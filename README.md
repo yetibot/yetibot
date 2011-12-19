@@ -25,6 +25,9 @@ export MEME_PASS=
 
 ## Usage
 
+All commands are prefixed by `yetibot` (or just `yeti` for short). yetibot ignores
+everything else.
+
 ### Jenkins
 
 ___status___
