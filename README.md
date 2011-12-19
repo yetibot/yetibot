@@ -29,34 +29,27 @@ export MEME_PASS=
 
 ___status___
 
+Returns status and date of the last build, whether it's currently building,
+who it was started by, and the changeset.
+
 ```
 yetibot jen status [jenkins job name]
-
-SUCCESS at Wed Nov 16. Started by trevor.
-Currently building? false
-[Changeset]
 ```
 
 ___build___
 
 ```
 yetibot jen build [job name]
-
-Building [job name]
 ```
 
 ___list___
 
+Takes either a number or a word to match job names on. Number returns the first N
+jobs and word returns all jobs matching the word.
+
 ```
 yetibot jen list 2
-
-job-1
-job-2
-```
-
 yetibot jen list model
-
-[lists all jobs containing "model"]
 ```
 
 ### Meme generator
