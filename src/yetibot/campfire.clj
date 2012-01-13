@@ -50,13 +50,15 @@
               ; time, 1 per line, and sometimes 1 of those lines can be 
               ; truncated so try parsing each line individually
               (doseq [line (s/split #"\n" s)]
+                (println line)
                 (try
                   (if-let [json (json/read-json line)]
                     (do
                       (println json)
                       (println)
                       (message-callback json)))
-                  (catch Exception e)))))))))
+                  (catch Exception e
+                    (println e))))))))))
 
 (defn start [message-callback]
   (def event-loop
