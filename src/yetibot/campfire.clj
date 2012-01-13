@@ -19,7 +19,7 @@
 (def escapees {\" "\\\""})
 
 
-(def base-uri (str "https://" (:sub-domain cf-settings) "campfirenow.com"))
+(def base-uri (str "https://" (:sub-domain cf-settings) ".campfirenow.com"))
 (def streaming-uri "https://streaming.campfirenow.com")
 (def auth {:user u :password p :preemptive true})
 
@@ -34,6 +34,7 @@
   (with-open [client (c/create-client)]
     (let [uri (str base-uri "/room/" room-id "/join.json")
           resp (c/POST client uri :auth auth)]
+      (println (str "joining at " uri))
       (c/await resp))))
 
 ; Monitor the chat room with the Streaming API
