@@ -1,5 +1,5 @@
 (defproject yetibot "1.0.0-SNAPSHOT"
-            :description "this is both a yeti and a bot. that's why it's awesome."
+            :description "this is both a yeti and a bot."
             :dependencies [[org.clojure/clojure "1.3.0"],
                            [org.clojars.adamwynne/http.async.client "0.4.1"]
                            [robert/hooke "1.1.2"]
