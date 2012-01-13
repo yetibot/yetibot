@@ -39,27 +39,22 @@
 
 ; Monitor the chat room with the Streaming API
 (defn listen-to-chat [message-callback]
-    (with-open [client (c/create-client)]
-      (join-room)
-      (let [uri (str streaming-uri "/room/" room-id "/live.json")
-            resp (c/stream-seq client :get uri :auth auth)]
-        (println "Start listening on streaming API")
-        (doseq [s (c/string resp)]
-          (if (not (empty? (str s)))
-            (do
-              ; Campfire sometimes returns multiple invalid json objects at a 
-              ; time, 1 per line, and sometimes 1 of those lines can be 
-              ; truncated so try parsing each line individually
-              (doseq [line (s/split #"\n" s)]
-                (println line)
-                (try
-                  (if-let [json (json/read-json line)]
-                    (do
-                      (println json)
-                      (println)
-                      (message-callback json)))
-                  (catch Exception e
-                    (println e))))))))))
+  (with-open [client (c/create-client)]
+    (join-room)
+    (let [uri (str streaming-uri "/room/" room-id "/live.json")
+              resp (c/stream-seq client :get uri :auth auth)]
+      (println "Start listening on streaming API")
+      (doseq [s (c/string resp)]
+        (if (not (empty? (s/trim (str s))))
+          ; Campfire sometimes returns multiple lines of json objects at a 
+          ; time, 1 per line so split the lines before parsing json
+          (doseq [line (s/split #"\cM" s)]
+            (try
+              (let [json (json/read-json line)]
+                (println json)
+                (message-callback json))
+              (catch Exception e
+                (println e)))))))))
 
 (defn start [message-callback]
   (def event-loop
