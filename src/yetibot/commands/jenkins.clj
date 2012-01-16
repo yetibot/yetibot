@@ -4,7 +4,6 @@
             [clojure.contrib.string :as s]
             [yetibot.campfire :as cf]
             [robert.hooke :as rh]
-            [yetibot.core :as core]
             [clj-time.core :as t]
             [clj-time.coerce :as c])
   (:use [yetibot.util]))
