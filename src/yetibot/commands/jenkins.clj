@@ -62,7 +62,9 @@
 ; TODO - it'd be cool to poll the status in the background 
 ; to see if/when the build started, or whether it's in the queue behind
 ; some other jobs
-(defn build [job-name]
+(defn build
+  "build job-name"
+  [job-name]
   (println (str "Build: " job-name))
   (with-open [client (client/create-client)]
     (let [uri (str base-uri "job/" job-name "/build")
@@ -86,10 +88,15 @@
   (chat-job-names 
     (s/grep (re-pattern match) (job-names))))
 
+(defn status-cmd
+  "status job-name"
+  [job-name]
+  (chat-status job-name))
+
 
 (cmd-hook #"jen"
           #"^build\s(.+)" (build (second p))
-          #"^status\s(.+)" (chat-status (second p))
+          #"^status\s(.+)" (status-cmd (second p))
           #"^list\s(.+)" (let [arg (second p)]
                            (if (empty? arg)
                              (list-jobs)
