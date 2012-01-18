@@ -8,14 +8,25 @@
         [yetibot.help :only (get-docs get-docs-for)]))
 
 
-(defn get-help-topics
-  "# get help topics"
+(defn help-topics
   []
   (println "fetching help topics")
-  (cf/send-message (s/join \newline
-    (keys (get-docs)))))
+  (cf/send-message
+    (str "These are the topics I know about. Use help <topic> for more details."
+         \newline
+         (s/join \newline
+                 (keys (get-docs))))))
 
+(defn help-for-topic
+  "help <topic>                # get help for <topic>"
+  [prefix]
+  (cf/send-paste
+    (s/join \newline
+            (or
+              (seq (get-docs-for prefix))
+              (list (str "I couldn't find any help for topic " prefix))))))
 
 
 (cmd-hook #"help"
-          #"^$" (get-help-topics))
+          #"^$" (help-topics)
+          #"^\w+$" (help-for-topic p))

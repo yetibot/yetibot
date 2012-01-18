@@ -7,8 +7,7 @@
             [yetibot.core :as core]
             [robert.hooke :as rh]
             [clojure.tools.cli :as c])
-  (:use [yetibot.util]
-        [clojure.contrib.cond]))
+  (:use [yetibot.util]))
 
 (def base-uri "http://version1.api.memegenerator.net/")
 (def domain "http://memegenerator.net")
@@ -79,7 +78,9 @@
 (defn chat-instance [i]
   (cf/send-message (str domain (:instanceImageUrl i))))
 
-(defn chat-instance-popular []
+(defn chat-instance-popular 
+  "meme popular                # list popular meme instances"
+  []
   (chat-instance (first (:result (instances-popular)))))
 
 (defn chat-meme-list [l]
@@ -88,17 +89,28 @@
 
 ;; retry api calls - TODO add https://github.com/joegallo/robert-bruce
 
+(defn trending-cmd
+  "meme trending               # list trending generators"
+  []
+  (chat-meme-list
+    (gen-trending)))
+
+(defn search-cmd [term]
+  "meme search <term>          # query available meme generators"
+  (chat-meme-list
+    (search-generators term)))
+
+(defn generate-cmd
+  "meme <instance-name> <line1> / <line2> # generate an instance"
+  [inst line1 line2]
+  (println (str "generate meme " inst))
+  (chat-instance
+    (create-instance
+      (map-to-query-string
+        (build-instance-params inst line1 line2)))))
 
 (cmd-hook #"meme"
           #"^popular" (chat-instance-popular)
-          #"^trending" (chat-meme-list
-                         (gen-trending))
-          #"^search\s(.+)" (chat-meme-list
-                             (search-generators (second p)))
-          #"^(.+)\s(.+)\/(.+)$" (do 
-                                  (println (str "generate meme " (second p)))
-                                  (chat-instance
-                                    (create-instance
-                                      (map-to-query-string
-                                        (build-instance-params
-                                          (nth p 1) (nth p 2) (nth p 3)))))))
+          #"^trending" (trending-cmd)
+          #"^search\s(.+)" (search-cmd (second p))
+          #"^(.+)\s(.+)\/(.+)$" (generate-cmd (nth p 1) (nth p 2) (nth p 3)))
