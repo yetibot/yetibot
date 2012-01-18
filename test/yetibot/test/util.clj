@@ -1,4 +1,4 @@
-(ns yetibot.test.commands.jenkins
+(ns yetibot.test.util
   (:require [clojure.contrib.string :as s])
   (:use [yetibot.util])
   (:use [clojure.test]))

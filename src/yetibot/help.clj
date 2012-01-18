@@ -3,9 +3,12 @@
             [yetibot.core :as core]
             [clojure.data.json :as json]))
 
-; TODO
+(def docs (atom {}))
+
 (defn add-docs [prefix cmds]
-  (println (str "adding docs for " prefix cmds))
-  (map println cmds)
-  (println (take 1 cmds))
-  cmds)
+  (println (str "adding docs for " prefix (str cmds)))
+  ; add to the docs atom using prefix string as the key
+  (swap! docs conj {(str prefix) (remove nil? cmds)}))
+
+(defn get-docs [prefix]
+  (get @docs prefix))
