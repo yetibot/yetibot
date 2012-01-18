@@ -10,5 +10,8 @@
   ; add to the docs atom using prefix string as the key
   (swap! docs conj {(str prefix) (remove nil? cmds)}))
 
-(defn get-docs [prefix]
-  (get @docs prefix))
+(defn get-docs []
+  @docs)
+
+(defn get-docs-for [prefix]
+  (get (get-docs) prefix))

@@ -22,7 +22,7 @@
   (parse-event json
                (let [parsed (s/split #"\s" 3 (s/trim body))]
                  (when (re-find #"^yeti" (first parsed)) ; you talking to me?
-                   (handle-command (second parsed) (last parsed ))))))
+                   (handle-command (second parsed) (nth parsed 3 ""))))))
 
 (defn handle-campfire-event [json]
   (parse-event json

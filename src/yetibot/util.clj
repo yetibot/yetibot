@@ -31,7 +31,7 @@
        (fn [~'callback ~'cmd ~'args]
          (if (re-find ~prefix (s/lower-case ~'cmd))
            (do
-             (println (str "found " ~prefix))
+             (println (str "found " ~prefix ". args are:" ~'args))
              ; try matching the available sub-commands
              (cond-let [~'p]
                        ~@(map (fn [i#]

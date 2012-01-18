@@ -13,5 +13,5 @@
 (deftest add-and-retrieve-docs
          (add-some-docs) ; setup
          (is
-           (not (empty? (get-docs "git commit")))
+           (not (empty? (get-docs-for "git commit")))
            "retrieve previously added docs for 'git commit'"))
