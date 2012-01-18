@@ -2,6 +2,7 @@
   (:require [http.async.client :as client]
             [clojure.contrib.string :as s]
             [yetibot.core :as core]
+            [yetibot.help :as help]
             [robert.hooke :as rh]
             [clojure.data.json :as json])
   (:use [clojure.contrib.cond])
@@ -20,21 +21,33 @@
                 (client/await response)
                 (json/read-json (client/string response)))))
 
+
+
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
-  `(rh/add-hook
-     #'core/handle-command
-     (fn [~'callback ~'cmd ~'args]
-       (if (re-find ~prefix (s/lower-case ~'cmd))
-         (do
-           (println (str "found " ~prefix))
-           (cond-let [~'p]
-                     ~@(map (fn [i#]
-                              (if (instance? java.util.regex.Pattern i#)
-                                `(re-find ~i# ~'args)
-                                `~i#))
-                            exprs)))
-         (~'callback ~'cmd ~'args)))))
+  `(do
+     (rh/add-hook
+       #'core/handle-command
+       (fn [~'callback ~'cmd ~'args]
+         (if (re-find ~prefix (s/lower-case ~'cmd))
+           (do
+             (println (str "found " ~prefix ". args are:" ~'args))
+             ; try matching the available sub-commands
+             (cond-let [~'p]
+                       ~@(map (fn [i#]
+                                (if (instance? java.util.regex.Pattern i#)
+                                  `(re-find ~i# ~'args)
+                                  `~i#))
+                              exprs)))
+           (~'callback ~'cmd ~'args))))
+     ; extract the meta from the commands and use it to build docs
+     (help/add-docs ~prefix
+                    (map
+                      (fn [i#]
+                        (if (list? i#)
+                          (:doc (meta (resolve (first i#))))))
+                      '~exprs))))
+
 
 
 ; query string helper

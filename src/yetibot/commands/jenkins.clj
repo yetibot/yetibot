@@ -6,7 +6,7 @@
             [robert.hooke :as rh]
             [clj-time.core :as t]
             [clj-time.coerce :as c])
-  (:use [yetibot.util]))
+  (:use [yetibot.util :only (cmd-hook with-client)]))
 
 
 (def base-uri (System/getenv "JENKINS_URI"))
@@ -62,7 +62,9 @@
 ; TODO - it'd be cool to poll the status in the background 
 ; to see if/when the build started, or whether it's in the queue behind
 ; some other jobs
-(defn build [job-name]
+(defn build
+  "jen build <job-name>"
+  [job-name]
   (println (str "Build: " job-name))
   (with-open [client (client/create-client)]
     (let [uri (str base-uri "job/" job-name "/build")
@@ -86,14 +88,25 @@
   (chat-job-names 
     (s/grep (re-pattern match) (job-names))))
 
+(defn status-cmd
+  "jen status <job-name>"
+  [job-name]
+  (chat-status job-name))
+
+(defn list-cmd 
+  "
+jen list                    # lists first 20 jenkins jobs
+jen list <n>                # lists first <n> jenkins jobs
+jen list <string>           # lists jenkins jobs containing <string>"
+  [arg]
+  (if (empty? arg)
+    (list-jobs)
+    (let [arg (read-string arg)]
+      (if (number? arg)
+        (list-jobs arg)
+        (list-jobs-matching (name arg))))))
 
 (cmd-hook #"jen"
           #"^build\s(.+)" (build (second p))
-          #"^status\s(.+)" (chat-status (second p))
-          #"^list\s(.+)" (let [arg (second p)]
-                           (if (empty? arg)
-                             (list-jobs)
-                             (let [arg (read-string arg)]
-                               (if (number? arg)
-                                 (list-jobs arg)
-                                 (list-jobs-matching (name arg)))))))
+          #"^status\s(.+)" (status-cmd (second p))
+          #"^list\s(.+)" (list-cmd (second p)))
