@@ -3,7 +3,6 @@
             [http.async.client.request :as req]
             [clojure.data.json :as json]
             [clojure.contrib.string :as s]
-            [yetibot.campfire :as cf]
             [yetibot.core :as core]
             [robert.hooke :as rh]
             [clojure.tools.cli :as c])
@@ -76,16 +75,15 @@
 
 ; Chat senders
 (defn chat-instance [i]
-  (cf/send-message (str domain (:instanceImageUrl i))))
+  (str domain (:instanceImageUrl i)))
 
-(defn chat-instance-popular 
+(defn chat-instance-popular
   "meme popular                # list popular meme instances"
   []
   (chat-instance (first (:result (instances-popular)))))
 
 (defn chat-meme-list [l]
-  (cf/send-message
-    (s/join \newline (map #(:urlName %) (:result l)))))
+  (s/join \newline (map #(:urlName %) (:result l))))
 
 ;; retry api calls - TODO add https://github.com/joegallo/robert-bruce
 

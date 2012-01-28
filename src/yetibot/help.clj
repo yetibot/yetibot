@@ -7,7 +7,7 @@
 (def docs (atom {}))
 
 (defn add-docs [prefix cmds]
-  (println (str "adding docs for " prefix (str cmds)))
+  (println (str "adding docs for " prefix))
   ; add to the docs atom using prefix string as the key
   (swap! docs conj {(str prefix) 
                     (map s/trim

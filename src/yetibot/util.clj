@@ -2,6 +2,7 @@
   (:require [http.async.client :as client]
             [clojure.contrib.string :as s]
             [yetibot.core :as core]
+            [yetibot.campfire :as cf]
             [yetibot.help :as help]
             [robert.hooke :as rh]
             [clojure.data.json :as json])
@@ -22,6 +23,12 @@
                 (json/read-json (client/string response)))))
 
 
+; formatters to send data structures to chat
+(defn chat-result [d]
+  (cf/send-message
+    (cond
+      (seq? d) (s/join \newline d)
+      :else (str d))))
 
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
@@ -36,8 +43,8 @@
              (cond-let [~'p]
                        ~@(map (fn [i#]
                                 (if (instance? java.util.regex.Pattern i#)
-                                  `(re-find ~i# ~'args)
-                                  `~i#))
+                                  `(re-find ~i# ~'args) ; prefix to match
+                                  `(chat-result ~i#))) ; chat results of handler
                               exprs)))
            (~'callback ~'cmd ~'args))))
      ; extract the meta from the commands and use it to build docs
