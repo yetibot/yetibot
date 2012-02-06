@@ -57,9 +57,11 @@
 
 
 
+(defn encode [s]
+  (URLEncoder/encode (str s) "UTF-8"))
+
 ; query string helper
 (defn map-to-query-string [m]
-  (let [encode #(URLEncoder/encode (str %) "UTF-8")]
-    (s/join "&" (map (fn [[k v]] (format "%s=%s" 
-                                         (encode (name k)) (encode v))) m))))
+  (s/join "&" (map (fn [[k v]] (format "%s=%s" 
+                                       (encode (name k)) (encode v))) m)))
 

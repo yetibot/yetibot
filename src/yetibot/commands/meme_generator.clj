@@ -1,15 +1,12 @@
 (ns yetibot.commands.meme-generator
   (:require [http.async.client :as client]
-            [http.async.client.request :as req]
-            [clojure.data.json :as json]
             [clojure.contrib.string :as s]
             [yetibot.core :as core]
-            [robert.hooke :as rh]
-            [clojure.tools.cli :as c])
+            [robert.hooke :as rh])
   (:use [yetibot.util]))
 
 (def base-uri "http://version1.api.memegenerator.net/")
-(def domain "http://memegenerator.net")
+(def base-image-uri "http://a.static.memegenerator.net")
 (def apis {:trending "Generators_Select_ByTrending"
            :popular "Generators_Select_ByPopular?pageIndex=0&pageSize=12&days=7"
            :instance-popular "Instances_Select_ByPopular"
@@ -40,12 +37,13 @@
             auth))
 
 (defn search-generators [q]
-  (get-json (str base-uri (:search-generators apis) q) auth))
+  (get-json (str base-uri (:search-generators apis) (encode q)) auth))
 
 (defn create-instance [query-string]
   (let [uri (str base-uri (:create apis) "?" query-string)]
     (println uri)
     (let [result (:result (get-json uri auth))]
+      (println result)
       ; hit the instance url to force actual generation
       (with-client (:instanceUrl result) client/GET auth
                    (client/await response)
@@ -75,7 +73,7 @@
 
 ; Chat senders
 (defn chat-instance [i]
-  (str domain (:instanceImageUrl i)))
+  (str base-image-uri (s/replace-str "400x" "500x" (:instanceImageUrl i))))
 
 (defn chat-instance-popular
   "meme popular                # list popular meme instances"
@@ -83,7 +81,7 @@
   (chat-instance (first (:result (instances-popular)))))
 
 (defn chat-meme-list [l]
-  (s/join \newline (map #(:urlName %) (:result l))))
+  (s/join \newline (map #(:displayName %) (:result l))))
 
 ;; retry api calls - TODO add https://github.com/joegallo/robert-bruce
 
@@ -99,8 +97,8 @@
     (search-generators term)))
 
 (defn generate-cmd
-  "meme <instance-name> <line1> / <line2> # generate an instance"
-  [inst line1 line2]
+  "meme <instance query>: <line1> / <line2> # generate an instance"
+  [[inst line1 line2]]
   (println (str "generate meme " inst))
   (chat-instance
     (create-instance
@@ -111,4 +109,8 @@
           #"^popular" (chat-instance-popular)
           #"^trending" (trending-cmd)
           #"^search\s(.+)" (search-cmd (second p))
-          #"^(.+)\s(.+)\/(.+)$" (generate-cmd (nth p 1) (nth p 2) (nth p 3)))
+          #"^(.+):(.+)\/(.+)$" (generate-cmd (rest p)))
+
+(def r #"^(.+):(.+)\/(.+)$")
+(def cmd "The Least Interesting Man In The World: hello / goodbye")
+(re-find r cmd)
