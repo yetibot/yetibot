@@ -110,7 +110,3 @@
           #"^trending" (trending-cmd)
           #"^search\s(.+)" (search-cmd (second p))
           #"^(.+):(.+)\/(.+)$" (generate-cmd (rest p)))
-
-(def r #"^(.+):(.+)\/(.+)$")
-(def cmd "The Least Interesting Man In The World: hello / goodbye")
-(re-find r cmd)

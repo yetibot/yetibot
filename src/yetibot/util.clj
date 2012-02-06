@@ -17,7 +17,7 @@
 
 (defn get-json 
   ([uri auth] (get-json uri client/GET auth))
-  ([uri verb-fn auth ]
+  ([uri verb-fn auth]
    (with-client uri verb-fn auth
                 (client/await response)
                 (json/read-json (client/string response)))))
