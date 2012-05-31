@@ -2,7 +2,7 @@
 
 It's a yeti. It's a bot. You can find it on campfire, awaiting your command.
 
-<img src="http://www.decide.com/img/yeti.png" />
+<img src="https://www.decide.com/img/yeti.png" />
 
 ## Setup
 
