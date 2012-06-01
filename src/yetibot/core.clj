@@ -2,8 +2,9 @@
   (:require [http.async.client :as c]
             [yetibot.campfire :as cf]
             [clojure.contrib.string :as s]
-            [clojure.tools.namespace :as ns]))
-
+            [clojure.tools.namespace :as ns])
+  (:use [clojure.tools.logging :only (trace)]
+        [clj-logging-config.log4j]))
 
 ; Deserializes json string and extracts fields
 (defmacro parse-event [event-json & body]
@@ -49,5 +50,6 @@
 
 
 (defn -main [& args]
+  (trace "starting main")
   (load-commands)
   (cf/start handle-campfire-event))
