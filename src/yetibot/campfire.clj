@@ -2,7 +2,8 @@
   (:require [http.async.client :as c]
             [clojure.data.json :as json]
             [clojure.contrib.string :as s]
-            [clj-campfire.core :as cf]))
+            [clj-campfire.core :as cf])
+  (:use [clojure.tools.logging :only (info error)]))
 
 
 ; Settings
@@ -53,8 +54,8 @@
               (let [json (json/read-json line)]
                 (println json)
                 (message-callback json))
-              (catch Exception e
-                (println e)))))))))
+              (catch Exception ex
+                (error ex "Exception parsing json")))))))))
 
 (defn start [message-callback]
   (def event-loop
@@ -62,8 +63,8 @@
                    (while true
                      (try
                        (listen-to-chat message-callback)
-                       (catch Exception e 
-                         (println (str "Exception while listening to streaming api" e)))))))))
+                       (catch Exception ex
+                         (error ex "Exception while listening to streaming api"))))))))
 
                            ; (message-callback (json/read-json s))
                            ;(let [json (json/read-json s)]
