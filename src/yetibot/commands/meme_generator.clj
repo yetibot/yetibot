@@ -73,7 +73,7 @@
 
 ; Chat senders
 (defn chat-instance [i]
-  (str base-image-uri (s/replace-str "400x" "500x" (:instanceImageUrl i))))
+  (str (s/replace-str "400x" "500x" (:instanceImageUrl i))))
 
 (defn chat-instance-popular
   "meme popular                # list popular meme instances"

@@ -3,7 +3,7 @@
             [yetibot.campfire :as cf]
             [clojure.contrib.string :as s]
             [clojure.tools.namespace :as ns])
-  (:use [clojure.tools.logging :only (trace)]
+  (:use [clojure.tools.logging]
         [clj-logging-config.log4j]))
 
 ; Deserializes json string and extracts fields
@@ -22,8 +22,11 @@
   (println "handle-text-message")
   (parse-event json
                (let [parsed (s/split #"\s" 3 (s/trim body))]
-                 (when (re-find #"^yeti" (first parsed)) ; you talking to me?
-                   (handle-command (second parsed) (nth parsed 2 ""))))))
+                 (if (>= (count parsed) 2)
+                   (when (re-find #"^yeti" (first parsed)) ; you talking to me?
+                     (handle-command (second parsed) (nth parsed 2 "")))
+                   (println (str "WARN: couldn't split the message into 2 parts: " body))
+                   ))))
 
 (defn handle-campfire-event [json]
   (parse-event json

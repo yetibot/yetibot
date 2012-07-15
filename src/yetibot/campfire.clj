@@ -47,7 +47,7 @@
       (println "Start listening on streaming API")
       (doseq [s (c/string resp)]
         (if (not (empty? (s/trim (str s))))
-          ; Campfire sometimes returns multiple lines of json objects at a 
+          ; Campfire sometimes returns multiple lines of json objects at a
           ; time, 1 per line so split the lines before parsing json
           (doseq [line (s/split #"\cM" s)]
             (try
@@ -55,16 +55,22 @@
                 (println json)
                 (message-callback json))
               (catch Exception ex
-                (error ex "Exception parsing json")))))))))
+                (println "Exception parsing json")))))))))
 
 (defn start [message-callback]
   (def event-loop
-    (future-call (bound-fn [] ; call on a separate thread so it doesn't block
+    ;;; (future-call (bound-fn [] ; call on a separate thread so it doesn't block
                    (while true
                      (try
                        (listen-to-chat message-callback)
                        (catch Exception ex
-                         (error ex "Exception while listening to streaming api"))))))))
+                         (println "Exception while listening to streaming api")
+                         (println ex)
+                         ))
+                     (println "Something bad happened. Sleeping for 2 seconds before reconnect")
+                     (. Thread (sleep 2000)))))
+    ; ))
+
 
                            ; (message-callback (json/read-json s))
                            ;(let [json (json/read-json s)]
