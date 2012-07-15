@@ -10,14 +10,15 @@
 
 (def base-uri (System/getenv "JENKINS_URI"))
 (def auth {:user (System/getenv "JENKINS_USER")
-           :password (System/getenv "JENKINS_PASS")})
+           :password (System/getenv "JENKINS_PASS")
+           :preemptive true})
 
 
 ; helpers
 (def job-names
   (memoize
     (fn []
-      (with-client (str base-uri "api/json") #'client/GET auth
+      (with-client (str base-uri "api/json") client/GET auth
                    (client/await response)
                    (let [json (json/read-json (client/string response))]
                      (map (fn [item] (:name item)) (:jobs json)))))))
