@@ -27,7 +27,7 @@
 (defn chat-result [d]
   (cf/send-message
     (cond
-      (seq? d) (s/join \newline d)
+      (coll? d) (s/join \newline d)
       :else (str d))))
 
 ; command hook
