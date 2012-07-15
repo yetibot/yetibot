@@ -25,7 +25,7 @@ export MEME_PASS=
 
 ## Usage
 
-All commands are prefixed by `yetibot` (or just `yeti` for short). yetibot ignores
+All commands are prefixed by `yetibot` (or just `yeti` for short or `!` for shortest). yetibot ignores
 everything else.
 
 ### Jenkins
@@ -89,7 +89,16 @@ Generates a meme and returns the image url to chat.
 yetibot meme interesting I don't always code / but when I do, I use clojure
 ```
 
+### Help
+
+yetibot self-documents itself using the docstrings of its various commands. Ask it
+for help.
+
+```
+!help
+```
+
 ## License
 
-Copyright &copy; 2011 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
+Copyright &copy; 2012 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
 
