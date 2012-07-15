@@ -26,5 +26,5 @@
       (str "No images found for " q))))
 
 (cmd-hook #"image"
-          #".*" (image-cmd (first p)))
+          #".*" (image-cmd p))
 

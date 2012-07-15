@@ -30,7 +30,9 @@
           response (client/GET client uri :auth auth)]
       (println (str "trying to fetch " uri))
       (client/await response)
-      (json/read-json (client/string response)))))
+      (let [unparsed (client/string response)]
+        (println (str "found " unparsed))
+        (json/read-json unparsed)))))
 
 (defn job-status [job-name]
   "Sends job status info to chat. Sample output:
@@ -42,17 +44,17 @@
     (if-let [building (str (:building json))] ; convert to string so a `false` doesn't give a false-negative
       (let [result (str (:result json))
                    changeset (s/join
-                               \newline 
+                               \newline
                                (map (fn [i]
                                       (let [msg (:msg i)
                                             author (if (seq (:author i))
                                                      (:fullName (:author i)) ; git
                                                      (:user i))]; svn
-                                        (str author ": " msg))) 
+                                        (str author ": " msg)))
                                     (:items (:changeSet json))))]
         [(:url json)
-         (str 
-           (if result (str result " at ")) 
+         (str
+           (if result (str result " at "))
            (c/to-date (c/from-long (:timestamp json)))
            ". "
            (:shortDescription (first (:causes (first (:actions json)))))
@@ -62,7 +64,7 @@
          changeset]))))
 
 
-; TODO - it'd be cool to poll the status in the background 
+; TODO - it'd be cool to poll the status in the background
 ; to see if/when the build started, or whether it's in the queue behind
 ; some other jobs
 (defn build
@@ -77,7 +79,7 @@
 
 (defn list-jobs
   ([] (list-jobs 20)) ; show 20 by default
-  ([n] (if (nil? n) 
+  ([n] (if (nil? n)
          (list-jobs)
          (do
            (println (str "List " n " jobs"))
@@ -92,7 +94,7 @@
   [job-name]
   (job-status job-name))
 
-(defn list-cmd 
+(defn list-cmd
   "
 jen list                    # lists first 20 jenkins jobs
 jen list <n>                # lists first <n> jenkins jobs
