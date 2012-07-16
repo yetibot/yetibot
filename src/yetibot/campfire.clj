@@ -55,7 +55,7 @@
                 (println json)
                 (message-callback json))
               (catch Exception ex
-                (println "Exception parsing json")))))))))
+                (println (str "Exception parsing json" ex))))))))))
 
 (defn start [message-callback]
   (def event-loop
