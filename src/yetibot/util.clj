@@ -25,10 +25,12 @@
 
 ; formatters to send data structures to chat
 (defn chat-result [d]
-  (cf/send-message
-    (cond
-      (coll? d) (s/join \newline d)
-      :else (str d))))
+  (let [formatted (cond
+                    (coll? d) (s/join \newline d)
+                    :else (str d))]
+    (if (s/substring? (str \newline) formatted)
+      (cf/send-paste formatted)
+      (cf/send-message formatted))))
 
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
