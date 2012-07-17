@@ -60,7 +60,7 @@
   - an existing valid json response to avoid a search request
   text1 is required, text2 is optional. When text2 is missing, text1 is used
   in place of text2 and text1 is left empty"
-  (merge (extract-ids 
+  (merge (extract-ids
            (if (string? meme)
              (first (:result (search-generators meme)))
              meme))
@@ -91,8 +91,9 @@
   (chat-meme-list
     (gen-trending)))
 
-(defn search-cmd [term]
+(defn search-cmd
   "meme search <term>          # query available meme generators"
+  [term]
   (chat-meme-list
     (search-generators term)))
 
