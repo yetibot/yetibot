@@ -55,7 +55,7 @@
                 (println json)
                 (message-callback json))
               (catch Exception ex
-                (println (str "Exception parsing json" ex))))))))))
+                (println (str "Exception in chat handler " ex))))))))))
 
 (defn start [message-callback]
   (def event-loop
