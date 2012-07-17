@@ -33,7 +33,7 @@
   "Retrieves popular instances"
   (get-json (str base-uri (:instance-popular apis) "?"
                  (map-to-query-string
-                   {:languageCode "en" :pageSize 1 :days 1}))
+                   {:languageCode "en" :pageSize 20 :days 1}))
             auth))
 
 (defn search-generators [q]
@@ -76,9 +76,9 @@
   (str (s/replace-str "400x" "500x" (:instanceImageUrl i))))
 
 (defn chat-instance-popular
-  "meme popular                # list popular meme instances"
+  "meme popular                # list random popular meme instances from the top 20 in the last day"
   []
-  (chat-instance (first (:result (instances-popular)))))
+  (chat-instance (rand-nth (:result (instances-popular)))))
 
 (defn chat-meme-list [l]
   (s/join \newline (map #(:displayName %) (:result l))))
