@@ -10,9 +10,9 @@
                            [org.clojure/tools.logging "0.2.3"]
                            [clj-logging-config "1.9.7"]
                            [log4j/log4j "1.2.16" :exclusions [javax.mail/mail
-                                                               javax.jms/jms
-                                                               com.sun.jdmk/jmxtools
-                                                               com.sun.jmx/jmxri]]
-                           [org.clojure/tools.logging "0.2.3"]]
+                                                              javax.jms/jms
+                                                              com.sun.jdmk/jmxtools
+                                                              com.sun.jmx/jmxri]]
+                           [clj-ssh "0.4.0"]]
             :dev-dependencies [[clj-stacktrace "0.2.3"]]
             :main yetibot.core)
