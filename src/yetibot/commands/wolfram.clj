@@ -14,9 +14,11 @@
 (defn search-wolfram
   "wolfram <query> # search for <query> on Wolfram Alpha"
   [q]
-  (map #(str (first %) "\n" (str (second %) "&t=.jpg"))
-    (parse-imgs-from-xml
-      (xml/parse (str endpoint "&input=" q)))))
+  (flatten
+    (map #(str (second %) "&t=.jpg")
+      (parse-imgs-from-xml
+        (xml/parse (str endpoint "&input=" q))))))
+
 
 (cmd-hook #"wolfram"
           #".*" (search-wolfram p))

@@ -15,7 +15,7 @@
      (let [~'response (~verb-fn ~'client ~uri :auth ~auth)]
        ~@body)))
 
-(defn get-json 
+(defn get-json
   ([uri auth] (get-json uri client/GET auth))
   ([uri verb-fn auth]
    (with-client uri verb-fn auth
@@ -28,9 +28,19 @@
   (let [formatted (cond
                     (coll? d) (s/join \newline d)
                     :else (str d))]
-    (if (s/substring? (str \newline) formatted)
-      (cf/send-paste formatted)
-      (cf/send-message formatted))))
+    ; decide which of 3 ways to send to chat
+    (cond
+      ; send each item in the coll as a separate message
+      (and
+        (coll? d)
+        (s/substring? (str \newline) formatted)
+        (filter #(s/substring? % formatted) ["jpg" "png" "gif"]))
+      (cf/send-message-for-each d)
+      ; send the message with newlines as a paste
+      (s/substring? (str \newline) formatted) (cf/send-paste formatted)
+      ; send as regular message
+      :else (cf/send-message formatted))))
+
 
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
@@ -64,6 +74,5 @@
 
 ; query string helper
 (defn map-to-query-string [m]
-  (s/join "&" (map (fn [[k v]] (format "%s=%s" 
+  (s/join "&" (map (fn [[k v]] (format "%s=%s"
                                        (encode (name k)) (encode v))) m)))
-

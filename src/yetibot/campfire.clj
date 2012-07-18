@@ -26,10 +26,15 @@
 
 
 (defn send-message [msg]
-  (cf/message cf-settings room msg))
+  (cf/message cf-settings room (str msg)))
 
 (defn send-paste [p]
   (cf/paste cf-settings room p))
+
+(defn send-message-for-each [msgs]
+  (println (str "send" (count msgs) "messages"))
+  (println msgs)
+  (doseq [m msgs] (send-message m)))
 
 (defn join-room []
   (with-open [client (c/create-client)]
