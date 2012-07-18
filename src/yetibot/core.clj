@@ -38,6 +38,7 @@
   (parse-event json
                (condp = event-type ; Handle the various types of messages
                  "TextMessage" (handle-text-message json)
+                 "PasteMessage" (handle-text-message json)
                  (println "Unhandled event type: " event-type)))) 
 
 (defn unknown-command [cmd subcommand]
