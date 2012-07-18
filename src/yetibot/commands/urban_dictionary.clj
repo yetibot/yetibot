@@ -2,8 +2,7 @@
   (:require [clojure.string :as s]
             [http.async.client :as client]
             [clojure.data.json :as json])
-  (:use [clj-ssh.ssh]
-        [yetibot.util]))
+  (:use [yetibot.util]))
 
 (def endpoint "http://api.urbandictionary.com/v0/define?term=")
 
@@ -19,7 +18,8 @@
 (defn search-cmd
   "urban <query> # search for <query> on Urban Dictionary"
   [q]
-  (for [i (:list (search-urban-dictionary q))] (:definition i)))
+  (first
+    (for [i (:list (search-urban-dictionary q))] (:definition i))))
 
 (cmd-hook #"urban"
           #".*" (search-cmd p))
