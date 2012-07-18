@@ -50,13 +50,14 @@
           ; Campfire sometimes returns multiple lines of json objects at a
           ; time, 1 per line so split the lines before parsing json
           (doseq [line (s/split #"\cM" s)]
-            (try
-              (let [json (json/read-json line)]
-                (println json)
-                (message-callback json))
-              (catch Exception ex
-                (println (str "Exception in chat handler " ex))
-                (send-paste (str "An exception occurred: " ex))))))))))
+            (future
+              (try
+                (let [json (json/read-json line)]
+                  (println json)
+                  (message-callback json))
+                (catch Exception ex
+                  (println (str "Exception in chat handler " ex))
+                  (send-paste (str "An exception occurred: " ex)))))))))))
 
 (defn start [message-callback]
   (def event-loop
