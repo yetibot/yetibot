@@ -15,7 +15,7 @@
         (client/string response)))))
 
 (defn scala-cmd
-  "scala <expression> # evaluate a clojure expression"
+  "scala <expression> # evaluate a scala expression"
   [expr]
   (try-scala expr))
 
