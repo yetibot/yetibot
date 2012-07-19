@@ -98,6 +98,23 @@ for help.
 !help
 ```
 
+Its reply will be:
+
+```
+These are the topics I know about. Use help <topic> for more details.
+help
+clojure
+scala
+http
+ssh
+wolfram
+meme
+urban
+jen
+poke
+image
+```
+
 ## License
 
 Copyright &copy; 2012 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
