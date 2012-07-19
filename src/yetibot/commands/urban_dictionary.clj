@@ -8,7 +8,7 @@
 
 (defn search-urban-dictionary
   [q]
-  (let [uri (str endpoint "define?term=" q)]
+  (let [uri (str endpoint "define?term=" (encode q))]
     (with-open [client (client/create-client)]
       (let [response (client/GET client uri)]
         (client/await response)
