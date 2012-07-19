@@ -13,6 +13,8 @@
                                                               javax.jms/jms
                                                               com.sun.jdmk/jmxtools
                                                               com.sun.jmx/jmxri]]
-                           [clj-ssh "0.4.0"]]
+                           [clj-ssh "0.4.0"]
+                           [useful "0.8.3-alpha8"]
+                           ]
             :dev-dependencies [[clj-stacktrace "0.2.3"]]
             :main yetibot.core)
