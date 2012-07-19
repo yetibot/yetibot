@@ -11,7 +11,10 @@
 (defn clojure-cmd
   "clojure <expression> # evaluate a clojure expression"
   [expr]
-  (:result (try-clojure expr)))
+  (let [json (try-clojure expr)]
+    (if (:error json)
+      (:message json)
+      (:result ))))
 
 (cmd-hook #"clojure"
           #".*" (clojure-cmd p))
