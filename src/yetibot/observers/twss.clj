@@ -35,7 +35,9 @@
   #'core/handle-text-message
   (fn [callback json]
     (core/parse-event json
-                      (observe event-type body))
-
-    ; finish up by psasing it back to handle-text-message
+                      (try
+                        (observe event-type body)
+                        (catch Exception e
+                          (println (str "observer exception" e)))))
+    ; finish up by passing it back to handle-text-message
     (callback json)))
