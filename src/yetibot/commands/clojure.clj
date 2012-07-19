@@ -14,7 +14,7 @@
   (let [json (try-clojure expr)]
     (if (:error json)
       (:message json)
-      (:result ))))
+      (:result json))))
 
 (cmd-hook #"clojure"
           #".*" (clojure-cmd p))
