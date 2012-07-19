@@ -20,6 +20,14 @@ export JENKINS_PASS=
 
 export MEME_USER=
 export MEME_PASS=
+
+export SSH_SERVERS=
+export SSH_dev1=
+export SSH_dev2=
+export SSH_PRIVATE_KEY_PATH=
+export SSH_USERNAME=
+
+export WOLFRAM_APP_ID=
 ```
 
 
