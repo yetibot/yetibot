@@ -29,7 +29,7 @@
   [q]
   (let [images (fetch-image q)]
     (if (seq images)
-      (:url (rand-nth images))
+      (str (:url (rand-nth images)) "?campfire=.jpg")
       (str "No images found for " q))))
 
 (defn top-image
@@ -37,7 +37,7 @@
   [q]
   (let [images (fetch-image q)]
     (if (seq images)
-      (:url (first images))
+      (str (:url (first images)) "?campfire=.jpg")
       (str "No images found for " q))))
 
 
