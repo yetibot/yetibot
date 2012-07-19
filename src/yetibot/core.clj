@@ -45,21 +45,32 @@
   (cf/send-message (str "I don't know how to do " subcommand " for " cmd))
   (println (str "unkown command" cmd)))
 
-(defn yetibot-command-namespaces []
+(defn find-namespaces [pattern]
   (let [all-ns (ns/find-namespaces-on-classpath)]
-    (filter #(re-find #"^yetibot\.commands" (str %)) all-ns)))
+    (filter #(re-find pattern (str %)) all-ns)))
 
-(defn load-command [arg]
+(defn yetibot-command-namespaces []
+  (find-namespaces #"^yetibot\.commands"))
+
+(defn yetibot-observer-namespaces []
+  (find-namespaces #"^yetibot\.observer"))
+
+(defn load-ns [arg]
   (try (require arg :reload)
-       (catch Exception e
-         (println "Warning: problem requiring" arg "hook:" (.getMessage e)))))
+    (catch Exception e
+      (println "Warning: problem requiring" arg "hook:" (.getMessage e)))))
 
 (defn load-commands []
   (doseq [command-namespace (yetibot-command-namespaces)]
-    (load-command command-namespace)))
+    (load-ns command-namespace)))
+
+(defn load-observers []
+  (doseq [n (yetibot-observer-namespaces)]
+    (load-ns n)))
 
 
 (defn -main [& args]
   (trace "starting main")
+  (load-observers)
   (load-commands)
   (cf/start handle-campfire-event))
