@@ -16,6 +16,7 @@
        ~@body)))
 
 (defn get-json
+  ([uri] (get-json uri {:user "" :password ""}))
   ([uri auth] (get-json uri client/GET auth))
   ([uri verb-fn auth]
    (with-client uri verb-fn auth

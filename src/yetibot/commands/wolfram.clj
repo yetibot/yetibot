@@ -6,7 +6,6 @@
 (def app-id (System/getenv "WOLFRAM_APP_ID"))
 (def endpoint (str "http://api.wolframalpha.com/v2/query?appid=" app-id))
 
-;; TODO - use xml-seq then filter down to queryresults containing images
 (defn parse-imgs-from-xml [xml]
   (let [xs (xml-seq xml)]
     (for [el xs :when (= :img (:tag el))] [(:alt (:attrs el)) (:src (:attrs el))])))
