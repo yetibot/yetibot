@@ -28,6 +28,6 @@
 
 (obs-hook
   ["TextMessage" "PasteMessage"]
-  (fn [event-type body]
+  (fn [event-json]
     (parse-result-from-twss
-      (load-twss body))))
+      (load-twss (:body event-json)))))

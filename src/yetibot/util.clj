@@ -72,21 +72,19 @@
 ; observer hook
 (defn obs-hook
   "Pass a collection of event-types you're interested in and an observer function
-  that accepts `event-type` and `body` args. If an event occurs that matches the
-  events in your event-types arg, your observer will be called."
+  that accepts a single arg. If an event occurs that matches the events in your
+  event-types arg, your observer will be called with the event's json."
   [event-types observer]
   (rh/add-hook
     #'core/handle-campfire-event
     (fn [callback json]
-      (core/parse-event
-        json
-        ; when event-type is in event-types, observe it
-        (when (some #{event-type} event-types)
-          ; swallow any exceptions from observers
-          (try
-            (observer event-type body)
-            (catch Exception e
-              (println (str "observer exception" e))))))
+      ; when event-type is in event-types, observe it
+      (when (some #{(:type json)} event-types)
+        ; swallow any exceptions from observers
+        (try
+          (observer json)
+          (catch Exception e
+            (println (str "observer exception" e)))))
       (callback json))))
 
 (defn encode [s]
