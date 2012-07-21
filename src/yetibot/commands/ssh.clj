@@ -8,7 +8,8 @@
 (def private-key-path (System/getenv "SSH_PRIVATE_KEY_PATH"))
 (def username (System/getenv "SSH_USERNAME"))
 (def servers (s/split (System/getenv "SSH_SERVERS") #","))
-(def servers-by-name (into {} (for [k servers] [(keyword k) (System/getenv (str "SSH_" k))])))
+(def servers-by-name
+  (into {} (for [k servers] [(keyword k) (System/getenv (str "SSH_" k))])))
 
 (defn list-servers
   "ssh servers # list servers configured for ssh access"
