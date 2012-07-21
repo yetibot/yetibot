@@ -54,6 +54,7 @@
              (println (str "found " ~prefix ". args are:" ~'args))
              ; try matching the available sub-commands
              (cond-let [~'p]
+                       ; rebuild the pairs in `exprs` as valid input for cond-let
                        ~@(map (fn [i#]
                                 (if (instance? java.util.regex.Pattern i#)
                                   `(re-find ~i# ~'args) ; prefix to match
@@ -68,7 +69,25 @@
                           (:doc (meta (resolve (first i#))))))
                       '~exprs))))
 
-
+; observer hook
+(defn obs-hook
+  "Pass a collection of event-types you're interested in and an observer function
+  that accepts `event-type` and `body` args. If an event occurs that matches the
+  events in your event-types arg, your observer will be called."
+  [event-types observer]
+  (rh/add-hook
+    #'core/handle-campfire-event
+    (fn [callback json]
+      (core/parse-event
+        json
+        ; when event-type is in event-types, observe it
+        (when (some #{event-type} event-types)
+          ; swallow any exceptions from observers
+          (try
+            (observer event-type body)
+            (catch Exception e
+              (println (str "observer exception" e))))))
+      (callback json))))
 
 (defn encode [s]
   (URLEncoder/encode (str s) "UTF-8"))

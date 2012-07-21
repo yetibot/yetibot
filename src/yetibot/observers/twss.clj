@@ -26,18 +26,8 @@
       false
       (cf/send-message (str reply)))))
 
-(defn observe [event-type body]
-  (println (str "observing " event-type body))
-  (parse-result-from-twss
-    (load-twss body)))
-
-(rh/add-hook
-  #'core/handle-text-message
-  (fn [callback json]
-    (core/parse-event json
-                      (try
-                        (observe event-type body)
-                        (catch Exception e
-                          (println (str "observer exception" e)))))
-    ; finish up by passing it back to handle-text-message
-    (callback json)))
+(obs-hook
+  ["TextMessage" "PasteMessage"]
+  (fn [event-type body]
+    (parse-result-from-twss
+      (load-twss body))))
