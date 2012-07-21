@@ -39,7 +39,7 @@
                (condp = event-type ; Handle the various types of messages
                  "TextMessage" (handle-text-message json)
                  "PasteMessage" (handle-text-message json)
-                 (println "Unhandled event type: " event-type)))) 
+                 (println "Unhandled event type: " event-type))))
 
 (defn unknown-command [cmd subcommand]
   (cf/send-message (str "I don't know how to do " subcommand " for " cmd))

@@ -5,6 +5,7 @@
             [yetibot.campfire :as cf]
             [yetibot.help :as help]
             [robert.hooke :as rh]
+            [clojure.stacktrace :as st]
             [clojure.data.json :as json])
   (:use [clojure.contrib.cond])
   (:import (java.net URL URLEncoder)))
@@ -84,7 +85,8 @@
         (try
           (observer json)
           (catch Exception e
-            (println (str "observer exception" e)))))
+            (println (str "observer exception: " e))
+            (st/print-stack-trace (st/root-cause e) 3))))
       (callback json))))
 
 (defn encode [s]
