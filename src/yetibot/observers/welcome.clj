@@ -6,10 +6,10 @@
   (:use [yetibot.util]))
 
 ; Map of user_id to responses
-(def ids (s/split (str (System/getenv "RESPONSE_IDS")) #","))
+(def ids (s/split (str (System/getenv "WELCOME_IDS")) #","))
 (def enter-responses
   (when ids
-    (into {} (for [id ids] [(keyword id) (System/getenv (str "RESPONSE_" id))]))))
+    (into {} (for [id ids] [(keyword id) (System/getenv (str "WELCOME_" id))]))))
 
 (obs-hook
   ["EnterMessage"]
