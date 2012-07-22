@@ -12,7 +12,7 @@
 (def auth {:user (System/getenv "JENKINS_USER")
            :password (System/getenv "JENKINS_PASS")
            :preemptive true})
-
+(def default-job (System/getenv "JENKINS_DEFAULT_JOB"))
 
 ; helpers
 (def job-names
@@ -90,6 +90,12 @@
   (println (str "list jobs matching " match))
   (s/grep (re-pattern match) (job-names)))
 
+(defn build-default-cmd
+  "jen build # build default job if configured"
+  [] (if default-job
+       (build default-job)
+       "no default job configured"))
+
 (defn status-cmd
   "jen status <job-name>"
   [job-name]
@@ -109,6 +115,7 @@ jen list <string>           # lists jenkins jobs containing <string>"
         (list-jobs-matching (name arg))))))
 
 (cmd-hook #"jen"
+          #"^build$" (build-default-cmd)
           #"^build\s(.+)" (build (second p))
           #"^status\s(.+)" (status-cmd (second p))
           #"^list\s(.+)" (list-cmd (second p)))
