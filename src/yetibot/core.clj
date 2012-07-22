@@ -2,6 +2,7 @@
   (:require [http.async.client :as c]
             [yetibot.campfire :as cf]
             [clojure.contrib.string :as s]
+            [clojure.stacktrace :as st]
             [clojure.tools.namespace :as ns])
   (:use [clojure.tools.logging]
         [clj-logging-config.log4j]))
@@ -63,7 +64,8 @@
 (defn load-ns [arg]
   (try (require arg :reload)
     (catch Exception e
-      (println "Warning: problem requiring" arg "hook:" (.getMessage e)))))
+      (println "Warning: problem requiring" arg "hook:" (.getMessage e))
+      (st/print-stack-trace (st/root-cause e) 3))))
 
 (defn load-commands []
   (doseq [command-namespace (yetibot-command-namespaces)]
