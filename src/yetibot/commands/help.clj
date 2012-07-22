@@ -3,6 +3,9 @@
   (:use [yetibot.util :only (cmd-hook)]
         [yetibot.help :only (get-docs get-docs-for)]))
 
+(def separator
+  "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")
+
 (defn help-topics
   []
   (println "fetching help topics")
@@ -12,13 +15,21 @@
                (keys (get-docs)))))
 
 (defn help-for-topic
-  "help <topic>                # get help for <topic>"
+  "help <topic> # get help for <topic>"
   [prefix]
   (s/join \newline
           (or
             (seq (get-docs-for prefix))
             (list (str "I couldn't find any help for topic " prefix)))))
 
+(defn help-all-cmd
+  "help all # get help for all topics"
+  []
+  (s/join (str \newline separator \newline)
+          (for [section (vals (get-docs))]
+            (s/join \newline section))))
+
 (cmd-hook #"help"
+          #"all" (help-all-cmd)
           #"^$" (help-topics)
           #"^\w+$" (help-for-topic p))
