@@ -16,13 +16,16 @@
      (let [~'response (~verb-fn ~'client ~uri :auth ~auth)]
        ~@body)))
 
-(defn get-json
-  ([uri] (get-json uri {:user "" :password ""}))
-  ([uri auth] (get-json uri client/GET auth))
+(defn fetch
+  ([uri] (fetch uri {:user "" :password ""})) ; default empty user/pass
+  ([uri auth] (fetch uri client/GET auth)) ; default GET
   ([uri verb-fn auth]
    (with-client uri verb-fn auth
                 (client/await response)
-                (json/read-json (client/string response)))))
+                (client/string response))))
+
+(defn get-json [& args]
+  (json/read-json (apply fetch args)))
 
 
 ; formatters to send data structures to chat
