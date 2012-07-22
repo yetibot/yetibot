@@ -1,7 +1,6 @@
 (ns yetibot.commands.image-search
   (:require [http.async.client :as client]
             [clojure.contrib.string :as s]
-            [yetibot.core :as core]
             [clojure.data.json :as json]
             [robert.hooke :as rh])
   (:use [yetibot.util]))
