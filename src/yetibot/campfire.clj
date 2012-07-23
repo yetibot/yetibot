@@ -2,6 +2,7 @@
   (:require [http.async.client :as c]
             [clojure.data.json :as json]
             [clojure.contrib.string :as s]
+            [clojure.stacktrace :as st]
             [clj-campfire.core :as cf])
   (:use [clojure.tools.logging :only (info error)]))
 
@@ -65,6 +66,7 @@
                   (message-callback json))
                 (catch Exception ex
                   (println (str "Exception in chat handler " ex))
+                  (st/print-stack-trace (st/root-cause ex) 3)
                   (send-paste (str "An exception occurred: " ex)))))))))))
 
 (defn start [message-callback]

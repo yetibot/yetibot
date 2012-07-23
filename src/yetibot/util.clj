@@ -63,7 +63,9 @@
                                 (if (instance? java.util.regex.Pattern i#)
                                   `(re-find ~i# ~'args) ; prefix to match
                                   `(chat-result ~i#))) ; chat results of handler
-                              exprs)))
+                              exprs)
+                       ; default to help
+                       true (core/handle-command "help" (str ~prefix))))
            (~'callback ~'cmd ~'args))))
      ; extract the meta from the commands and use it to build docs
      (help/add-docs ~prefix
