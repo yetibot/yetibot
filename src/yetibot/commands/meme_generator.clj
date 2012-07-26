@@ -81,7 +81,10 @@
   (chat-instance (rand-nth (:result (instances-popular)))))
 
 (defn chat-meme-list [l]
-  (s/join \newline (map #(:displayName %) (:result l))))
+  (if (and l (seq (:result l)))
+    (s/join \newline (map #(:displayName %) (:result l)))
+    "No results"))
+
 
 ;; retry api calls - TODO add https://github.com/joegallo/robert-bruce
 
