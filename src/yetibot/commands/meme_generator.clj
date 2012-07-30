@@ -112,5 +112,5 @@
 (cmd-hook #"meme"
           #"^popular" (chat-instance-popular)
           #"^trending" (trending-cmd)
-          #"^search\s(.+)" (search-cmd (second p))
-          #"^(.+):(.+)\/(.+)$" (generate-cmd (rest p)))
+          #"^(.+):(.+)\/(.+)$" (generate-cmd (rest p))
+          #"^(search\s)?(.+)" (search-cmd (nth p 2)))
