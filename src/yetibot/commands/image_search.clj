@@ -11,7 +11,7 @@
 (defn google-image-search [q n]
   (with-open [client (client/create-client)]
     (let [resp (client/GET client base-google-image-url
-                           :query {:v "1.0", :rsz n, :q q})]
+                           :query {:v "1.0", :rsz n, :q q :safe "active"})]
       (client/await resp)
       (json/read-json (client/string resp)))))
 
