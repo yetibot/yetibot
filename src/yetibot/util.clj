@@ -39,7 +39,7 @@
       (and
         (coll? d)
         (s/substring? (str \newline) formatted)
-        (filter #(s/substring? % formatted) ["jpg" "png" "gif"]))
+        (seq (filter #(s/substring? % formatted) ["jpg" "png" "gif"])))
       (cf/send-message-for-each d)
       ; send the message with newlines as a paste
       (s/substring? (str \newline) formatted) (cf/send-paste formatted)
