@@ -17,7 +17,8 @@
          (is
            (=
              (order/show-order)
-             ["panang beef"])))
+             ["panang beef"])
+           "it should have the panang beef I ordered"))
 
 ; order multiple items
 (deftest order-multiple-items
@@ -28,7 +29,8 @@
          (is
            (=
              3
-             (count (order/get-orders)))))
+             (count (order/get-orders)))
+           "the current order should have 3 items"))
 
 ; !order show
 (deftest show-empty-order
@@ -36,6 +38,5 @@
          (is
            (=
              order/empty-order-message
-             (order/show-order))))
-
-
+             (order/show-order))
+           "it should report the empty order message if empty"))

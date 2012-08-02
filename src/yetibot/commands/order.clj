@@ -30,7 +30,6 @@
     os
     empty-order-message))
 
-
 (cmd-hook #"order"
           #"^$" (start-taking-orders)
           #"show" (show-order)
