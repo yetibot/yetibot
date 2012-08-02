@@ -6,7 +6,7 @@ It's a yeti. It's a bot. You can find it on campfire, awaiting your command.
 
 ## Setup
 
-Configure your system's environment variables and run it.
+Configure your `ENV` and `lein run` it.
 
 ```
 export CAMPFIRE_API_KEY=
@@ -21,13 +21,22 @@ export JENKINS_PASS=
 export MEME_USER=
 export MEME_PASS=
 
-export SSH_SERVERS=
-export SSH_dev1=
-export SSH_dev2=
+# A list of host aliases
+export SSH_SERVERS=dev,test
+export SSH_dev=<dev.example.com>
+export SSH_test=<test.example.com>
+# The private key to connect to all hosts. This may be configurable per-host in the future.
 export SSH_PRIVATE_KEY_PATH=
 export SSH_USERNAME=
 
 export WOLFRAM_APP_ID=
+
+# Sounds to play when specific users enter the room
+export WELCOME_IDS=<userid1>,<userid2>
+# User 1
+export WELCOME_<userid1>=yeah
+# User 2
+export WELCOME_<userid2>=secret
 ```
 
 
