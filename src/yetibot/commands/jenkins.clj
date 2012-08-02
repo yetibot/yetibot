@@ -10,7 +10,7 @@
 
 (def base-uri (System/getenv "JENKINS_URI"))
 (def auth {:user (System/getenv "JENKINS_USER")
-           :password (System/getenv "JENKINS_PASS")
+           :password (System/getenv "JENKINS_API_KEY")
            :preemptive true})
 (def default-job (System/getenv "JENKINS_DEFAULT_JOB"))
 

@@ -16,7 +16,9 @@ export CAMPFIRE_SUBDOMAIN=
 
 export JENKINS_URI=
 export JENKINS_USER=
-export JENKINS_PASS=
+export JENKINS_API_KEY=
+# Default job to build when running !jenkins build with no args
+export JENKINS_DEFAULT_JOB=
 
 export MEME_USER=
 export MEME_PASS=
