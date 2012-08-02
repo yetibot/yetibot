@@ -19,11 +19,7 @@
   (println (str "nothing handled command " cmd " with args " args))
   ; default to looking up a random result from google image search instead of
   ; complaining about not knowing stuff.
-  (cf/send-message ((eval 'yetibot.commands.image-search/image-cmd)
-                                   (str cmd " " (s/join " " args)))))
-
-  ;;; (cf/send-message (str "I don't know much about " cmd
-  ;;;                       ". Use !help.")))
+  (handle-command "image" (str cmd " " args)))
 
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
