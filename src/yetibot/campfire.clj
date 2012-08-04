@@ -49,6 +49,11 @@
       (println (str "joining at " uri))
       (c/await resp))))
 
+(defn get-room []
+  (let [uri (str base-uri "/room/" room-id ".json")
+        users (http/get-json uri auth)]
+    users))
+
 ; Monitor the chat room with the Streaming API
 (defn listen-to-chat [message-callback]
   (with-open [client (c/create-client)]
