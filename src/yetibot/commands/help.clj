@@ -1,7 +1,7 @@
 (ns yetibot.commands.help
   (:require [clojure.contrib.string :as s])
   (:use [yetibot.util :only (cmd-hook)]
-        [yetibot.help :only (get-docs get-docs-for)]))
+        [yetibot.models.help :only (get-docs get-docs-for)]))
 
 (def separator
   "▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬")

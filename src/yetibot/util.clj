@@ -3,7 +3,7 @@
             [clojure.contrib.string :as s]
             [yetibot.core :as core]
             [yetibot.campfire :as cf]
-            [yetibot.help :as help]
+            [yetibot.models.help :as help]
             [robert.hooke :as rh]
             [clojure.stacktrace :as st]
             [clojure.data.json :as json])

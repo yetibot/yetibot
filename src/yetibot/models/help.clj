@@ -1,4 +1,4 @@
-(ns yetibot.help
+(ns yetibot.models.help
   (:require [clojure.contrib.string :as s]
             [yetibot.core :as core]
             [clojure.contrib.string :as s]
