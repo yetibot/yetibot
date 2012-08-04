@@ -2,6 +2,7 @@
   (:require [clojure.string :as s]
             [http.async.client :as client])
   (:use [yetibot.util]
+        [yetibot.util.http]
         [clojure.java.shell :only [sh]]))
 
 (def endpoint "http://www.simplyscala.com/interp?bot=irc&code=")

@@ -3,6 +3,8 @@
             [clojure.data.json :as json]
             [clojure.contrib.string :as s]
             [clojure.stacktrace :as st]
+            [yetibot.models.users :as users]
+            [yetibot.util.http :as http]
             [clj-campfire.core :as cf])
   (:use [clojure.tools.logging :only (info error)]))
 
@@ -69,19 +71,19 @@
                   (st/print-stack-trace (st/root-cause ex) 3)
                   (send-paste (str "An exception occurred: " ex)))))))))))
 
+
 (defn start [message-callback]
   (def event-loop
-    ;;; (future-call (bound-fn [] ; call on a separate thread so it doesn't block
-                   (while true
-                     (try
-                       (listen-to-chat message-callback)
-                       (catch Exception ex
-                         (println "Exception while listening to streaming api")
-                         (println ex)
-                         ))
-                     (println "Something bad happened. Sleeping for 2 seconds before reconnect")
-                     (. Thread (sleep 2000)))))
-    ; ))
+    (future
+      (while true
+        (try
+          (listen-to-chat message-callback)
+          (catch Exception ex
+            (println "Exception while listening to streaming api")
+            (println ex)
+            ))
+        (println "Something bad happened. Sleeping for 2 seconds before reconnect")
+        (. Thread (sleep 2000))))))
 
 
                            ; (message-callback (json/read-json s))

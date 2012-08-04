@@ -1,5 +1,5 @@
 (ns yetibot.commands.poke
-  (:use [yetibot.util :only (cmd-hook with-client)]))
+  (:use [yetibot.util :only (cmd-hook)]))
 
 (defn do-poking
  "poke                        # NEVER do this"

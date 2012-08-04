@@ -1,5 +1,6 @@
 (ns yetibot.commands.classnamer
-  (:use [yetibot.util :only [cmd-hook fetch]]))
+  (:use [yetibot.util :only [cmd-hook]]
+        [yetibot.util.http :only [fetch]]))
 
 (def endpoint "http://www.classnamer.com/index.txt")
 

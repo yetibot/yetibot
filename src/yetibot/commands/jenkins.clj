@@ -5,7 +5,8 @@
             [robert.hooke :as rh]
             [clj-time.core :as t]
             [clj-time.coerce :as c])
-  (:use [yetibot.util :only (cmd-hook with-client)]))
+  (:use [yetibot.util :only (cmd-hook)]
+        [yetibot.util.http :only (with-client)]))
 
 
 (def base-uri (System/getenv "JENKINS_URI"))
