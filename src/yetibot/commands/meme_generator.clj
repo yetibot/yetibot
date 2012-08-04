@@ -3,7 +3,8 @@
             [clojure.contrib.string :as s]
             [yetibot.core :as core]
             [robert.hooke :as rh])
-  (:use [yetibot.util]))
+  (:use [yetibot.util :only (cmd-hook)]
+        [yetibot.util.http]))
 
 (def base-uri "http://version1.api.memegenerator.net/")
 (def base-image-uri "http://a.static.memegenerator.net")

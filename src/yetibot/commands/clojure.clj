@@ -1,6 +1,7 @@
 (ns yetibot.commands.clojure
   (:require [clojure.string :as s])
-  (:use [yetibot.util]))
+  (:use [yetibot.util]
+        [yetibot.util.http]))
 
 (def endpoint "http://tryclj.com/eval.json")
 

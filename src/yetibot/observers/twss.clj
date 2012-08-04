@@ -5,7 +5,8 @@
             [useful.fn :as useful :only rate-limited]
             [yetibot.core :as core]
             [clojure.xml :as xml])
-  (:use [yetibot.util]))
+  (:use [yetibot.util]
+        [yetibot.util.http]))
 
 ; todo - abstract into observe-hook macro
 

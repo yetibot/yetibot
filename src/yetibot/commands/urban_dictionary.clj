@@ -2,7 +2,8 @@
   (:require [clojure.string :as s]
             [http.async.client :as client]
             [clojure.data.json :as json])
-  (:use [yetibot.util]))
+  (:use [yetibot.util]
+        [yetibot.util.http]))
 
 (def endpoint "http://api.urbandictionary.com/v0/")
 
