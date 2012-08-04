@@ -1,5 +1,5 @@
-(ns yetibot.test.help
-  (:use [yetibot.help])
+(ns yetibot.test.models.help
+  (:use [yetibot.models.help])
   (:use [clojure.test]))
 
 (defn add-some-docs []
