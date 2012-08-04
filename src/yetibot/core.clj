@@ -1,6 +1,7 @@
 (ns yetibot.core
   (:require [http.async.client :as c]
             [yetibot.campfire :as cf]
+            [yetibot.models.users :as users]
             [clojure.contrib.string :as s]
             [clojure.stacktrace :as st]
             [clojure.tools.namespace :as ns])
@@ -76,4 +77,7 @@
   (trace "starting main")
   (load-observers)
   (load-commands)
+  (future
+    (users/reset-users-from-room
+      (cf/get-room)))
   (cf/start handle-campfire-event))
