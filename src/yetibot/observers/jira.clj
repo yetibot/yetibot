@@ -18,6 +18,7 @@
         fs (:fields ji)]
     (chat-result [(-> fs :summary)
                   (str "Assignee: " (-> fs :assignee :displayName))
+                  (str "Status: " (-> fs :status :name))
                   (str jira/base-uri "/browse/" issue)])))
 
 (obs-hook
