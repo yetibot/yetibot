@@ -18,6 +18,9 @@
                     :else (str d))]
     ; decide which of 3 ways to send to chat
     (cond
+      ; send map as key: value pairs
+      (map? d) (cf/send-message-for-each
+                 (map #(str (first %1) ": " (second %1)) d))
       ; send each item in the coll as a separate message
       (and
         (coll? d)
@@ -28,7 +31,6 @@
       (s/substring? (str \newline) formatted) (cf/send-paste formatted)
       ; send as regular message
       :else (cf/send-message formatted))))
-
 
 ; command hook
 (defmacro cmd-hook [prefix & exprs]

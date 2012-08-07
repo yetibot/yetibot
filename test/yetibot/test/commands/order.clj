@@ -3,6 +3,8 @@
   (:use [clojure.test]
         [yetibot.core]))
 
+(def user {:name "TestBot"})
+
 ; !order
 (deftest start-taking-orders
          (is
@@ -13,11 +15,11 @@
 
 ; !order panang beef / 3 stars / brown rice
 (deftest order-some-food
-         (order/take-order "panang beef")
+         (order/take-order "panang beef" user)
          (is
            (=
              (order/show-order)
-             ["panang beef"])
+             {(:name user) "panang beef"})
            "it should have the panang beef I ordered"))
 
 ; order multiple items
@@ -28,9 +30,9 @@
          (order/take-order "banana")
          (is
            (=
-             3
+             1
              (count (order/get-orders)))
-           "the current order should have 3 items"))
+           "it should replace the order for current user each time"))
 
 ; !order show
 (deftest show-empty-order
