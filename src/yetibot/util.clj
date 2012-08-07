@@ -9,6 +9,7 @@
             [clojure.data.json :as json])
   (:use [clojure.contrib.cond]))
 
+(def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
 
 ; formatters to send data structures to chat
 (defn chat-result [d]
@@ -67,7 +68,9 @@
     #'core/handle-campfire-event
     (fn [callback json]
       ; when event-type is in event-types, observe it
-      (when (some #{(:type json)} event-types)
+      (when (and
+              (not= (str (:user_id json)) bot-id) ; don't observer yourself
+              (some #{(:type json)} event-types))
         ; swallow any exceptions from observers
         (try
           (observer json)
