@@ -21,16 +21,16 @@
   ([food] (take-order food nil))
   ([food user]
    ; use rand-int as key  placeholder until we can tell yetibot who issued the command
-   (prn (str "user was" user))
-   (swap! orders conj {(rand-int 1000000) food})
+   (swap! orders conj {(:name user) food})
    "Got it."))
 
 (defn show-order
   "order show # show the current order"
   []
-  (if-let [os (vals (get-orders))]
-    os
-    empty-order-message))
+  (let [os (get-orders)]
+    (if (empty? os)
+      empty-order-message
+      os)))
 
 (cmd-hook #"order"
           #"^$" (start-taking-orders)
