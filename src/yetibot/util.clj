@@ -35,7 +35,7 @@
   `(do
      (rh/add-hook
        #'core/handle-command
-       (fn [~'callback ~'cmd ~'args]
+       (fn [~'callback ~'cmd ~'args ~'user]
          (if (re-find ~prefix (s/lower-case ~'cmd))
            (do
              (println (str "found " ~prefix ". args are:" ~'args))
@@ -49,7 +49,7 @@
                               exprs)
                        ; default to help
                        true (core/handle-command "help" (str ~prefix))))
-           (~'callback ~'cmd ~'args))))
+           (~'callback ~'cmd ~'args ~'user))))
      ; extract the meta from the commands and use it to build docs
      (help/add-docs ~prefix
                     (map
