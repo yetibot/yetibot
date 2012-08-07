@@ -15,25 +15,28 @@
          ~'event-type (:type ~event-json)]
      ~@body))
 
-(defn handle-command [cmd args]
-  "receives parsed `cmd` and `args` for commands to hook into"
-  (println (str "nothing handled command " cmd " with args " args))
-  ; default to looking up a random result from google image search instead of
-  ; complaining about not knowing stuff.
-  (handle-command "image" (str cmd " " args)))
+(defn handle-command
+  ([cmd args] (handle-command cmd args nil))
+  ([cmd args user]
+   "receives parsed `cmd` and `args` for commands to hook into"
+   (println (str "nothing handled command " cmd " with args " args))
+   ; default to looking up a random result from google image search instead of
+   ; complaining about not knowing stuff.
+   (handle-command "image" (str cmd " " args) user)))
 
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
   (println "handle-text-message")
   (parse-event json
-               (let [parsed (s/split #"\s" 3 (s/trim body))]
+               (let [parsed (s/split #"\s" 3 (s/trim body))
+                     user (users/get-user (:user_id json))]
                  (if (>= (count parsed) 1)
                    (cond
                      (re-find #"^yeti" (first parsed)) ; you talking to me?
-                       (handle-command (second parsed) (nth parsed 2 ""))
+                       (handle-command (second parsed) (nth parsed 2 "") user)
                      (re-find #"^\!" (first parsed)) ; short syntax
                        (handle-command (s/join "" (rest (first parsed)))
-                                       (s/join " " (rest parsed))))
+                                       (s/join " " (rest parsed)) user))
                    (println (str "WARN: couldn't split the message into 2 parts: " body))
                    ))))
 

@@ -8,11 +8,6 @@
   (:use [yetibot.util]
         [yetibot.util.http]))
 
-; todo - abstract into observe-hook macro
-
-; observers hook handle-text-message which is called before
-; the more specific handle-command
-
 (def one-hour 3600000)
 (def endpoint "http://twss-classifier.heroku.com/?sentence=")
 (def false-phrase "Not TWSS")
