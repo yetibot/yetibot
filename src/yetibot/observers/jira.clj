@@ -13,7 +13,8 @@
   (re-pattern
     (str "(" (s/join "|" project-keys) ")" "-\\d+")))
 
-(defn report-jira [issue]
+(defn report-jira [[issue & _]]
+  (prn (str "lookup jira issue " issue))
   (let [ji (jira/get-issue issue)
         fs (:fields ji)]
     (chat-result [(-> fs :summary)
@@ -25,5 +26,5 @@
   ["TextMessage" "PasteMessage"]
   (fn [event-json]
     (prn event-json)
-    (if-let [issue (re-find issue-pattern (:body event-json))]
-      (report-jira (first issue)))))
+    (if-let [is (re-seq issue-pattern (:body event-json))]
+      (doall (map report-jira is)))))
