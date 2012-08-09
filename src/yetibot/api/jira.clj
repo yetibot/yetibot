@@ -11,4 +11,26 @@
   "Fetch json for a given JIRA"
   [i]
   (let [uri (str api-uri "/issue/" i)]
+    (prn uri)
     (get-json uri auth)))
+
+(defn user-search
+  "Search users"
+  [username]
+  ;; /user/search
+  (let [uri (str api-uri "/user/search?"
+                 (map-to-query-string {:username username}))]
+    (prn uri)
+    (get-json uri auth)))
+
+(defn server-info
+  "Returns general information about the current JIRA server"
+  []
+  (get-json (str api-uri "/serverInfo")))
+
+(defn my-permissions
+  "Returns all permissions in the system and whether the currently logged in user has
+  them"
+  []
+  (get-json (str api-uri "/mypermissions")))
+
