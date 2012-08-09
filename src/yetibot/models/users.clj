@@ -12,3 +12,6 @@
 
 (defn get-user [id]
   (get @users id))
+
+(defn get-rand-user []
+  (rand-nth (vals @users)))
