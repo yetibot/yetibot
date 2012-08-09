@@ -1,4 +1,5 @@
 (ns yetibot.observers.chatoms
+  (:require [yetibot.models.users :as users])
   (:use [yetibot.util :only (chat-result obs-hook)]
         [useful.fn :only (rate-limited)]
         [yetibot.util.http :only (get-json)]))
@@ -7,9 +8,15 @@
 
 (def five-minutes 300000)
 
+(defn user-prefix
+  []
+  (if-let [u (users/get-rand-user)]
+    (str (:name u) ": ")))
+
 (def report-chatom
   (rate-limited
-    #((chat-result (:text (get-json uri))))
+    #((chat-result
+        (str (user-prefix) (:text (get-json uri)))))
     five-minutes))
 
 (obs-hook
