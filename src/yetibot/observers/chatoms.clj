@@ -7,6 +7,7 @@
 (def uri "http://chatoms.com/chatom.json?Normal=1&Fun=20&Philosophy=3&Out+There=4&Love=5&Personal=10")
 
 (def five-minutes 300000)
+(def two-hours 7200000)
 
 (defn user-prefix
   []
@@ -17,10 +18,9 @@
   (rate-limited
     #((chat-result
         (str (user-prefix) (:text (get-json uri)))))
-    five-minutes))
+    two-hours))
 
 (obs-hook
-  ["KickMessage" "IdleMessage" "LeaveMessage" "TimestampMessage"
-   "TopicChangeMessage"]
+  ["KickMessage" "IdleMessage" "LeaveMessage" "TopicChangeMessage"]
   (fn [event-json]
     (report-chatom)))
