@@ -8,8 +8,6 @@
 ; !order
 (deftest start-taking-orders
          (is
-           (= (order/start-taking-orders) "Ok, go ahead"))
-         (is
            (= (order/get-orders) {})
            "it should clear the orders list"))
 

@@ -11,10 +11,10 @@
 (defn reset-orders [] (reset! orders {}))
 
 (defn start-taking-orders
-  "order # reset the orders list and start collecting everyone's order"
+  "order reset # reset the orders list"
   []
   (reset-orders)
-  "Ok, go ahead")
+  "Ok, I reset the orders list.")
 
 (defn take-order
   "order <food> # add (or replace) your food for the current order"
@@ -24,6 +24,11 @@
    (swap! orders conj {(:name user) food})
    "Got it."))
 
+(defn order-for
+  "order for <person>: <food> # order <food> for someone other than yourself"
+  [person food]
+  (take-order food {:name person}))
+
 (defn show-order
   "order show # show the current order"
   []
@@ -32,7 +37,9 @@
       empty-order-message
       os)))
 
+
 (cmd-hook #"order"
-          #"^$" (start-taking-orders)
+          #"reset" (start-taking-orders)
           #"show" (show-order)
+          #"for\s(.+):(.+)" (order-for (nth p 1) (nth p 2))
           #".+" (take-order p user))
