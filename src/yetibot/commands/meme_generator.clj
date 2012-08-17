@@ -30,15 +30,28 @@
     (println uri)
     (get-json uri auth)))
 
-(defn instances-popular []
-  "Retrieves popular instances"
-  (get-json (str base-uri (:instance-popular apis) "?"
-                 (map-to-query-string
-                   {:languageCode "en" :pageSize 20 :days 1}))
-            auth))
-
 (defn search-generators [q]
   (get-json (str base-uri (:search-generators apis) (encode q)) auth))
+
+(defn get-first-generator [q]
+  (let [json (search-generators q)
+        result (:result json)]
+    (if (empty? result)
+      {:urlName ""} ; stub an empty result to prevent errors TODO: improve
+      (first result))))
+
+(defn instances-popular
+  ([] (instances-popular ""))
+  ([gen]
+   "Retrieves popular instances. Retrieves popular only for `gen` if specified."
+   (println (str "gen is " gen))
+   (let [uri (str base-uri (:instance-popular apis) "?"
+                  (map-to-query-string
+                    (merge {:languageCode "en" :pageSize 20 :days 1}
+                           (when-not (empty? gen)
+                             {:urlName (:urlName (get-first-generator gen))}))))]
+     (println uri)
+     (get-json uri auth))))
 
 (defn create-instance [query-string]
   (let [uri (str base-uri (:create apis) "?" query-string)]
@@ -81,6 +94,15 @@
   []
   (chat-instance (rand-nth (:result (instances-popular)))))
 
+(defn chat-instance-popular-for-gen
+  "meme popular <generator>    # list random popular meme instances for <generator> from the top 20 in the last day"
+  [gen]
+  (let [json (instances-popular gen)
+        result (:result json)]
+    (if (empty? result)
+      (str "No popular instances for " gen)
+      (chat-instance (rand-nth result)))))
+
 (defn chat-meme-list [l]
   (if (and l (seq (:result l)))
     (s/join \newline (map #(:displayName %) (:result l)))
@@ -102,7 +124,7 @@
     (search-generators term)))
 
 (defn generate-cmd
-  "meme <instance query>: <line1> / <line2> # generate an instance"
+  "meme <generator>: <line1> / <line2> # generate an instance"
   [[inst line1 line2]]
   (println (str "generate meme " inst))
   (chat-instance
@@ -111,7 +133,8 @@
         (build-instance-params inst line1 line2)))))
 
 (cmd-hook #"meme"
-          #"^popular" (chat-instance-popular)
+          #"^popular$" (chat-instance-popular)
+          #"^popular\s(.+)" (chat-instance-popular-for-gen (nth p 1))
           #"^trending" (trending-cmd)
           #"^(.+):(.+)\/(.+)$" (generate-cmd (rest p))
           #"^(search\s)?(.+)" (search-cmd (nth p 2)))
