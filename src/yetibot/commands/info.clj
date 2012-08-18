@@ -7,7 +7,7 @@
 (defn info
   "info <topic> # retrieve info about <topic> from DuckDuckGo"
   [topic]
-  (let [json (get-json (str endpoint topic))]
+  (let [json (get-json (str endpoint (encode topic)))]
     (if-let [resp (-> json :RelatedTopics first :Text)]
       resp
       (str "No info available for " topic))))
