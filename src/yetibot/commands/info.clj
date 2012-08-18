@@ -13,4 +13,4 @@
       (str "No info available for " topic))))
 
 (cmd-hook #"info"
-          #".+" info)
+          #".+" (info p))
