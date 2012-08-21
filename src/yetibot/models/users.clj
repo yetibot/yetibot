@@ -1,9 +1,9 @@
 (ns yetibot.models.users)
 
-(def users (atom {}))
+(defonce users (atom {}))
 
-(defn add-user [id user]
-  (swap! user conj {id user}))
+;;; (defn add-user [id user]
+;;;   (swap! user conj {id user}))
 
 (defn reset-users-from-room [room]
   (let [us (-> room :room :users)
