@@ -7,6 +7,7 @@
 
 ; !order
 (deftest start-taking-orders
+         (order/start-taking-orders)
          (is
            (= (order/get-orders) {})
            "it should clear the orders list"))
