@@ -13,5 +13,8 @@
 (defn get-user [id]
   (get @users id))
 
+(defn get-user-names []
+	(map :name (vals @users)))
+
 (defn get-rand-user []
   (rand-nth (vals @users)))
