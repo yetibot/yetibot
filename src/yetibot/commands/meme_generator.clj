@@ -49,7 +49,8 @@
                   (map-to-query-string
                     (merge {:languageCode "en" :pageSize 20 :days 1}
                            (when-not (empty? gen)
-                             {:urlName (:urlName (get-first-generator gen))}))))]
+                             ; clear days to search for popular instance of all time
+                             {:days 7 :urlName (:urlName (get-first-generator gen))}))))]
      (println uri)
      (get-json uri auth))))
 
