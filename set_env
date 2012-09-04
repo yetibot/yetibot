@@ -1,0 +1,59 @@
+export CAMPFIRE_API_KEY=4570127b5de71737bb4316bdeb8b98b6ac98d873
+export CAMPFIRE_SUBDOMAIN=decide
+export CAMPFIRE_BOT_ID=1008539
+export CAMPFIRE_ROOM="Front end"
+export CAMPFIRE_ROOM_ID=460842
+
+export CAMPFIRE_ROOM=Dev
+export CAMPFIRE_ROOM_ID=433283
+#export CAMPFIRE_ROOM="Test room"
+#export CAMPFIRE_ROOM_ID=523232
+
+export JENKINS_URI=http://jenkins.decideit.org/
+export JENKINS_USER=trevor
+export JENKINS_API_KEY=0218d4fcb6a87e06b2ca21b3f175329e
+export JENKINS_DEFAULT_JOB=com.decide.website
+
+export MEME_USER=yetibotmeme
+export MEME_PASS=yetibotmeme
+
+export SSH_PRIVATE_KEY_PATH=/Users/trevorhartman/.ssh/dev-sg-keypair
+export SSH_USERNAME=ubuntu
+export SSH_SERVERS=dev1,dev2
+export SSH_dev1=dev1-001.decideit.org
+export SSH_dev2=dev2-001.decideit.org
+
+export WOLFRAM_APP_ID=EHUQA3-66TJW7PA4P
+
+export WELCOME_IDS=1240569,1201757,1078144,993269,1078144,1233209,1069060,993985,1078141,1094081,1057929,1078135,1181628
+# Test Yeti
+export WELCOME_1240569=yeah
+# JSW
+export WELCOME_1078144=yeah
+# Ryan R
+export WELCOME_1201757=vuvuzela
+# Trevor
+export WELCOME_993269=nyan
+# Chris
+export WELCOME_993985=deeper
+# Ian
+export WELCOME_1078135=tmyk
+# Joel
+export WELCOME_1069060=ohmy
+# Ryan E
+export WELCOME_1233209=secret
+# Larry
+export WELCOME_1078141=trombone
+# JeffW
+export WELCOME_1094081=ohyeah
+# Kate
+export WELCOME_1057929=sax
+# Rebecca Z
+export WELCOME_1181628=inconceivable
+
+
+# JIRA
+export JIRA_DOMAIN=decide.atlassian.net
+export JIRA_USER=yetibot
+export JIRA_PASSWORD=yetibot
+export JIRA_PROJECT_KEYS=DEC,HULK
