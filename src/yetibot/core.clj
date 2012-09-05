@@ -24,6 +24,13 @@
    ; complaining about not knowing stuff.
    (handle-command "image" (str cmd " " args) user)))
 
+(defn handle-piped-command
+  "parse commands out of piped delimiters"
+  [body user]
+  (let [cms (s/split #"\|" (s/trim (s/replace-re #"\!" "" pc)))]
+    ))
+
+
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
   (println "handle-text-message")
@@ -32,13 +39,18 @@
                      user (users/get-user (:user_id json))]
                  (if (>= (count parsed) 1)
                    (cond
-                     (re-find #"^yeti" (first parsed)) ; you talking to me?
+                     ; you talking to me?
+                     (re-find #"^yeti" (first parsed))
                        (handle-command (second parsed) (nth parsed 2 "") user)
-                     (re-find #"^\!" (first parsed)) ; short syntax
+                     ; it starts with a ! and contains pipes
+                     (and (re-find #"^\!" (first parsed))
+                          (re-find "#\|" body))
+                       (handle-piped-command body user)
+                     ; short syntax
+                     (re-find #"^\!" (first parsed))
                        (handle-command (s/join "" (rest (first parsed)))
                                        (s/join " " (rest parsed)) user))
-                   (println (str "WARN: couldn't split the message into 2 parts: " body))
-                   ))))
+                   (println (str "WARN: couldn't split the message into 2 parts: " body))))))
 
 (defn handle-campfire-event [json]
   (parse-event json
@@ -46,10 +58,6 @@
                  "TextMessage" (handle-text-message json)
                  "PasteMessage" (handle-text-message json)
                  (println "Unhandled event type: " event-type))))
-
-(defn unknown-command [cmd subcommand]
-  (cf/send-message (str "I don't know how to do " subcommand " for " cmd))
-  (println (str "unkown command" cmd)))
 
 (defn find-namespaces [pattern]
   (let [all-ns (ns/find-namespaces-on-classpath)]
