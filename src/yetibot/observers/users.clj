@@ -1,7 +1,8 @@
 (ns yetibot.observers.users
   (:require [yetibot.models.users :as users]
             [yetibot.campfire :as cf])
-  (:use [yetibot.util :only (chat-result obs-hook)]))
+  (:use [yetibot.util :only (obs-hook)]
+        [yetibot.campfire :only (chat-data-structure)]))
 
 (def refresh-future (atom nil))
 

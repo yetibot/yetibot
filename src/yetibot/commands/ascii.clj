@@ -11,4 +11,4 @@
 
 
 (cmd-hook #"ascii"
-          #".+" (ascii p))
+          #"^.+" (ascii p))

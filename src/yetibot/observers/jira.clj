@@ -3,6 +3,7 @@
             [clojure.string :as s])
   (:use [yetibot.util]
         [yetibot.util.http]
+        [yetibot.campfire :only (chat-data-structure)]
         [clojure.contrib.cond]))
 
 (def project-keys
@@ -17,7 +18,7 @@
   (prn (str "lookup jira issue " issue))
   (let [ji (jira/get-issue issue)
         fs (:fields ji)]
-    (chat-result [(-> fs :summary)
+    (chat-data-structure [(-> fs :summary)
                   (str "Assignee: " (-> fs :assignee :displayName))
                   (str "Status: " (-> fs :status :name))
                   (str jira/base-uri "/browse/" issue)])))

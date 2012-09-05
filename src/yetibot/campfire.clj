@@ -8,7 +8,6 @@
             [clj-campfire.core :as cf])
   (:use [clojure.tools.logging :only (info error)]))
 
-
 ; Settings
 (def u (System/getenv "CAMPFIRE_API_KEY"))
 (def p "x")
@@ -22,11 +21,9 @@
 (def json-headers {:content-type "application/json"})
 (def escapees {\" "\\\""})
 
-
 (def base-uri (str "https://" (:sub-domain cf-settings) ".campfirenow.com"))
 (def streaming-uri "https://streaming.campfirenow.com")
 (def auth {:user u :password p :preemptive true})
-
 
 (defn send-message [msg]
   (cf/message cf-settings room (str msg)))
@@ -76,7 +73,6 @@
                   (st/print-stack-trace (st/root-cause ex) 3)
                   (send-paste (str "An exception occurred: " ex)))))))))))
 
-
 (defn start [message-callback]
   (def event-loop
     (future
@@ -89,8 +85,6 @@
             ))
         (println "Something bad happened. Sleeping for 2 seconds before reconnect")
         (. Thread (sleep 2000))))))
-
-
                            ; (message-callback (json/read-json s))
                            ;(let [json (json/read-json s)]
                            ;  (println json)
@@ -99,3 +93,23 @@
                            ;    (println "pass it to the callback")
                            ;    (message-callback json)))))))))))
 
+; formatters to send data structures to chat
+(defn chat-data-structure [d]
+  (let [formatted (cond
+                    (coll? d) (s/join \newline d)
+                    :else (str d))]
+    ; decide which of 3 ways to send to chat
+    (cond
+      ; send map as key: value pairs
+      (map? d) (send-message-for-each
+                 (map #(str (first %1) ": " (second %1)) d))
+      ; send each item in the coll as a separate message
+      (and
+        (coll? d)
+        (s/substring? (str \newline) formatted)
+        (seq (filter #(s/substring? % formatted) ["jpg" "png" "gif"])))
+      (send-message-for-each d)
+      ; send the message with newlines as a paste
+      (s/substring? (str \newline) formatted) (send-paste formatted)
+      ; send as regular message
+      :else (send-message formatted))))

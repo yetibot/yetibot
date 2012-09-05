@@ -11,27 +11,6 @@
 
 (def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
 
-; formatters to send data structures to chat
-(defn chat-result [d]
-  (let [formatted (cond
-                    (coll? d) (s/join \newline d)
-                    :else (str d))]
-    ; decide which of 3 ways to send to chat
-    (cond
-      ; send map as key: value pairs
-      (map? d) (cf/send-message-for-each
-                 (map #(str (first %1) ": " (second %1)) d))
-      ; send each item in the coll as a separate message
-      (and
-        (coll? d)
-        (s/substring? (str \newline) formatted)
-        (seq (filter #(s/substring? % formatted) ["jpg" "png" "gif"])))
-      (cf/send-message-for-each d)
-      ; send the message with newlines as a paste
-      (s/substring? (str \newline) formatted) (cf/send-paste formatted)
-      ; send as regular message
-      :else (cf/send-message formatted))))
-
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
   `(do
@@ -47,7 +26,7 @@
                        ~@(map (fn [i#]
                                 (if (instance? java.util.regex.Pattern i#)
                                   `(re-find ~i# ~'args) ; prefix to match
-                                  `(chat-result ~i#))) ; chat results of handler
+                                  `~i#)) ; send result back to handle-command ; chat results of handler
                               exprs)
                        ; default to help
                        true (core/handle-command "help" (str ~prefix))))

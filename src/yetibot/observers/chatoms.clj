@@ -1,6 +1,7 @@
 (ns yetibot.observers.chatoms
   (:require [yetibot.models.users :as users])
-  (:use [yetibot.util :only (chat-result obs-hook)]
+  (:use [yetibot.util :only (obs-hook)]
+        [yetibot.campfire :only (chat-data-structure)]
         [useful.fn :only (rate-limited)]
         [yetibot.util.http :only (get-json)]))
 
@@ -16,7 +17,7 @@
 
 (def report-chatom
   (rate-limited
-    #((chat-result
+    #((chat-data-structure
         (str (user-prefix) (:text (get-json uri)))))
     two-hours))
 

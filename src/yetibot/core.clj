@@ -22,13 +22,31 @@
    (println (str "nothing handled command " cmd " with args " args))
    ; default to looking up a random result from google image search instead of
    ; complaining about not knowing stuff.
+   ; --
+   ; WARNING: if there is no "image" command this will produce an infinite loop.
+   ; Might want to keep a recursion count to prevent that.
    (handle-command "image" (str cmd " " args) user)))
 
+(defn chat-handle-command [& args]
+  (cf/chat-data-structure (apply handle-command args)))
+
+; TODO: look at the resulting data structure of single-res. If it's a sequence,
+; pipe a calls for each item in the sequence.
 (defn handle-piped-command
-  "parse commands out of piped delimiters"
+  "Parse commands out of piped delimiters and pipe the results of one to the next"
   [body user]
-  (let [cms (s/split #"\|" (s/trim (s/replace-re #"\!" "" pc)))]
-    ))
+  (let [cmds (map s/trim (s/split #"\|" (s/replace-re #"\!" "" body)))]
+    (prn "handle piped cmd " cmds)
+    (let [res (reduce (fn [acc cmd]
+                        (let [acc-cmd (str cmd " " acc)
+                              parsed (s/split #"\s" 2 acc-cmd)
+                              single-res (handle-command (first parsed) (second parsed) user)]
+                          (println "result of " parsed " was " single-res)
+                          single-res))
+                      ""
+                      cmds)]
+      (cf/chat-data-structure res)
+      (println "reduced the answer down to" res))))
 
 
 (defn handle-text-message [json]
@@ -41,14 +59,14 @@
                    (cond
                      ; you talking to me?
                      (re-find #"^yeti" (first parsed))
-                       (handle-command (second parsed) (nth parsed 2 "") user)
+                       (chat-handle-command (second parsed) (nth parsed 2 "") user)
                      ; it starts with a ! and contains pipes
                      (and (re-find #"^\!" (first parsed))
-                          (re-find "#\|" body))
+                          (re-find #"\|" body))
                        (handle-piped-command body user)
                      ; short syntax
                      (re-find #"^\!" (first parsed))
-                       (handle-command (s/join "" (rest (first parsed)))
+                       (chat-handle-command (s/join "" (rest (first parsed)))
                                        (s/join " " (rest parsed)) user))
                    (println (str "WARN: couldn't split the message into 2 parts: " body))))))
 
