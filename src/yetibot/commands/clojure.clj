@@ -17,5 +17,5 @@
       (:message json)
       (:result json))))
 
-(cmd-hook #"clojure"
+(cmd-hook #"clj"
           #".*" (clojure-cmd p))

@@ -4,10 +4,10 @@
         [evaljs.rhino]))
 
 (defn javascript-cmd
-  "javascript <expression> # evaluate a javascript expression"
+  "js <expression> # evaluate a javascript expression"
   [expr]
   (with-context (rhino-context)
                 (evaljs expr)))
 
-(cmd-hook #"javascript"
+(cmd-hook #"js"
           #".*" (javascript-cmd p))
