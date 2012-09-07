@@ -14,6 +14,7 @@
                                                               javax.jms/jms
                                                               com.sun.jdmk/jmxtools
                                                               com.sun.jmx/jmxri]]
+                           [evaljs "0.1.2"]
                            [clj-ssh "0.4.0"]
                            [useful "0.8.3-alpha8"]
                            ]

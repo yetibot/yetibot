@@ -60,7 +60,7 @@
     (join-room)
     (let [uri (str streaming-uri "/room/" room-id "/live.json")
               resp (c/stream-seq client :get uri :auth auth)]
-      (println "Start listening on streaming API")
+      (println (str "Start listening on streaming API in room " room))
       (doseq [s (c/string resp)]
         (if (not (empty? (s/trim (str s))))
           ; Campfire sometimes returns multiple lines of json objects at a
