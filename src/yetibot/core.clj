@@ -18,7 +18,9 @@
 (defn handle-command
   ([cmd args] (handle-command cmd args nil))
   ([cmd args user]
-   "receives parsed `cmd` and `args` for commands to hook into"
+   "Receives parsed `cmd` prefix and `args` for commands to hook into. Typicall
+   `args` will be a string, but it might be a seq when handle-command is called
+   from handle-piped-command."
    (println (str "nothing handled command " cmd " with args " args))
    ; default to looking up a random result from google image search instead of
    ; complaining about not knowing stuff.
@@ -30,19 +32,33 @@
 (defn chat-handle-command [& args]
   (cf/chat-data-structure (apply handle-command args)))
 
-; TODO: look at the resulting data structure of single-res. If it's a sequence,
-; pipe a calls for each item in the sequence.
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
   [body user]
   (let [cmds (map s/trim (s/split #"\|" (s/replace-re #"\!" "" body)))]
     (prn "handle piped cmd " cmds)
-    (let [res (reduce (fn [acc cmd]
-                        (let [acc-cmd (str cmd " " acc)
-                              parsed (s/split #"\s" 2 acc-cmd)
-                              single-res (handle-command (first parsed) (second parsed) user)]
-                          (println "result of " parsed " was " single-res)
-                          single-res))
+    ; cmd-with-args is the unparsed string
+    (let [res (reduce (fn [acc cmd-with-args]
+                        (let [acc-cmd (str cmd-with-args " " acc)
+                              ; split out the cmd and args
+                              [cmd args] (s/split #"\s" 2 cmd-with-args)]
+                          (println "command " cmd " with args " args
+                                   " and acc'd args " acc)
+                          ; TODO
+                          ; acc could be a collection instead of a string. In that case we
+                          ; could:
+                          ; - take the first item and run the command with that
+                          ; - run handle-command for every item in the seq with the
+                          ;   assumption that this is the last command in the pipe
+                          (if (coll? acc)
+                            ; acc was a collection, so ignore any args in
+                            ; cmd-with-args. The acc collection will be args instead.
+                            (handle-command cmd acc user)
+                            ; otherwise concat args and acc as the new args. args are
+                            ; likely empty anyway. (e.g. !urban random | !image - the
+                            ; args to !image are empty, and acc would be the result
+                            ; of !urban random)
+                            (handle-command cmd (str (when args (str args " ")) acc) user))))
                       ""
                       cmds)]
       (cf/chat-data-structure res)

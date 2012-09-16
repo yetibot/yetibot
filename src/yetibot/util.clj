@@ -11,22 +11,30 @@
 
 (def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
 
+(def ^:private Pattern java.util.regex.Pattern)
+
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
   `(do
      (rh/add-hook
        #'core/handle-command
        (fn [~'callback ~'cmd ~'args ~'user]
+         ; only match against the
+         ; first word in args
          (if (re-find ~prefix (s/lower-case ~'cmd))
            (do
-             (println (str "found " ~prefix ". args are:" ~'args))
+             (println (str "found " ~prefix " on cmd " ~'cmd ". args are:" ~'args))
              ; try matching the available sub-commands
              (cond-let [~'p]
                        ; rebuild the pairs in `exprs` as valid input for cond-let
                        ~@(map (fn [i#]
-                                (if (instance? java.util.regex.Pattern i#)
-                                  `(re-find ~i# ~'args) ; prefix to match
-                                  `~i#)) ; send result back to handle-command ; chat results of handler
+                                (cond
+                                  ; prefix to match
+                                  (instance? Pattern i#) `(re-find ~i# ~'args)
+                                  ; placeholder - set p equal to the args
+                                  (= i# '_) `~'args
+                                  ; send result back to handle-command
+                                  :else `~i#))
                               exprs)
                        ; default to help
                        true (core/handle-command "help" (str ~prefix))))

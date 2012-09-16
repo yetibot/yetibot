@@ -104,9 +104,10 @@
       (str "No popular instances for " gen)
       (chat-instance (rand-nth result)))))
 
+; This no longer needs to return a string. The chat handler stringifies it for us.
 (defn chat-meme-list [l]
   (if (and l (seq (:result l)))
-    (s/join \newline (map #(:displayName %) (:result l)))
+    (map #(:displayName %) (:result l))
     "No results"))
 
 
