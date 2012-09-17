@@ -10,7 +10,7 @@
     (get-json uri)))
 
 (defn clojure-cmd
-  "clojure <expression> # evaluate a clojure expression"
+  "clj <expression> # evaluate a clojure expression"
   [expr]
   (let [json (try-clojure expr)]
     (if (:error json)
