@@ -13,8 +13,12 @@
 (defn get-user [id]
   (get @users id))
 
+(defn get-user-by-name [name]
+  (let [us (filter #(= name (:name %)) (vals @users))]
+    (if us (first us) nil)))
+
 (defn get-user-names []
-	(map :name (vals @users)))
+  (map :name (vals @users)))
 
 (defn get-rand-user []
   (rand-nth (vals @users)))
