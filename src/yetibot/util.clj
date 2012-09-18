@@ -37,7 +37,7 @@
                                   :else `~i#))
                               exprs)
                        ; default to help
-                       true (core/handle-command "help" (str ~prefix))))
+                       true (core/handle-command "help" (str ~prefix) ~'user)))
            (~'callback ~'cmd ~'args ~'user))))
      ; extract the meta from the commands and use it to build docs
      (help/add-docs ~prefix
