@@ -98,10 +98,10 @@
     (filter #(re-find pattern (str %)) all-ns)))
 
 (defn yetibot-command-namespaces []
-  (find-namespaces #"^yetibot\.commands"))
+  (flatten (map find-namespaces [#"^yetibot\.commands" #"^plugins.*commands"])))
 
 (defn yetibot-observer-namespaces []
-  (find-namespaces #"^yetibot\.observer"))
+  (flatten (map find-namespaces [#"^yetibot\.observers" #"^plugins.*observers"])))
 
 (defn load-ns [arg]
   (try (require arg :reload)
