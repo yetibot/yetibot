@@ -138,6 +138,13 @@ notit show # show the current list of users registered as not-it
 notit # register a user as not-it
 ```
 
+## Plugins
+
+YetiBot [looks in namespaces](https://github.com/devth/yetibot/blob/master/src/yetibot/core.clj#L100-104)
+starting with "plugins" when loading commands and observers. It also [ignores](https://github.com/devth/yetibot/blob/master/.gitignore#L10)
+`src/plugins` so that you can symlink it to a directory outside of YetiBot, which
+might be stored in some other repository.
+
 ## License
 
 Copyright &copy; 2012 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
