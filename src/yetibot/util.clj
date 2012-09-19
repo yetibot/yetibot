@@ -13,6 +13,10 @@
 
 (def ^:private Pattern java.util.regex.Pattern)
 
+(def env
+  (let [e (into {} (System/getenv))]
+    (zipmap (map keyword (keys e)) (vals e))))
+
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
   `(do
