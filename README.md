@@ -47,94 +47,97 @@ export WELCOME_<userid2>=secret
 All commands are prefixed by `yetibot` (or just `yeti` for short or `!` for shortest). yetibot ignores
 everything else.
 
-### Jenkins
-
-___status___
-
-Returns status and date of the last build, whether it's currently building,
-who it was started by, and the changeset.
-
-```
-yetibot jen status [jenkins job name]
-```
-
-___build___
-
-```
-yetibot jen build [job name]
-```
-
-___list___
-
-Takes either a number or a word to match job names on. Number returns the first N
-jobs and word returns all jobs matching the word.
-
-```
-yetibot jen list 2
-yetibot jen list model
-```
-
-### Meme generator
-
-___popular___
-
-Shows the first result of popular instances from the API. In the future it'll probably grab a random result instead.
-
-```
-yetibot meme popular
-```
-
-___trending___
-
-Shows the list of trending generators.
-
-```
-yetibot meme trending
-```
-
-___search___
-
-Searches the generators by name.
-
-```
-yetibot meme search interesting
-```
-
-___generator___
-
-Generates a meme and returns the image url to chat.
-
-```
-yetibot meme interesting I don't always code / but when I do, I use clojure
-```
 
 ### Help
 
 yetibot self-documents itself using the docstrings of its various commands. Ask it
-for help.
+for `!help` to get a list of help topics. `!help all` shows fully expanded command
+list for each topic.
 
 ```
-!help
+!help all
 ```
 
-Its reply will be:
-
 ```
-These are the topics I know about. Use help <topic> for more details.
-help
-clojure
-scala
-http
-ssh
-wolfram
-meme
-urban
-jen
-poke
-image
+head <list> # returns the first item from the <list>
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+clj <expression> # evaluate a clojure expression
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+help all # get help for all topics
+help <topic> # get help for <topic>
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+catfact # fetch a random cat fact
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+random <list> # returns a random item where <list> is a comma-separated list of items.
+  Can also be used to extract a random item when a collection is piped to random.
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+scala <expression> # evaluate a scala expression
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+wordnik define <word> # look up the definition for <word> on Wordnik
+wordnik random # look up a random word on Wordnik
+wordnik wotd # look up the Word of the Day on Wordnik
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+http <code>                 # look up http status code
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+users random # get a random user
+users # list all users presently in the room
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+ssh <server> <command> # run a command on <server>
+ssh servers # list servers configured for ssh access
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+attack <name> # attacks a person in the room
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+uptime # list uptime in milliseconds
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+js <expression> # evaluate a javascript expression
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+cls # clear screen after your co-worker posts something inappropriate
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+wolfram <query> # search for <query> on Wolfram Alpha
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+curl <options> <url> # execute standard curl tool
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+info <topic> # retrieve info about <topic> from DuckDuckGo
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+order reset # reset the orders list
+order show # show the current order
+order for <person>: <food> # order <food> for someone other than yourself
+order <food> # add (or replace) your food for the current order
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+classnamer # retrieves a legit OO class name
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+tail <list> # returns the last item from the <list>
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+meme popular                # list random popular meme instances from the top 20 in the last day
+meme popular <generator>    # list random popular meme instances for <generator> from the top 20 in the last day
+meme trending               # list trending generators
+meme <generator>: <line1> / <line2> # generate an instance
+meme search <term>          # query available meme generators
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+ascii <text> # generates ascii art representation of <text>
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+urban random # fetch a random definition from Urban Dictionary
+urban <query> # search for <query> on Urban Dictionary
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+jen build # build default job if configured
+jen build <job-name>
+jen status <job-name>
+jen list                    # lists first 20 jenkins jobs
+jen list <n>                # lists first <n> jenkins jobs
+jen list <string>           # lists jenkins jobs containing <string>
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+complete <phrase> # complete phrase from Google Complete
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+poke                        # NEVER do this
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+image top <query> # fetch the first image from google images
+image <query> # fetch a random result from google images
+▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
+notit reset # resets the current not-it list
+notit show # show the current list of users registered as not-it
+notit # register a user as not-it
 ```
 
 ## License
 
 Copyright &copy; 2012 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
-
