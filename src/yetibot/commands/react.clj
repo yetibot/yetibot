@@ -10,7 +10,7 @@
 
 (defn- filter-images [html]
   (set (map second
-            (re-seq img-pattern r))))
+            (re-seq img-pattern html))))
 
 (defn- fetch-gifs []
   (let [raw-html (fetch endpoint)]
