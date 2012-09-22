@@ -1,6 +1,6 @@
 (ns yetibot.commands.meme-generator
   (:require [http.async.client :as client]
-            [clojure.contrib.string :as s]
+            [clojure.string :as s]
             [yetibot.core :as core]
             [robert.hooke :as rh])
   (:use [yetibot.util :only (cmd-hook)]
@@ -88,7 +88,7 @@
 
 ; Chat senders
 (defn chat-instance [i]
-  (str (s/replace-str "400x" "500x" (:instanceImageUrl i))))
+  (str (s/replace (:instanceImageUrl i) "400x" "500x")))
 
 (defn chat-instance-popular
   "meme popular                # list random popular meme instances from the top 20 in the last day"
@@ -134,9 +134,19 @@
       (map-to-query-string
         (build-instance-params inst line1 line2)))))
 
+(defn generate-auto-split-cmd
+  "meme <generator>: <text> # autosplit <text> in half and generate the instance"
+  [[inst text]]
+  (let [spl (s/split text #"\s")]
+    (generate-cmd
+      (list* inst
+             (map (partial s/join " ")
+                  (split-at (/ (count spl) 2) spl))))))
+
 (cmd-hook #"meme"
           #"^popular$" (chat-instance-popular)
           #"^popular\s(.+)" (chat-instance-popular-for-gen (nth p 1))
           #"^trending" (trending-cmd)
-          #"^(.+):(.+)\/(.+)$" (generate-cmd (rest p))
+          #"^(.+):(.+)\/(.*)$" (generate-cmd (rest p))
+          #"^(.+):(.+)$" (generate-auto-split-cmd (rest p))
           #"^(search\s)?(.+)" (search-cmd (nth p 2)))
