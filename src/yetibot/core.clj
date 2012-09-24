@@ -133,11 +133,13 @@
   (doseq [n (yetibot-observer-namespaces)]
     (load-ns n)))
 
+(defn load-commands-and-observers []
+  (load-observers)
+  (load-commands))
 
 (defn -main [& args]
   (trace "starting main")
-  (load-observers)
-  (load-commands)
+  (load-commands-and-observers)
   (future
     (users/reset-users-from-room
       (cf/get-room)))
