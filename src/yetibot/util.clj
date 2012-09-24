@@ -22,7 +22,7 @@
   `(do
      (rh/add-hook
        #'core/handle-command
-       (fn [~'callback ~'cmd ~'args ~'user]
+       (fn [~'callback ~'cmd ~'args ~'user ~'opts]
          ; only match against the
          ; first word in args
          (if (re-find ~prefix (s/lower-case ~'cmd))
@@ -41,8 +41,8 @@
                                   :else `~i#))
                               exprs)
                        ; default to help
-                       true (core/handle-command "help" (str ~prefix) ~'user)))
-           (~'callback ~'cmd ~'args ~'user))))
+                       true (core/handle-command "help" (str ~prefix) ~'user ~'opts)))
+           (~'callback ~'cmd ~'args ~'user ~'opts))))
      ; extract the meta from the commands and use it to build docs
      (help/add-docs ~prefix
                     (map

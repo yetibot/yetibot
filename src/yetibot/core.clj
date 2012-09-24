@@ -16,21 +16,29 @@
      ~@body))
 
 (defn handle-command
-  ([cmd args] (handle-command cmd args nil))
-  ([cmd args user]
-   "Receives parsed `cmd` prefix and `args` for commands to hook into. Typicall
-   `args` will be a string, but it might be a seq when handle-command is called
-   from handle-piped-command."
-   (println (str "nothing handled command " cmd " with args " args))
-   ; default to looking up a random result from google image search instead of
-   ; complaining about not knowing stuff.
-   ; --
-   ; WARNING: if there is no "image" command this will produce an infinite loop.
-   ; Might want to keep a recursion count to prevent that.
-   (handle-command "image" (str cmd " " args) user)))
+  [cmd args user opts]
+  "Receives parsed `cmd` prefix and `args` for commands to hook into. Typicall
+  `args` will be a string, but it might be a seq when handle-command is called
+  from handle-piped-command."
+  (println (str "nothing handled command " cmd " with args " args))
+  ; default to looking up a random result from google image search instead of
+  ; complaining about not knowing stuff.
+  ; --
+  ; WARNING: if there is no "image" command this will produce an infinite loop.
+  ; Might want to keep a recursion count to prevent that.
+  (handle-command "image" (str cmd " " args) user nil))
 
 (defn chat-handle-command [& args]
   (cf/chat-data-structure (apply handle-command args)))
+
+(defn parse-cmd-with-args
+  [cmd-with-args]
+  (s/split #"\s" 2 cmd-with-args))
+
+(defn parse-and-handle-command
+  [cmd-with-args & args]
+  (apply handle-command
+         (flatten [(parse-cmd-with-args cmd-with-args) args])))
 
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
@@ -41,7 +49,7 @@
     (let [res (reduce (fn [acc cmd-with-args]
                         (let [acc-cmd (str cmd-with-args " " acc)
                               ; split out the cmd and args
-                              [cmd args] (s/split #"\s" 2 cmd-with-args)]
+                              [cmd args] (parse-cmd-with-args cmd-with-args)]
                           (println "command " cmd " with args " args
                                    " and acc'd args " acc)
                           ; TODO
@@ -53,12 +61,12 @@
                           (if (coll? acc)
                             ; acc was a collection, so ignore any args in
                             ; cmd-with-args. The acc collection will be args instead.
-                            (handle-command cmd acc user)
+                            (handle-command cmd acc user args)
                             ; otherwise concat args and acc as the new args. args are
                             ; likely empty anyway. (e.g. !urban random | !image - the
                             ; args to !image are empty, and acc would be the result
                             ; of !urban random)
-                            (handle-command cmd (str (when args (str args " ")) acc) user))))
+                            (handle-command cmd (str (when args (str args " ")) acc) user nil))))
                       ""
                       cmds)]
       (cf/chat-data-structure res)
@@ -75,7 +83,7 @@
                    (cond
                      ; you talking to me?
                      (re-find #"^yeti" (first parsed))
-                       (chat-handle-command (second parsed) (nth parsed 2 "") user)
+                       (chat-handle-command (second parsed) (nth parsed 2 "") user nil)
                      ; it starts with a ! and contains pipes
                      (and (re-find #"^\!" (first parsed))
                           (re-find #"\|" body))
@@ -83,7 +91,7 @@
                      ; short syntax
                      (re-find #"^\!" (first parsed))
                        (chat-handle-command (s/join "" (rest (first parsed)))
-                                       (s/join " " (rest parsed)) user))
+                                       (s/join " " (rest parsed)) user nil))
                    (println (str "WARN: couldn't split the message into 2 parts: " body))))))
 
 (defn handle-campfire-event [json]

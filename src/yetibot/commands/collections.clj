@@ -1,12 +1,12 @@
 (ns yetibot.commands.collections
   (:require
-    [clojure.contrib.string :as s])
+    [clojure.string :as s])
   (:use [yetibot.util :only (cmd-hook)]))
 
 (defn ensure-items-collection [items]
   (if (coll? items)
     items
-    (s/split #"," items)))
+    (s/split items #"\n")))
 
 ; random
 
@@ -38,3 +38,18 @@
 
 (cmd-hook #"tail"
           _ (tail p))
+
+; xargs
+; example usage: !meme trending | xargs meme interesting:
+
+(defn xargs
+  "xargs <cmd> <list> # run <cmd> for every item in <list>; behavior is similar to xargs(1)'s xargs -n1"
+  [cmd items user]
+  (println "cmd is" cmd ". items are " items)
+  (let [is (ensure-items-collection items)]
+    (map #(yetibot.core/parse-and-handle-command (str cmd " " %) user nil) is)))
+
+(cmd-hook #"xargs"
+          _ (xargs opts args user))
+
+
