@@ -88,7 +88,7 @@
            (take n (job-names))))))
 
 (defn list-jobs-matching [match]
-  (println (str "list jobs matching " match))
+  (prn "list jobs matching " match)
   (s/grep (re-pattern match) (job-names)))
 
 (defn build-default-cmd
@@ -108,12 +108,13 @@ jen list                    # lists first 20 jenkins jobs
 jen list <n>                # lists first <n> jenkins jobs
 jen list <string>           # lists jenkins jobs containing <string>"
   [arg]
+  (println "list command with args:" arg)
   (if (empty? arg)
     (list-jobs)
-    (let [arg (read-string arg)]
-      (if (number? arg)
-        (list-jobs arg)
-        (list-jobs-matching (name arg))))))
+    (let [p-arg (read-string arg)]
+      (if (number? p-arg)
+        (list-jobs p-arg)
+        (list-jobs-matching arg)))))
 
 (cmd-hook #"jen"
           #"^build$" (build-default-cmd)
