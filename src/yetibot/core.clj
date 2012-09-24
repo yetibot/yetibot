@@ -111,19 +111,20 @@
 
 (defn find-namespaces [pattern]
   (let [all-ns (ns/find-namespaces-on-classpath)]
-    (filter #(re-find pattern (str %)) all-ns)))
+    (filter #(re-matches pattern (str %)) all-ns)))
 
 (def yetibot-command-namespaces
-  [#"^yetibot\.commands" #"^plugins.*commands"])
+  [#"^yetibot\.commands.*" #"^plugins.*commands.*"])
 
 (def yetibot-observer-namespaces
-  [#"^yetibot\.observers" #"^plugins.*observers"])
+  [#"^yetibot\.observers.*" #"^plugins.*observers.*"])
 
 (def yetibot-all-namespaces
   (merge
     (map last [yetibot-command-namespaces
                 yetibot-observer-namespaces])
-    #"^yetibot\.*"))
+    ; with a negative lookahead assertion
+    #"^yetibot\.(.(?!(core)))*"))
 
 (defn load-ns [arg]
   (println "Loading namespace" arg)
@@ -147,9 +148,14 @@
   (load-commands))
 
 (defn reload-all-yetibot
-  "Reloads all of YetiBot's namespaces, including plugins"
+  "Reloads all of YetiBot's namespaces, including plugins. Loading yetibot.core is
+  temporarily disabled until we can figure out to unhook and rehook
+  handle-campfire-event and handle-command"
   []
-  (find-and-load-ns yetibot-all-namespaces))
+  ;; only load commands and observers 
+  ;; until https://github.com/devth/yetibot/issues/75 is fixed
+  (load-commands-and-observers))
+  ;;; (find-and-load-ns yetibot-all-namespaces))
 
 (defn -main [& args]
   (trace "starting main")
