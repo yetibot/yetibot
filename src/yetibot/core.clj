@@ -3,6 +3,7 @@
             [yetibot.campfire :as cf]
             [yetibot.models.users :as users]
             [clojure.contrib.string :as s]
+            [clojure.string :as cs]
             [clojure.stacktrace :as st]
             [clojure.tools.namespace :as ns])
   (:use [clojure.tools.logging]
@@ -50,23 +51,30 @@
                         (let [acc-cmd (str cmd-with-args " " acc)
                               ; split out the cmd and args
                               [cmd args] (parse-cmd-with-args cmd-with-args)]
-                          (println "command " cmd " with args " args
-                                   " and acc'd args " acc)
+                          (prn "command " cmd "with args" args
+                                   "and acc'd args" acc)
                           ; TODO
                           ; acc could be a collection instead of a string. In that case we
                           ; could:
                           ; - take the first item and run the command with that
+                          ;   (head)
                           ; - run handle-command for every item in the seq with the
                           ;   assumption that this is the last command in the pipe
+                          ;   (xargs)
                           (if (coll? acc)
-                            ; acc was a collection, so ignore any args in
-                            ; cmd-with-args. The acc collection will be args instead.
+                            ; acc was a collection, so pass the args as opts
+                            ; The acc collection will be regular args instead.
+                            ; This allows the collections commands to deal with them.
                             (handle-command cmd acc user args)
                             ; otherwise concat args and acc as the new args. args are
                             ; likely empty anyway. (e.g. !urban random | !image - the
                             ; args to !image are empty, and acc would be the result
                             ; of !urban random)
-                            (handle-command cmd (str (when args (str args " ")) acc) user nil))))
+                            (let [opt-args-frags [args acc]
+                                  built-args
+                                    (cs/join " "
+                                     (filter (complement cs/blank?) opt-args-frags))]
+                              (handle-command cmd built-args user nil)))))
                       ""
                       cmds)]
       (cf/chat-data-structure res)
@@ -114,7 +122,7 @@
 (defn load-ns [arg]
   (try (require arg :reload)
     (catch Exception e
-      (println "Warning: problem requiring" arg "hook:" (.getMessage e))
+      (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
       (st/print-stack-trace (st/root-cause e) 3))))
 
 (defn load-commands []

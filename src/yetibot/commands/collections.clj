@@ -45,11 +45,11 @@
 (defn xargs
   "xargs <cmd> <list> # run <cmd> for every item in <list>; behavior is similar to xargs(1)'s xargs -n1"
   [cmd items user]
-  (println "cmd is" cmd ". items are " items)
-  (let [is (ensure-items-collection items)]
-    (map #(yetibot.core/parse-and-handle-command (str cmd " " %) user nil) is)))
+  (if (s/blank? cmd)
+    items
+    (let [is (ensure-items-collection items)]
+      (map #(yetibot.core/parse-and-handle-command (str cmd " " %) user nil) is))))
+
 
 (cmd-hook #"xargs"
           _ (xargs opts args user))
-
-

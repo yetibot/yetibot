@@ -6,7 +6,7 @@
             [clj-time.core :as t]
             [clj-time.coerce :as c])
   (:use [yetibot.util :only (cmd-hook)]
-        [yetibot.util.http :only (with-client)]))
+        [yetibot.util.http :only (fetch get-json with-client)]))
 
 
 (def base-uri (System/getenv "JENKINS_URI"))
@@ -65,19 +65,16 @@
          ""
          changeset]))))
 
-
-; TODO - it'd be cool to poll the status in the background
-; to see if/when the build started, or whether it's in the queue behind
-; some other jobs
 (defn build
   "jen build <job-name>"
   [job-name]
-  (println (str "Build: " job-name))
-  (with-open [client (client/create-client)]
-    (let [uri (str base-uri "job/" job-name "/build")
-              response (client/GET client uri :auth auth)]
-      (client/await response)
-      (str "I sent off a build for " job-name))))
+  (if (some #{job-name} (job-names))
+    (do
+      (println (str "Build: " job-name))
+      (let [uri (str base-uri "job/" job-name "/build")
+            response (fetch uri auth)]
+        (str "I sent off a build for " job-name)))
+    (str "There is no Jenkins job by the name of " job-name ". Next time get it right.")))
 
 (defn list-jobs
   ([] (list-jobs 20)) ; show 20 by default
