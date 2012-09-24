@@ -113,29 +113,43 @@
   (let [all-ns (ns/find-namespaces-on-classpath)]
     (filter #(re-find pattern (str %)) all-ns)))
 
-(defn yetibot-command-namespaces []
-  (flatten (map find-namespaces [#"^yetibot\.commands" #"^plugins.*commands"])))
+(def yetibot-command-namespaces
+  [#"^yetibot\.commands" #"^plugins.*commands"])
 
-(defn yetibot-observer-namespaces []
-  (flatten (map find-namespaces [#"^yetibot\.observers" #"^plugins.*observers"])))
+(def yetibot-observer-namespaces
+  [#"^yetibot\.observers" #"^plugins.*observers"])
+
+(def yetibot-all-namespaces
+  (merge
+    (map last [yetibot-command-namespaces
+                yetibot-observer-namespaces])
+    #"^yetibot\.*"))
 
 (defn load-ns [arg]
+  (println "Loading namespace" arg)
   (try (require arg :reload)
     (catch Exception e
       (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
       (st/print-stack-trace (st/root-cause e) 3))))
 
+(defn find-and-load-ns [ns-patterns]
+  (let [nss (flatten (map find-namespaces ns-patterns))]
+    (dorun (map load-ns nss))))
+
 (defn load-commands []
-  (doseq [command-namespace (yetibot-command-namespaces)]
-    (load-ns command-namespace)))
+  (find-and-load-ns yetibot-command-namespaces))
 
 (defn load-observers []
-  (doseq [n (yetibot-observer-namespaces)]
-    (load-ns n)))
+  (find-and-load-ns yetibot-observer-namespaces))
 
 (defn load-commands-and-observers []
   (load-observers)
   (load-commands))
+
+(defn reload-all-yetibot
+  "Reloads all of YetiBot's namespaces, including plugins"
+  []
+  (find-and-load-ns yetibot-all-namespaces))
 
 (defn -main [& args]
   (trace "starting main")

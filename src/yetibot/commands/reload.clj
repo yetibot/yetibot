@@ -4,7 +4,7 @@
 (defn reload-cmd
   "reload # reload all of YetiBot's commands and observers"
   []
-  (yetibot.core/load-commands-and-observers)
+  (yetibot.core/reload-all-yetibot)
   "Reload complete.")
 
 (cmd-hook #"reload"
