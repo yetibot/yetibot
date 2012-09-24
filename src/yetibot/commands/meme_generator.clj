@@ -147,6 +147,6 @@
           #"^popular$" (chat-instance-popular)
           #"^popular\s(.+)" (chat-instance-popular-for-gen (nth p 1))
           #"^trending" (trending-cmd)
-          #"^(.+):(.+)\/(.*)$" (generate-cmd (rest p))
-          #"^(.+):(.+)$" (generate-auto-split-cmd (rest p))
+          #"^(.+?):(.+)\/(.*)$" (generate-cmd (rest p))
+          #"^(.+?):(.+)$" (generate-auto-split-cmd (rest p))
           #"^(search\s)?(.+)" (search-cmd (nth p 2)))
