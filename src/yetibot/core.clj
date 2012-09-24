@@ -37,9 +37,9 @@
   (s/split #"\s" 2 cmd-with-args))
 
 (defn parse-and-handle-command
-  [cmd-with-args & args]
-  (apply handle-command
-         (flatten [(parse-cmd-with-args cmd-with-args) args])))
+  [cmd-with-args & rest]
+  (let [[cmd args] (parse-cmd-with-args cmd-with-args)]
+  (apply handle-command (list* cmd (str args) rest))))
 
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
