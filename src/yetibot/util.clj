@@ -35,8 +35,9 @@
                                 (cond
                                   ; prefix to match
                                   (instance? Pattern i#) `(re-find ~i# ~'args)
-                                  ; placeholder - set p equal to the args
-                                  (= i# '_) `~'args
+                                  ; placeholder - set p equal to the args (which
+                                  ; might by nil, so or it with :empty)
+                                  (= i# '_) `(or ~'args :empty)
                                   ; send result back to handle-command
                                   :else `~i#))
                               exprs)

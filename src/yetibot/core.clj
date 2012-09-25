@@ -34,7 +34,9 @@
 
 (defn parse-cmd-with-args
   [cmd-with-args]
-  (s/split #"\s" 2 cmd-with-args))
+  (let [[cmd args] (s/split #"\s" 2 cmd-with-args)
+        args (or args "")]
+    [cmd args]))
 
 (defn parse-and-handle-command
   [cmd-with-args & rest]
@@ -62,10 +64,10 @@
                           ;   assumption that this is the last command in the pipe
                           ;   (xargs)
                           (if (coll? acc)
-                            ; acc was a collection, so pass the args as opts
-                            ; The acc collection will be regular args instead.
+                            ; acc was a collection, so pass the acc as opts instead
+                            ; of just concatting it to args.
                             ; This allows the collections commands to deal with them.
-                            (handle-command cmd acc user args)
+                            (handle-command cmd args user acc)
                             ; otherwise concat args and acc as the new args. args are
                             ; likely empty anyway. (e.g. !urban random | !image - the
                             ; args to !image are empty, and acc would be the result
