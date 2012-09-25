@@ -56,3 +56,12 @@ tail <n> <list> # returns the last <n> items from the <list>"
 
 (cmd-hook #"xargs"
           _ (xargs args opts user))
+
+;join
+(defn join
+  "join <list> # joins list with a single space"
+  [items]
+  (s/join " " (ensure-items-collection items)))
+
+(cmd-hook #"join"
+          _ (join opts))
