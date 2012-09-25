@@ -6,7 +6,7 @@
 (def endpoint "http://api.scalex.org/?per_page=1&q=")
 
 (defn- format-docs [res]
-  ((juxt :qualifiedName :signature :docUrl) res))
+  ((juxt :qualifiedName :signature (comp :source :comment) :docUrl) res))
 
 (defn scalex-cmd
   "scalex <query> # searches scalex.org"
