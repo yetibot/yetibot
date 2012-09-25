@@ -3,10 +3,10 @@
 
 (defn repeat-cmd
   "repeat <n> <cmd> # repeat <cmd> <n> times"
-  [[_ n cmd] user]
+  [[_ n cmd] user opts]
   (repeatedly (read-string n) ; parse int
               #(yetibot.core/parse-and-handle-command
-                 cmd user nil)))
+                 cmd user opts)))
 
 (cmd-hook #"repeat"
-          #"(\d+)\s(.+)" (repeat-cmd p user))
+          #"(\d+)\s(.+)" (repeat-cmd p user opts))
