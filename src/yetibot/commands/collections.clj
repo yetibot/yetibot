@@ -57,7 +57,7 @@ tail <n> <list> # returns the last <n> items from the <list>"
 (cmd-hook #"xargs"
           _ (xargs args opts user))
 
-;join
+; join
 (defn join
   "join <list> # joins list with a single space"
   [items]
@@ -65,3 +65,14 @@ tail <n> <list> # returns the last <n> items from the <list>"
 
 (cmd-hook #"join"
           _ (join opts))
+
+; set
+(defn set-cmd
+  "set <list> # returns the set of distinct elements in <list>"
+  [items]
+  (let [r (set (ensure-items-collection items))]
+    (prn "set results is" r)
+    r))
+
+(cmd-hook #"set"
+          _ (set-cmd opts))

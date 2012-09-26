@@ -96,7 +96,7 @@
 ; formatters to send data structures to chat
 (defn chat-data-structure [d]
   (let [formatted (cond
-                    (coll? d) (s/join \newline (flatten d))
+                    (coll? d) (s/join \newline (flatten (seq d)))
                     :else (str d))]
     ; decide which of 3 ways to send to chat
     (cond
