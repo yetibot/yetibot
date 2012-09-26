@@ -76,3 +76,13 @@ tail <n> <list> # returns the last <n> items from the <list>"
 
 (cmd-hook #"set"
           _ (set-cmd opts))
+
+
+; list
+(defn list-cmd
+  "list <comma-delimited-items> # build a list"
+  [items]
+  (map s/trim (s/split items #",")))
+
+(cmd-hook #"list"
+          _ (list-cmd args))
