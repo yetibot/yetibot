@@ -80,9 +80,27 @@ tail <n> <list> # returns the last <n> items from the <list>"
 
 ; list
 (defn list-cmd
-  "list <comma-delimited-items> # build a list"
+  "list <comma-delimited-items> # construct a list"
   [items]
   (map s/trim (s/split items #",")))
 
 (cmd-hook #"list"
           _ (list-cmd args))
+
+; count
+(defn count-cmd
+  "count <list> # count the number of items in <list>"
+  [items]
+  (count (ensure-items-collection items)))
+
+(cmd-hook #"count"
+          _ (count-cmd opts))
+
+; sort
+(defn sort-cmd
+  "sort <list> # sort a list"
+  [items]
+  (sort (ensure-items-collection items)))
+
+(cmd-hook #"sort"
+          _ (sort-cmd opts))
