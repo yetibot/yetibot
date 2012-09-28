@@ -104,3 +104,14 @@ tail <n> <list> # returns the last <n> items from the <list>"
 
 (cmd-hook #"sort"
           _ (sort-cmd opts))
+
+; grep
+(defn grep-cmd
+  "grep <pattern> <list> # filters the items in a list by <pattern>"
+  [pattern items]
+  (let [pattern (re-pattern (str "(?i)" pattern))
+        items (ensure-items-collection items)]
+    (filter #(re-find pattern %) items)))
+
+(cmd-hook #"grep"
+          #"(\S+)" (grep-cmd (second p) opts))
