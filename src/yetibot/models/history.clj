@@ -5,10 +5,11 @@
 
 (defn items-with-user []
   (for [i @history]
-    [(:name (u/get-user (:user_id i))) (:body i)]))
+    {:user (u/get-user (:user_id i)) :body (:body i)}))
+
+(defn fmt-items-with-user []
+  (for [m (items-with-user)]
+    (str (-> m :user :name) ": " (:body m))))
 
 (defn add [json]
-  (println "add event to history" json)
-  (swap! history conj json)
-  (println "history is now" @history)
-  (println (items-with-user)))
+  (swap! history conj json))
