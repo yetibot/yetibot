@@ -5,7 +5,7 @@
 (defn history-cmd
   "history # show the last 10 items from chat history"
   []
-  (take 10 (h/fmt-items-with-user)))
+  (take-last 10 (h/fmt-items-with-user)))
 
 (cmd-hook #"history"
           _ (history-cmd))
