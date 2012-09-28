@@ -12,7 +12,7 @@
   (str "These are the topics I know about. Use help <topic> for more details."
        \newline
        (s/join \newline
-               (keys (get-docs)))))
+               (sort (keys (get-docs))))))
 
 (defn help-for-topic
   "help <topic> # get help for <topic>"
