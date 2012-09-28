@@ -47,7 +47,7 @@
    (println (str "gen is " gen))
    (let [uri (str base-uri (:instance-popular apis) "?"
                   (map-to-query-string
-                    (merge {:languageCode "en" :pageSize 20 :days 1}
+                    (merge {:languageCode "en" :pageSize 20 :days 7}
                            (when-not (empty? gen)
                              ; clear days to search for popular instance of all time
                              {:days 7 :urlName (:urlName (get-first-generator gen))}))))]
