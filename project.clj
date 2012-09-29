@@ -18,6 +18,7 @@
                            [clj-ssh "0.4.0"]
                            [useful "0.8.3-alpha8"]
                            [clj-wordnik "0.1.0-alpha1"]
+                           [tentacles "0.2.0-beta1"]
                            ]
             :dev-dependencies [[clj-stacktrace "0.2.3"]]
             :main yetibot.core)
