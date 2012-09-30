@@ -11,14 +11,17 @@
                            [org.clojure/tools.logging "0.2.3"]
                            [clj-logging-config "1.9.7"]
                            [log4j/log4j "1.2.16" :exclusions [javax.mail/mail
-                                                              javax.jms/jms
-                                                              com.sun.jdmk/jmxtools
-                                                              com.sun.jmx/jmxri]]
+                                                               javax.jms/jms
+                                                               com.sun.jdmk/jmxtools
+                                                               com.sun.jmx/jmxri]]
                            [evaljs "0.1.2"]
                            [clj-ssh "0.4.0"]
                            [useful "0.8.3-alpha8"]
                            [clj-wordnik "0.1.0-alpha1"]
-                           [tentacles "0.2.0-beta1"]
+                           [tentacles "0.2.2"]
+                           [clj-http "0.5.5"]
+                           [org.clojure/data.xml "0.0.6"]
+                           [org.clojure/data.zip "0.1.1"]
                            ]
             :dev-dependencies [[clj-stacktrace "0.2.3"]]
             :main yetibot.core)
