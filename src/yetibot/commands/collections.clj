@@ -52,7 +52,7 @@ tail <n> <list> # returns the last <n> items from the <list>"
   (if (s/blank? cmd)
     items
     (let [is (ensure-items-collection items)]
-      (map #(yetibot.core/parse-and-handle-command (str cmd " " %) user nil) is))))
+      (pmap #(yetibot.core/parse-and-handle-command (str cmd " " %) user nil) is))))
 
 (cmd-hook #"xargs"
           _ (xargs args opts user))
