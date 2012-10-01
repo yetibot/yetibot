@@ -67,8 +67,9 @@
 (defn repos []
   (r/org-repos org-name auth))
 
-(defn contents [repo path]
-  (r/contents org-name repo path auth))
+
+;;; (defn contents [repo path]
+;;;   (r/contents org-name repo path auth))
 
 
 

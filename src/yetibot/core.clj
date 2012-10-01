@@ -46,7 +46,7 @@
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
   [body user]
-  (let [cmds (map s/trim (s/split #"\|" (s/replace-re #"\!" "" body)))]
+  (let [cmds (map s/trim (s/split #" \| " (s/replace-re #"\!" "" body)))]
     (prn "handle piped cmd " cmds)
     ; cmd-with-args is the unparsed string
     (let [res (reduce (fn [acc cmd-with-args]
@@ -96,7 +96,7 @@
                        (chat-handle-command (second parsed) (nth parsed 2 "") user nil)
                      ; it starts with a ! and contains pipes
                      (and (re-find #"^\!" (first parsed))
-                          (re-find #"\|" body))
+                          (re-find #" \| " body))
                        (handle-piped-command body user)
                      ; short syntax
                      (re-find #"^\!" (first parsed))

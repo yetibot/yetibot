@@ -114,4 +114,4 @@ tail <n> <list> # returns the last <n> items from the <list>"
     (filter #(re-find pattern %) items)))
 
 (cmd-hook #"grep"
-          #"(\S+)" (grep-cmd (second p) opts))
+          _ (grep-cmd p opts))
