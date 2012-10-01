@@ -27,8 +27,8 @@
       false
       (reply-once-per-hour))))
 
-(obs-hook
-  ["TextMessage" "PasteMessage"]
-  (fn [event-json]
-    (parse-result-from-twss
-      (load-twss (:body event-json)))))
+;;; (obs-hook
+;;;   ["TextMessage" "PasteMessage"]
+;;;   (fn [event-json]
+;;;     (parse-result-from-twss
+;;;       (load-twss (:body event-json)))))
