@@ -9,8 +9,7 @@
   (let [n (read-string n)]
     (when (> n max-repeat)
       (yetibot.campfire/chat-data-structure
-        (str "Whoa there, " (:name user) ". I'm not gonna repeat that " n
-             " times, but I'll do it " max-repeat " times.")))
+        (str "Shut up " (:name user) ".")))
     (let [n (min max-repeat n)]
       (repeatedly n ; parse int
                   #(yetibot.core/parse-and-handle-command
