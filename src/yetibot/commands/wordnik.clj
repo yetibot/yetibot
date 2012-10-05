@@ -27,7 +27,7 @@
       (if word
         (conj (extract-definitions-text ds)
               word)
-        (str "No defitions found for " )))))
+        (str "No defitions found for " w)))))
 
 (defn random
   "wordnik random # look up a random word on Wordnik"
