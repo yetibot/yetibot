@@ -3,9 +3,9 @@
   (:use [yetibot.util :only (cmd-hook)]))
 
 (defn history-cmd
-  "history # show the last 10 items from chat history"
+  "history # show chat history" 
   []
-  (take-last 10 (h/fmt-items-with-user)))
+  (h/fmt-items-with-user))
 
 (cmd-hook #"history"
           _ (history-cmd))
