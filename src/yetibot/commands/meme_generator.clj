@@ -143,7 +143,7 @@
              (map (partial s/join " ")
                   (split-at (/ (count spl) 2) spl))))))
 
-(cmd-hook #"meme"
+(cmd-hook #"meme$"
           #"^popular$" (chat-instance-popular)
           #"^popular\s(.+)" (chat-instance-popular-for-gen (nth p 1))
           #"^trending" (trending-cmd)
