@@ -1,7 +1,8 @@
 (ns yetibot.commands.collections
   (:require
     [clojure.string :as s])
-  (:use [yetibot.util :only (cmd-hook)]))
+  (:use [yetibot.util :only (cmd-hook)]
+        [yetibot.campfire :only (chat-data-structure)]))
 
 (defn ensure-items-collection [items]
   (if (coll? items)
@@ -114,4 +115,16 @@ tail <n> <list> # returns the last <n> items from the <list>"
     (filter #(re-find pattern %) items)))
 
 (cmd-hook #"grep"
-          _ (grep-cmd p opts))
+          _ (grep-cmd p opts)
+          #"(\S+)" (grep-cmd (second p) opts))
+
+; tee
+(defn tee-cmd
+  "tee <list> # output <list> to chat and return list - useful for pipes"
+  [items]
+  (let [items (ensure-items-collection items)]
+    (chat-data-structure items)
+    items))
+
+(cmd-hook #"tee"
+          _ (tee-cmd opts))
