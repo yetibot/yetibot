@@ -45,6 +45,14 @@
   (let [[cmd args] (parse-cmd-with-args cmd-with-args)]
   (apply handle-command (list* cmd (str args) rest))))
 
+(defn to-coll-if-contains-newlines
+  "This might be a bit hack-ish, but it lets us get out of explicitly supporting streams
+  in every command that we want it."
+  [s]
+  (if (and (string? s) (re-find #"\n" s))
+    (s/split #"\n" s)
+    s))
+
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
   [body user]
@@ -54,9 +62,8 @@
     (let [res (reduce (fn [acc cmd-with-args]
                         (let [acc-cmd (str cmd-with-args " " acc)
                               ; split out the cmd and args
-                              [cmd args] (parse-cmd-with-args cmd-with-args)]
-                          (prn "command " cmd "with args" args
-                                   "and acc'd args" acc)
+                              [cmd args] (parse-cmd-with-args cmd-with-args)
+                              possible-coll-acc (to-coll-if-contains-newlines acc)]
                           ; TODO
                           ; acc could be a collection instead of a string. In that case we
                           ; could:
@@ -65,15 +72,17 @@
                           ; - run handle-command for every item in the seq with the
                           ;   assumption that this is the last command in the pipe
                           ;   (xargs)
-                          (if (coll? acc)
+                          (if-let [acc-coll (or (and (coll? acc) acc)
+                                               (and (coll? possible-coll-acc) possible-coll-acc))]
                             ; acc was a collection, so pass the acc as opts instead
                             ; of just concatting it to args.
                             ; This allows the collections commands to deal with them.
-                            (handle-command cmd args user acc)
+                            (handle-command cmd args user acc-coll)
                             ; otherwise concat args and acc as the new args. args are
                             ; likely empty anyway. (e.g. !urban random | !image - the
                             ; args to !image are empty, and acc would be the result
-                            ; of !urban random)
+                            ; of !urban random). Send args as opts in this case so
+                            ; that regular cmd output can be parsed as opts.
                             (let [opt-args-frags [args acc]
                                   built-args
                                     (cs/join " "
