@@ -5,9 +5,11 @@
             [clojure.contrib.string :as s]
             [clojure.string :as cs]
             [clojure.stacktrace :as st]
-            [clojure.tools.namespace :as ns])
+            [clojure.tools.namespace.find :as ns]
+            [clojure.java.classpath :as cp])
   (:use [clojure.tools.logging]
-        [clj-logging-config.log4j]))
+        [clj-logging-config.log4j]
+        [clojure.tools.namespace.repl :only (refresh)]))
 
 ; Deserializes json string and extracts fields
 (defmacro parse-event [event-json & body]
@@ -112,7 +114,7 @@
                  (println "Unhandled event type: " event-type))))
 
 (defn find-namespaces [pattern]
-  (let [all-ns (ns/find-namespaces-on-classpath)]
+  (let [all-ns (ns/find-namespaces (cp/classpath))]
     (filter #(re-matches pattern (str %)) all-ns)))
 
 (def yetibot-command-namespaces
@@ -154,7 +156,8 @@
   temporarily disabled until we can figure out to unhook and rehook
   handle-campfire-event and handle-command"
   []
-  ;; only load commands and observers 
+  ;;; (refresh))
+  ;; only load commands and observers
   ;; until https://github.com/devth/yetibot/issues/75 is fixed
   (load-commands-and-observers))
   ;;; (find-and-load-ns yetibot-all-namespaces))
@@ -165,4 +168,4 @@
   (future
     (users/reset-users-from-room
       (cf/get-room)))
-  (cf/start handle-campfire-event))
+  (cf/start #'handle-campfire-event))
