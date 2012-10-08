@@ -91,9 +91,13 @@
        "no default job configured"))
 
 (defn status-cmd
-  "jen status <job-name>"
-  [job-name]
-  (job-status job-name))
+  "
+jen status <job-name>       # show Jenkins status for <job-name>
+jen status                  # show Jenkins status for default job if configured"
+  [& args]
+  (if (empty? args)
+    (do (prn "use default job" default-job) (job-status default-job))
+    (job-status (first args))))
 
 (defn list-cmd
   "
@@ -112,6 +116,7 @@ jen list <string>           # lists jenkins jobs containing <string>"
 (cmd-hook #"jen"
           #"^build$" (build-default-cmd)
           #"^build\s(.+)" (build (second p))
+          #"^status$" (status-cmd)
           #"^status\s(.+)" (status-cmd (second p))
           #"^list$" (list-cmd)
           #"^list\s(.+)" (list-cmd (second p)))

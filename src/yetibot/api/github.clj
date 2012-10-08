@@ -31,23 +31,22 @@
 
 
 ;;; data
-;;; (data/blob org-name "com.decide.website" "a58183bd07e357f769782d24a01e6d05fa84d2a0" auth)
 
 (defn tree
-  [repo]
-  (data/tree org-name repo "master"
-          (merge auth {:recursive true})))
+  [repo & [opts]]
+  (data/tree org-name repo (or (:branch opts) "master")
+          (merge auth {:recursive true} opts)))
 
 (defn find-paths [tr pattern]
   (filter #(re-find pattern (:path %)) (:tree tr)))
 
 (defn raw
   "Retrieve raw contents from GitHub"
-  ([repo path] (raw repo path "master"))
-  ([repo path git-ref]
-   (let [uri (format (str endpoint "/repos/%s/%s/contents/%s") org-name repo path)]
-     (client/get uri
-                 {:accept "application/vnd.github.raw+json"
+  [repo path & [{:keys [branch]}]]
+  (let [git-ref (or branch "master")]
+    (let [uri (format (str endpoint "/repos/%s/%s/contents/%s?ref=%s") org-name repo path git-ref)]
+      (client/get uri
+                  {:accept "application/vnd.github.raw+json"
                   :headers {"Authorization" (str "token " token)}}))))
 
 

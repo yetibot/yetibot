@@ -15,12 +15,11 @@
 
 (defn poms-by-path
   "Return a map of path keys and xml-zip'd content values for all found poms in a given repo"
-  [repo]
-  (let [tree-paths (gh/find-paths (gh/tree repo) #"pom.xml")]
-    (prn "looking up poms for " (map :path tree-paths))
+  [repo & [opts]]
+  (let [tree-paths (gh/find-paths (gh/tree repo opts) #"pom.xml")]
     (zipmap (map :path tree-paths)
             (->> tree-paths
-              (map #(gh/raw repo (:path %)))
+              (map #(gh/raw repo (:path %) opts))
               (map :body)
               (map parse-pom)))))
 
@@ -31,9 +30,9 @@
 
 (defn extract-from-pom
   "Looks up poms for a given repo, and passes it to an extractor fn"
-  [repo extractor]
-  (let [poms (->> repo
-               poms-by-path
+  [repo extractor & [opts]]
+  (let [poms (-> repo
+               (poms-by-path opts)
                sort-pom-list)]
     (extractor poms)))
 
@@ -45,9 +44,7 @@
 (defn format-tree-data
   ([tree] (format-tree-data tree 1))
   ([tree lvl]
-   (prn tree lvl)
    (let [[k v children] tree]
-     (prn k v children)
      (str
        (indent-n lvl) tree-art " " k ": " v
        (when (seq children)
@@ -87,12 +84,12 @@
         [path version-str deps]))))
 
 (defn formatted-tree
-  [repo fn]
+  [repo fn & [opts]]
   (str repo \newline
        (s/join
          \newline
          (map format-tree-data
-              (extract-from-pom repo fn)))))
+              (extract-from-pom repo fn opts)))))
 
 ;;; example:
 ;;; com.foo.api
@@ -100,19 +97,25 @@
 ;;; └── api-client/pom.xml: parent/7.1.7-SNAPSHOT
 ;;; └── api-ws/pom.xml: parent/7.1.7-SNAPSHOT
 (defn poms-for-repo
-  "poms <repo> # extract versions from poms in <repo>"
-  [repo]
-  (formatted-tree repo extract-version))
+  "
+poms <repo> # extract versions from poms in <repo>
+poms <repo> <branch> # extract versions from poms in <repo> for <branch>"
+  [repo & [branch]]
+  (formatted-tree repo extract-version (when branch {:branch branch})))
 
 ;;; example:
 ;;; com.foo.api
 ;;; └── pom.xml: 7.1.7-SNAPSHOT
 ;;;     └── com.twitter/util-collection: 5.3.10
 (defn deps-for-repo
-  "poms deps <repo> # show pom versions along with its dependencies for <repo>"
-  [repo]
-  (formatted-tree repo extract-version-and-deps))
+  "
+poms deps <repo> # show pom versions along with its dependencies in <repo>
+poms deps <repo> <branch> # show pom versions along with its dependencies in <repo> for <branch>"
+  [repo & [branch]]
+  (formatted-tree repo extract-version-and-deps (when branch {:branch branch})))
 
 (cmd-hook #"poms"
-          #"deps (\S+)" (deps-for-repo (second p))
-          #"(\S+)" (poms-for-repo (second p)))
+          #"^deps\s+(\S+)$" (deps-for-repo (nth p 1))
+          #"^deps\s+(\S+)\s+(\S+)" (deps-for-repo (nth p 1) (nth p 2))
+          #"^(\S+)$" (poms-for-repo (nth p 1))
+          #"(\S+)\s+(\S+)$" (poms-for-repo (nth p 1) (nth p 2)))
