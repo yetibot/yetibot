@@ -56,6 +56,8 @@
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
   [body user]
+  ; TODO: don't scrub body of all !s since we now have a ! command. Instead,
+  ; conditionally trim the first ! off only if it's not followed by a space.
   (let [cmds (map s/trim (s/split #" \| " (s/replace-re #"\!" "" body)))]
     (prn "handle piped cmd " cmds)
     ; cmd-with-args is the unparsed string

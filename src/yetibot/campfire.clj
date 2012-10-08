@@ -97,31 +97,33 @@
   "Formatters to send data structures to chat.
    If `d` is a nested data structure, it will attempt to recursively flatten
    or merge (if it's a map)."
-  (if (and (not (map? d))
-           (coll? d)
-           (coll? (first d)))
-    ; if it's a nested sequence, recursively flatten it
-    (if (map? (first d))
-      ; merge if the insides are maps
-      (chat-data-structure (apply merge d))
-      ; otherwise flatten
-      (chat-data-structure (apply concat d)))
-    ; otherwise send in the most appropriate manner
-    (let [formatted (cond
-                      (coll? d) (s/join \newline d)
-                      :else (str d))]
-      ; decide which of 3 ways to send to chat
-      (cond
-        ; send map as key: value pairs
-        (map? d) (send-message-for-each
-                   (map #(str (first %1) ": " (second %1)) d))
-        ; send each item in the coll as a separate message
-        (and
-          (coll? d)
-          (s/substring? (str \newline) formatted)
-          (seq (filter #(s/substring? % formatted) ["jpg" "png" "gif"])))
-        (send-message-for-each d)
-        ; send the message with newlines as a paste
-        (s/substring? (str \newline) formatted) (send-paste formatted)
-        ; send as regular message
-        :else (send-message formatted)))))
+  (when-not (:supress (meta d))
+    (if (and (not (map? d))
+             (coll? d)
+             (coll? (first d)))
+      ; if it's a nested sequence, recursively flatten it
+      (if (map? (first d))
+        ; merge if the insides are maps
+        (chat-data-structure (apply merge d))
+        ; otherwise flatten
+        (chat-data-structure (apply concat d)))
+      ; otherwise send in the most appropriate manner
+      (let [formatted (cond
+                        (coll? d) (s/join \newline d)
+                        :else (str d))]
+        ; decide which of 3 ways to send to chat
+        ; TODO: extract to multimethods
+        (cond
+          ; send map as key: value pairs
+          (map? d) (send-message-for-each
+                     (map #(str (first %1) ": " (second %1)) d))
+          ; send each item in the coll as a separate message
+          (and
+            (coll? d)
+            (s/substring? (str \newline) formatted)
+            (seq (filter #(s/substring? % formatted) ["jpg" "png" "gif"])))
+          (send-message-for-each d)
+          ; send the message with newlines as a paste
+          (s/substring? (str \newline) formatted) (send-paste formatted)
+          ; send as regular message
+          :else (send-message formatted))))))
