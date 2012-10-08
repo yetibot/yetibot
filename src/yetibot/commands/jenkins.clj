@@ -77,12 +77,8 @@
     (str "There is no Jenkins job by the name of " job-name ". Next time get it right.")))
 
 (defn list-jobs
-  ([] (list-jobs 20)) ; show 20 by default
-  ([n] (if (nil? n)
-         (list-jobs)
-         (do
-           (println (str "List " n " jobs"))
-           (take n (job-names))))))
+  ([] (job-names))
+  ([n] (take n (job-names))))
 
 (defn list-jobs-matching [match]
   (prn "list jobs matching " match)
@@ -101,14 +97,14 @@
 
 (defn list-cmd
   "
-jen list                    # lists first 20 jenkins jobs
+jen list                    # lists all jenkins jobs
 jen list <n>                # lists first <n> jenkins jobs
 jen list <string>           # lists jenkins jobs containing <string>"
-  [arg]
-  (println "list command with args:" arg)
-  (if (empty? arg)
+  [& args]
+  (if (empty? args)
     (list-jobs)
-    (let [p-arg (read-string arg)]
+    (let [arg (first args)
+          p-arg (read-string arg)]
       (if (number? p-arg)
         (list-jobs p-arg)
         (list-jobs-matching arg)))))
@@ -117,4 +113,5 @@ jen list <string>           # lists jenkins jobs containing <string>"
           #"^build$" (build-default-cmd)
           #"^build\s(.+)" (build (second p))
           #"^status\s(.+)" (status-cmd (second p))
+          #"^list$" (list-cmd)
           #"^list\s(.+)" (list-cmd (second p)))
