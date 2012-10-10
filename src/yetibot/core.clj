@@ -146,7 +146,7 @@
   (try (require arg :reload)
     (catch Exception e
       (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
-      (st/print-stack-trace (st/root-cause e) 3))))
+      (st/print-stack-trace (st/root-cause e) 15))))
 
 (defn find-and-load-ns [ns-patterns]
   (let [nss (flatten (map find-namespaces ns-patterns))]

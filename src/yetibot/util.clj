@@ -19,6 +19,7 @@
 
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
+  (let [[topic prefix] (if (vector? prefix) prefix [(str prefix) prefix])]
   `(do
      (rh/add-hook
        #'core/handle-command
@@ -45,12 +46,12 @@
                        true (core/handle-command "help" (str ~prefix) ~'user ~'opts)))
            (~'callback ~'cmd ~'args ~'user ~'opts))))
      ; extract the meta from the commands and use it to build docs
-     (help/add-docs ~prefix
+     (help/add-docs ~topic
                     (map
                       (fn [i#]
                         (if (list? i#)
                           (:doc (meta (resolve (first i#))))))
-                      '~exprs))))
+                      '~exprs)))))
 
 ; observer hook
 (defn obs-hook
