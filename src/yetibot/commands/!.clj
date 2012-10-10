@@ -17,7 +17,7 @@
         last-cmd (some valid-cmd? hist-for-user)]
     (prn "last command is" last-cmd)
     (if last-cmd
-      (with-meta (yetibot.core/handle-text-message last-cmd) {:supress true})
+      (with-meta (yetibot.core/handle-text-message last-cmd) {:suppress true})
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
 (cmd-hook #"!"

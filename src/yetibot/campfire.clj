@@ -97,7 +97,7 @@
   "Formatters to send data structures to chat.
    If `d` is a nested data structure, it will attempt to recursively flatten
    or merge (if it's a map)."
-  (when-not (:supress (meta d))
+  (when-not (:suppress (meta d))
     (if (and (not (map? d))
              (coll? d)
              (coll? (first d)))
