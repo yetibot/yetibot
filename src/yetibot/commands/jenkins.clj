@@ -67,14 +67,14 @@
 
 (defn build
   "jen build <job-name>"
-  [job-name]
-  (if (some #{job-name} (job-names))
-    (do
-      (println (str "Build: " job-name))
-      (let [uri (str base-uri "job/" job-name "/build")
-            response (fetch uri auth)]
-        (str "I sent off a build for " job-name)))
-    (str "There is no Jenkins job by the name of " job-name ". Next time get it right.")))
+  [job-pattern]
+  (let [job-pattern (re-pattern job-pattern)]
+    (letfn [(match-job [pattern job] (when (re-find pattern job) job))]
+      (if-let [job-name (some (partial match-job job-pattern) (job-names))]
+        (let [uri (format "%sjob/%s/build" base-uri job-name)
+                  response (fetch uri auth)]
+          (str "I sent off a build for " job-name))
+        (format "I couldn't match any jobs on  %s. Get it right next time." job-pattern)))))
 
 (defn list-jobs
   ([] (job-names))
