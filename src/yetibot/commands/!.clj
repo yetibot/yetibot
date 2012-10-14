@@ -13,7 +13,7 @@
 (defn !-cmd
   "! # execute your last command"
   [user]
-  (let [hist-for-user (h/items-for-user user)
+  (let [hist-for-user (reverse (h/items-for-user user))
         last-cmd (some valid-cmd? hist-for-user)]
     (prn "last command is" last-cmd)
     (if last-cmd
