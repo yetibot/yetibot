@@ -99,23 +99,28 @@
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
   (println "handle-text-message")
-  (parse-event json
-               (let [parsed (s/split #"\s" 3 (s/trim body))
-                     user (users/get-user (:user_id json))]
-                 (if (>= (count parsed) 1)
-                   (cond
-                     ; you talking to me?
-                     (re-find #"^yeti" (first parsed))
+  (try
+    (parse-event json
+                 (let [parsed (s/split #"\s" 3 (s/trim body))
+                       user (users/get-user (:user_id json))]
+                   (if (>= (count parsed) 1)
+                     (cond
+                       ; you talking to me?
+                       (re-find #"^yeti" (first parsed))
                        (chat-handle-command (second parsed) (nth parsed 2 "") user nil)
-                     ; it starts with a ! and contains pipes
-                     (and (re-find #"^\!" (first parsed))
-                          (re-find #" \| " body))
+                       ; it starts with a ! and contains pipes
+                       (and (re-find #"^\!" (first parsed))
+                            (re-find #" \| " body))
                        (handle-piped-command body user)
-                     ; short syntax
-                     (re-find #"^\!" (first parsed))
+                       ; short syntax
+                       (re-find #"^\!" (first parsed))
                        (chat-handle-command (s/join "" (rest (first parsed)))
-                                       (s/join " " (rest parsed)) user nil))
-                   (println (str "WARN: couldn't split the message into 2 parts: " body))))))
+                                            (s/join " " (rest parsed)) user nil))
+                     (println (str "WARN: couldn't split the message into 2 parts: " body)))))
+    (catch Exception ex
+      (println "Exception inside `handle-text-message`" ex)
+      (st/print-stack-trace (st/root-cause ex) 12)
+      (cf/send-paste (str "An exception occurred: " ex)))))
 
 (defn handle-campfire-event [json]
   (parse-event json

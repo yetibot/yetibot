@@ -1,7 +1,7 @@
 (ns yetibot.campfire
   (:require [http.async.client :as c]
             [clojure.data.json :as json]
-            [clojure.contrib.string :as s]
+            [clojure.string :as s]
             [clojure.stacktrace :as st]
             [yetibot.models.users :as users]
             [yetibot.util.http :as http]
@@ -26,7 +26,8 @@
 (def auth {:user u :password p :preemptive true})
 
 (defn send-message [msg]
-  (cf/message cf-settings room (str msg)))
+  (let [msg (if (s/blank? msg) "No results" msg)]
+    (cf/message cf-settings room (str msg))))
 
 (defn send-paste [p]
   (cf/paste cf-settings room p))
@@ -62,7 +63,7 @@
         (if (not (empty? (s/trim (str s))))
           ; Campfire sometimes returns multiple lines of json objects at a
           ; time, 1 per line so split the lines before parsing json
-          (doseq [line (s/split #"\cM" s)]
+          (doseq [line (s/split s #"\cM")]
             (future
               (try
                 (let [json (json/read-json line)]
@@ -70,8 +71,7 @@
                   (message-callback json))
                 (catch Exception ex
                   (println (str "Exception in chat handler " ex))
-                  (st/print-stack-trace (st/root-cause ex) 3)
-                  (send-paste (str "An exception occurred: " ex)))))))))))
+                  (st/print-stack-trace (st/root-cause ex) 12))))))))))
 
 (defn start [message-callback]
   (def event-loop
@@ -120,10 +120,10 @@
           ; send each item in the coll as a separate message
           (and
             (coll? d)
-            (s/substring? (str \newline) formatted)
-            (seq (filter #(s/substring? % formatted) ["jpg" "png" "gif"])))
+            (re-find #"\n" formatted)
+            (seq (filter #(re-find (re-pattern %) formatted) ["jpg" "png" "gif"])))
           (send-message-for-each d)
           ; send the message with newlines as a paste
-          (s/substring? (str \newline) formatted) (send-paste formatted)
+          (re-find #"\n" formatted) (send-paste formatted)
           ; send as regular message
           :else (send-message formatted))))))
