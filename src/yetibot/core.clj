@@ -26,10 +26,9 @@
   (println (str "nothing handled command " cmd " with args " args))
   ; default to looking up a random result from google image search instead of
   ; complaining about not knowing stuff.
-  ; --
-  ; WARNING: if there is no "image" command this will produce an infinite loop.
-  ; Might want to keep a recursion count to prevent that.
-  (handle-command "image" (str cmd " " args) user nil))
+  (if (find-ns 'yetibot.commands.image-search)
+    (handle-command "image" (str cmd " " args) user nil)
+    (format "I don't know how to handle %s %s." cmd args)))
 
 (defn chat-handle-command [& args]
   (cf/chat-data-structure (apply handle-command args)))
@@ -42,8 +41,12 @@
 
 (defn parse-and-handle-command
   [cmd-with-args & rest]
-  (let [[cmd args] (parse-cmd-with-args cmd-with-args)]
-  (apply handle-command (list* cmd (str args) rest))))
+  (let [[cmd args] (parse-cmd-with-args cmd-with-args)
+        rest-args (into rest (take (- 2 (count rest)) (repeatedly (constantly nil))))]
+  (apply handle-command (list* cmd (str args) rest-args))))
+
+(defn cmd-reader [arg]
+  (parse-and-handle-command (str arg)))
 
 (defn to-coll-if-contains-newlines
   "This might be a bit hack-ish, but it lets us get out of explicitly supporting streams
