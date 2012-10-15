@@ -1,6 +1,6 @@
 # yetibot
 
-It's a yeti. It's a bot. You can find it on campfire, awaiting your command.
+Find me on Campfire, awaiting your command.
 
 <img src="https://www.decide.com/img/yeti.png" />
 
