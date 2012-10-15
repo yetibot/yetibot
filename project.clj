@@ -24,6 +24,5 @@
                            [org.clojure/data.xml "0.0.6"]
                            [org.clojure/data.zip "0.1.1"]
                            [clj-aws-s3 "0.3.2"]
-                           ]
-            :dev-dependencies [[clj-stacktrace "0.2.3"]]
+                           [environ "0.3.0"]]
             :main yetibot.core)

@@ -8,3 +8,5 @@ pom.xml
 .lein-plugins/
 tags
 src/plugins
+target/
+.lein-env
