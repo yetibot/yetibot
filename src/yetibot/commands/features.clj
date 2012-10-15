@@ -33,7 +33,7 @@
     (let [title (s/trim (second match))]
       (chat-data-structure
         (if (post-issue title)
-          (format "I've taken note of your feature request: %s" title)
+          (format "Acknowledged: %s" title)
           "I feel like you're trying to spam me; ignored")))))
 
 (defn- issues-in-yetibot-repo
