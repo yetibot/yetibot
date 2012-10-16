@@ -3,38 +3,48 @@
             [clojure.set])
   (:use [yetibot.util]))
 
-(def empty-it-message "Nobody has registered as not-it yet.")
-(def its (atom #{}))
+; Users who have registered as not-it
+(def not-its (atom #{}))
 
-(defn get-its [] @its)
+; Users who could potentially be it, i.e. all active human users
+(def candidate-its (atom #{}))
 
-(defn reset-its 
+(defn get-not-its [] @not-its)
+
+(defn do-reset
+  []
+  (do
+    (reset! not-its #{})
+    (reset! candidate-its (set (map :name (users/get-active-humans))))))
+
+(defn reset-its
   "notit reset # resets the current not-it list"
-  [] (reset! its #{}))
+  []
+  (do
+    (do-reset)
+    (format "%s: get ready, you could be it!" (clojure.string/join ", " @candidate-its ))))
 
 (defn show-its
   "notit show # show the current list of users registered as not-it"
   []
-  (let [ni (get-its)]
+  (let [ni (get-not-its)]
     (if (empty? ni)
-      empty-it-message
+      "Nobody has called not-it yet"
       ni)))
-
-(defn get-real-users [] (remove #{"YetiBot"} (users/get-user-names)))
 
 (defn register-not-it
   "notit # register a user as not-it"
-  ([user]
-   (let [user-name (:name user)
-         new-not-its (swap! its conj user-name)
-         set-real-users (set (get-real-users))
-         potential-its (clojure.set/difference set-real-users new-not-its)]
-     (if (= (count potential-its) 1)
-       (do 
-         (reset-its)
-         (str (first potential-its) " is it! Resetting not-its."))
-       "Hurry up or you're going to be it!"
-       ))))
+  [user]
+  (let [user-name (:name user)]
+    (if (contains? candidate-its user-name)
+      (let [new-not-its (swap! not-its conj user-name)
+            potential-its (clojure.set/difference candidate-its new-not-its)]
+        (if (= (count potential-its) 1)
+          (do
+            (reset-its)
+            (str (first potential-its) " is it! Resetting not-its."))
+          (format "The following people need to hurry up: %s" (clojure.string/join ", " potential-its))))
+      (str user-name ": you've been inactive for awhile so you're not eligible to be it."))))
 
 (cmd-hook #"notit"
           #"reset" (reset-its)
