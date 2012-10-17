@@ -7,7 +7,6 @@
 (def active-threshold-milliseconds (* active-threshold-minutes 60 1000))
 (def campfire-date-pattern "yyyy/MM/dd HH:mm:ss Z")
 (def date-formatter (doto (new SimpleDateFormat campfire-date-pattern) (.setTimeZone (java.util.TimeZone/getTimeZone "GreenwichEtc"))))
-(def yetibot-id 1008539)
 
 (defonce users (atom {}))
 
@@ -48,7 +47,7 @@
       (< ms-since-active active-threshold-milliseconds))
     false))
 
-(defn is-yetibot? [user] (= (:user_id user) yetibot-id))
+(defn is-yetibot? [user] (= (str (:id user)) (System/getenv "CAMPFIRE_BOT_ID")))
 
 (defn get-active-users [] (filter is-active? (vals @users)))
 
