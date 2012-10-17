@@ -45,8 +45,8 @@
         rest-args (into rest (take (- 2 (count rest)) (repeatedly (constantly nil))))]
   (apply handle-command (list* cmd (str args) rest-args))))
 
-(defn cmd-reader [arg]
-  (parse-and-handle-command (str arg)))
+(defn cmd-reader [& args]
+  (parse-and-handle-command (cs/join " " args)))
 
 (defn to-coll-if-contains-newlines
   "This might be a bit hack-ish, but it lets us get out of explicitly supporting streams
