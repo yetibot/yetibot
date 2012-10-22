@@ -11,7 +11,7 @@
   "eval <form> # evaluate the <form> data structure in YetiBot's context"
   [form user]
   (if (user-is-allowed? user)
-    (str (eval (read-string form)))
+    (pr-str (eval (read-string form)))
     (format "You are not allowed, %s." (:name user))))
 
 (cmd-hook #"eval"
