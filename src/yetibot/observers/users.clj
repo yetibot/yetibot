@@ -19,3 +19,8 @@
   ["KickMessage" "LeaveMessage" "EnterMessage"]
   (fn [event-json]
     (refresh-users)))
+
+(obs-hook
+  ["TextMessage" "PasteMessage"]
+  (fn [event-json]
+    (users/update-active-timestamp event-json)))
