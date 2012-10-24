@@ -1,5 +1,6 @@
 (ns yetibot.commands.email
-  (:require [postal.core :as postal])
+  (:require [postal.core :as postal]
+            [yetibot.util.format :as fmt])
   (:use [yetibot.util :only (cmd-hook env ensure-config)]))
 
 (def default-subject "A friendly message from YetiBot")
@@ -21,7 +22,8 @@ email <to> / <body> # send an email with a friendly default message"
                 {:from (:from config)
                  :to to
                  :subject subject
-                 :body (str body opts)} config))]
+                 :body (str body (when opts (first (fmt/format-data-structure opts))))}
+                config))]
     (:message res)))
 
 (ensure-config
