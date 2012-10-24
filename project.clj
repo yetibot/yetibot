@@ -25,5 +25,6 @@
                            [org.clojure/data.zip "0.1.1"]
                            [clj-aws-s3 "0.3.2"]
                            [overtone/at-at "1.0.0"]
+                           [com.draines/postal "1.9.0"]
                            [environ "0.3.0"]]
             :main yetibot.core)

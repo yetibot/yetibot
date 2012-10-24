@@ -13,6 +13,10 @@
 
 (def ^:private Pattern java.util.regex.Pattern)
 
+(defmacro ensure-config [& body]
+  `(when (every? identity ~'config)
+     ~@body))
+
 (def env
   (let [e (into {} (System/getenv))]
     (zipmap (map keyword (keys e)) (vals e))))
