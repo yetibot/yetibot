@@ -5,6 +5,7 @@
             [clojure.stacktrace :as st]
             [yetibot.models.users :as users]
             [yetibot.util.http :as http]
+            [yetibot.util.format :as fmt]
             [clj-campfire.core :as cf])
   (:use [clojure.tools.logging :only (info error)]))
 
@@ -98,32 +99,16 @@
    If `d` is a nested data structure, it will attempt to recursively flatten
    or merge (if it's a map)."
   (when-not (:suppress (meta d))
-    (if (and (not (map? d))
-             (coll? d)
-             (coll? (first d)))
-      ; if it's a nested sequence, recursively flatten it
-      (if (map? (first d))
-        ; merge if the insides are maps
-        (chat-data-structure (apply merge d))
-        ; otherwise flatten
-        (chat-data-structure (apply concat d)))
-      ; otherwise send in the most appropriate manner
-      (let [formatted (cond
-                        (coll? d) (s/join \newline d)
-                        :else (str d))]
-        ; decide which of 3 ways to send to chat
-        ; TODO: extract to multimethods
-        (cond
-          ; send map as key: value pairs
-          (map? d) (send-message-for-each
-                     (map #(str (first %1) ": " (second %1)) d))
-          ; send each item in the coll as a separate message
-          (and
-            (coll? d)
-            (re-find #"\n" formatted)
-            (seq (filter #(re-find (re-pattern %) formatted) ["jpg" "png" "gif"])))
-          (send-message-for-each d)
-          ; send the message with newlines as a paste
-          (re-find #"\n" formatted) (send-paste formatted)
-          ; send as regular message
-          :else (send-message formatted))))))
+    (let [[formatted flattened-data] (fmt/format-data-structure d)]
+      (prn "formatted is" formatted)
+      (cond
+        ; send each item in the coll as a separate message if it contains 
+        (and
+          (coll? d)
+          (re-find #"\n" formatted)
+          (seq (filter #(re-find (re-pattern %) formatted) ["jpg" "png" "gif"])))
+        (send-message-for-each flattened-data)
+        ; send the message with newlines as a paste
+        (re-find #"\n" formatted) (send-paste formatted)
+        ; send as regular message
+        :else (send-message formatted)))))
