@@ -1,6 +1,7 @@
 (ns yetibot.commands.email
   (:require [postal.core :as postal]
-            [yetibot.util.format :as fmt])
+            [yetibot.util.format :as fmt]
+            [clojure.string :as s])
   (:use [yetibot.util :only (cmd-hook env ensure-config)]))
 
 (def default-subject "A friendly message from YetiBot")
@@ -14,6 +15,16 @@
              :bcc (:YETIBOT_EMAIL_BCC env)
              :ssl true})
 
+(defn encode-images [content]
+  (s/replace content #"(\S+)(.jpg|.png|.gif)" #(format "<img src='%s'>" (first %))))
+
+(defn build-body
+  "Take body and optional `opts` data structure. Send as HTML emails if jpgs or gifs are detected."
+  [body opts]
+  (let [content (str body \newline
+                     (when (and opts (not= opts body)) (first (fmt/format-data-structure opts))))]
+    [{:type "text/html" :content (encode-images content)}]))
+
 (defn send-email
   "email <to> / <subject> / <body> # send an email
 email <to> / <body> # send an email with a friendly default message"
@@ -24,11 +35,9 @@ email <to> / <body> # send an email with a friendly default message"
                (with-meta
                  {:from (:from config)
                  :to to
-                 :bcc bcc
+                 :bcc bcc ; (s/split bcc #",")
                  :subject subject
-                 :body (str body
-                            \newline
-                            (when (and opts (not= opts body)) (first (fmt/format-data-structure opts))))}
+                 :body (build-body body opts)}
                  config))]
      (if (= "messages sent" (:message res))
        success-message

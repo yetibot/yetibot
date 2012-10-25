@@ -30,7 +30,8 @@
       ; otherwise flatten
       (format-data-structure (apply concat d)))
     ; otherwise send in the most appropriate manner
-    [(format-flattened d) d]))
+    (let [ds (if (set? d) (seq d) d)]
+      [(format-flattened ds) ds])))
 
 (defn format-data-as-string [d]
   (let [[s _] (format-data-structure d)]
