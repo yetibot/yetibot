@@ -92,7 +92,7 @@
                                   built-args
                                     (cs/join " "
                                      (filter (complement cs/blank?) opt-args-frags))]
-                              (handle-command cmd built-args user nil)))))
+                              (handle-command cmd built-args user acc)))))
                       ""
                       cmds)]
       (cf/chat-data-structure res)
