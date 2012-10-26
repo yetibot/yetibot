@@ -49,5 +49,7 @@ email <to> / <body> # send an email with a friendly default message"
 
 (ensure-config
   (cmd-hook #"email"
-            #"(.+)\/(.+)\/(.*)" (send-email (nth p 1) (nth p 2) (nth p 3 "") opts)
-            #"(.+)\/(.*)" (send-email (nth p 1) default-subject (nth p 2 "") opts)))
+            #"(.+) \/ (.+) \/ (.*)" (send-email (nth p 1) (nth p 2) (nth p 3 "") opts)
+            #"(.+) \/ (.+)" (send-email (nth p 1) default-subject (nth p 2 "") opts)
+            #"(.+) \/" (send-email (nth p 1) default-subject "" opts)
+            #"(.+)@(.+)" (send-email (first (s/split (nth p 1) #" ")) default-subject "" opts)))
