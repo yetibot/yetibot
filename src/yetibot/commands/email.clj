@@ -18,12 +18,16 @@
 (defn encode-images [content]
   (s/replace content #"(\S+)(.jpg|.png|.gif)" #(format "<img src='%s'>" (first %))))
 
+(defn encode-newlines [content]
+  (s/replace content #"\n" (fn [n] "<br>\n")))
+
 (defn build-body
   "Take body and optional `opts` data structure. Send as HTML emails if jpgs or gifs are detected."
   [body opts]
-  (let [content (str body \newline
-                     (when (and opts (not= opts body)) (first (fmt/format-data-structure opts))))]
-    [{:type "text/html" :content (encode-images content)}]))
+  (let [content (str (when (not (empty? body)) (str body \newline))
+                     (when (and opts (not= opts body))
+                       (first (fmt/format-data-structure opts))))]
+    [{:type "text/html" :content (-> content encode-images encode-newlines)}]))
 
 (defn send-email
   "email <to> / <subject> / <body> # send an email
@@ -34,10 +38,10 @@ email <to> / <body> # send an email with a friendly default message"
    (let [res (postal/send-message
                (with-meta
                  {:from (:from config)
-                 :to to
-                 :bcc bcc ; (s/split bcc #",")
-                 :subject subject
-                 :body (build-body body opts)}
+                  :to to
+                  :bcc (s/split bcc #",")
+                  :subject subject
+                  :body (build-body body opts)}
                  config))]
      (if (= "messages sent" (:message res))
        success-message
