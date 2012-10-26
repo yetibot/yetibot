@@ -18,7 +18,7 @@
                       reverse)))
 
 (defn- format-chat [i]
-  (format "\"%s\" - %s" (:body i) (-> i :user :name)))
+  (format "\"%s\"" (:body i)))
 
 (defn- meme-it [gen]
   (let [chat (find-chat-to-memeify)]
