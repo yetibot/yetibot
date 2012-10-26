@@ -15,7 +15,7 @@
 
 ; default handling for strings and other non-collections
 (defmethod format-flattened :default [d]
-  d)
+  (str d))
 
 (defn format-data-structure
   "returns a string representation of `d` as well as the fully-flattened data representation"
