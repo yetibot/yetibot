@@ -1,4 +1,4 @@
-(ns yetibot.commands.email
+(ns yetibot.commands.mail
   (:require [postal.core :as postal]
             [yetibot.util.format :as fmt]
             [clojure.string :as s])
@@ -30,8 +30,9 @@
     [{:type "text/html" :content (-> content encode-images encode-newlines)}]))
 
 (defn send-email
-  "email <to> / <subject> / <body> # send an email
-email <to> / <body> # send an email with a friendly default message"
+  "mail <to> / <subject> / <body> # send an email
+mail <to> / <body> # send an email with a friendly default subject
+mail <to> # send an email with piped content"
   ([to subject body opts] (send-email to subject body opts (:bcc config)))
   ([to subject body opts bcc]
    (prn "send-email with " to subject body opts bcc)
@@ -48,8 +49,8 @@ email <to> / <body> # send an email with a friendly default message"
        error-message))))
 
 (ensure-config
-  (cmd-hook #"email"
+  (cmd-hook #"mail"
             #"(.+) \/ (.+) \/ (.*)" (send-email (nth p 1) (nth p 2) (nth p 3 "") opts)
             #"(.+) \/ (.+)" (send-email (nth p 1) default-subject (nth p 2 "") opts)
             #"(.+) \/" (send-email (nth p 1) default-subject "" opts)
-            #"(.+)@(.+)" (send-email (first (s/split (nth p 1) #" ")) default-subject "" opts)))
+            #"(.+)@(.+)" (send-email (format "%s@%s" (nth p 1) (nth p 2)) default-subject "" opts)))
