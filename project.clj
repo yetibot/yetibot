@@ -8,7 +8,7 @@
                            [org.clojure/data.json "0.1.1"]
                            [org.clojure/tools.namespace "0.2.0"]
                            [org.clojure/java.classpath "0.2.0"]
-                           [clj-time "0.3.2"]
+                           [clj-time "0.4.4"]
                            [org.clojure/tools.logging "0.2.3"]
                            [clj-logging-config "1.9.7"]
                            [log4j/log4j "1.2.16" :exclusions [javax.mail/mail
