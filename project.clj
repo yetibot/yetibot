@@ -26,5 +26,6 @@
                            [clj-aws-s3 "0.3.2"]
                            [overtone/at-at "1.0.0"]
                            [com.draines/postal "1.9.0"]
+                           [twitter-api "0.6.11"]
                            [environ "0.3.0"]]
             :main yetibot.core)

@@ -33,6 +33,9 @@
 (defn send-paste [p]
   (cf/paste cf-settings room p))
 
+;;; (defn send-tweet [t]
+;;;   (cf/tweet cf-settings room t))
+
 (defn play-sound [sound]
   (cf/play-sound cf-settings room sound))
 
