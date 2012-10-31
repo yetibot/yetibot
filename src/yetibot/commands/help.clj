@@ -1,5 +1,5 @@
 (ns yetibot.commands.help
-  (:require [clojure.contrib.string :as s])
+  (:require [clojure.string :as s])
   (:use [yetibot.util :only (cmd-hook)]
         [yetibot.models.help :only (get-docs get-docs-for)]))
 

@@ -1,6 +1,6 @@
 (ns yetibot.util.http
   (:require [http.async.client :as client]
-            [clojure.contrib.string :as s]
+            [clojure.string :as s]
             [clojure.data.json :as json])
   (:import (java.net URL URLEncoder)))
 
