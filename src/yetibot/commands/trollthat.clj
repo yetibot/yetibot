@@ -52,7 +52,7 @@
 (def genthat-pattern #"^(\w+)that$")
 
 (defn genthat
-  "<gen>that # use <foo> generator to memify the last thing said"
+  "<gen>that # use <gen> generator to memify the last thing said"
   [cmd]
   (let [[_ gen] (re-find genthat-pattern cmd)]
     (meme-it gen)))
