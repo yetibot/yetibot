@@ -3,7 +3,7 @@
             [yetibot.commands.meme-generator :as meme])
   (:use [yetibot.util :only (cmd-hook)]))
 
-(def ^:private history-ignore [#"^.trollthat$" #"^.memethat$"])
+(def ^:private history-ignore [#"^.trollthat$" #"^.(\w+)that$"])
 
 (defn- filter-chat
   "Return `chat-item` only if it doesn't match any regexes in `history-ignore`"
@@ -18,7 +18,7 @@
                       reverse)))
 
 (defn- format-chat [i]
-  (format "\"%s\"" (:body i)))
+  (:body i))
 
 (defn- meme-it [gen]
   (let [chat (find-chat-to-memeify)]
@@ -37,7 +37,7 @@
           _ (troll))
 
 
-; alternative: memethat
+; memethat
 (defn memethat
   "memethat # use a random generator from trending memes to memeify the last thing said"
   []
@@ -47,3 +47,15 @@
 
 (cmd-hook #"memethat"
           _ (memethat))
+
+; <gen>that
+(def genthat-pattern #"^(\w+)that$")
+
+(defn genthat
+  "<gen>that # use <foo> generator to memify the last thing said"
+  [cmd]
+  (let [[_ gen] (re-find genthat-pattern cmd)]
+    (meme-it gen)))
+
+(cmd-hook ["<gen>that" genthat-pattern]
+          _ (genthat cmd))
