@@ -2,7 +2,7 @@
   (:import org.apache.commons.lang3.time.DurationFormatUtils)
   (:use [yetibot.util :only(cmd-hook)]))
 
-(def start-time (System/currentTimeMillis))
+(defonce start-time (System/currentTimeMillis))
 
 (defn now [] (System/currentTimeMillis))
 
