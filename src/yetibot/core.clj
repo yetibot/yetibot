@@ -122,7 +122,7 @@
                      (println (str "WARN: couldn't split the message into 2 parts: " body)))))
     (catch Exception ex
       (println "Exception inside `handle-text-message`" ex)
-      (st/print-stack-trace (st/root-cause ex) 12)
+      (st/print-stack-trace (st/root-cause ex) 24)
       (cf/send-paste (str "An exception occurred: " ex)))))
 
 (defn handle-campfire-event [json]
@@ -167,7 +167,7 @@
   (find-and-load-ns yetibot-observer-namespaces))
 
 (defn load-commands-and-observers []
-  (load-observers)
+  ;;; (load-observers)
   (load-commands))
 
 (defn reload-all-yetibot

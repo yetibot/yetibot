@@ -34,6 +34,10 @@
 (defn get-user-names []
   (map :name (vals @users)))
 
+(defn find-user-like [name]
+  (let [patt (re-pattern (str "(?i)" name))]
+    (some #(when (re-find patt (:name %)) %) (vals @users))))
+
 (defn get-rand-user []
   (rand-nth (vals @users)))
 

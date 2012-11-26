@@ -1,12 +1,11 @@
 (ns yetibot.commands.mustache
-  (:use [yetibot.util :only (cmd-hook)]))
+  (:use [yetibot.hooks :only [cmd-hook]]))
 
 (def facts
-  [
-   "Women are attracted to men with Moustaches"
+  ["Women are attracted to men with Moustaches"
    "In 1967, The Beatles gave away cardboard mustaches with their album Sgt. Pepper’s Lonely Hearts Club Band."
-   "Mo’s make you look stronger and will scare off an opponent.  Beards are for the weak and lame."
-   "Gentleman have always worn Mo’s.  The term barbarian was applied to men who wore beards, because they were a lesser type of man."
+   "Mo’s make you look stronger and will scare off an opponent. Beards are for the weak and lame."
+   "Gentleman have always worn Mo’s. The term barbarian was applied to men who wore beards, because they were a lesser type of man."
    "A Mo will make you richer, beards are for beggers."
    "In a deck of cards the king of hearts is the only king without a moustache."
    "A survey of 100,000 women in 1988 found that 68% confirmed that a man with a moustache was a superior lover than his clean lipped neighbor"
@@ -47,8 +46,7 @@
 
 (defn mst-fact
   "mustachefact # show a random mustache fact"
-  []
-  (rand-nth facts))
+  [_] (rand-nth facts))
 
 (cmd-hook #"mustachefact"
-          _ (mst-fact))
+          _ mst-fact)

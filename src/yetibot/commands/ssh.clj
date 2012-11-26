@@ -1,7 +1,8 @@
 (ns yetibot.commands.ssh
-  (:require [clojure.string :as s])
-  (:use [clj-ssh.ssh]
-        [yetibot.util :only (cmd-hook env)]))
+  (:require [clojure.string :as s]
+            [clj-ssh.ssh :refer :all]
+            [yetibot.hooks :refer [cmd-hook]]
+            [yetibot.util :refer [env]]))
 
 
 ; Build a map of servers from ENV-config like:
@@ -39,11 +40,11 @@
 
 (defn list-servers
   "ssh servers # list servers configured for ssh access"
-  [] (map name (keys servers)))
+  [_] (map name (keys servers)))
 
 (defn run-command
   "ssh <server> <command> # run a command on <server>"
-  [server-name command]
+  [{[_ server-name command] :match}]
   (if-let [config ((keyword server-name) servers)]
     (let [host (:host config)
           user (:user config)
@@ -59,5 +60,5 @@
     (str "No servers found for " server-name)))
 
 (cmd-hook #"ssh"
-          #"^(\w+)\s(.+)" (run-command (nth p 1) (nth p 2))
-          #"^servers" (list-servers))
+          #"^(\w+)\s(.+)" run-command
+          #"^servers" list-servers)

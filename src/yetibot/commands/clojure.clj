@@ -1,7 +1,7 @@
 (ns yetibot.commands.clojure
   (:require [clojure.string :as s])
-  (:use [yetibot.util]
-        [yetibot.util.http]))
+  (:use [yetibot.hooks :only [cmd-hook]]
+        [yetibot.util.http :only [get-json map-to-query-string]]))
 
 (def endpoint "http://tryclj.com/eval.json")
 
@@ -11,11 +11,12 @@
 
 (defn clojure-cmd
   "clj <expression> # evaluate a clojure expression"
-  [expr]
-  (let [json (try-clojure expr)]
+  {:test #(assert (= #cmd "clj (+ 1 2)") "3")}
+  [{:keys [args]}]
+  (let [json (try-clojure args)]
     (if (:error json)
       (:message json)
       (:result json))))
 
 (cmd-hook #"clj"
-          #".*" (clojure-cmd p))
+          #"\S*" clojure-cmd)

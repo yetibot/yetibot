@@ -4,9 +4,9 @@
             [clojure.contrib.string :as s]
             [useful.fn :as useful :only rate-limited]
             [yetibot.core :as core]
-            [clojure.xml :as xml])
-  (:use [yetibot.util]
-        [yetibot.util.http]))
+            [yetibot.hooks :refer [obs-hook]]
+            [yetibot.util.http :refer [encode]]
+            [clojure.xml :as xml]))
 
 (def one-hour 3600000)
 (def endpoint "http://twss-classifier.heroku.com/?sentence=")

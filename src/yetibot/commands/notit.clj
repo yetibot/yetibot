@@ -1,7 +1,7 @@
 (ns yetibot.commands.notit
   (:require [yetibot.models.users :as users]
             [clojure.set])
-  (:use [yetibot.util]))
+  (:use [yetibot.hooks :only [cmd-hook]]))
 
 ; Users who have registered as not-it
 (def not-its (atom #{}))
@@ -19,14 +19,14 @@
 
 (defn reset-its
   "notit reset # resets the current not-it list"
-  []
+  [_]
   (do
     (do-reset)
     (format "%s: get ready, you could be it!" (clojure.string/join ", " @candidate-its ))))
 
 (defn show-its
   "notit show # show the current list of users registered as not-it"
-  []
+  [_]
   (let [ni (get-not-its)]
     (if (empty? ni)
       "Nobody has called not-it yet"
@@ -34,7 +34,7 @@
 
 (defn register-not-it
   "notit # register a user as not-it"
-  [user]
+  [{:keys [user]}]
   (let [user-name (:name user)]
     (if (contains? candidate-its user-name)
       (let [new-not-its (swap! not-its conj user-name)
@@ -47,6 +47,6 @@
       (str user-name ": you've been inactive for awhile so you're not eligible to be it."))))
 
 (cmd-hook #"notit"
-          #"reset" (reset-its)
-          #"show" (show-its)
-          #"^$" (register-not-it user))
+          #"reset" reset-its
+          #"show" show-its
+          #"^$" register-not-it)

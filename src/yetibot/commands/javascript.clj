@@ -1,13 +1,13 @@
 (ns yetibot.commands.javascript
-  (:use [yetibot.util :only (cmd-hook)]
+  (:use [yetibot.hooks :only [cmd-hook]]
         [evaljs.core]
         [evaljs.rhino]))
 
 (defn javascript-cmd
   "js <expression> # evaluate a javascript expression"
-  [expr]
+  [{expr :match}]
   (with-context (rhino-context)
                 (evaljs expr)))
 
 (cmd-hook #"js"
-          #".*" (javascript-cmd p))
+          #".*" javascript-cmd)

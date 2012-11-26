@@ -3,8 +3,8 @@
             [yetibot.api.github :as gh]
             [clojure.data.xml :as xml]
             [clojure.zip :as zip])
-  (:use [yetibot.util :only (cmd-hook)]
-        [clojure.data.zip.xml :only (attr text xml->)]))
+  (:use [yetibot.hooks :only [cmd-hook]]
+        [clojure.data.zip.xml :only [attr text xml->]]))
 
 (def tree-art "└──") ;;; "├── "
 
@@ -100,7 +100,7 @@
   "
 poms <repo> # extract versions from poms in <repo>
 poms <repo> <branch> # extract versions from poms in <repo> for <branch>"
-  [repo & [branch]]
+  [{[_ repo branch] :match}]
   (formatted-tree repo extract-version (when branch {:branch branch})))
 
 ;;; example:
@@ -111,11 +111,11 @@ poms <repo> <branch> # extract versions from poms in <repo> for <branch>"
   "
 poms deps <repo> # show pom versions along with its dependencies in <repo>
 poms deps <repo> <branch> # show pom versions along with its dependencies in <repo> for <branch>"
-  [repo & [branch]]
+  [{[_ repo branch] :match}]
   (formatted-tree repo extract-version-and-deps (when branch {:branch branch})))
 
 (cmd-hook #"poms"
-          #"^deps\s+(\S+)$" (deps-for-repo (nth p 1))
-          #"^deps\s+(\S+)\s+(\S+)" (deps-for-repo (nth p 1) (nth p 2))
-          #"^(\S+)$" (poms-for-repo (nth p 1))
-          #"(\S+)\s+(\S+)$" (poms-for-repo (nth p 1) (nth p 2)))
+          #"^deps\s+(\S+)$" deps-for-repo
+          #"^deps\s+(\S+)\s+(\S+)" deps-for-repo
+          #"^(\S+)$" poms-for-repo
+          #"(\S+)\s+(\S+)$" poms-for-repo)

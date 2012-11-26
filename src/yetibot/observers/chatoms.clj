@@ -1,9 +1,9 @@
 (ns yetibot.observers.chatoms
-  (:require [yetibot.models.users :as users])
-  (:use [yetibot.util :only (obs-hook)]
-        [yetibot.campfire :only (chat-data-structure)]
-        [useful.fn :only (rate-limited)]
-        [yetibot.util.http :only (get-json)]))
+  (:require [yetibot.models.users :as users]
+            [yetibot.campfire :refer [chat-data-structure]]
+            [yetibot.hooks :refer [obs-hook]]
+            [useful.fn :refer [rate-limited]]
+            [yetibot.util.http :refer [get-json]]))
 
 (def uri "http://chatoms.com/chatom.json?Normal=1&Fun=20&Philosophy=3&Out+There=4&Love=5&Personal=10")
 

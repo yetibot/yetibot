@@ -3,7 +3,7 @@
             [clojure.string :as s]
             [clojure.data.json :as json]
             [robert.hooke :as rh])
-  (:use [yetibot.util]))
+  (:use [yetibot.hooks :only [cmd-hook]]))
 
 (def base-google-image-url "http://ajax.googleapis.com/ajax/services/search/images")
 (def auth {:user "" :password ""})
@@ -25,7 +25,7 @@
 
 (defn image-cmd
   "image <query> # fetch a random result from google images"
-  [q]
+  [{q :match}]
   (let [images (fetch-image q)]
     (if (seq images)
       (str (:url (rand-nth images)) "?campfire=.jpg")
@@ -33,7 +33,7 @@
 
 (defn top-image
   "image top <query> # fetch the first image from google images"
-  [q]
+  [{[_ q] :match}]
   (let [images (fetch-image q)]
     (if (seq images)
       (str (:url (first images)) "?campfire=.jpg")
@@ -41,6 +41,6 @@
 
 
 (cmd-hook #"image"
-          #"^top\s(.*)" (top-image (nth p 1))
-          #".*" (image-cmd p))
+          #"^top\s(.*)" top-image
+          #".*" image-cmd)
 

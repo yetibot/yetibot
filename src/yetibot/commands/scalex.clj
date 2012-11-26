@@ -1,7 +1,7 @@
 (ns yetibot.commands.scalex
   (:require [clojure.string :as s])
-  (:use [yetibot.util :only (cmd-hook)]
-        [yetibot.util.http :only (get-json fetch)]))
+  (:use [yetibot.hooks :only [cmd-hook]]
+        [yetibot.util.http :only [get-json]]))
 
 (def endpoint "http://api.scalex.org/?per_page=1&q=")
 
@@ -10,11 +10,11 @@
 
 (defn scalex-cmd
   "scalex <query> # searches scalex.org"
-  [query]
+  [{query :args}]
   (let [res (get-json (str endpoint query))]
     (if-let [first-result (first (:results res))]
       (format-docs first-result)
-      (str "No results for " query " on scalex.org"))))
+      (format "No results for %s on scalex.org" query))))
 
 (cmd-hook #"scalex"
-          _ (scalex-cmd p))
+          _ scalex-cmd)

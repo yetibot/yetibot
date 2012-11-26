@@ -1,7 +1,7 @@
 (ns yetibot.commands.!
   (:require [yetibot.models.history :as h]
             [clojure.string :as s])
-  (:use [yetibot.util :only [cmd-hook]]))
+  (:use [yetibot.hooks :only [cmd-hook]]))
 
 (defn- valid-cmd? [json]
   (let [body (:body json)]
@@ -12,7 +12,7 @@
 ;;; handled in a separate history structure.
 (defn !-cmd
   "! # execute your last command"
-  [user]
+  [{:keys [user]}]
   (let [hist-for-user (reverse (h/items-for-user user))
         last-cmd (some valid-cmd? hist-for-user)]
     (prn "last command is" last-cmd)
@@ -21,4 +21,4 @@
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
 (cmd-hook #"!"
-          _ (!-cmd user))
+          _ !-cmd)

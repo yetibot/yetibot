@@ -2,10 +2,11 @@
   (:require [clojure.string :as s]
             [clojure.data.json :as json]
             [yetibot.campfire :as cf]
-            [http.async.client :as ac])
-  (:use [yetibot.util :only (cmd-hook ensure-config env)]
-        [clojure.set :only (difference)]
-        [twitter.oauth]
+            [http.async.client :as ac]
+            [clojure.set :refer [difference]]
+            [yetibot.util :refer [ensure-config env]]
+            [yetibot.hooks :refer [cmd-hook]])
+  (:use [twitter.oauth]
         [twitter.callbacks]
         [twitter.callbacks.handlers]
         [twitter.api.restful]
@@ -66,11 +67,11 @@
 
 (defn tracking
   "twitter tracking # show the topics that are being tracked on Twitter"
-  [] @topics)
+  [_] @topics)
 
 (defn track
   "twitter track <topic> # track a <topic> on the Twitter stream"
-  [topic]
+  [{[_ topic] :match}]
   (prn "track " topic)
   (if (@topics topic)
     (format "You're already tracking %s." topic)
@@ -80,7 +81,7 @@
 
 (defn untrack
   "twitter untrack <topic> # stop tracking <topic>"
-  [topic]
+  [{[_ topic] :match}]
   (if (@topics topic)
     (do
       (swap! topics disj topic)
@@ -89,7 +90,6 @@
 
 (ensure-config
   (cmd-hook #"twitter"
-            #"tracking" (tracking)
-            #"untrack\s+(.+)" (untrack (nth p 1))
-            #"track\s+(.+)" (track (nth p 1))
-            ))
+            #"tracking" tracking
+            #"untrack\s+(.+)" untrack
+            #"track\s+(.+)" track))

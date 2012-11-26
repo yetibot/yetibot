@@ -2,8 +2,8 @@
   (:require [robert.hooke :as rh]
             [yetibot.campfire :as cf]
             [clojure.string :as s]
-            [yetibot.core :as core])
-  (:use [yetibot.util]))
+            [yetibot.hooks :refer [obs-hook]]
+            [yetibot.core :as core]))
 
 ; Map of user_id to responses
 (def ids (s/split (str (System/getenv "WELCOME_IDS")) #","))
@@ -16,8 +16,4 @@
   (fn [json]
     (let [user_id (:user_id json)
           resp ((keyword (str user_id)) enter-responses)]
-      (println (str user_id " entered"))
-      (println (str "response should be " resp))
-
-      (when resp
-        (cf/play-sound resp)))))
+      (when resp (cf/play-sound resp)))))

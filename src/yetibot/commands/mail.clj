@@ -2,7 +2,8 @@
   (:require [postal.core :as postal]
             [yetibot.util.format :as fmt]
             [clojure.string :as s])
-  (:use [yetibot.util :only (cmd-hook env ensure-config)]))
+  (:use [yetibot.util :only [env ensure-config]]
+        [yetibot.hooks :only [cmd-hook]]))
 
 (def default-subject "A friendly message from YetiBot")
 (def success-message "Sent :email:")
@@ -29,13 +30,10 @@
                        (first (fmt/format-data-structure opts))))]
     [{:type "text/html" :content (-> content encode-images encode-newlines)}]))
 
-(defn send-email
-  "mail <to> / <subject> / <body> # send an email
-mail <to> / <body> # send an email with a friendly default subject
-mail <to> # send an email with piped content"
-  ([to subject body opts] (send-email to subject body opts (:bcc config)))
+(defn send-mail
+  ([to subject body opts] (send-mail to subject body opts (:bcc config)))
   ([to subject body opts bcc]
-   (prn "send-email with " to subject body opts bcc)
+   (prn "send-mail with " to subject body opts bcc)
    (let [res (postal/send-message
                (with-meta
                  {:from (:from config)
@@ -48,9 +46,24 @@ mail <to> # send an email with piped content"
        success-message
        error-message))))
 
+(defn send-body-and-subject
+  "mail <to> / <subject> / <body> # send an email"
+  [{[_ to subject body] :match opts :opts}]
+  (send-mail to subject body opts))
+
+(defn send-piped-and-body
+  "mail <to> / <body> # mail with <body> and any piped content"
+  [{[_ to body] :match opts :opts}]
+  (send-mail to default-subject body opts))
+
+(defn send-piped
+  "mail <to> # mail with piped content"
+  [{[_ to] :match opts :opts}]
+  (send-mail to default-subject "" opts))
+
 (ensure-config
   (cmd-hook #"mail"
-            #"(.+) \/ (.+) \/ (.*)" (send-email (nth p 1) (nth p 2) (nth p 3 "") opts)
-            #"(.+) \/ (.+)" (send-email (nth p 1) default-subject (nth p 2 "") opts)
-            #"(.+) \/" (send-email (nth p 1) default-subject "" opts)
-            #"(.+)@(.+)" (send-email (format "%s@%s" (nth p 1) (nth p 2)) default-subject "" opts)))
+            #"(.+) \/ (.+) \/ (.*)" send-body-and-subject
+            #"(\S+@\S+) \/ (.+)" send-piped-and-body
+            ;;; #"(.+) \/" (send-mail(nth p 1) default-subject "" opts)
+            #"(\S+@\S+)( \/)?" send-piped)) ; just the email address

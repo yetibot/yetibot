@@ -5,7 +5,7 @@
             [robert.hooke :as rh]
             [clj-time.core :as t]
             [clj-time.coerce :as c])
-  (:use [yetibot.util :only (cmd-hook)]
+  (:use [yetibot.hooks :only [cmd-hook]]
         [yetibot.util.http :only (fetch get-json with-client)]))
 
 
@@ -67,7 +67,7 @@
 
 (defn build
   "jen build <job-name>"
-  [job-pattern]
+  [{job-pattern :match}]
   (let [job-pattern (re-pattern job-pattern)]
     (letfn [(match-job [pattern job] (when (re-find pattern job) job))]
       (if-let [job-name (some (partial match-job job-pattern) (job-names))]
@@ -86,7 +86,7 @@
 
 (defn build-default-cmd
   "jen build # build default job if configured"
-  [] (if default-job
+  [_] (if default-job
        (build default-job)
        "no default job configured"))
 
@@ -94,29 +94,24 @@
   "
 jen status <job-name>       # show Jenkins status for <job-name>
 jen status                  # show Jenkins status for default job if configured"
-  [& args]
-  (if (empty? args)
-    (do (prn "use default job" default-job) (job-status default-job))
-    (job-status (first args))))
+  [{args :match}]
+  (if (coll? args)
+    (job-status (second args))
+    (job-status default-job)))
 
 (defn list-cmd
   "
 jen list                    # lists all jenkins jobs
-jen list <n>                # lists first <n> jenkins jobs
-jen list <string>           # lists jenkins jobs containing <string>"
-  [& args]
-  (if (empty? args)
-    (list-jobs)
-    (let [arg (first args)
-          p-arg (read-string arg)]
-      (if (number? p-arg)
-        (list-jobs p-arg)
-        (list-jobs-matching arg)))))
+jen list <pattern>          # lists jenkins jobs containing <string>"
+  [{args :match}]
+  (if (coll? args)
+    (list-jobs-matching (second args))
+    (list-jobs)))
 
 (cmd-hook #"jen"
-          #"^build$" (build-default-cmd)
-          #"^build\s(.+)" (build (second p))
-          #"^status$" (status-cmd)
-          #"^status\s(.+)" (status-cmd (second p))
-          #"^list$" (list-cmd)
-          #"^list\s(.+)" (list-cmd (second p)))
+          #"^build$" build-default-cmd
+          #"^build\s(.+)" build
+          #"^status$" status-cmd
+          #"^status\s(.+)" status-cmd
+          #"^list\s(.+)" list-cmd
+          #"^list$" list-cmd)

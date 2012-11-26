@@ -3,7 +3,7 @@
             [clojure.string :as s]
             [yetibot.core :as core]
             [robert.hooke :as rh])
-  (:use [yetibot.util :only (cmd-hook)]
+  (:use [yetibot.hooks :only [cmd-hook]]
         [yetibot.util.http]))
 
 (def base-uri "http://version1.api.memegenerator.net/")
@@ -92,12 +92,12 @@
 
 (defn chat-instance-popular
   "meme popular                # list random popular meme instances from the top 20 in the last day"
-  []
+  [_]
   (chat-instance (rand-nth (:result (instances-popular)))))
 
 (defn chat-instance-popular-for-gen
   "meme popular <generator>    # list random popular meme instances for <generator> from the top 20 in the last day"
-  [gen]
+  [{[_ gen] :match}]
   (let [json (instances-popular gen)
         result (:result json)]
     (if (empty? result)
@@ -115,19 +115,17 @@
 
 (defn trending-cmd
   "meme trending               # list trending generators"
-  []
-  (chat-meme-list
-    (gen-trending)))
+  [_] (chat-meme-list (gen-trending)))
 
 (defn search-cmd
   "meme search <term>          # query available meme generators"
-  [term]
+  [{[_ term] :match}]
   (chat-meme-list
     (search-generators term)))
 
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"
-  [[inst line1 line2]]
+  [{[_ inst line1 line2] :match}]
   (println (str "generate meme " inst))
   (chat-instance
     (create-instance
@@ -136,17 +134,18 @@
 
 (defn generate-auto-split-cmd
   "meme <generator>: <text> # autosplit <text> in half and generate the instance"
-  [[inst text]]
+  [{[_ inst text] :match}]
+  (prn "auto split" inst text)
   (let [spl (s/split text #"\s")]
     (generate-cmd
-      (list* inst
-             (map (partial s/join " ")
-                  (split-at (/ (count spl) 2) spl))))))
+      {:match (list* nil inst
+                     (map (partial s/join " ")
+                          (split-at (/ (count spl) 2) spl)))})))
 
-(cmd-hook #"meme$"
-          #"^popular$" (chat-instance-popular)
-          #"^popular\s(.+)" (chat-instance-popular-for-gen (nth p 1))
-          #"^trending" (trending-cmd)
-          #"^(.+?):(.+)\/(.*)$" (generate-cmd (rest p))
-          #"^(.+?):(.+)$" (generate-auto-split-cmd (rest p))
-          #"^(search\s)?(.+)" (search-cmd (nth p 2)))
+(cmd-hook ["meme" #"meme$"]
+          #"^popular$" chat-instance-popular
+          #"^popular\s(.+)" chat-instance-popular-for-gen
+          #"^trending" trending-cmd
+          #"^(.+?):(.+)\/(.*)$" generate-cmd
+          #"^(.+?):(.+)$" generate-auto-split-cmd
+          #"^(?:search\s)?(.+)" search-cmd)

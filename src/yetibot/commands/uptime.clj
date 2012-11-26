@@ -1,6 +1,6 @@
 (ns yetibot.commands.uptime
-  (:import org.apache.commons.lang3.time.DurationFormatUtils)
-  (:use [yetibot.util :only(cmd-hook)]))
+  (:require [yetibot.hooks :refer [cmd-hook]])
+  (:import org.apache.commons.lang3.time.DurationFormatUtils))
 
 (defonce start-time (System/currentTimeMillis))
 
@@ -10,7 +10,7 @@
 
 (defn uptime-cmd
   "uptime # list uptime in milliseconds"
-  [] (DurationFormatUtils/formatDurationWords (uptime-millis) true true))
+  [_] (DurationFormatUtils/formatDurationWords (uptime-millis) true true))
 
 (cmd-hook #"uptime"
-          #"" (uptime-cmd))
+          _ uptime-cmd)

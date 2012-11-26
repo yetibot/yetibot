@@ -3,7 +3,8 @@
             [clojure.string :as s]
             [useful.fn :as useful :only rate-limited]
             [tentacles [issues :as is]])
-  (:use [yetibot.util :only (cmd-hook obs-hook env)]
+  (:use [yetibot.hooks :only [obs-hook cmd-hook]]
+        [yetibot.util :only [env]]
         [yetibot.campfire :only (chat-data-structure)]))
 
 (def rate-limit-ms 5000)
@@ -15,7 +16,7 @@
 (defn should-add-feature?
   "Loop the regexes that think we should add a feature"
   [body]
-  (some identity 
+  (some identity
         (map #(re-find % body)
              [#"(?i)^feature request:(.+)"
               #"(?i)^yetibot feature:(.+)"])))
@@ -41,12 +42,12 @@
 
 (defn lookup-features
   "features # look up YetiBot's current list of features requests"
-  []
+  [_]
   (map :title (issues-in-yetibot-repo)))
 
 (when (every? identity config)
   (cmd-hook #"features"
-            _ (lookup-features))
+            _ lookup-features)
   (obs-hook
     ["TextMessage" "PasteMessage"]
     listen-for-add-feature))

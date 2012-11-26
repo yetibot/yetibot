@@ -1,9 +1,9 @@
 (ns yetibot.commands.wordnik
   (:require [wordnik.api.word :as word]
             [wordnik.api.words :as words]
+            [yetibot.hooks :refer [cmd-hook]]
             [clojure.string :as s])
-  (:use wordnik.core
-        [yetibot.util :only (cmd-hook)]))
+  (:use wordnik.core))
 
 (def ^:private api-key (System/getenv "WORDNIK_API_KEY"))
 
@@ -20,28 +20,23 @@
 
 (defn define
   "wordnik define <word> # look up the definition for <word> on Wordnik"
-  [w]
+  [{[_ w] :match}]
   (with-auth
     (let [ds (word/definitions (s/trim w))
           word (-> ds first :word)]
       (if word
-        (conj (extract-definitions-text ds)
-              word)
+        (conj (extract-definitions-text ds) word)
         (str "No defitions found for " w)))))
 
 (defn random
   "wordnik random # look up a random word on Wordnik"
-  []
-  (with-auth
-    (define (:word (words/random-word)))))
+  [_] (with-auth (define (:word (words/random-word)))))
 
 (defn wotd
   "wordnik wotd # look up the Word of the Day on Wordnik"
-  []
-  (with-auth
-    (format-defs (words/wotd))))
+  [_] (with-auth (format-defs (words/wotd))))
 
 (cmd-hook #"wordnik"
-          #"define\s(\w+)" (define (second p))
-          #"random" (random)
-          #"wotd" (wotd))
+          #"define\s(\w+)" define
+          #"random" random
+          #"wotd" wotd)

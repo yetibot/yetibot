@@ -1,40 +1,30 @@
 (ns yetibot.commands.urban-dictionary
   (:require [clojure.string :as s]
-            [http.async.client :as client]
-            [clojure.data.json :as json])
-  (:use [yetibot.util]
-        [yetibot.util.http]))
+            [yetibot.hooks :refer [cmd-hook]]
+            [yetibot.util.http :refer [encode get-json]]
+            [clojure.data.json :as json]))
 
 (def endpoint "http://api.urbandictionary.com/v0/")
 
+(defn- call [querystring]
+  (get-json (str endpoint querystring)))
+
 (defn search-urban-dictionary
-  [q]
-  (let [uri (str endpoint "define?term=" (encode q))]
-    (with-open [client (client/create-client)]
-      (let [response (client/GET client uri)]
-        (client/await response)
-        (json/read-json (client/string response))))))
+  [q] (call (format "define?term=%s" (encode q))))
 
-(defn fetch-random []
-  (let [uri (str endpoint "random")]
-    (with-open [client (client/create-client)]
-      (let [response (client/GET client uri)]
-        (client/await response)
-        (json/read-json (client/string response))))))
+(defn fetch-random [] (call "random"))
 
+(defn format-def [result]
+  (first (for [i (:list result)] [(:word i) (:definition i)])))
 
 (defn random-cmd
   "urban random # fetch a random definition from Urban Dictionary"
-  []
-  (first
-    (for [i (:list (fetch-random))] [(:word i) (:definition i)])))
+  [_] (format-def (fetch-random)))
 
 (defn search-cmd
   "urban <query> # search for <query> on Urban Dictionary"
-  [q]
-  (first
-    (for [i (:list (search-urban-dictionary q))] (:definition i))))
+  [{q :match}] (format-def (search-urban-dictionary q)))
 
 (cmd-hook #"urban"
-          #"^random" (random-cmd)
-          #".*" (search-cmd p))
+          #"^random" random-cmd
+          #".*" search-cmd)

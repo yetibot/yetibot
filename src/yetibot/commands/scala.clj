@@ -1,24 +1,18 @@
 (ns yetibot.commands.scala
-  (:require [clojure.string :as s]
-            [http.async.client :as client])
-  (:use [yetibot.util]
-        [yetibot.util.http]
-        [clojure.java.shell :only [sh]]))
+  (:use [yetibot.hooks :only [cmd-hook]]
+        [yetibot.util.http :only [encode fetch]]))
 
 (def endpoint "http://www.simplyscala.com/interp?bot=irc&code=")
 
 (defn try-scala
   [expr]
   (let [uri (str endpoint (encode expr))]
-    (with-open [client (client/create-client)]
-      (let [response (client/GET client uri)]
-        (client/await response)
-        (client/string response)))))
+    (fetch uri)))
 
 (defn scala-cmd
   "scala <expression> # evaluate a scala expression"
-  [expr]
+  [{expr :match}]
   (try-scala expr))
 
 (cmd-hook #"scala"
-          #".*" (scala-cmd p))
+          #".*" scala-cmd)
