@@ -2,6 +2,7 @@
   (:require [yetibot.api.jira :as jira]
             [clojure.string :as s])
   (:use [yetibot.util]
+        [yetibot.hooks :only [obs-hook]]
         [yetibot.util.http]
         [yetibot.campfire :only (chat-data-structure)]
         [clojure.contrib.cond]))

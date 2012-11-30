@@ -167,7 +167,7 @@
   (find-and-load-ns yetibot-observer-namespaces))
 
 (defn load-commands-and-observers []
-  ;;; (load-observers)
+  (load-observers)
   (load-commands))
 
 (defn reload-all-yetibot
