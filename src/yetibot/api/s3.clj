@@ -8,3 +8,7 @@
 (defn content [path]
   (let [[bucket key] (s/split path #"\/" 2)]
     (slurp (:content (s3/get-object cred bucket key)))))
+
+(defn put [path object]
+  (let [[bucket key] (s/split path #"\/" 2)]
+    (s3/put-object cred bucket key object)))
