@@ -49,6 +49,21 @@
                   {:accept "application/vnd.github.raw+json"
                   :headers {"Authorization" (str "token " token)}}))))
 
+(defn changed-files
+  "Retrieves a list of the filenames which have changed in a single commit, or between two commits"
+  [repo sha1 & [sha2]]
+  (let [uri (if sha2
+          (format (str endpoint "/repos/%s/%s/compare/%s...%s") org-name repo sha1 sha2)
+          (format (str endpoint "/repos/%s/%s/commits/%s") org-name repo sha1))
+        raw-data (client/get uri {:headers {"Authorization" (str "token " token)}})
+        raw-data-body (:body raw-data)
+        json-data (clojure.data.json/read-json raw-data-body)]
+    (map :filename (:files json-data))))
+
+(defn was-file-changed?
+  "Determines if a given file (with path) was changed in a single commit, or between two commits"
+  [filename repo sha1 & [sha2]]
+  (boolean (some #{filename} (changed-files repo sha1 sha2))))
 
 ;;; (client/get "http://site.com/resources/3" {:accept :json})
 
