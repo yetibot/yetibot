@@ -67,7 +67,7 @@
 
 (defn build
   "jen build <job-name>"
-  [{job-pattern :match}]
+  [{[_ job-pattern] :match}]
   (let [job-pattern (re-pattern job-pattern)]
     (letfn [(match-job [pattern job] (when (re-find pattern job) job))]
       (if-let [job-name (some (partial match-job job-pattern) (job-names))]
@@ -87,8 +87,8 @@
 (defn build-default-cmd
   "jen build # build default job if configured"
   [_] (if default-job
-       (build default-job)
-       "no default job configured"))
+        (build {:match [nil default-job]})
+        "No default job configured"))
 
 (defn status-cmd
   "
