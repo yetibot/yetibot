@@ -12,3 +12,9 @@
 (defn put [path object]
   (let [[bucket key] (s/split path #"\/" 2)]
     (s3/put-object cred bucket key object)))
+
+(defn buckets []
+  (s3/list-buckets cred))
+
+(defn list-objects [bucket prefix]
+  (s3/list-objects cred bucket {:delimiter "/" :prefix prefix}))
