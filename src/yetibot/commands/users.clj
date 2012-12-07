@@ -11,6 +11,13 @@
   "users random # get a random user"
   [_] (:name (users/get-rand-user)))
 
+(defn reset
+  "users reset # reset the user list for the current room"
+  [_]
+  (users/reset-users)
+  "Users list reset complete")
+
 (cmd-hook #"users"
+          #"reset" reset
           #"random" rand-user
           #"^$" show-users)

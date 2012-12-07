@@ -4,21 +4,10 @@
   (:use [yetibot.hooks :only (obs-hook)]
         [yetibot.campfire :only (chat-data-structure)]))
 
-(def refresh-future (atom nil))
-
-(defn refresh-users []
-  (prn "refreshing users list")
-  (when (future? @refresh-future)
-    (prn "cancel existing refresh future")
-    (future-cancel @refresh-future))
-  (reset! refresh-future (future
-                           (users/reset-users-from-room
-                             (cf/get-room)))))
-
 (obs-hook
   ["KickMessage" "LeaveMessage" "EnterMessage"]
   (fn [event-json]
-    (refresh-users)))
+    (users/reset-users)))
 
 (obs-hook
   ["TextMessage" "PasteMessage"]

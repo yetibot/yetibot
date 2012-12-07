@@ -3,7 +3,6 @@
             [clojure.data.json :as json]
             [clojure.string :as s]
             [clojure.stacktrace :as st]
-            [yetibot.models.users :as users]
             [yetibot.util.http :as http]
             [yetibot.util.format :as fmt]
             [clj-campfire.core :as cf])
