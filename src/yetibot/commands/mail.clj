@@ -28,7 +28,7 @@
   (let [content (str (when (not (empty? body)) (str body \newline))
                      (when (and opts (not= opts body))
                        (first (fmt/format-data-structure opts))))]
-    [{:type "text/html" :content (-> content encode-images encode-newlines)}]))
+    [{:type "text/html; charset=utf-8" :content (-> content encode-images encode-newlines)}]))
 
 (defn send-mail
   ([to subject body opts] (send-mail to subject body opts (:bcc config)))
