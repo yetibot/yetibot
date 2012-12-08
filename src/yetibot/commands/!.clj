@@ -20,5 +20,5 @@
       (with-meta (yetibot.core/handle-text-message last-cmd) {:suppress true})
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
-(cmd-hook #"!"
+(cmd-hook ["!" #"!"]
           _ !-cmd)

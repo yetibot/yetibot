@@ -8,8 +8,7 @@
 
 (defn help-topics
   [_]
-  (println "fetching help topics")
-  (str "These are the topics I know about. Use help <topic> for more details."
+  (str "Use help <topic> for more details"
        \newline
        (s/join \newline
                (sort (keys (get-docs))))))
@@ -17,10 +16,9 @@
 (defn help-for-topic
   "help <topic> # get help for <topic>"
   [{prefix :args}]
-  (s/join \newline
-          (or
-            (seq (get-docs-for prefix))
-            (list (str "I couldn't find any help for topic " prefix)))))
+  (or
+    (seq (get-docs-for prefix))
+    (format "I couldn't find any help for topic '%s'" prefix)))
 
 (defn help-all-cmd
   "help all # get help for all topics"
@@ -32,4 +30,4 @@
 (cmd-hook #"help"
           #"all" help-all-cmd
           #"^$" help-topics
-          #"^\w+$" help-for-topic)
+          #"^\S+$" help-for-topic)
