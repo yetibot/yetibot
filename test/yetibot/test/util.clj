@@ -1,19 +1,15 @@
 (ns yetibot.test.util
-  (:require [clojure.contrib.string :as s])
+  (:require [clojure.string :as s])
   (:use [yetibot.util])
   (:use [clojure.test]))
 
-
-(defn command-stub 
-  "command stub"
-  []
+(defn command-stub
+  "command stub" []
   (println "i'm just a stub"))
 
 (defn command-stub2
-  "command stub 2"
-  []
+  "command stub 2" []
   (println "i'm just a stub"))
-
 
 (def hook-stub `(cmd-hook
                   #"test-hook"
@@ -26,4 +22,3 @@
 
 (defn run-hook []
   ~(hook-stub))
-

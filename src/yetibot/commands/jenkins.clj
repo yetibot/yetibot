@@ -1,7 +1,7 @@
 (ns yetibot.commands.jenkins
   (:require [http.async.client :as client]
             [clojure.data.json :as json]
-            [clojure.contrib.string :as s]
+            [clojure.string :as s]
             [robert.hooke :as rh]
             [clj-time.core :as t]
             [clj-time.coerce :as c])
@@ -81,8 +81,8 @@
   ([n] (take n (job-names))))
 
 (defn list-jobs-matching [match]
-  (prn "list jobs matching " match)
-  (s/grep (re-pattern match) (job-names)))
+  (let [p (re-pattern match)]
+    (filter #(re-find p %) (job-names))))
 
 (defn build-default-cmd
   "jen build # build default job if configured"

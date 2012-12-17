@@ -2,7 +2,7 @@
   (:require [http.async.client :as c]
             [yetibot.campfire :as cf]
             [yetibot.models.users :as users]
-            [clojure.contrib.string :as s]
+            [clojure.string :as s]
             [clojure.string :as cs]
             [clojure.stacktrace :as st]
             [clojure.tools.namespace.find :as ns]
@@ -35,7 +35,7 @@
 
 (defn parse-cmd-with-args
   [cmd-with-args]
-  (let [[cmd args] (s/split #"\s" 2 cmd-with-args)
+  (let [[cmd args] (s/split cmd-with-args #"\s" 2)
         args (or args "")]
     [cmd args]))
 
@@ -53,7 +53,7 @@
   in every command that we want it."
   [s]
   (if (and (string? s) (re-find #"\n" s))
-    (s/split #"\n" s)
+    (s/split s #"\n")
     s))
 
 (defn handle-piped-command
@@ -61,7 +61,7 @@
   [body user]
   ; TODO: don't scrub body of all !s since we now have a ! command. Instead,
   ; conditionally trim the first ! off only if it's not followed by a space.
-  (let [cmds (map s/trim (s/split #" \| " (s/replace-re #"\!" "" body)))]
+  (let [cmds (map s/trim (s/split (s/replace body #"\!" "") #" \| "))]
     (prn "handle piped cmd " cmds)
     ; cmd-with-args is the unparsed string
     (let [res (reduce (fn [acc cmd-with-args]
@@ -104,7 +104,7 @@
   (println "handle-text-message")
   (try
     (parse-event json
-                 (let [parsed (s/split #"\s" 3 (s/trim body))
+                 (let [parsed (s/split (s/trim body) #"\s" 3)
                        user (users/get-user (:user_id json))]
                    (if (>= (count parsed) 1)
                      (cond

@@ -1,6 +1,9 @@
 (defproject yetibot "1.0.0-SNAPSHOT"
             :description "A command line in your campfire."
             :dependencies [[org.clojure/clojure "1.4.0"],
+                           ; TODO - kill this some day. We're only relying on it for
+                           ; cond-let at this point.
+                           [org.clojure/clojure-contrib "1.2.0"]
                            [org.clojars.adamwynne/http.async.client "0.4.1"]
                            [org.apache.commons/commons-lang3 "3.1"]	
                            [robert/hooke "1.1.2"]

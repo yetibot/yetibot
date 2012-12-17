@@ -1,5 +1,5 @@
 (ns yetibot.hooks
-  (:require [clojure.contrib.string :as s]
+  (:require [clojure.string :as s]
             [yetibot.core :as core]
             [yetibot.models.help :as help]
             [robert.hooke :as rh]

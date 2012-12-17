@@ -1,7 +1,6 @@
 (ns yetibot.models.help
-  (:require [clojure.contrib.string :as s]
+  (:require [clojure.string :as s]
             [yetibot.core :as core]
-            [clojure.contrib.string :as s]
             [clojure.data.json :as json]))
 
 (def docs (atom {}))

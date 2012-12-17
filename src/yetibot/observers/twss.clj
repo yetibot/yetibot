@@ -1,7 +1,7 @@
 (ns yetibot.observers.twss
   (:require [robert.hooke :as rh]
             [yetibot.campfire :as cf]
-            [clojure.contrib.string :as s]
+            [clojure.string :as s]
             [useful.fn :as useful :only rate-limited]
             [yetibot.core :as core]
             [yetibot.hooks :refer [obs-hook]]
@@ -20,12 +20,12 @@
 (defn load-twss [phrase]
   (xml/parse (str endpoint (encode phrase))))
 
-(defn parse-result-from-twss [xml]
-  (let [xs (xml-seq xml)
-        result (first (for [el xs :when (= (:id (:attrs el)) "result")] el))]
-    (if (s/substring? false-phrase (str result))
-      false
-      (reply-once-per-hour))))
+;;; (defn parse-result-from-twss [xml]
+;;;   (let [xs (xml-seq xml)
+;;;         result (first (for [el xs :when (= (:id (:attrs el)) "result")] el))]
+;;;     (if (s/substring? false-phrase (str result))
+;;;       false
+;;;       (reply-once-per-hour))))
 
 ;;; (obs-hook
 ;;;   ["TextMessage" "PasteMessage"]
