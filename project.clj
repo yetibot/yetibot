@@ -35,5 +35,6 @@
                            [com.bigml/closchema "0.1.8"]
                            [org.clojure/java.jdbc "0.2.3"]
                            [mysql/mysql-connector-java "5.1.6"]
+                           [incanter "1.4.0"]
                            [cheshire "5.0.0"]]
             :main yetibot.core)
