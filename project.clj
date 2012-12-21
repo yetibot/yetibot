@@ -8,7 +8,7 @@
                            [org.apache.commons/commons-lang3 "3.1"]	
                            [robert/hooke "1.1.2"]
                            [clj-campfire "1.0.0"]
-                           [org.clojure/data.json "0.1.1"]
+                           [org.clojure/data.json "0.2.0"]
                            [org.clojure/tools.namespace "0.2.0"]
                            [org.clojure/java.classpath "0.2.0"]
                            [clj-time "0.4.4"]
