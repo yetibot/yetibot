@@ -22,6 +22,7 @@
     `(do
        (rh/add-hook
          #'core/handle-command
+         ~prefix ; use prefix as the hook-key to enable removing/re-adding
          (fn [~callback ~cmd ~args ~user ~opts]
            ; only match against the
            ; first word in ~args
