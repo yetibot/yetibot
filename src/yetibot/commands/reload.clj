@@ -1,11 +1,20 @@
 (ns yetibot.commands.reload
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require [clojure.string :as s]
+            [yetibot.hooks :refer [cmd-hook]]))
 
-(defn reload-cmd
+(defn reload-all-cmd
   "reload # reload all of YetiBot's commands and observers"
   [_]
   (yetibot.core/reload-all-yetibot)
   "Reload complete.")
 
+(defn reload-cmd
+  "reload <namespace pattern> # reload a specific namespace"
+  [{:keys [match]}]
+  (let [re (re-pattern (format ".*%s.*" match))
+        matched (yetibot.core/find-and-load-namespaces [re])]
+    (format "Reloaded namespaces:\n  %s" (s/join "\n  " matched))))
+
 (cmd-hook #"reload"
-          _ reload-cmd)
+          #".+" reload-cmd
+          _ reload-all-cmd)

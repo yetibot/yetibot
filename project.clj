@@ -6,7 +6,7 @@
                            [org.clojure/clojure-contrib "1.2.0"]
                            [org.clojars.adamwynne/http.async.client "0.4.1"]
                            [org.apache.commons/commons-lang3 "3.1"]	
-                           [robert/hooke "1.1.2"]
+                           [robert/hooke "1.3.0"]
                            [clj-campfire "1.0.0"]
                            [org.clojure/data.json "0.2.0"]
                            [org.clojure/tools.namespace "0.2.0"]

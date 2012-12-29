@@ -151,20 +151,24 @@
 
 (defn load-ns [arg]
   (println "Loading namespace" arg)
-  (try (require arg :reload)
+  (try (require arg :reload-all)
     (catch Exception e
       (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
       (st/print-stack-trace (st/root-cause e) 15))))
 
-(defn find-and-load-ns [ns-patterns]
+(defn find-and-load-namespaces
+  "Find namespaces matching ns-patterns: a seq of regex patterns. Load the matching
+  namespaces and return the seq of matched namespaces."
+  [ns-patterns]
   (let [nss (flatten (map find-namespaces ns-patterns))]
-    (dorun (map load-ns nss))))
+    (dorun (map load-ns nss))
+    nss))
 
 (defn load-commands []
-  (find-and-load-ns yetibot-command-namespaces))
+  (find-and-load-namespaces yetibot-command-namespaces))
 
 (defn load-observers []
-  (find-and-load-ns yetibot-observer-namespaces))
+  (find-and-load-namespaces yetibot-observer-namespaces))
 
 (defn load-commands-and-observers []
   (load-observers)
@@ -179,7 +183,7 @@
   ;; only load commands and observers
   ;; until https://github.com/devth/yetibot/issues/75 is fixed
   (load-commands-and-observers))
-  ;;; (find-and-load-ns yetibot-all-namespaces))
+  ;;; (find-and-load-namespaces yetibot-all-namespaces))
 
 (defn -main [& args]
   (trace "starting main")
