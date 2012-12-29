@@ -33,8 +33,8 @@
   (if-let [match (should-add-feature? (:body event-json))]
     (let [title (s/trim (second match))]
       (chat-data-structure
-        (if (post-issue title)
-          (format "Acknowledged: %s" title)
+        (if-let [issue (post-issue title)]
+          (format "Opened issue: %s" (:html_url issue))
           "I feel like you're trying to spam me; ignored")))))
 
 (defn- issues-in-yetibot-repo
