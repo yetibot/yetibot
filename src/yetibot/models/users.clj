@@ -26,7 +26,7 @@
         us-by-id (into {} (for [u us] [(:id u) (get-refreshed-user u)]))]
     (reset! users us-by-id)))
 
-(defn reset-users [] (reset-users-from-room cf/get-room))
+(defn reset-users [] (reset-users-from-room (cf/get-room)))
 
 (defn get-user [id]
   (get @users id))
