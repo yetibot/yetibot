@@ -4,9 +4,10 @@
             [clojure.string :as s]
             [robert.hooke :as rh]
             [clj-time.core :as t]
-            [clj-time.coerce :as c])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only (fetch get-json with-client)]))
+            [clj-time.coerce :as c]
+            [clojure.core.cache :as cache]
+            [yetibot.hooks :refer [cmd-hook]]
+            [yetibot.util.http :refer [fetch get-json with-client]]))
 
 
 (def base-uri (System/getenv "JENKINS_URI"))
@@ -15,14 +16,25 @@
            :preemptive true})
 (def default-job (System/getenv "JENKINS_DEFAULT_JOB"))
 
-; helpers
-(def job-names
-  (memoize
-    (fn []
-      (with-client (str base-uri "api/json") client/GET auth
-                   (client/await response)
-                   (let [json (json/read-json (client/string response))]
-                     (map (fn [item] (:name item)) (:jobs json)))))))
+; Helpers
+(def cache-ttl (* 1000 60 60))
+(def jenkins-cache (atom (cache/ttl-cache-factory {} :ttl cache-ttl)))
+
+(defn fetch-root []
+  (prn "fetching jenkins root api")
+  (let [uri (format "%s/api/json" base-uri)]
+    (get-json uri auth)))
+
+(defn root-data []
+  (swap! jenkins-cache
+         (fn [c]
+           (if (cache/has? c :root)
+             (cache/hit c :root)
+             (cache/miss c :root (fetch-root))))))
+
+(defn job-names [] (map :name (:jobs (:root (root-data)))))
+
+
 
 ; API Calls
 (defn status [job-name]
