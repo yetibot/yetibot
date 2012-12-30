@@ -3,7 +3,7 @@
             [yetibot.core :as core]
             [clojure.data.json :as json]))
 
-(def docs (atom {}))
+(defonce docs (atom {}))
 
 (defn add-docs [prefix cmds]
   (println (str "adding docs for " prefix \newline (apply str cmds)))

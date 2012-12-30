@@ -151,7 +151,7 @@
 
 (defn load-ns [arg]
   (println "Loading namespace" arg)
-  (try (require arg :reload-all)
+  (try (require arg :reload)
     (catch Exception e
       (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
       (st/print-stack-trace (st/root-cause e) 15))))
