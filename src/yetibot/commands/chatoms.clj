@@ -1,4 +1,4 @@
-(ns yetibot.observers.chatoms
+(ns yetibot.commands.chatoms
   (:require [yetibot.hooks :refer [cmd-hook]]
             [yetibot.util.http :refer [get-json]]))
 
