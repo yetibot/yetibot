@@ -24,6 +24,14 @@
 (defn encode [s]
   (URLEncoder/encode (str s) "UTF-8"))
 
+(defn ensure-img-suffix
+  "Add an image url suffix if not already present."
+  {:test #(assert (= "foo?.gif" (ensure-img-suffix "foo")))}
+  [url]
+  (if (re-find #"\.(jpg|png|gif)$" url)
+    url
+    (format "%s?.gif" url)))
+
 ; query string helper
 (defn map-to-query-string [m]
   (s/join "&" (map (fn [[k v]] (format "%s=%s"
