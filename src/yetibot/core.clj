@@ -18,20 +18,18 @@
          ~'event-type (:type ~event-json)]
      ~@body))
 
+
 (defn handle-command
   [cmd args user opts]
-  "Receives parsed `cmd` prefix and `args` for commands to hook into. Typicall
+  "Receives parsed `cmd` prefix and `args` for commands to hook into. Typically
   `args` will be a string, but it might be a seq when handle-command is called
-  from handle-piped-command."
+  from handle-piped-command. All commands hook this fn."
   (println (str "nothing handled command " cmd " with args " args))
   ; default to looking up a random result from google image search instead of
   ; complaining about not knowing stuff.
   (if (find-ns 'yetibot.commands.image-search)
     (handle-command "image" (str cmd " " args) user nil)
     (format "I don't know how to handle %s %s." cmd args)))
-
-(defn chat-handle-command [& args]
-  (cf/chat-data-structure (apply handle-command args)))
 
 (defn parse-cmd-with-args
   [cmd-with-args]
@@ -43,7 +41,9 @@
   "Optionally takes 2nd param `user` and 3rd param `opts`"
   [cmd-with-args & rest]
   (let [[cmd args] (parse-cmd-with-args cmd-with-args)
-        rest-args (into rest (take (- 2 (count rest)) (repeatedly (constantly nil))))]
+        ; use into on a vector of rest args so the nils don't get prepended
+        rest-args (into (vec rest) (take (- 2 (count rest)) (repeat nil)))]
+    (prn "rest-args are" rest-args)
     (apply handle-command (list* cmd (str args) rest-args))))
 
 (defn cmd-reader [& args]
@@ -60,9 +60,12 @@
 (defn handle-piped-command
   "Parse commands out of piped delimiters and pipe the results of one to the next"
   [body user]
-  ; TODO: don't scrub body of all !s since we now have a ! command. Instead,
-  ; conditionally trim the first ! off only if it's not followed by a space.
-  (let [cmds (map s/trim (s/split (s/replace body #"\!" "") #" \| "))]
+  ; Don't scrub body of *all* !s since we now have a ! command
+  (let [cleaned-body (-> body
+                       (s/replace #"\!(\w+)" (fn [[_ w]] w))
+                       (s/replace #"\!\!" "!"))
+        cmds (map s/trim (s/split cleaned-body #" \| "))]
+    (prn "cleaned body is" cleaned-body)
     (prn "handle piped cmd " cmds)
     ; cmd-with-args is the unparsed string
     (let [res (reduce (fn [acc cmd-with-args]
@@ -99,32 +102,31 @@
       (cf/chat-data-structure res)
       (println "reduced the answer down to" res))))
 
+(defn re-find-all
+  "Returns true if all patterns match"
+  [s & ps]
+  (every? #(re-find % s) ps))
+
+(defn strip-leading-! [body] (s/replace body #"^\!" ""))
 
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
   (println "handle-text-message")
   (try
-    (parse-event json
-                 (let [parsed (s/split (s/trim body) #"\s" 3)
-                       user (users/get-user (:user_id json))]
-                   (if (>= (count parsed) 1)
-                     (cond
-                       ; you talking to me?
-                       (re-find #"^yeti" (first parsed))
-                       (chat-handle-command (second parsed) (nth parsed 2 "") user nil)
-                       ; it starts with a ! and contains pipes
-                       (and (re-find #"^\!" (first parsed))
-                            (re-find #" \| " body))
-                       (handle-piped-command body user)
-                       ; short syntax
-                       (re-find #"^\!" (first parsed))
-                       (chat-handle-command (s/join "" (rest (first parsed)))
-                                            (s/join " " (rest parsed)) user nil))
-                     (println (str "WARN: couldn't split the message into 2 parts: " body)))))
-    (catch Exception ex
-      (println "Exception inside `handle-text-message`" ex)
-      (st/print-stack-trace (st/root-cause ex) 24)
-      (cf/send-paste (str "An exception occurred: " ex)))))
+    (let [user (users/get-user (:user_id json))
+          cmd? (re-find #"^\!" (:body json))
+          body (-> (:body json) strip-leading-!)]
+      (prn "user is" user)
+      (when cmd?
+        (cond
+          ; piped commands contain pipes
+          (re-find #" \| " body) (handle-piped-command body user)
+          ; must be a single command
+          true (cf/chat-data-structure (parse-and-handle-command body user)))))
+      (catch Exception ex
+        (println "Exception inside `handle-text-message`" ex)
+        (st/print-stack-trace (st/root-cause ex) 24)
+        (cf/send-paste (str "An exception occurred: " ex)))))
 
 (defn handle-campfire-event [json]
   (parse-event json
