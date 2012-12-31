@@ -1,4 +1,4 @@
-(ns yetibot.commands.trollthat
+(ns yetibot.commands.memethat
   (:require [yetibot.models.history :as h]
             [yetibot.commands.meme-generator :as meme]
             [yetibot.hooks :refer [cmd-hook]]))
@@ -14,7 +14,7 @@
 
 (defn- find-chat-to-memeify []
   (some filter-chat (->> (h/items-with-user)
-                      (take-last 10)
+                     (take-last 10)
                       reverse)))
 
 (defn- format-chat [i]
@@ -26,7 +26,6 @@
       (yetibot.core/parse-and-handle-command
         (format "meme %s: %s" gen (format-chat chat)) nil nil)
       (format "No history to %s." (if (= gen "troll") gen "meme")))))
-
 
 ; memethat
 (defn memethat
