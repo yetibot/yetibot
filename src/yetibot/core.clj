@@ -29,7 +29,7 @@
   ; complaining about not knowing stuff.
   (if (find-ns 'yetibot.commands.image-search)
     (handle-command "image" (str cmd " " args) user nil)
-    (format "I don't know how to handle %s %s." cmd args)))
+    (format "I don't know how to handle %s %s" cmd args)))
 
 (defn parse-cmd-with-args
   [cmd-with-args]
@@ -43,7 +43,6 @@
   (let [[cmd args] (parse-cmd-with-args cmd-with-args)
         ; use into on a vector of rest args so the nils don't get prepended
         rest-args (into (vec rest) (take (- 2 (count rest)) (repeat nil)))]
-    (prn "rest-args are" rest-args)
     (apply handle-command (list* cmd (str args) rest-args))))
 
 (defn cmd-reader [& args]
@@ -99,15 +98,35 @@
                               (handle-command cmd built-args user acc)))))
                       ""
                       cmds)]
-      (cf/chat-data-structure res)
-      (println "reduced the answer down to" res))))
+      (println "reduced the answer down to" res)
+      res)))
 
-(defn re-find-all
-  "Returns true if all patterns match"
-  [s & ps]
-  (every? #(re-find % s) ps))
+(defn direct-cmd
+  "Determine if this cmd is singular or piped and direct it accordingly"
+  [body user]
+  (cond
+    ; piped commands contain pipes
+    (re-find #" \| " body) (handle-piped-command body user)
+    ; must be a single command
+    true (parse-and-handle-command body user)))
+
+; TODO: handle nested sub-expressions / backticks
+(defn expand-backticks [body user]
+  "Expands backticked sub-expressions (if any)"
+  (if-let [ms (re-seq #"(`[^`]+`)+" body)]
+    (reduce (fn [acc [_ backticked-cmd]]
+              (let [cmd (s/replace backticked-cmd #"\`" "")
+                    cmd-result (direct-cmd cmd user)]
+                (s/replace-first acc backticked-cmd cmd-result)))
+            body
+            ms)
+    body))
+
+(defn handle-expansion-pass [body user]
+  (-> body (expand-backticks user)))
 
 (defn strip-leading-! [body] (s/replace body #"^\!" ""))
+
 
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
@@ -115,14 +134,9 @@
   (try
     (let [user (users/get-user (:user_id json))
           cmd? (re-find #"^\!" (:body json))
-          body (-> (:body json) strip-leading-!)]
+          body (-> (:body json) (handle-expansion-pass user) strip-leading-!)]
       (prn "user is" user)
-      (when cmd?
-        (cond
-          ; piped commands contain pipes
-          (re-find #" \| " body) (handle-piped-command body user)
-          ; must be a single command
-          true (cf/chat-data-structure (parse-and-handle-command body user)))))
+      (when cmd? (cf/chat-data-structure (direct-cmd body user))))
       (catch Exception ex
         (println "Exception inside `handle-text-message`" ex)
         (st/print-stack-trace (st/root-cause ex) 24)
