@@ -7,6 +7,8 @@
   (let [body (:body json)]
     (when (re-find #"^\![^\!]" body) json)))
 
+(defn- clean-cmd [json] (s/replace (:body json) #"\!" ""))
+
 ;;; Currently this just looks back through history for posts starting with !, which
 ;;; is an impl detail. Better would be for `handle-command` to store commands that it
 ;;; handled in a separate history structure.
@@ -17,7 +19,7 @@
         last-cmd (some valid-cmd? hist-for-user)]
     (prn "last command is" last-cmd)
     (if last-cmd
-      (with-meta (yetibot.core/handle-text-message last-cmd) {:suppress true})
+      (yetibot.core/parse-and-handle-command (clean-cmd last-cmd) user)
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
 (cmd-hook ["!" #"!"]

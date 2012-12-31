@@ -40,10 +40,11 @@
     [cmd args]))
 
 (defn parse-and-handle-command
+  "Optionally takes 2nd param `user` and 3rd param `opts`"
   [cmd-with-args & rest]
   (let [[cmd args] (parse-cmd-with-args cmd-with-args)
         rest-args (into rest (take (- 2 (count rest)) (repeatedly (constantly nil))))]
-  (apply handle-command (list* cmd (str args) rest-args))))
+    (apply handle-command (list* cmd (str args) rest-args))))
 
 (defn cmd-reader [& args]
   (parse-and-handle-command (cs/join " " args)))
@@ -78,7 +79,7 @@
                           ;   assumption that this is the last command in the pipe
                           ;   (xargs)
                           (if-let [acc-coll (or (and (coll? acc) acc)
-                                               (and (coll? possible-coll-acc) possible-coll-acc))]
+                                                (and (coll? possible-coll-acc) possible-coll-acc))]
                             ; acc was a collection, so pass the acc as opts instead
                             ; of just concatting it to args.
                             ; This allows the collections commands to deal with them.
