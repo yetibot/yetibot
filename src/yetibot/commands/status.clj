@@ -19,7 +19,7 @@
   [{:keys [match user]}]
   (let [st (format "%s at %s: %s" (:name user) (fmt-local-time) match)]
     (swap! statuses conj {(:name user) st})
-    "Status set"))
+    (show-status {:user user})))
 
 (defn show-status
   "status # show everyone's status"
