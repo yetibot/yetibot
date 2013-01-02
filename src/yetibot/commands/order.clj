@@ -16,18 +16,6 @@
   (reset-orders)
   "Ok, I reset the orders list.")
 
-(defn take-order
-  "order <food> # add (or replace) your food for the current order"
-  [{:keys [match user]}]
-   ; use rand-int as key  placeholder until we can tell yetibot who issued the command
-   (swap! orders conj {(:name user) match})
-   "Got it.")
-
-(defn order-for
-  "order for <person>: <food> # order <food> for someone other than yourself"
-  [{[_ person food] :match}]
-  (take-order {:match food :user {:name person}}))
-
 (defn show-order
   "order show # show the current order"
   [_]
@@ -35,6 +23,17 @@
     (if (empty? os)
       empty-order-message
       os)))
+
+(defn take-order
+  "order <food> # add (or replace) your food for the current order"
+  [{:keys [match user]}]
+  (swap! orders conj {(:name user) match})
+  (show-order nil))
+
+(defn order-for
+  "order for <person>: <food> # order <food> for someone other than yourself"
+  [{[_ person food] :match}]
+  (take-order {:match food :user {:name person}}))
 
 (cmd-hook #"order"
           #"reset" start-taking-orders
