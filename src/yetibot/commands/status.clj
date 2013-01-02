@@ -1,16 +1,17 @@
 (ns yetibot.commands.status
   (:require [clj-time
               [format :refer [formatter]]
-              [core :refer [default-time-zone]]
+              [core :refer [default-time-zone time-zone-for-id]]
               [local :refer [local-now format-local-time *local-formatters*]]]
             [yetibot.hooks :refer [cmd-hook]]))
 
 (defonce statuses (atom {}))
 (def empty-msg "No one has set their status")
+(def time-zone (time-zone-for-id "America/Los_Angeles"))
 
 (defn- fmt-local-time []
   (binding [*local-formatters*
-             {:short-time (formatter "hh:mm aa" (default-time-zone))}]
+             {:short-time (formatter "hh:mm aa" time-zone)}]
     (format-local-time (local-now) :short-time)))
 
 (defn set-status
