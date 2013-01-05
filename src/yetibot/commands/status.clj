@@ -14,17 +14,17 @@
              {:short-time (formatter "hh:mm aa" time-zone)}]
     (format-local-time (local-now) :short-time)))
 
+(defn show-status
+  "status # show everyone's status"
+  [_] (let [ss @statuses]
+        (if (empty? ss) empty-msg (vals ss))))
+
 (defn set-status
   "status <message> # update your status"
   [{:keys [match user]}]
   (let [st (format "%s at %s: %s" (:name user) (fmt-local-time) match)]
     (swap! statuses conj {(:name user) st})
     (show-status {:user user})))
-
-(defn show-status
-  "status # show everyone's status"
-  [_] (let [ss @statuses]
-        (if (empty? ss) empty-msg (vals ss))))
 
 (cmd-hook #"status"
           #".+" set-status
