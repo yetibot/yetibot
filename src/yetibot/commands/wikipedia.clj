@@ -39,5 +39,5 @@
       (no-match match))))
 
 (cmd-hook ["wiki" #"^wiki(pedia)*"]
-          #"search\s+(\w+)" search-cmd
-          #"\w+" wiki-cmd)
+          #"search\s+(.+)" search-cmd
+          #".+" wiki-cmd)
