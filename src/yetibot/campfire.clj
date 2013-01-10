@@ -98,8 +98,8 @@
 
 (defn chat-data-structure [d]
   "Formatters to send data structures to chat.
-   If `d` is a nested data structure, it will attempt to recursively flatten
-   or merge (if it's a map)."
+  If `d` is a nested data structure, it will attempt to recursively flatten
+  or merge (if it's a map)."
   (when-not (:suppress (meta d))
     (let [[formatted flattened-data] (fmt/format-data-structure d)]
       (prn "formatted is" formatted)
@@ -108,7 +108,8 @@
         (and
           (coll? d)
           (re-find #"\n" formatted)
-          (seq (filter #(re-find (re-pattern %) formatted) ["jpg" "png" "gif"])))
+          (seq (filter #(re-find (re-pattern (str "^http.*\\." %))
+                                 formatted) ["jpg" "png" "gif"])))
         (send-message-for-each flattened-data)
         ; send the message with newlines as a paste
         (re-find #"\n" formatted) (send-paste formatted)
