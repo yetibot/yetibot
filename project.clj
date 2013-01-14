@@ -5,14 +5,17 @@
                            ; cond-let at this point.
                            [org.clojure/clojure-contrib "1.2.0"]
                            [org.clojars.adamwynne/http.async.client "0.4.1"]
-                           [org.apache.commons/commons-lang3 "3.1"]	
+                           [org.apache.commons/commons-lang3 "3.1"]
                            [robert/hooke "1.3.0"]
                            [clj-campfire "1.0.0"]
-                           [org.clojure/data.json "0.2.0"]
-                           [org.clojure/tools.namespace "0.2.0"]
-                           [org.clojure/java.classpath "0.2.0"]
                            [clj-time "0.4.4"]
+
+                           [org.clojure/data.json "0.1.2"]
+                           [org.clojure/tools.namespace "0.2.2"]
+                           [org.clojure/java.classpath "0.2.0"]
+                           [org.clojure/core.cache "0.6.2"]
                            [org.clojure/tools.logging "0.2.3"]
+
                            [clj-logging-config "1.9.7"]
                            [log4j/log4j "1.2.16" :exclusions [javax.mail/mail
                                                                javax.jms/jms
@@ -35,7 +38,14 @@
                            [com.bigml/closchema "0.1.8"]
                            [org.clojure/java.jdbc "0.2.3"]
                            [mysql/mysql-connector-java "5.1.6"]
+                           [cheshire "5.0.1"]
                            [incanter "1.4.0"]
-                           [org.clojure/core.cache "0.6.2"]
-                           [cheshire "5.0.0"]]
+
+                           [compojure "1.1.5"]
+                           ;;; [lib-noir "0.3.4" :exclusions [[org.clojure/tools.namespace]]]
+                           ]
+            :plugins [[lein-ring "0.8.0"]]
+            :pedantic :warn
+            :ring {:handler yetibot.webapp.server/app}
+                   ;;; :init yetibot.core/main }
             :main yetibot.core)
