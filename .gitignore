@@ -10,3 +10,4 @@ tags
 src/plugins
 target/
 .lein-env
+.lein-repl-history
