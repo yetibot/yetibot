@@ -3,7 +3,6 @@
             [yetibot.campfire :as cf]
             [clojure.string :as s]
             [useful.fn :as useful :only rate-limited]
-            [yetibot.core :as core]
             [yetibot.hooks :refer [obs-hook]]
             [yetibot.util.http :refer [encode]]
             [clojure.xml :as xml]))

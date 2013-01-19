@@ -2,8 +2,7 @@
   (:require [robert.hooke :as rh]
             [yetibot.campfire :as cf]
             [clojure.string :as s]
-            [yetibot.hooks :refer [obs-hook]]
-            [yetibot.core :as core]))
+            [yetibot.hooks :refer [obs-hook]]))
 
 ; Map of user_id to responses
 (def ids (s/split (str (System/getenv "WELCOME_IDS")) #","))
