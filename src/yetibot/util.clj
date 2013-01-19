@@ -1,7 +1,6 @@
 (ns yetibot.util
   (:require [http.async.client :as client]
             [clojure.string :as s]
-            [yetibot.core :as core]
             [yetibot.campfire :as cf]
             [yetibot.models.help :as help]
             [robert.hooke :as rh]

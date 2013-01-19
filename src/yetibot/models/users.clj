@@ -1,6 +1,5 @@
 (ns yetibot.models.users
-  (:require [yetibot.models.users :as users]
-            [yetibot.campfire :as cf])
+  (:require [yetibot.campfire :as cf])
   (:import java.util.Date)
   (:import java.sql.Timestamp)
   (:import java.text.SimpleDateFormat))

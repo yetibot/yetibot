@@ -1,6 +1,5 @@
 (ns yetibot.hooks
   (:require [clojure.string :as s]
-            [yetibot.core :as core]
             [yetibot.models.help :as help]
             [robert.hooke :as rh]
             [clojure.stacktrace :as st])
@@ -21,7 +20,7 @@
         match (gensym "match")]
     `(do
        (rh/add-hook
-         #'core/handle-command
+         #'yetibot.core/handle-command
          ~prefix ; use prefix as the hook-key to enable removing/re-adding
          (fn [~callback ~cmd ~args ~user ~opts]
            ; only match against the
@@ -49,7 +48,7 @@
                                                  :opts ~opts})))
                                 exprs)
                          ; default to help
-                         true (core/handle-command "help" ~topic ~user ~opts)))
+                         true (yetibot.core/handle-command "help" ~topic ~user ~opts)))
              (~callback ~cmd ~args ~user ~opts))))
        ; extract the meta from the commands and use it to build docs
        (help/add-docs ~topic
@@ -67,7 +66,7 @@
   event-types arg, your observer will be called with the event's json."
   [event-types observer]
   (rh/add-hook
-    #'core/handle-campfire-event
+    #'yetibot.core/handle-campfire-event
     (fn [callback json]
       ; when event-type is in event-types, observe it
       (when (and
