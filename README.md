@@ -44,8 +44,36 @@ export WELCOME_<userid2>=secret
 
 ## Usage
 
-All commands are prefixed by `yetibot` (or just `yeti` for short or `!` for shortest). yetibot ignores
-everything else.
+All commands are prefixed by `!`. yetibot ignores everything else.
+
+TODO: more examples
+
+### Pipes
+
+Output from one command can be piped to another, like Unix pipes.
+
+```
+!complete does ie support | xargs echo Answer: No, it is sucky. Question:
+
+Answer: No, it is sucky. Question: does ie support css3
+Answer: No, it is sucky. Question: does ie support svg
+Answer: No, it is sucky. Question: does ie support canvas
+Answer: No, it is sucky. Question: does ie support media queries
+Answer: No, it is sucky. Question: does ie support websockets
+Answer: No, it is sucky. Question: does ie support cors
+Answer: No, it is sucky. Question: does ie support png
+Answer: No, it is sucky. Question: does ie support placeholder
+Answer: No, it is sucky. Question: does ie support rgba
+Answer: No, it is sucky. Question: does ie support rounded corners
+```
+
+### Backticks
+
+```
+!meme grumpy cat: `catfact` / False
+```
+
+<img src="http://cdn.memegenerator.net/instances/500x/33734863.jpg" />
 
 
 ### Help
