@@ -177,4 +177,4 @@ might be stored in some other repository.
 
 ## License
 
-Copyright &copy; 2012 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
+Copyright &copy; 2012-2013 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
