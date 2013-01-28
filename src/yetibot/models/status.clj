@@ -1,5 +1,6 @@
 (ns yetibot.models.status
-  (:require [clj-time
+  (:require [yetibot.models.users :as u]
+            [clj-time
               [format :refer [formatter unparse]]
               [core :refer [day year month
                             to-time-zone after?
@@ -18,10 +19,10 @@
 
 
 
-(defn add-status [user st]
-  (let [update (fn [curr user new-st]
-                 (update-in curr [user] #(conj % {:timestamp (now) :status new-st})))]
-    (swap! statuses update user st)))
+(defn add-status [{:keys [id]} st]
+  (let [update (fn [curr user-id new-st]
+                 (update-in curr [user-id] #(conj % {:timestamp (now) :status new-st})))]
+    (swap! statuses update id st)))
 
 
 (defn- format-sts
@@ -37,7 +38,8 @@
      ; sort it by timestamp
      (sort-by (comp second second))
      ; and finally format it
-     (map (fn [[{n :name} [ts st]]] (format "%s at %s: %s" n (format-time ts) st))))))
+     (map (fn [[id [ts st]]]
+            (format "%s at %s: %s" (:name (u/get-user id)) (format-time ts) st))))))
 
 (defn statuses-for-today []
   (format-sts @statuses (fn [[_ [ts _]]] (is-today? ts))))
