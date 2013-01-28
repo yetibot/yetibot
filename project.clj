@@ -1,5 +1,7 @@
 (defproject yetibot "1.0.0-SNAPSHOT"
             :description "A command line in your campfire."
+            :profiles {:dev {:dependencies [[midje "1.5-alpha9"]]}
+                             :plugins [[lein-midje "3.0-alpha4"]]}
             :dependencies [[org.clojure/clojure "1.4.0"],
                            ; TODO - kill this some day. We're only relying on it for
                            ; cond-let at this point.
