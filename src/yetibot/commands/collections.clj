@@ -142,3 +142,12 @@
 
 (cmd-hook #"tee"
           _ tee-cmd)
+
+;reverse
+(defn reverse-cmd
+  "reverse <list> # reverse the ordering of <list>"
+  [{items :opts}]
+  (reverse (ensure-items-collection items)))
+
+(cmd-hook #"reverse"
+          _ reverse-cmd)
