@@ -96,8 +96,8 @@
 ; list
 (defn list-cmd
   "list <comma-delimited-items> # construct a list"
-  [{:keys [match]}]
-  (s/split match #","))
+  [{:keys [args]}]
+  (s/split args #","))
 
 (cmd-hook #"list"
           _ list-cmd)
