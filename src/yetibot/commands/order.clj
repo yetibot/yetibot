@@ -14,7 +14,7 @@
   "order reset # reset the orders list"
   [_]
   (reset-orders)
-  "Ok, I reset the orders list.")
+  "Orders reset")
 
 (defn show-order
   "order show # show the current order"
