@@ -25,18 +25,26 @@
                  (update-in curr [user-id] #(conj % {:timestamp (now) :status new-st})))]
     (swap! statuses update id st)))
 
-(defn- format-sts
+
+(defn flatten-sts
+  "flatten the structure into [[user [:timestamp :status ]]]"
+  [sts]
+  (mapcat (fn [[k vs]] (map #(vector k ((juxt :timestamp :status) %)) vs)) sts))
+
+(defn sort-fs
+  "sort it by timestamp"
+  [flat-sts] (sort-by (comp second second) flat-sts))
+
+(defn format-sts
   "Transform statuses collection into a flattened collection of formatted strings,
   optionally filtered by `filter-fn`"
   ([ss] (format-sts ss identity))
   ([ss filter-fn]
    (->> ss
-     ; flatten the structure into [[user [:timestamp :status ]]]
-     (mapcat (fn [[k vs]] (map #(vector k ((juxt :timestamp :status) %)) vs)))
+     flatten-sts
      ; optionally filter out by some criteria
      (filter filter-fn)
-     ; sort it by timestamp
-     (sort-by (comp second second))
+     sort-fs
      ; and finally format it
      (map (fn [[id [ts st]]]
             (format "%s at %s: %s" (:name (u/get-user id)) (format-time ts) st))))))
