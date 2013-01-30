@@ -3,11 +3,19 @@
         [evaljs.core]
         [evaljs.rhino]))
 
+(def statements (atom []))
+
 (defn javascript-cmd
   "js <expression> # evaluate a javascript expression"
   [{expr :match}]
-  (with-context (rhino-context)
-                (evaljs expr)))
+  (let [res (try
+              (with-context (rhino-context)
+                            (dorun (map evaljs @statements))
+                            (evaljs expr))
+              (catch Exception e e))]
+    (when-not (instance? Exception res)
+      (swap! statements conj expr))
+    res))
 
 (cmd-hook #"js"
           #".*" javascript-cmd)
