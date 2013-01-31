@@ -32,7 +32,7 @@
 
 (defn sort-fs
   "sort it by timestamp"
-  [flat-sts] (sort-by (comp second second) flat-sts))
+  [flat-sts] (sort-by (comp second first) flat-sts))
 
 (defn format-sts
   "Transform statuses collection into a flattened collection of formatted strings,
