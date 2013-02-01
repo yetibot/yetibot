@@ -136,9 +136,8 @@
 (defn tee-cmd
   "tee <list> # output <list> to chat and return list (useful for pipes)"
   [{items :opts}]
-  (let [items (ensure-items-collection items)]
-    (chat-data-structure items)
-    items))
+  (chat-data-structure items)
+  items)
 
 (cmd-hook #"tee"
           _ tee-cmd)
