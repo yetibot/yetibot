@@ -9,23 +9,30 @@ body {
 }
 
 .animate {
-  transition: all 1s linear .1s;
-  -webkit-transition: all 1s linear .1s;
+  transition: all 1s linear .01s;
+  -webkit-transition: all .5s linear .0s;
   -moz-transition: all 1s linear .1s;
 }
 
 
 div.content {
   width: 400px;
-  height: 400px;
   text-align: center;
   display: block;
   position: absolute;
   top: 50%;
   left: 50%;
   margin-left: -200px;
-  margin-top: -100px;
+
   opacity: 0;
+  border: 5px solid #ddd;
+  background: white;
+  border-radius: 200px;
+  padding-top: 100px;
+  height: 300px;
+  margin-top: -210px;
+  box-shadow: 0px 0px 200px #fff;
+
 }
 div.content.shown {
   opacity: 1;
@@ -35,6 +42,9 @@ a {
   border: 0;
   text-decoration: none;
   color: inherit;
+  display: block;
+  height: 100%;
+  width: 100%;
 }
 
 img.yeti {
@@ -44,8 +54,12 @@ img.yeti {
   top: 20px;
   -webkit-filter: blur(2px);
 }
-div.content a:hover img.yeti {
+div.content:hover img.yeti {
   -webkit-filter: blur(0px);
+}
+
+div.content:hover {
+  background: #f1f1f1;
 }
 
 
