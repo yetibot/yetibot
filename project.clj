@@ -44,6 +44,7 @@
                            [incanter "1.4.0"]
 
                            [compojure "1.1.5"]
+                           [hiccup "1.0.2"]
                            [lib-noir "0.3.4" :exclusions [[org.clojure/tools.namespace]]]
                            ]
             :plugins [[lein-ring "0.8.0"]]
