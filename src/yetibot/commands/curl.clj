@@ -5,7 +5,7 @@
 
 (defn curl
   "curl <options> <url> # execute standard curl tool"
-  {:test #(#cmd "curl -I http://www.google.com")}
+  {:test #(curl {:args "-I http://www.google.com"})}
   [{opts-and-url :args}]
   (let [curl (partial shell/sh "curl")]
     (:out (apply curl (s/split opts-and-url #"\s")))))

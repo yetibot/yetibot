@@ -7,7 +7,7 @@
 
 (defn haiku
   "haiku # fetch a random haiku"
-  {:test #(assert (seq? #cmd haiku))}
+  {:test #(assert (seq? (haiku nil)))}
   [_] (let [res (xml-seq (xml/parse endpoint))]
         (for [el res :when (= :line (:tag el))]
           (first (:content el)))))
