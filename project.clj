@@ -47,8 +47,8 @@
                            [hiccup "1.0.2"]
                            [lib-noir "0.3.4" :exclusions [[org.clojure/tools.namespace]]]
                            ]
-            :plugins [[lein-ring "0.8.0"]]
+            :plugins [[lein-ring "0.8.2"]]
             :pedantic :warn
-            :ring {:handler yetibot.webapp.server/app}
-                   ;;; :init yetibot.core/main }
+            :ring {:handler yetibot.webapp.server/app
+                   :init yetibot.core/-main}
             :main yetibot.core)
