@@ -31,8 +31,8 @@
   (mapcat (fn [[k vs]] (map #(vector k ((juxt :timestamp :status) %)) vs)) sts))
 
 (defn sort-fs
-  "sort it by timestamp"
-  [flat-sts] (sort-by (comp second first) flat-sts))
+  "sort it by timestamp, descending"
+  [flat-sts] (sort-by (comp first second) #(compare %2 %1) flat-sts))
 
 (defn format-sts
   "Transform statuses collection into a flattened collection of formatted strings,
