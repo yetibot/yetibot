@@ -9,8 +9,8 @@ body {
 }
 
 .animate {
-  transition: all 1s linear .01s;
-  -webkit-transition: all .5s linear .0s;
+  transition: all 1s linear .1s;
+  -webkit-transition: all .5s linear .1s;
   -moz-transition: all 1s linear .1s;
 }
 
