@@ -59,6 +59,7 @@ div.content:hover img.yeti {
 }
 
 div.content:hover {
+  margin-top: -220px;
   box-shadow: 0px 0px 200px #000;
 }
 
