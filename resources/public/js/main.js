@@ -3,7 +3,9 @@ var Yeti = {
     Yeti.show();
   },
   show: function() {
-    $('.content').addClass('shown');
+    setTimeout(function() {
+      $('.content').addClass('shown');
+    }, 200);
   }
 };
 
