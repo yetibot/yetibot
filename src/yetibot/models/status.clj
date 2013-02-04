@@ -50,7 +50,7 @@
 
 (defn status-since [ts]
   (letfn [(after-ts? [status-item] (after-or-equal? (:timestamp status-item) ts))]
-    (map (fn [[user-key sts]] {user-key (filter after-ts? sts)}) @statuses)))
+    (into {} (for [[user-key sts] @statuses] [user-key (filter after-ts? sts)]))))
 
 (defn statuses-for-today []
   (format-sts @statuses (fn [[_ [ts _]]] (is-today? ts))))
