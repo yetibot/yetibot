@@ -30,9 +30,9 @@
         (map fmt-status (get-json "https://status.github.com/api/messages.json"))
         (repeat "--")))
 
-(cmd-hook ["gh" #"^gh$"]
+(cmd-hook ["gh" #"^gh|github$"]
           #"feed" feed
           #"repos" repos
-          #"status" status
           #"statuses" statuses
+          #"status$" status
           #"branches\s+(\S+)" branches)
