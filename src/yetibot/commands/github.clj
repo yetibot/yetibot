@@ -18,13 +18,21 @@
   [{[_ repo] :match}]
   (map :name (gh/branches repo)))
 
+(defn- fmt-status [st] ((juxt :status :body :created_on) st))
+
 (defn status
   "gh status # show GitHub's current system status"
-  [_] ((juxt :status :body :created_on)
-       (get-json "https://status.github.com/api/last-message.json")))
+  [_] (fmt-status (get-json "https://status.github.com/api/last-message.json")))
+
+(defn statuses
+  "gh statuses # show all recent GitHub system status messages"
+  [_] (interleave
+        (map fmt-status (get-json "https://status.github.com/api/messages.json"))
+        (repeat "--")))
 
 (cmd-hook ["gh" #"^gh$"]
           #"feed" feed
           #"repos" repos
           #"status" status
+          #"statuses" statuses
           #"branches\s+(\S+)" branches)
