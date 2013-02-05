@@ -28,7 +28,7 @@
   "gh statuses # show all recent GitHub system status messages"
   [_] (interleave
         (map fmt-status (get-json "https://status.github.com/api/messages.json"))
-        (repeat "--")))
+        (repeat ["--"])))
 
 (cmd-hook ["gh" #"^gh|github$"]
           #"feed" feed
