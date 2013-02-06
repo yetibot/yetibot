@@ -75,6 +75,13 @@ Answer: No, it is sucky. Question: does ie support rounded corners
 
 <img src="http://cdn.memegenerator.net/instances/500x/33734863.jpg" />
 
+### Combo
+
+```
+!echo `repeat 10 echo i don't always repeat myself but | join`…StackOverflowError | meme interesting: 
+```
+
+<img src="http://cdn.memegenerator.net/instances/500x/34461434.jpg" />
 
 ### Help
 
