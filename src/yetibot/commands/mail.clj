@@ -1,6 +1,7 @@
 (ns yetibot.commands.mail
   (:require [postal.core :as postal]
             [yetibot.util.format :as fmt]
+            [yetibot.models.mail]
             [clojure.string :as s])
   (:use [yetibot.util :only [env ensure-config]]
         [yetibot.hooks :only [cmd-hook]]))

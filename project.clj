@@ -46,6 +46,12 @@
                            [compojure "1.1.5"]
                            [hiccup "1.0.2"]
                            [lib-noir "0.3.4" :exclusions [[org.clojure/tools.namespace]]]
+
+                           ; Use this fork until canonical clojure-mail has merged:
+                           ; https://github.com/owainlewis/clojure-mail/pull/1
+                           [org.clojars.petterik/clojure-mail "0.1.8"]
+                           ;;; [clojure-mail "0.1.0-SNAPSHOT"]
+
                            ]
             :plugins [[lein-ring "0.8.2"]]
             :pedantic :warn
