@@ -4,6 +4,8 @@ Find me on Campfire, awaiting your command.
 
 <img src="https://www.decide.com/img/yeti.png" />
 
+[![Build Status](https://travis-ci.org/devth/yetibot.png?branch=master)](https://travis-ci.org/devth/yetibot)
+
 ## Setup
 
 Configure your `ENV` and `lein run` it.
