@@ -79,7 +79,7 @@
 ;;; repos
 
 (defn repos []
-  (r/org-repos org-name auth))
+  (r/org-repos org-name (merge auth {:per-page 100})))
 
 (defn branches [repo]
   (r/branches org-name repo auth))
