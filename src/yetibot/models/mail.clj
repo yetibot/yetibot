@@ -29,20 +29,23 @@
                   (map read-mail messages)
                   (repeat ["--"]))))
 
-(defn- announce-unread-messages [messages]
-  (yetibot.campfire/chat-data-structure
-    (cons
-      (format "You have mail! %s:\n" (pluralize (count messages) "new message"))
-      (fmt-messages messages))))
+(defn- fmt-you-have-mail [messages]
+  (cons (format "You have mail! %s:\n" (pluralize (count messages) "new message"))
+        (fmt-messages messages)))
 
 (defn fetch-unread-mail []
   (let [messages (unread-messages inbox)]
     (when-not (empty? messages)
-      (announce-unread-messages messages)
-      (mark-all-read inbox))))
+      (mark-all-read inbox)
+      (fmt-you-have-mail messages))))
+
+(defn fetch-and-announce-unread-mail []
+  (let [formatted-mail (fetch-unread-mail)]
+    (when formatted-mail
+      (yetibot.campfire/chat-data-structure formatted-mail))))
 
 ; poll for new messages
 (defonce initial
-  (future (every poll-interval fetch-unread-mail pool
+  (future (every poll-interval fetch-and-announce-unread-mail
                  :desc "Fetch email"
                  :initial-delay 0)))

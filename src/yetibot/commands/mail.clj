@@ -1,7 +1,7 @@
 (ns yetibot.commands.mail
   (:require [postal.core :as postal]
             [yetibot.util.format :as fmt]
-            [yetibot.models.mail]
+            [yetibot.models.mail :refer [fetch-unread-mail]]
             [clojure.string :as s])
   (:use [yetibot.util :only [env ensure-config]]
         [yetibot.hooks :only [cmd-hook]]))
@@ -9,6 +9,7 @@
 (def default-subject "A friendly message from YetiBot")
 (def success-message "Sent :email:")
 (def error-message "Failed to send :poop:")
+(def no-messages "No new messages. :soon:")
 
 (def config {:host (:YETIBOT_EMAIL_HOST env)
              :user (:YETIBOT_EMAIL_USER env)
@@ -62,8 +63,13 @@
   [{[_ to] :match opts :opts}]
   (send-mail to default-subject "" opts))
 
+(defn fetch-cmd
+  "mail fetch # fetch unread messages from YetiBot's mail"
+  [_] (or (fetch-unread-mail) no-messages))
+
 (ensure-config
   (cmd-hook #"mail"
+            #"fetch" fetch-cmd
             #"(.+) \/ (.+) \/ (.*)" send-body-and-subject
             #"(\S+@\S+) \/ (.+)" send-piped-and-body
             ;;; #"(.+) \/" (send-mail(nth p 1) default-subject "" opts)
