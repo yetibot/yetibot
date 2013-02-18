@@ -18,7 +18,7 @@
 (defn- u [id] {:name (str id) :id id}) ;; user stub
 
 (fact "about limiting statuses to given time periods"
-  (status-since (n-days-ago 0)) => [{(u 123) [(status-map-for-n-days-ago 0)]}]
+  (status-since (n-days-ago 0)) => {(u 123) [(status-map-for-n-days-ago 0)]}
   (against-background
     (before :facts (reset! statuses {(u 123) (map status-map-for-n-days-ago (range 8))}))))
 
