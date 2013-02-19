@@ -4,7 +4,7 @@
 
 (def empty-order-message "You haven't ordered anything yet.")
 
-(def orders (atom {}))
+(defonce orders (atom {}))
 
 (defn get-orders [] @orders)
 
