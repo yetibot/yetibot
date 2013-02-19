@@ -39,4 +39,5 @@
           #"reset" start-taking-orders
           #"show" show-order
           #"for\s(.+):(.+)" order-for
-          #".+" take-order)
+          #".+" take-order
+          _ show-order)
