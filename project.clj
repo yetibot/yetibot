@@ -3,10 +3,12 @@
   :profiles {:dev {:dependencies [[midje "1.5-beta1"]]}
              :plugins [[lein-midje "3.0-beta1"]]}
   :dependencies [[org.clojure/clojure "1.4.0"],
+
                  ; TODO - kill this some day. We're only relying on it for
                  ; cond-let at this point.
                  [org.clojure/clojure-contrib "1.2.0"]
-                 [org.clojars.adamwynne/http.async.client "0.4.1"]
+                 [org.clojars.adamwynne/http.async.client "0.4.1"
+                  ]
                  [org.apache.commons/commons-lang3 "3.1"]
                  [robert/hooke "1.3.0"]
                  [clj-campfire "1.0.0"]
@@ -16,13 +18,8 @@
                  [org.clojure/tools.namespace "0.2.2"]
                  [org.clojure/java.classpath "0.2.0"]
                  [org.clojure/core.cache "0.6.2"]
-                 [org.clojure/tools.logging "0.2.3"]
 
-                 [clj-logging-config "1.9.7"]
-                 [log4j/log4j "1.2.16" :exclusions [javax.mail/mail
-                                                    javax.jms/jms
-                                                    com.sun.jdmk/jmxtools
-                                                    com.sun.jmx/jmxri]]
+
                  [evaljs "0.1.2"]
                  [clj-ssh "0.4.0"]
                  [useful "0.8.3-alpha8"]
@@ -51,6 +48,10 @@
                  ; https://github.com/owainlewis/clojure-mail/pull/1
                  [org.clojars.petterik/clojure-mail "0.1.8"]
                  ;;; [clojure-mail "0.1.0-SNAPSHOT"]
+
+                 ;;;; database
+                 [com.datomic/datomic-free "0.8.3814"]
+                 [datomico "0.1.0"]
 
                  ]
   :plugins [[lein-ring "0.8.2"]]

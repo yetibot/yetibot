@@ -7,9 +7,7 @@
             [clojure.stacktrace :as st]
             [clojure.tools.namespace.find :as ns]
             [clojure.java.classpath :as cp])
-  (:use [clojure.tools.logging]
-        [clj-logging-config.log4j]
-        [clojure.tools.namespace.repl :only (refresh)]))
+  (:use [clojure.tools.namespace.repl :only (refresh)]))
 
 ; Deserializes json string and extracts fields
 (defmacro parse-event [event-json & body]
