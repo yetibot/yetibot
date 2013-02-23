@@ -201,9 +201,9 @@
   ;;; (find-and-load-namespaces yetibot-all-namespaces))
 
 (defn -main [& args]
-  (prn "starting main")
   (load-commands-and-observers)
   (future
     (users/reset-users-from-room
       (cf/get-room)))
+  (require 'yetibot.db)
   (cf/start #'handle-campfire-event))
