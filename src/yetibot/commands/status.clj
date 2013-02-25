@@ -13,7 +13,7 @@
 (defn show-status-since
   "status since <n> <minutes|hours|days|weeks|months> ago # show status since a given time" [{[_ n unit] :match}]
   (let [unit (plural unit) ; pluralize if singular
-        unit-fn (ns-resolve (symbol "clj-time.core") (symbol unit))
+        unit-fn (ns-resolve 'clj-time.core (symbol unit))
         n (read-string n)]
     (if (number? n)
       (model/format-sts (model/status-since (-> n unit-fn ago)))
@@ -21,9 +21,9 @@
 
 (defn set-status
   "status <message> # update your status"
-  [{:keys [match user]}]
+  [{:keys [match user] :as args}]
   (model/add-status user match)
-  (show-status {:user user}))
+  (show-status args))
 
 (cmd-hook #"status"
           #"since (.+) (minutes*|hours*|days*|weeks*|months*)( ago)*" show-status-since

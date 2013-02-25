@@ -1,56 +1,69 @@
 (ns yetibot.models.status
   (:require [clj-time
-              [format :refer [formatter unparse]]
-              [core :refer [day year month
-                            to-time-zone after?
-                            default-time-zone now time-zone-for-id date-time utc
-                            ago days weeks years months]]]))
+             [coerce :refer [from-date]]
+             [format :refer [formatter unparse]]
+             [core :refer [day year month
+                           to-time-zone after?
+                           default-time-zone now time-zone-for-id date-time utc
+                           ago hours days weeks years months]]]
+            [yetibot.models.users :refer [get-user]]
+            [datomico.core :as dc]
+            [datomico.db :refer [q]]))
 
-; {user [{:timestamp DateTime :status "status"}]}
-(defonce statuses (atom {}))
+;;;; schema
 
-; time
+(def model-namespace :status)
+
+(def schema (dc/build-schema model-namespace
+                             [[:user-id :long]
+                              [:status :string]]))
+
+(dc/create-model-fns model-namespace)
+
+;;;; time helpers
+
 (def time-zone (time-zone-for-id "America/Los_Angeles"))
 (def short-time (formatter "hh:mm aa" time-zone))
 (defn- format-time [dt] (unparse short-time dt))
-(defn at-midnight [dt] (date-time (year dt) (month dt) (day dt)))
-(defn- today [] (at-midnight (now)))
-(defn- is-today? [dt]
-  (after? (to-time-zone dt time-zone) (to-time-zone (today) time-zone)))
 (defn- after-or-equal? [d1 d2] (or (= d1 d2) (after? d1 d2)))
 
-(defn add-status [user st]
-  (let [user-key (select-keys user [:id :name])
-        update (fn [curr user-key new-st]
-                 (update-in curr [user-key] #(conj % {:timestamp (now) :status new-st})))]
-    (swap! statuses update user-key st)))
+;;;; write
 
-(defn flatten-sts
-  "flatten the structure into [[user [:timestamp :status ]]]"
-  [sts]
-  (mapcat (fn [[k vs]] (map #(vector k ((juxt :timestamp :status) %)) vs)) sts))
+(defn add-status [{:keys [id]} st]
+  (create {:user-id id :status st}))
 
-(defn sort-fs
-  "sort it by timestamp, descending"
-  [flat-sts] (sort-by (comp first second) #(compare %2 %1) flat-sts))
+;;;; read
+
+(defn- statuses
+  "Retrieve statuses for all users"
+  [] (seq (q '[:find ?user-id ?status ?txInstant
+               :where
+               [?tx :db/txInstant ?txInstant]
+               [?i :status/user-id ?user-id ?tx]
+               [?i :status/status ?status ?tx]])))
+
+(defn status-since
+  "Retrieve statuses after or equal to a given joda timestamp"
+  [ts] (let [after-ts? (fn [[_ _ inst]] (after-or-equal? (from-date inst) ts))]
+         (filter after-ts? (statuses))))
+
+(def prepare-data
+  "Turn user-ids into actual user maps and convert java dates to joda"
+  (partial map (fn [[uid st inst]] [(get-user uid) st (from-date inst)])))
+
+(def sort-st
+  "Sort it by timestamp, descending"
+  (partial sort-by (comp first second) #(compare %2 %1)))
+
+(def sts-to-strings
+  "Format statuses collection as a collection of string"
+  (partial map (fn [[user st date]]
+                 (format "%s at %s: %s" (:name user) (format-time date) st))))
 
 (defn format-sts
-  "Transform statuses collection into a flattened collection of formatted strings,
-  optionally filtered by `filter-fn`"
-  ([ss] (format-sts ss identity))
-  ([ss filter-fn]
-   (->> ss
-     flatten-sts
-     ; optionally filter out by some criteria
-     (filter filter-fn)
-     sort-fs
-     ; and finally format it
-     (map (fn [[user-key [ts st]]]
-            (format "%s at %s: %s" (:name user-key) (format-time ts) st))))))
-
-(defn status-since [ts]
-  (letfn [(after-ts? [status-item] (after-or-equal? (:timestamp status-item) ts))]
-    (into {} (for [[user-key sts] @statuses] [user-key (filter after-ts? sts)]))))
-
-(defn statuses-for-today []
-  (format-sts @statuses (fn [[_ [ts _]]] (is-today? ts))))
+  "Transform statuses collection into a normalized collection of formatted strings"
+  [ss]
+  (-> ss
+      prepare-data
+      sort-st
+      sts-to-strings))

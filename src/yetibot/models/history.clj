@@ -4,7 +4,7 @@
             [datomico.db :refer [q]]
             [datomico.action :refer [all where raw-where]]))
 
-;;;; database
+;;;; schema
 
 (def model-namespace :history)
 
