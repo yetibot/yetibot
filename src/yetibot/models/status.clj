@@ -53,7 +53,7 @@
 
 (def sort-st
   "Sort it by timestamp, descending"
-  (partial sort-by (comp first second) #(compare %2 %1)))
+  (partial sort-by (comp second rest) #(compare %2 %1)))
 
 (def sts-to-strings
   "Format statuses collection as a collection of string"
