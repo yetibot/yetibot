@@ -13,6 +13,10 @@
   "gh repos # list all known repos"
   [_] (map :name (gh/repos)))
 
+(defn repos-urls
+  "gh repos urls # list the ssh urls of all repos"
+  [_] (map :ssh_url (gh/repos)))
+
 (defn branches
   "gh branches <repo> # list branches for <repo>"
   [{[_ repo] :match}]
@@ -32,7 +36,8 @@
 
 (cmd-hook ["gh" #"^gh|github$"]
           #"feed" feed
-          #"repos" repos
+          #"repos$" repos
+          #"repos urls" repos-urls
           #"statuses" statuses
           #"status$" status
           #"branches\s+(\S+)" branches)
