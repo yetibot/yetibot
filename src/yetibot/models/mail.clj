@@ -46,6 +46,6 @@
 
 ; poll for new messages
 (defonce initial
-  (future (every poll-interval fetch-and-announce-unread-mail
+  (future (every poll-interval fetch-and-announce-unread-mail pool
                  :desc "Fetch email"
                  :initial-delay 0)))
