@@ -88,13 +88,6 @@
             ))
         (println "Something bad happened. Sleeping for 2 seconds before reconnect")
         (. Thread (sleep 2000))))))
-                           ; (message-callback (json/read-json s))
-                           ;(let [json (json/read-json s)]
-                           ;  (println json)
-                           ;  (when (and (not (empty? (s/trim (str s))))
-                           ;             (not= (str (:user_id json)) "1008539"))
-                           ;    (println "pass it to the callback")
-                           ;    (message-callback json)))))))))))
 
 (defn chat-data-structure [d]
   "Formatters to send data structures to chat.
@@ -104,9 +97,11 @@
     (let [[formatted flattened-data] (fmt/format-data-structure d)]
       (prn "formatted is" formatted)
       (cond
-        ; send each item in the coll as a separate message if it contains 
+        ; send each item in the coll as a separate message if it contains images and
+        ; the total length of the collection is less than 20
         (and
           (coll? d)
+          (< (count d) 20)
           (re-find #"\n" formatted)
           (seq (filter #(re-find (re-pattern (str "^http.*\\." %))
                                  formatted) ["jpg" "png" "gif"])))

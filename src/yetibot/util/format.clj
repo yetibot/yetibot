@@ -6,7 +6,7 @@
 
 ; send map as key: value pairs
 (defmethod format-flattened Associative [d]
-  (format-flattened (map #(str (first %1) ": " (second %1)) d)))
+  (format-flattened (map (fn [[k v]] (str k ": " v)) d)))
 
 (defmethod format-flattened Sequential [d]
   (s/join \newline d))
