@@ -142,7 +142,7 @@
 (cmd-hook #"tee"
           _ tee-cmd)
 
-;reverse
+; reverse
 (defn reverse-cmd
   "reverse <list> # reverse the ordering of <list>"
   [{items :opts}]
@@ -150,3 +150,25 @@
 
 (cmd-hook #"reverse"
           _ reverse-cmd)
+
+; keys
+(defn keys-cmd
+  "keys <map> # return the keys from <map>"
+  [{items :opts}]
+  (if (map? items)
+    (keys items)
+    items))
+
+(cmd-hook #"keys"
+          _ keys-cmd)
+
+; vals
+(defn vals-cmd
+  "vals <map> # return the vals from <map>"
+  [{items :opts}]
+  (if (map? items)
+    (vals items)
+    items))
+
+(cmd-hook #"vals"
+          _ vals-cmd)
