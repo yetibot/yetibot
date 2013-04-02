@@ -6,9 +6,9 @@
 
 (defn haskell-cmd
   "hs <expression> # evaluate haskell expression"
-  [{:keys [args]}]
-  (let [json (get-json (str endpoint (encode args)))]
+  [{:keys [match]}]
+  (let [json (get-json (str endpoint (encode match)))]
     ((juxt :type :result) json)))
 
 (cmd-hook #"hs"
-          _ haskell-cmd)
+          #".*" haskell-cmd)
