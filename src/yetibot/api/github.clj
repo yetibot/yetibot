@@ -5,15 +5,14 @@
                        [data :as data]
                        [orgs :as o]]
             [clojure.string :as s]
-            [clj-http.client :as client])
-  (:use [yetibot.util :only (env)]
-        [yetibot.util.http :only (fetch)]))
+            [clj-http.client :as client]
+            [yetibot.util :refer [env]]
+            [yetibot.util.http :refer [fetch]]))
 
 
 ;;; uses tentacles for most api calls, but falls back to raw REST calls when
 ;;; tentacles doesn't support something (like Accept headers for raw blob content).
 (def endpoint "https://api.github.com/")
-
 
 
 ;;; config
@@ -28,7 +27,6 @@
 (def org (first (filter
                   #(= (:login %) org-name)
                   (o/orgs auth))))
-
 
 ;;; data
 
@@ -53,8 +51,8 @@
   "Retrieves a list of the filenames which have changed in a single commit, or between two commits"
   [repo sha1 & [sha2]]
   (let [uri (if sha2
-          (format (str endpoint "/repos/%s/%s/compare/%s...%s") org-name repo sha1 sha2)
-          (format (str endpoint "/repos/%s/%s/commits/%s") org-name repo sha1))
+              (format (str endpoint "/repos/%s/%s/compare/%s...%s") org-name repo sha1 sha2)
+              (format (str endpoint "/repos/%s/%s/commits/%s") org-name repo sha1))
         raw-data (client/get uri {:headers {"Authorization" (str "token " token)}})
         raw-data-body (:body raw-data)
         json-data (clojure.data.json/read-json raw-data-body)]
@@ -65,17 +63,6 @@
   [filename repo sha1 & [sha2]]
   (boolean (some #{filename} (changed-files repo sha1 sha2))))
 
-;;; (client/get "http://site.com/resources/3" {:accept :json})
-
-
-
-  ;;; ([repo path git-ref]
-  ;;;  (let [uri (format "https://raw.github.com/%s/%s/%s/%s?login=%s&token=%s"
-  ;;;                    org-name repo git-ref path user-name token)]
-  ;;;    (prn uri)
-  ;;;    (fetch uri))))
-
-
 ;;; repos
 
 (defn repos []
@@ -84,10 +71,8 @@
 (defn branches [repo]
   (r/branches org-name repo auth))
 
-
 ;;; (defn contents [repo path]
 ;;;   (r/contents org-name repo path auth))
-
 
 
 ;;; events / feed
