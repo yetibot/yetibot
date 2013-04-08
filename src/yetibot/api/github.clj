@@ -15,7 +15,7 @@
 (def endpoint "https://api.github.com/")
 
 
-;;; config
+;;; config - TODO: make these eval lazily instead of GETing on load
 
 (def token (:GITHUB_TOKEN env))
 (def auth {:oauth-token token})
@@ -24,9 +24,12 @@
 (def user-name (:login user))
 (def org-name (:GITHUB_ORG env))
 
-(def org (first (filter
-                  #(= (:login %) org-name)
-                  (o/orgs auth))))
+(defonce org (first (filter
+                      #(= (:login %) org-name)
+                      (o/orgs auth))))
+
+(defn get-with-auth [uri & [opts]]
+  (client/get uri {:headers {"Authorization" (str "token " token)}}))
 
 ;;; data
 
@@ -37,6 +40,17 @@
 
 (defn find-paths [tr pattern]
   (filter #(re-find pattern (:path %)) (:tree tr)))
+
+; data/commit doesn't work anymore - github removed "git" from the path
+(defn commit [repo sha]
+  (get-with-auth
+    (format "https://api.github.com/repos/%s/%s/commits/%s" org-name repo sha)))
+
+(defn patches
+  "Retrieve a vector of patches (1 for each file modified) for a given repo and sha."
+  [repo sha]
+  (let [body (clojure.data.json/read-json (:body (commit repo sha)))]
+    (keep identity (map :patch (:files  body)))))
 
 (defn raw
   "Retrieve raw contents from GitHub"
