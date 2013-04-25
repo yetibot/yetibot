@@ -138,7 +138,7 @@
       (catch Exception ex
         (println "Exception inside `handle-text-message`" ex)
         (st/print-stack-trace (st/root-cause ex) 24)
-        (cf/send-paste (str "An exception occurred: " ex)))))
+        (cf/send-message (str "Exception :cop:: " ex)))))
 
 (defn handle-campfire-event [json]
   (parse-event json
