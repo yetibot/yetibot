@@ -19,7 +19,13 @@
                 (client/string response))))
 
 (defn get-json [& args]
-  (json/read-json (apply fetch args)))
+  (let [raw (apply fetch args)]
+    (try
+      (json/read-json raw)
+      (catch Exception e
+        (println "Exception trying to fetch json")
+        (prn args)
+        (throw (Exception. (str "Unable to parse JSON from response:" raw)))))))
 
 (defn encode [s]
   (URLEncoder/encode (str s) "UTF-8"))
