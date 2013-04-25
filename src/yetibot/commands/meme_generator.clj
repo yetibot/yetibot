@@ -12,7 +12,7 @@
            :popular "Generators_Select_ByPopular?pageIndex=0&pageSize=12&days=7"
            :instance-popular "Instances_Select_ByPopular"
            :create "Instance_Create"
-           :search-generators "Generators_Search?q="})
+           :search-generators "Generators_Search?pageIndex=0&pageSize=12&q="})
 
 (def auth {:user (System/getenv "MEME_USER")
            :password (System/getenv "MEME_PASS")})
@@ -31,7 +31,7 @@
     (get-json uri auth)))
 
 (defn search-generators [q]
-  (get-json (str base-uri (:search-generators apis) (encode q)) auth))
+  (get-json (str base-uri (:search-generators apis) (encode q))))
 
 (defn get-first-generator [q]
   (let [json (search-generators q)
