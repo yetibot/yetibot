@@ -5,12 +5,12 @@
     [compojure.handler :as handler]
     [compojure.response :as response]
     [hiccup.core :refer :all]
-    [yetibot.core :refer [parse-and-handle-command]]
+    [yetibot.core :refer [direct-cmd]]
     [compojure.core :refer :all]))
 
 (defn api [command]
   (prn "cmd was" command)
-  (parse-and-handle-command command))
+  (direct-cmd command nil))
 
 (defroutes app-routes
   (GET "/" [] (views/layout))
