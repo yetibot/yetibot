@@ -2,7 +2,6 @@
   (:require [http.async.client :as client]
             [clojure.string :as s]
             [yetibot.campfire :as cf]
-            [yetibot.models.help :as help]
             [robert.hooke :as rh]
             [clojure.stacktrace :as st]
             [clojure.data.json :as json])
@@ -17,3 +16,12 @@
 (def env
   (let [e (into {} (System/getenv))]
     (zipmap (map keyword (keys e)) (vals e))))
+
+(defn psuedo-format
+  "Similar to clojure.core/format, except it only supports %s, and it will replace
+   all occurances of %s with the single arg. If there is no %s found, it appends the
+   arg to the end of the string instead."
+  [s arg]
+  (if (re-find #"\%s" s)
+    (s/replace s "%s" arg)
+    (str s " " arg)))

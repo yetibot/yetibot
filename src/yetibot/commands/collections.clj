@@ -1,7 +1,8 @@
 (ns yetibot.commands.collections
-  (:require [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.campfire :only [chat-data-structure]]))
+  (:require [clojure.string :as s]
+            [yetibot.hooks :refer [cmd-hook]]
+            [yetibot.campfire :refer [chat-data-structure]]
+            [yetibot.util :refer [psuedo-format]]))
 
 ; helpers for all collection cmds
 (defn ensure-items-collection [items]
@@ -69,9 +70,7 @@
     (let [itms (ensure-items-collection opts)]
       (pmap (fn [item]
               (yetibot.core/parse-and-handle-command
-                (if (re-find #"\%s" args)
-                  (s/replace args "%s" item)
-                  (str args " " item))
+                (psuedo-format args item)
                 user))
             itms))))
 
