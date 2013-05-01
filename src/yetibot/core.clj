@@ -2,12 +2,12 @@
   (:require [http.async.client :as c]
             [yetibot.campfire :as cf]
             [yetibot.models.users :as users]
+            [yetibot.util :refer [psuedo-format]]
             [clojure.string :as s]
-            [clojure.string :as cs]
             [clojure.stacktrace :as st]
             [clojure.tools.namespace.find :as ns]
-            [clojure.java.classpath :as cp])
-  (:use [clojure.tools.namespace.repl :only (refresh)]))
+            [clojure.java.classpath :as cp]
+            [clojure.tools.namespace.repl :refer [refresh]]))
 
 ; Deserializes json string and extracts fields
 (defmacro parse-event [event-json & body]
@@ -44,7 +44,7 @@
     (apply handle-command (list* cmd (str args) rest-args))))
 
 (defn cmd-reader [& args]
-  (parse-and-handle-command (cs/join " " args)))
+  (parse-and-handle-command (s/join " " args)))
 
 (defn to-coll-if-contains-newlines
   "This might be a bit hack-ish, but it lets us get out of explicitly supporting streams
@@ -59,8 +59,8 @@
   [body user]
   ; Don't scrub body of *all* !s since we now have a ! command
   (let [cleaned-body (-> body
-                       (s/replace #"\!(\w+)" (fn [[_ w]] w))
-                       (s/replace #"\!\!" "!"))
+                         (s/replace #"\!(\w+)" (fn [[_ w]] w))
+                         (s/replace #"\!\!" "!"))
         cmds (map s/trim (s/split cleaned-body #" \| "))]
     (prn "cleaned body is" cleaned-body)
     (prn "handle piped cmd " cmds)
@@ -85,15 +85,11 @@
                             ; This allows the collections commands to deal with them.
                             (handle-command cmd args user acc-coll)
                             ; otherwise concat args and acc as the new args. args are
-                            ; likely empty anyway. (e.g. !urban random | !image - the
+                            ; likely empty anyway. (e.g. !urban random | image - the
                             ; args to !image are empty, and acc would be the result
                             ; of !urban random). Send args as opts in this case so
                             ; that regular cmd output can be parsed as opts.
-                            (let [opt-args-frags [args acc]
-                                  built-args
-                                    (cs/join " "
-                                     (filter (complement cs/blank?) opt-args-frags))]
-                              (handle-command cmd built-args user acc)))))
+                            (parse-and-handle-command (psuedo-format cmd-with-args acc) user acc))))
                       ""
                       cmds)]
       (println "reduced the answer down to" res)
