@@ -9,8 +9,9 @@
     [compojure.core :refer :all]))
 
 (defn api [command]
-  (prn "cmd was" command)
-  (direct-cmd command nil))
+  (let [res (direct-cmd command nil)]
+    (yetibot.campfire/chat-data-structure res)
+    res))
 
 (defroutes app-routes
   (GET "/" [] (views/layout))
