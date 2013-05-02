@@ -55,18 +55,18 @@ TODO: more examples
 Output from one command can be piped to another, like Unix pipes.
 
 ```
-!complete does ie support | xargs echo Answer: No, it is sucky. Question:
+!complete does IE support | xargs echo %s? No, it is sucky.
 
-Answer: No, it is sucky. Question: does ie support css3
-Answer: No, it is sucky. Question: does ie support svg
-Answer: No, it is sucky. Question: does ie support canvas
-Answer: No, it is sucky. Question: does ie support media queries
-Answer: No, it is sucky. Question: does ie support websockets
-Answer: No, it is sucky. Question: does ie support cors
-Answer: No, it is sucky. Question: does ie support png
-Answer: No, it is sucky. Question: does ie support placeholder
-Answer: No, it is sucky. Question: does ie support rgba
-Answer: No, it is sucky. Question: does ie support rounded corners
+does ie support html5? No, it is sucky.
+does ie support css3? No, it is sucky.
+does ie support svg? No, it is sucky.
+does ie support media queries? No, it is sucky.
+does ie support ftps? No, it is sucky.
+does ie support png? No, it is sucky.
+does ie support canvas? No, it is sucky.
+does ie support @font-face? No, it is sucky.
+does ie support webgl? No, it is sucky.
+does ie support ttf? No, it is sucky.
 ```
 
 ### Backticks
