@@ -16,6 +16,7 @@
 (defroutes app-routes
   (GET "/" [] (views/layout))
   (GET "/api" [command] (api command))
+  (POST "/api" [command] (api command))
   (route/resources "/"))
 
 (def app (handler/site app-routes))
