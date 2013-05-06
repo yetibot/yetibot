@@ -5,7 +5,8 @@
 ; todo: loop through namespaces looking for a "schema" to load
 ; (do it manually for now)
 (def nss '[yetibot.models.history
-           yetibot.models.status])
+           yetibot.models.status
+           yetibot.models.alias])
 
 (def schemas
   (for [n nss] (do (require n)
