@@ -102,7 +102,7 @@
   ([n] (take n (job-names))))
 
 (defn list-jobs-matching [match]
-  (let [p (re-pattern match)]
+  (let [p (re-pattern (s/trim match))]
     (filter #(re-find p %) (job-names))))
 
 (defn build-default-cmd
@@ -131,7 +131,7 @@ jen list <pattern>          # lists jenkins jobs containing <string>"
 
 (cmd-hook #"jen"
           #"^build$" build-default-cmd
-          #"^build\s(.+)" build
+          #"^build\s(\S+)\s+$" build
           #"^status$" status-cmd
           #"^status\s(.+)" status-cmd
           #"^list\s(.+)" list-cmd
