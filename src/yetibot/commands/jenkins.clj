@@ -77,6 +77,10 @@
          ""
          changeset]))))
 
+(defn report-job-url [job-name]
+  (let [json (status job-name)]
+    (yetibot.campfire/chat-data-structure (:url json))))
+
 (defn build
   "jen build <job-name>"
   [{[_ job-pattern] :match}]
@@ -85,6 +89,7 @@
       (if-let [job-name (some (partial match-job job-pattern) (job-names))]
         (let [uri (format "%sjob/%s/build" base-uri job-name)
                   response (fetch uri auth)]
+          (future (report-job-url job-name))
           (str "I sent off a build for " job-name))
         (format "I couldn't match any jobs on  %s. Get it right next time." job-pattern)))))
 
