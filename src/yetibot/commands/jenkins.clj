@@ -78,6 +78,10 @@
          changeset]))))
 
 (defn report-job-url [job-name]
+  ; Wait a second before requesting the job url so that Jenkins has time to actually
+  ; start the build. Otherwise, the previous build url will be reported instead of
+  ; the latest.
+  (Thread/sleep 1000)
   (let [json (status job-name)]
     (yetibot.campfire/chat-data-structure (:url json))))
 
