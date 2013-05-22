@@ -94,7 +94,7 @@
         (let [uri (format "%sjob/%s/build" base-uri job-name)
                   response (fetch uri auth)]
           (future (report-job-url job-name))
-          (str "I sent off a build for " job-name))
+          (str "Starting build on " job-name))
         (format "I couldn't match any jobs on  %s. Get it right next time." job-pattern)))))
 
 (defn list-jobs
@@ -135,4 +135,4 @@ jen list <pattern>          # lists jenkins jobs containing <string>"
           #"^status$" status-cmd
           #"^status\s(.+)" status-cmd
           #"^list\s(.+)" list-cmd
-          #"^list$" list-cmd)
+          #"^list\s*$" list-cmd)
