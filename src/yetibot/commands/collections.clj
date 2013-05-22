@@ -176,3 +176,12 @@
 
 (cmd-hook #"vals"
           _ vals-cmd)
+
+; raw
+(defn raw-cmd
+  "raw <coll> # output a string representation of the raw collection"
+  [{items :opts}]
+  (pr-str items))
+
+(cmd-hook #"raw"
+          _ raw-cmd)
