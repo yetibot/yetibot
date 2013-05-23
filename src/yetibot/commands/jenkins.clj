@@ -131,7 +131,7 @@ jen list <pattern>          # lists jenkins jobs containing <string>"
 
 (cmd-hook #"jen"
           #"^build$" build-default-cmd
-          #"^build\s(\S+)\s+$" build
+          #"^build\s(\S+)\s*$" build
           #"^status$" status-cmd
           #"^status\s(.+)" status-cmd
           #"^list\s(.+)" list-cmd
