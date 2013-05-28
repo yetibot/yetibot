@@ -35,6 +35,11 @@
 ;;; (defn send-tweet [t]
 ;;;   (cf/tweet cf-settings room t))
 
+(defn self [token]
+  (let [auth {:user token :password "x"}
+        uri (str base-uri "/users/me.json")]
+    (http/get-json uri auth)))
+
 (defn play-sound [sound]
   (cf/play-sound cf-settings room sound))
 
@@ -49,6 +54,7 @@
           resp (c/POST client uri :auth auth)]
       (println (str "joining at " uri))
       (c/await resp))))
+
 
 (defn get-room []
   (let [uri (str base-uri "/room/" room-id ".json")
