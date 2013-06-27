@@ -40,7 +40,7 @@
 
 (defn list-servers
   "ssh servers # list servers configured for ssh access"
-  [_] (map name (keys servers)))
+  [_] (sort (map name (keys servers))))
 
 (defn run-command
   "ssh <server> <command> # run a command on <server>"
