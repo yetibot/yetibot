@@ -34,5 +34,5 @@
   [_] (weather-cmd {:match default-loc}))
 
 (cmd-hook #"weather"
-          #"\w+" weather-cmd
+          #".+" weather-cmd
           _ default-weather-cmd)
