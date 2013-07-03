@@ -56,7 +56,7 @@
                (session agent host {:strict-host-key-checking :no :username user})]
           (with-connection session
                            (let [result (ssh session {:cmd command})]
-                             (:out result))))))
+                             (or (:out result) (:error result)))))))
     (str "No servers found for " server-name)))
 
 (cmd-hook #"ssh"
