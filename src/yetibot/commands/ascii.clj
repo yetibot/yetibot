@@ -10,5 +10,5 @@
   [{text :match}]
   (fetch (str endpoint (encode text))))
 
-(cmd-hook #"ascii"
+(cmd-hook ["ascii" #"^ascii$"]
           #"^.+" ascii)
