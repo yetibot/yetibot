@@ -155,13 +155,23 @@
 (cmd-hook #"reverse"
           _ reverse-cmd)
 
+
+; keys / vals helper
+(defn split-kvs [items]
+  (map #(s/split % #":") items))
+
+(defn try-split [f items]
+  (if-let [parsed (split-kvs items)]
+    (map (comp s/trim f) parsed)
+    items))
+
 ; keys
 (defn keys-cmd
   "keys <map> # return the keys from <map>"
   [{items :opts}]
   (if (map? items)
     (keys items)
-    items))
+    (try-split first items)))
 
 (cmd-hook #"keys"
           _ keys-cmd)
@@ -172,7 +182,7 @@
   [{items :opts}]
   (if (map? items)
     (vals items)
-    items))
+    (try-split second items)))
 
 (cmd-hook #"vals"
           _ vals-cmd)
