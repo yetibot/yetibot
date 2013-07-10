@@ -2,13 +2,7 @@
   (:require [clojure.string :as s]
             [yetibot.hooks :refer [cmd-hook]]
             [yetibot.campfire :refer [chat-data-structure]]
-            [yetibot.util :refer [psuedo-format]]))
-
-; helpers for all collection cmds
-(defn ensure-items-collection [items]
-  (if (coll? items)
-    items
-    (s/split items #"\n")))
+            [yetibot.util :refer [psuedo-format split-kvs-with ensure-items-collection]]))
 
 ; random
 (defn random
@@ -156,22 +150,13 @@
           _ reverse-cmd)
 
 
-; keys / vals helper
-(defn split-kvs [items]
-  (map #(s/split % #":") items))
-
-(defn try-split [f items]
-  (if-let [parsed (split-kvs items)]
-    (map (comp s/trim f) parsed)
-    items))
-
 ; keys
 (defn keys-cmd
   "keys <map> # return the keys from <map>"
   [{items :opts}]
   (if (map? items)
     (keys items)
-    (try-split first items)))
+    (split-kvs-with first items)))
 
 (cmd-hook #"keys"
           _ keys-cmd)
@@ -182,7 +167,7 @@
   [{items :opts}]
   (if (map? items)
     (vals items)
-    (try-split second items)))
+    (split-kvs-with second items)))
 
 (cmd-hook #"vals"
           _ vals-cmd)

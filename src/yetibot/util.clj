@@ -25,3 +25,31 @@
   (if (re-find #"\%s" s)
     (s/replace s "%s" arg)
     (str s " " arg)))
+
+;;; collection parsing
+
+; helpers for all collection cmds
+(defn ensure-items-collection [items]
+  (if (coll? items)
+    items
+    (s/split items #"\n")))
+
+; keys / vals helpers
+(defn map-like? [items]
+  (or (map? items)
+      (every? #(re-find #".+:.+" %) items)))
+
+(defn split-kvs
+  "split into a nested list [[k v]] instead of a map so as to maintain the order"
+  [items]
+  (if (map-like? items)
+    (if (map? items)
+      (map vector (keys items) (vals items))
+      (map #(s/split % #":") items))))
+
+(defn split-kvs-with [f items]
+  "accepts a function to map over the split keys from `split-kvs`"
+  (if-let [kvs (split-kvs items)]
+    (map (comp s/trim f) kvs)
+    items))
+
