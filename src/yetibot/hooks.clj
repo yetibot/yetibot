@@ -1,8 +1,10 @@
 (ns yetibot.hooks
-  (:require [clojure.string :as s]
-            [yetibot.models.help :as help]
-            [robert.hooke :as rh]
-            [clojure.stacktrace :as st])
+  (:require
+    [yetibot.core]
+    [clojure.string :as s]
+    [yetibot.models.help :as help]
+    [robert.hooke :as rh]
+    [clojure.stacktrace :as st])
   (:use [clojure.contrib.cond :only (cond-let)]
         [yetibot.util :only (bot-id)]))
 

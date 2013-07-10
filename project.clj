@@ -7,8 +7,7 @@
                  ; TODO - kill this some day. We're only relying on it for
                  ; cond-let at this point.
                  [org.clojure/clojure-contrib "1.2.0"]
-                 [org.clojars.adamwynne/http.async.client "0.4.1"
-                  ]
+                 [org.clojars.adamwynne/http.async.client "0.4.1" ]
                  [org.apache.commons/commons-lang3 "3.1"]
                  [robert/hooke "1.3.0"]
                  [clj-campfire "1.0.0"]
@@ -18,7 +17,6 @@
                  [org.clojure/tools.namespace "0.2.2"]
                  [org.clojure/java.classpath "0.2.0"]
                  [org.clojure/core.cache "0.6.2"]
-
 
                  [evaljs "0.1.2"]
                  [clj-ssh "0.4.0"]

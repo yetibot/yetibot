@@ -5,8 +5,7 @@
             [clojure.stacktrace :as st]
             [yetibot.util.http :as http]
             [yetibot.util.format :as fmt]
-            [clj-campfire.core :as cf])
-  (:use [clojure.tools.logging :only (info error)]))
+            [clj-campfire.core :as cf]))
 
 ; Settings
 (def u (System/getenv "CAMPFIRE_API_KEY"))
