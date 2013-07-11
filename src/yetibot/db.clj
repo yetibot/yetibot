@@ -15,7 +15,4 @@
                   :dynamic-vars true
                   :schemas schemas}))
 
-(println "Datomic connected")
-
-; (def dm (dc/start {:dynamic-vars true
-;            :schemas [models.user/schema]}))
+(println "✓ Datomic connected")

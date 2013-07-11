@@ -1,6 +1,8 @@
 (ns yetibot.core
   (:require [http.async.client :as c]
             [yetibot.campfire :as cf]
+            [yetibot.logo :refer [logo]]
+            [yetibot.version :refer [version]]
             [yetibot.models.users :as users]
             [yetibot.util :refer [psuedo-format]]
             [clojure.string :as s]
@@ -161,7 +163,7 @@
     #"^yetibot\.(.(?!(core)))*"))
 
 (defn load-ns [arg]
-  (println "Loading namespace" arg)
+  (println "Loading " arg)
   (try (require arg :reload)
     (catch Exception e
       (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
@@ -196,7 +198,12 @@
   (load-commands-and-observers))
   ;;; (find-and-load-namespaces yetibot-all-namespaces))
 
+(defn welcome-message []
+  (println (str "Welcome to YetiBot " version))
+  (println logo))
+
 (defn -main [& args]
+  (welcome-message)
   (cf/start #'handle-campfire-event)
   (require 'yetibot.db)
   (load-commands-and-observers)

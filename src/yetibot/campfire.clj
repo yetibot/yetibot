@@ -51,7 +51,7 @@
   (with-open [client (c/create-client)]
     (let [uri (str base-uri "/room/" room-id "/join.json")
           resp (c/POST client uri :auth auth)]
-      (println (str "joining at " uri))
+      (println (str "✓ Joining room at " uri))
       (c/await resp))))
 
 
@@ -66,7 +66,7 @@
     (join-room)
     (let [uri (str streaming-uri "/room/" room-id "/live.json")
               resp (c/stream-seq client :get uri :auth auth)]
-      (println (str "Start listening on streaming API in room " room))
+      (println (str "✓ Start listening on streaming API in room " room))
       (doseq [s (c/string resp)]
         (if (not (empty? (s/trim (str s))))
           ; Campfire sometimes returns multiple lines of json objects at a

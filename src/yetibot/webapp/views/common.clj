@@ -1,9 +1,9 @@
 (ns yetibot.webapp.views.common
+  (:require [yetibot.version :refer [version]])
   (:use [hiccup.page :only [include-css include-js html5]]
         [hiccup.element]))
 
 (def title "YetiBot – A command line in your Campfire")
-(def version (System/getProperty "yetibot.version"))
 
 (defn layout [& content]
   (html5
