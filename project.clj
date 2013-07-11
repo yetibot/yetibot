@@ -48,9 +48,8 @@
                  ;;; [clojure-mail "0.1.0-SNAPSHOT"]
 
                  ;;;; database
-                 [com.datomic/datomic-free "0.8.4020.26"]
+                 [com.datomic/datomic-free "0.8.3814"]
                  [datomico "0.2.0"]
-
                  ]
   :plugins [[lein-ring "0.8.2"]]
   :pedantic :warn
