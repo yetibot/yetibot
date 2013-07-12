@@ -65,9 +65,11 @@
     opts
     (let [itms (ensure-items-collection opts)]
       (pmap (fn [item]
-              (yetibot.core/parse-and-handle-command
-                (psuedo-format args item)
-                user))
+              (try
+                (yetibot.core/parse-and-handle-command
+                  (psuedo-format args item) user)
+                (catch Exception ex
+                  ex)))
             itms))))
 
 (cmd-hook #"xargs"
