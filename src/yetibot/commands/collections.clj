@@ -75,7 +75,7 @@
 
 ; join
 (defn join
-  "join <list> # joins list with a single space"
+  "join <list> # joins list with a single space or whatever character is given"
   [{match :match items :opts}]
   (let [join-char (str (when-not (= match :empty) match) " ")]
     (s/join join-char (ensure-items-collection items))))
@@ -87,20 +87,11 @@
 ; words
 (defn words
   "words <string> # split <string> by spaces into a list"
-  [{match :match}]
-  (s/split match #" "))
+  [{args :args}]
+  (s/split args #" "))
 
 (cmd-hook #"words"
           _ words)
-
-; unwords
-(defn unwords
-  "unwords <list> # join <list> with spaces"
-  [{items :opts}]
-  (s/join " " (ensure-items-collection items)))
-
-(cmd-hook #"unwords"
-          _ unwords)
 
 ; set
 (defn set-cmd
