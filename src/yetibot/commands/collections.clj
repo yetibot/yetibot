@@ -81,7 +81,7 @@
     (s/join join-char (ensure-items-collection items))))
 
 (cmd-hook #"join"
-          #".+" join
+          #"(?is).+" join
           _ join)
 
 ; split
