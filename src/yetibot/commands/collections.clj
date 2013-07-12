@@ -84,6 +84,16 @@
           #".+" join
           _ join)
 
+; split
+(defn split
+  "split <string> # split string by provided character"
+  [{[_ split-str to-split] :match}]
+  (let [split-by (re-pattern split-str)]
+    (s/split to-split split-by)))
+
+(cmd-hook #"split"
+          #"(?is)^(\S+)\s+(.+)$" split)
+
 ; words
 (defn words
   "words <string> # split <string> by spaces into a list"
