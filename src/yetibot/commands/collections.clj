@@ -84,6 +84,24 @@
           #".+" join
           _ join)
 
+; words
+(defn words
+  "words <string> # split <string> by spaces into a list"
+  [{match :match}]
+  (s/split match #" "))
+
+(cmd-hook #"words"
+          _ words)
+
+; unwords
+(defn unwords
+  "unwords <list> # join <list> with spaces"
+  [{items :opts}]
+  (s/join " " (ensure-items-collection items)))
+
+(cmd-hook #"unwords"
+          _ unwords)
+
 ; set
 (defn set-cmd
   "set <list> # returns the set of distinct elements in <list>"
