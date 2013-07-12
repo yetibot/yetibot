@@ -6,9 +6,10 @@
 
 ; TODO: smart scaling
 (defn chartify [padding [label x]]
-  (let [x (read-string (str x))
+  (let [x' (read-string (str x))
+        x-num (if (number? x') x' (count x))
         label (str label)]
-    (format "%4s: %s" label (join (repeat x "*")))))
+    (format (str "%" padding "s: %s") label (join (repeat x-num "*")))))
 
 (defn max-label [m] (apply max (map (fn [[k v]] (count (str k))) m)))
 
