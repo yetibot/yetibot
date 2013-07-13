@@ -9,9 +9,9 @@
   "random <list> # returns a random item where <list> is a comma-separated list of items.
    Can also be used to extract a random item when a collection is piped to random."
   [{items :opts}]
-  (if items
+  (if (not (empty? items))
     (rand-nth (ensure-items-collection items))
-    (rand 100000)))
+    (str (rand 100000))))
 
 (cmd-hook #"random"
           _ random)
