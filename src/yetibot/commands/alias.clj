@@ -12,9 +12,8 @@
    i90 = random \\| echo http://images.wsdot.wa.gov/nw/090vc00508.jpg?nocache=%s&.jpg
    Note: alias args aren't supported yet:
    alias grid x = !repeat 10 `repeat 10 #{x} | join`"
-  [a]
-  (let [a (s/replace a "\\|" "|") ; unescape pipes
-        [_ a-name a-cmd]  (re-find #"(\w+)\s+\=\s+(.+)" a)
+  [{[_ a-name a-cmd] :match}]
+  (let [a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
         docstring (str "alias for " a-cmd)
         existing-alias (@aliases a-name)]
     (swap! aliases assoc a-name a-cmd)
@@ -28,8 +27,8 @@
       (format "Replaced existing alias %s = %s" a-cmd existing-alias)
       (format "%s alias created" a-name))))
 
-(defn add-alias [{:keys [user args] :as cmd-map}]
-  (model/create {:user-id (:id user) :alias-cmd args})
+(defn add-alias [{:keys [user match] :as cmd-map}]
+  (model/create {:user-id (:id user) :alias-cmd match})
   cmd-map)
 
 (defn load-aliases []
@@ -39,7 +38,7 @@
 (def create-alias
   "alias <alias> = <cmd> # alias a cmd, where <cmd> is a normal command expression.
    Note that pipes must be escaped like \"\\|\" to prevent normal pipe evaluation."
-  (comp wire-alias :args add-alias))
+  (comp wire-alias add-alias))
 
 (defn list-aliases
   "alias # show existing aliases"
@@ -61,4 +60,4 @@
 (cmd-hook #"alias"
           #"^$" list-aliases
           #"remove\s+(\w+)" remove-alias
-          _ create-alias)
+          #"(\w+)\s+\=\s+(.+)" create-alias)
