@@ -10,6 +10,11 @@
 
 (def ^:private Pattern java.util.regex.Pattern)
 
+(defn cmd-unhook [topic]
+  (rh/remove-hook
+    #'yetibot.core/handle-command
+    topic))
+
 ; command hook
 (defmacro cmd-hook [prefix & exprs]
   ; let user pass [topic regex] as prefix arg when a (str regex) isn't enough
@@ -23,7 +28,7 @@
     `(do
        (rh/add-hook
          #'yetibot.core/handle-command
-         ~prefix ; use prefix as the hook-key to enable removing/re-adding
+         ~topic ; use topic string as the hook-key to enable removing/re-adding
          (fn [~callback ~cmd ~args ~user ~opts]
            ; only match against the
            ; first word in ~args
