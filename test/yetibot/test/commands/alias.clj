@@ -1,8 +1,10 @@
 (ns yetibot.test.commands.alias
-  (:require [clojure.test :refer :all]
-            [yetibot.commands.alias :refer :all]))
+  (:require
+    [yetibot.db]
+    [clojure.test :refer :all]
+    [yetibot.commands.alias :refer :all]))
 
-(def user {:user-id 0})
+(def user {:id 0})
 
 (deftest test-add-alias
   (let [args  ["a = random \\| echo hi"

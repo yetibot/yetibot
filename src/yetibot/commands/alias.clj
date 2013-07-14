@@ -28,12 +28,12 @@
       (format "%s alias created" a-name))))
 
 (defn add-alias [{:keys [user match] :as cmd-map}]
-  (model/create {:user-id (:id user) :alias-cmd match})
+  (model/create {:user-id (:id user) :alias-cmd (prn-str match)})
   cmd-map)
 
 (defn load-aliases []
   (let [alias-cmds (model/find-all)]
-    (map (comp wire-alias :alias-cmd) alias-cmds)))
+    (map (comp wire-alias read-string :alias-cmd) alias-cmds)))
 
 (def create-alias
   "alias <alias> = <cmd> # alias a cmd, where <cmd> is a normal command expression.
