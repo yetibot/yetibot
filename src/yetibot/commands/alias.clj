@@ -15,12 +15,11 @@
   [{[_ a-name a-cmd] :match}]
   (let [a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
         docstring (str "alias for " a-cmd)
-        existing-alias (@aliases a-name)]
+        existing-alias (@aliases a-name)
+        cmd-fn (with-meta
+                 (fn [{:keys [user]}] (yetibot.core/direct-cmd a-cmd user))
+                 {:doc docstring}) ]
     (swap! aliases assoc a-name a-cmd)
-    (def cmd-fn
-      (with-meta
-        (fn [{:keys [user]}] (yetibot.core/direct-cmd a-cmd user))
-        {:doc docstring}))
     (cmd-hook [a-name (re-pattern (str "^" a-name "$"))]
               _ cmd-fn)
     (if existing-alias
