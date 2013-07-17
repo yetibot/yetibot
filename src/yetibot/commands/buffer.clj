@@ -10,7 +10,7 @@
 (defn buffer-cmd
   "buffer # accumulate arguments or piped contents into a buffer"
   [{:keys [args opts]}]
-  (when (coll? opts) (swap! buffer (partial reduce conj) opts))
+  (when (coll? opts) (swap! buffer into opts))
   (swap! buffer conj args))
 
 (defn flush-buffer
