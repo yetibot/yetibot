@@ -22,20 +22,20 @@
 (def gen-trending
   "Retrieves trending generators"
   (memoize (fn []
-             (get-json (str base-uri (:trending apis)) auth))))
+             (:result (get-json (str base-uri (:trending apis)) auth)))))
 
 (defn gen-popular []
   "Retrieves popular generators"
   (let [uri (str base-uri (:popular apis))]
     (println uri)
-    (get-json uri auth)))
+    (:result (get-json uri auth))))
 
 (defn search-generators [q]
-  (get-json (str base-uri (:search-generators apis) (encode q))))
+  (let [result (:result (get-json (str base-uri (:search-generators apis) (encode q))))]
+    (sort-by :ranking result)))
 
 (defn get-first-generator [q]
-  (let [json (search-generators q)
-        result (:result json)]
+  (let [result (search-generators q)]
     (if (empty? result)
       {:urlName ""} ; stub an empty result to prevent errors TODO: improve
       (first result))))
@@ -51,14 +51,11 @@
                            (when-not (empty? gen)
                              ; clear days to search for popular instance of all time
                              {:days 7 :urlName (:urlName (get-first-generator gen))}))))]
-     (println uri)
-     (get-json uri auth))))
+     (:result (get-json uri auth)))))
 
 (defn create-instance [query-string]
   (let [uri (str base-uri (:create apis) "?" query-string)]
-    (println uri)
     (let [result (:result (get-json uri auth))]
-      (println result)
       ; hit the instance url to force actual generation
       (with-client (:instanceUrl result) client/GET auth
                    (client/await response)
@@ -77,7 +74,7 @@
   in place of text2 and text1 is left empty"
   (merge (extract-ids
            (if (string? meme)
-             (first (:result (search-generators meme)))
+             (first (search-generators meme))
              meme))
          auth
          {:username (:user auth)
@@ -93,21 +90,20 @@
 (defn chat-instance-popular
   "meme popular                # list random popular meme instances from the top 20 in the last day"
   [_]
-  (chat-instance (rand-nth (:result (instances-popular)))))
+  (chat-instance (rand-nth (instances-popular))))
 
 (defn chat-instance-popular-for-gen
   "meme popular <generator>    # list random popular meme instances for <generator> from the top 20 in the last day"
   [{[_ gen] :match}]
-  (let [json (instances-popular gen)
-        result (:result json)]
+  (let [result (instances-popular gen)]
     (if (empty? result)
       (str "No popular instances for " gen)
       (chat-instance (rand-nth result)))))
 
-; This no longer needs to return a string. The chat handler stringifies it for us.
+
 (defn chat-meme-list [l]
-  (if (and l (seq (:result l)))
-    (map #(:displayName %) (:result l))
+  (if (and l (seq l))
+    (map #(:displayName %) l)
     "No results"))
 
 
