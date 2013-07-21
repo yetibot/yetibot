@@ -16,7 +16,9 @@
   "s3 ls <path> # list objects"
   [{[_ path] :match}]
   (let [[bucket prefix] (s/split path #"\/" 2)
-        res (s3/list-objects bucket prefix)]
+        res (if prefix
+              (s3/list-objects bucket {:delimiter "/" :prefix prefix})
+              (s3/list-objects bucket))]
     (map #(format "%s/%s" bucket %)
          (concat (:common-prefixes res) (map :key (:objects res))))))
 
