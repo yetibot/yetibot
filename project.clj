@@ -1,8 +1,9 @@
 (defproject yetibot "1.0.0-SNAPSHOT"
+  :repositories {"sonatype-oss-public" "https://oss.sonatype.org/content/groups/public/"}
   :description "A command line in your campfire."
   :profiles {:dev {:dependencies [[midje "1.5-beta1"]]}
              :plugins [[lein-midje "3.0-beta1"]]}
-  :dependencies [[org.clojure/clojure "1.4.0"],
+  :dependencies [[org.clojure/clojure "1.5.1"],
 
                  ; TODO - kill this some day. We're only relying on it for
                  ; cond-let at this point.
@@ -13,10 +14,12 @@
                  [clj-campfire "1.0.0"]
                  [clj-time "0.4.4"]
 
+                 ; contrib
                  [org.clojure/data.json "0.1.2"]
                  [org.clojure/tools.namespace "0.2.2"]
                  [org.clojure/java.classpath "0.2.0"]
-                 [org.clojure/core.cache "0.6.2"]
+                 [org.clojure/core.cache "0.6.3"]
+                 [org.clojure/core.async "0.1.0-SNAPSHOT"]
 
                  [evaljs "0.1.2"]
                  [clj-ssh "0.4.0"]
