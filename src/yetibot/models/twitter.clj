@@ -103,3 +103,10 @@
 (defn tweet [status]
   (statuses-update :oauth-creds creds
                    :params {:status status}))
+
+;;;; users
+
+(defn user-timeline [screen-name]
+  (statuses-user-timeline :oauth-creds creds
+                          :params {:screen_name screen-name
+                                   :count 3}))

@@ -6,6 +6,12 @@
 
 (def limit-chars (comp join take))
 
+(defn lookup
+  "twitter lookup <screen-name> # look up info on Twitter user"
+  [{[_ screen-name] :match}]
+  (let [user (-> (model/user-timeline screen-name) :body first :user)]
+    ((juxt :description :profile_image_url :location) user)))
+
 (defn tweet
   "twitter tweet <status> # post <status> to Twitter"
   [{[_ status] :match}]
@@ -57,6 +63,7 @@
     (format "You're not tracking %s" topic)))
 
 (cmd-hook #"twitter"
+          #"^lookup\s+(.+)" lookup
           #"^tweet\s+(.+)" tweet
           #"^following" following
           #"^follow\s+(.+)" follow
