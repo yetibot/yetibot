@@ -20,7 +20,7 @@
 (defn following
   "twitter following # list Twitter users you are following"
   [_]
-  (let [users (:users (:body (model/following)))]
+  (let [users (model/following)]
     (map :screen_name users)))
 
 (defn follow
