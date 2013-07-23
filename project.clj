@@ -7,10 +7,10 @@
                  ; TODO - kill this some day. We're only relying on it for
                  ; cond-let at this point.
                  [org.clojure/clojure-contrib "1.2.0"]
-                 [org.clojars.adamwynne/http.async.client "0.4.1" ]
+                 [http.async.client "0.5.2"]
                  [org.apache.commons/commons-lang3 "3.1"]
                  [robert/hooke "1.3.0"]
-                 [clj-campfire "1.0.0"]
+                 [clj-campfire "2.2.0"]
                  [clj-time "0.4.4"]
 
                  [org.clojure/data.json "0.1.2"]
@@ -29,7 +29,7 @@
                  [clj-aws-s3 "0.3.2"]
                  [overtone/at-at "1.0.0"]
                  [com.draines/postal "1.9.0"]
-                 [twitter-api "0.7.3"]
+                 [twitter-api "0.7.4"]
                  [inflections "0.7.3"]
                  [environ "0.3.0"]
                  [com.bigml/closchema "0.1.8"]
