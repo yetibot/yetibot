@@ -65,7 +65,7 @@
   (with-open [client (c/create-client)]
     (join-room)
     (let [uri (str streaming-uri "/room/" room-id "/live.json")
-              resp (c/stream-seq client :get uri :auth auth)]
+              resp (c/stream-seq client :get uri :auth auth :timeout -1)]
       (println (str "✓ Start listening on streaming API in room " room))
       (doseq [s (c/string resp)]
         (if (not (empty? (s/trim (str s))))

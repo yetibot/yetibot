@@ -8,6 +8,7 @@
                  ; cond-let at this point.
                  [org.clojure/clojure-contrib "1.2.0"]
                  [http.async.client "0.5.2"]
+                 ; [org.clojars.adamwynne/http.async.client "0.4.1" ]
                  [org.apache.commons/commons-lang3 "3.1"]
                  [robert/hooke "1.3.0"]
                  [clj-campfire "2.2.0"]

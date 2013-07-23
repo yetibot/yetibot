@@ -1,17 +1,32 @@
 (ns yetibot.models.twitter
   (:require
     [yetibot.util :refer [ensure-config env]]
-    [clojure.string :as s]
+    [clojure.string :refer [join]]
     [yetibot.campfire :as cf]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
     [twitter.callbacks :refer :all]
     [twitter.callbacks.handlers :refer :all]
     [twitter.api.restful :refer :all]
-    [twitter.api.streaming :refer :all])
+    [twitter.api.streaming :refer :all]
+    [datomico.core :as dc]
+    [datomico.db :refer [q]]
+    [datomico.action :refer [all where raw-where]])
   (:import
     (twitter.callbacks.protocols SyncSingleCallback)
     (twitter.callbacks.protocols AsyncStreamingCallback)))
+
+;;;; schema for storing topics to track
+
+(def model-namespace :twitter)
+
+(def schema (dc/build-schema model-namespace
+                             [[:user-id :long]
+                              [:topic :string]]))
+
+(dc/create-model-fns model-namespace)
+
+;;;; config
 
 (def config {:consumer_key (:TWITTER_CONSUMER_KEY env)
              :consumer_secret (:TWITTER_CONSUMER_SECRET env)
@@ -21,7 +36,7 @@
 (def creds (apply make-oauth-creds
                   ((juxt :consumer_key :consumer_secret :token :secret) config)))
 
-;; streaming callback
+;;;; streaming callback
 
 (defn format-url [user id] (format "https://twitter.com/%s/status/%s" user id))
 
@@ -39,39 +54,38 @@
 
 (def streaming-callback (AsyncStreamingCallback. succ fail exception))
 
-;; user stream
+;;;; user stream
 
 (defonce user-stream-resp
   (future (user-stream :oauth-creds creds :callbacks streaming-callback)))
 
-;; topic tracking
+;;;; topic tracking
 
-(def
-  ^{:private true
-    :doc "The set of topics tracking on the Twitter stream. When items are added
-          or removed from this set, the streaming connection is automatically reset."}
-  topics (atom #{}))
-
-(def streaming-response (atom nil))
+(def statuses-streaming-response (atom nil))
 
 (defn reset-streaming-topics [ts]
-  (prn "stream" ts)
-  ; first cacnel the streaming-response if it exists
-  (when-let [s @streaming-response]
-    ((:cancel (meta s))))
+  ; first cancel the streaming-response if it exists
+  (when-let [s @statuses-streaming-response] ((:cancel (meta s))))
   ; now create a new streaming connection with the new topics
-  (reset! streaming-response (statuses-filter :params {:track (s/join "," ts)}
-                                              :oauth-creds creds
-                                              :callbacks streaming-callback)))
+  (reset! statuses-streaming-response
+          (statuses-filter :params {:track (join "," ts)}
+                           :oauth-creds creds
+                           :callbacks streaming-callback)))
 
-(defn topic-watcher
-  "Watch `topics` atom."
-  [k r o n]
-  (reset-streaming-topics n))
+(defn reload-topics [] (reset-streaming-topics (map :topic (find-all))))
 
-(add-watch topics :track topic-watcher)
+(defn add-topic [user-id topic]
+  (create {:user-id user-id :topic topic})
+  (reload-topics))
 
-;; follow
+(defn remove-topic [topic-id]
+  (dc/delete topic-id)
+  (reload-topics))
+
+;; on startup, load the existing topics
+(future (reload-topics))
+
+;;;; follow
 
 
 

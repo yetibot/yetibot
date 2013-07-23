@@ -4,7 +4,8 @@
 
 ; todo: loop through namespaces looking for a "schema" to load
 ; (do it manually for now)
-(def nss '[yetibot.models.history
+(def nss '[yetibot.models.twitter
+           yetibot.models.history
            yetibot.models.status
            yetibot.models.alias])
 
