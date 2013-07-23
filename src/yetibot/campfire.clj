@@ -109,7 +109,7 @@
           (< (count d) 20)
           (re-find #"\n" formatted)
           (seq (filter #(re-find (re-pattern (str "^http.*\\." %))
-                                 formatted) ["jpg" "png" "gif"])))
+                                 formatted) ["jpeg" "jpg" "png" "gif"])))
         (send-message-for-each flattened-data)
         ; send the message with newlines as a paste
         (re-find #"\n" formatted) (send-paste formatted)

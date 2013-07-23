@@ -85,7 +85,15 @@
 ;; on startup, load the existing topics
 (future (reload-topics))
 
-;;;; follow
+;;;; follow / unfollow
 
+(defn follow [screen-name]
+  (friendships-create :oauth-creds creds
+                      :params {:screen_name screen-name}))
 
+(defn unfollow [screen-name]
+  (friendships-destroy :oauth-creds creds
+                       :params {:screen_name screen-name}))
 
+(defn following []
+  (friends-list :oauth-creds creds))

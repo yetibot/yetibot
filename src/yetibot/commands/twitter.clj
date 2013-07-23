@@ -4,6 +4,26 @@
     [yetibot.models.twitter :as model]
     [yetibot.hooks :refer [cmd-hook]]))
 
+(defn following
+  "twitter following # list Twitter users you are following"
+  [_]
+  (let [users (:users (:body (model/following)))]
+    (map :screen_name users)))
+
+(defn follow
+  "twitter follow <screen-name> # follow a Twitter user"
+  [{[_ screen-name] :match}]
+  (let [body (:body (model/follow screen-name))
+        [img desc] ((juxt :profile_image_url :description) body)]
+    [(str "Followed " screen-name ": " desc)
+     img]))
+
+(defn unfollow
+  "twitter unfollow <screen-name> # stop following a Twitter user"
+  [{[_ screen-name] :match}]
+  (model/unfollow screen-name)
+  (str "Unfollowed " screen-name))
+
 (defn tracking
   "twitter tracking # show the topics that are being tracked on Twitter"
   [_] (let [topics (map :topic (model/find-all))]
@@ -30,6 +50,9 @@
     (format "You're not tracking %s" topic)))
 
 (cmd-hook #"twitter"
-          #"tracking" tracking
-          #"untrack\s+(.+)" untrack
-          #"track\s+(.+)" track)
+          #"^following" following
+          #"^follow\s+(.+)" follow
+          #"^unfollow\s+(.+)" unfollow
+          #"^tracking" tracking
+          #"^untrack\s+(.+)" untrack
+          #"^track\s+(.+)" track)
