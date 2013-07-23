@@ -2,7 +2,14 @@
   (:require
     [clojure.string :refer [join]]
     [yetibot.models.twitter :as model]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.hooks :refer [cmd-hook suppress]]))
+
+(def limit-chars (comp join take))
+
+(defn tweet
+  "twitter tweet <status> # post <status> to Twitter"
+  [{[_ status] :match}]
+  (suppress (model/tweet (limit-chars 140 status))))
 
 (defn following
   "twitter following # list Twitter users you are following"
@@ -50,6 +57,7 @@
     (format "You're not tracking %s" topic)))
 
 (cmd-hook #"twitter"
+          #"^tweet\s+(.+)" tweet
           #"^following" following
           #"^follow\s+(.+)" follow
           #"^unfollow\s+(.+)" unfollow

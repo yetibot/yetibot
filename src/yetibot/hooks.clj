@@ -10,6 +10,11 @@
 
 (def ^:private Pattern java.util.regex.Pattern)
 
+(defn suppress
+  "Wraps parameter in meta data to indicate that it should not be posted to campfire"
+  [data-structure]
+  (with-meta data-structure {:suppress true}))
+
 (defn cmd-unhook [topic]
   (rh/remove-hook
     #'yetibot.core/handle-command

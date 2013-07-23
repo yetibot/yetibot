@@ -97,3 +97,9 @@
 
 (defn following []
   (friends-list :oauth-creds creds))
+
+;;;; tweet
+
+(defn tweet [status]
+  (statuses-update :oauth-creds creds
+                   :params {:status status}))
