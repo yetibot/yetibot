@@ -71,6 +71,9 @@
 (defn branches [repo]
   (r/branches org-name repo auth))
 
+(defn tags [repo]
+  (r/tags org-name repo auth))
+
 ;;; (defn contents [repo path]
 ;;;   (r/contents org-name repo path auth))
 
