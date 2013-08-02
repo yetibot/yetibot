@@ -18,7 +18,9 @@
   (str d))
 
 (defn format-data-structure
-  "returns a string representation of `d` as well as the fully-flattened data representation"
+  "Returns a tuple containing:
+     - a string representation of `d`
+     - the fully-flattened data representation"
   [d]
   (if (and (not (map? d))
            (coll? d)

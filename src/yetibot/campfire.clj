@@ -94,23 +94,31 @@
         (println "Something bad happened. Sleeping for 2 seconds before reconnect")
         (. Thread (sleep 2000))))))
 
+
+(defn contains-image-url-lines?
+  "Returns true if the string contains an image url on its own line, separated from
+   other characters by a newline"
+  [string]
+  (not (empty? (filter #(re-find (re-pattern (str "(?m)^http.*\\." %)) string) ["jpeg" "jpg" "png" "gif"]))))
+
+(defn should-send-msg-for-each?
+  [d formatted]
+  (and
+    (coll? d)
+    (< (count d) 20)
+    (re-find #"\n" formatted)
+    (contains-image-url-lines? formatted)))
+
 (defn chat-data-structure [d]
   "Formatters to send data structures to chat.
   If `d` is a nested data structure, it will attempt to recursively flatten
   or merge (if it's a map)."
   (when-not (:suppress (meta d))
-    (let [[formatted flattened-data] (fmt/format-data-structure d)]
-      (prn "formatted is" formatted)
+    (let [[formatted flattened] (fmt/format-data-structure d)]
       (cond
         ; send each item in the coll as a separate message if it contains images and
         ; the total length of the collection is less than 20
-        (and
-          (coll? d)
-          (< (count d) 20)
-          (re-find #"\n" formatted)
-          (seq (filter #(re-find (re-pattern (str "^http.*\\." %))
-                                 formatted) ["jpeg" "jpg" "png" "gif"])))
-        (send-message-for-each flattened-data)
+        (should-send-msg-for-each? d formatted) (send-message-for-each flattened)
         ; send the message with newlines as a paste
         (re-find #"\n" formatted) (send-paste formatted)
         ; send as regular message
