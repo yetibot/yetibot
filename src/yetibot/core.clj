@@ -61,7 +61,8 @@
     s))
 
 (defn handle-piped-command
-  "Parse commands out of piped delimiters and pipe the results of one to the next"
+  "Parse commands out of piped delimiters and pipe the results of one to the next.
+   Whoa; this thing needs some refactoring o_O"
   [body user]
   ; Don't scrub body of *all* !s since we now have a ! command
   (let [cleaned-body (-> body
@@ -89,7 +90,7 @@
                             ; acc was a collection, so pass the acc as opts instead
                             ; of just concatting it to args.
                             ; This allows the collections commands to deal with them.
-                            (handle-command cmd args user acc-coll)
+                            (parse-and-handle-command (str cmd " " args) user acc-coll)
                             ; otherwise concat args and acc as the new args. args are
                             ; likely empty anyway. (e.g. !urban random | image - the
                             ; args to !image are empty, and acc would be the result
