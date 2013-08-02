@@ -37,10 +37,14 @@
         args (or args "")]
     [cmd args]))
 
+(declare handle-expansion-pass)
+
 (defn parse-and-handle-command
   "Optionally takes 2nd param `user` and 3rd param `opts`"
   [cmd-with-args & rest]
-  (let [[cmd args] (parse-cmd-with-args cmd-with-args)
+  (let [user (first rest)
+        cmd-with-args (handle-expansion-pass cmd-with-args user)
+        [cmd args] (parse-cmd-with-args cmd-with-args)
         ; use into on a vector of rest args so the nils don't get prepended
         rest-args (into (vec rest) (take (- 2 (count rest)) (repeat nil)))]
     (apply handle-command (list* cmd (str args) rest-args))))
@@ -97,6 +101,8 @@
       (println "reduced the answer down to" res)
       res)))
 
+; expand backticks as late as possible
+; complete foo | xargs echo %s\n`image %s`
 (defn direct-cmd
   "Determine if this cmd is singular or piped and direct it accordingly"
   [body user]
@@ -130,7 +136,7 @@
   (try
     (let [user (users/get-user (:user_id json))
           cmd? (re-find #"^\!" (:body json))
-          body (-> (:body json) (handle-expansion-pass user) strip-leading-!)]
+          body (-> (:body json) strip-leading-!)]
       (prn "user is" user)
       (when cmd? (cf/chat-data-structure (direct-cmd body user))))
       (catch Exception ex
