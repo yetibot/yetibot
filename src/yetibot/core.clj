@@ -118,7 +118,8 @@
   "Expands backticked sub-expressions (if any)"
   (if-let [ms (re-seq #"(`[^`]+`)+" body)]
     (reduce (fn [acc [_ backticked-cmd]]
-              (let [cmd (s/replace backticked-cmd #"\`" "")
+              ; unescape the pipes and remove the backticks
+              (let [cmd (s/replace (s/replace backticked-cmd #"\`" "") "\\|" "|")
                     cmd-result (direct-cmd cmd user)]
                 (s/replace-first acc backticked-cmd cmd-result)))
             body
