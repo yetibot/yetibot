@@ -105,7 +105,7 @@
   [d formatted]
   (and
     (coll? d)
-    (< (count d) 20)
+    (<= (count d) 30)
     (re-find #"\n" formatted)
     (contains-image-url-lines? formatted)))
 
