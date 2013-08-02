@@ -9,13 +9,11 @@
 
 (defn format-listings [json]
   (let [items (-> json :findItemsByKeywordsResponse first :searchResult first :item)]
-    (interleave
-      (map (comp flatten
-                 (juxt price-and-title
-                       :viewItemURL
-                       :galleryURL))
-           (take 10 items))
-      (repeat ["--"]))))
+    (map (comp flatten
+               (juxt price-and-title
+                     :viewItemURL
+                     :galleryURL))
+         (take 10 items))))
 
 (defn find-cmd
   "ebay <term> # search ebay listings for <term>"
