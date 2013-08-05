@@ -14,6 +14,9 @@
                  [clj-campfire "2.2.0"]
                  [clj-time "0.4.4"]
 
+                 ; parsing
+                 [instaparse "1.2.2"]
+
                  [org.clojure/data.json "0.1.2"]
                  [org.clojure/tools.namespace "0.2.2"]
                  [org.clojure/java.classpath "0.2.0"]
