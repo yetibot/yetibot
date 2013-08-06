@@ -40,8 +40,9 @@
   (parse-and-handle-command (s/join " " args)))
 
 (defn to-coll-if-contains-newlines
-  "This might be a bit hack-ish, but it lets us get out of explicitly supporting streams
-  in every command that we want it."
+  "Convert a String to a List if the string contains newlines. Bit of a hack but it
+   lets us get out of explicitly supporting streams in every command that we want
+   it."
   [s]
   (if (and (string? s) (re-find #"\n" s))
     (s/split s #"\n")
@@ -119,18 +120,16 @@
 (defn strip-leading-! [body] (s/replace body #"^\!" ""))
 
 (defn handle-text-message [json]
-  "parse a `TextMessage` campfire event into a command and its args"
-  (println "handle-text-message")
+  "Parse a `TextMessage` campfire event into a command and its args"
   (try
     (let [user (users/get-user (:user_id json))
           cmd? (re-find #"^\!" (:body json))
           body (-> (:body json) strip-leading-!)]
-      (prn "user is" user)
       (when cmd? (cf/chat-data-structure (direct-cmd body user))))
-      (catch Exception ex
-        (println "Exception inside `handle-text-message`" ex)
-        (st/print-stack-trace (st/root-cause ex) 24)
-        (cf/send-message (str ":cop::cop: " ex " :cop::cop:")))))
+    (catch Exception ex
+      (println "Exception inside `handle-text-message`" ex)
+      (st/print-stack-trace (st/root-cause ex) 24)
+      (cf/send-message (str ":cop::cop: " ex " :cop::cop:")))))
 
 (defn handle-campfire-event [json]
   (let [event-type (:type json)]
