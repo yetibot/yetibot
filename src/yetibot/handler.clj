@@ -6,14 +6,6 @@
     [clojure.string :as s]
     [clojure.stacktrace :as st]))
 
-
-; Deserializes json string and extracts fields
-(defmacro parse-event [event-json & body]
-  `(let [~'user-id (:user_id ~event-json)
-         ~'body (:body ~event-json)
-         ~'event-type (:type ~event-json)]
-     ~@body))
-
 (defn handle-command
   [cmd args user opts]
   "Receives parsed `cmd` prefix and `args` for commands to hook into. Typically
@@ -141,8 +133,8 @@
         (cf/send-message (str ":cop::cop: " ex " :cop::cop:")))))
 
 (defn handle-campfire-event [json]
-  (parse-event json
-               (condp = event-type ; Handle the various types of messages
-                 "TextMessage" (handle-text-message json)
-                 "PasteMessage" (handle-text-message json)
-                 (println "Unhandled event type: " event-type))))
+  (let [event-type (:type json)]
+    (condp = event-type ; Handle the various types of messages
+      "TextMessage" (handle-text-message json)
+      "PasteMessage" (handle-text-message json)
+      (println "Unhandled event type: " event-type))))
