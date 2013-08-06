@@ -1,15 +1,14 @@
 (ns yetibot.core
-  (:require [http.async.client :as c]
-            [yetibot.campfire :as cf]
-            [yetibot.logo :refer [logo]]
-            [yetibot.version :refer [version]]
-            [yetibot.models.users :as users]
-            [yetibot.util :refer [psuedo-format]]
-            [clojure.string :as s]
-            [clojure.stacktrace :as st]
-            [clojure.tools.namespace.find :as ns]
-            [clojure.java.classpath :as cp]
-            [clojure.tools.namespace.repl :refer [refresh]]))
+  (:require
+    [yetibot.loader :refer [load-commands-and-observers]]
+    [yetibot.campfire :as cf]
+    [yetibot.logo :refer [logo]]
+    [yetibot.version :refer [version]]
+    [yetibot.models.users :as users]
+    [yetibot.util :refer [psuedo-format]]
+    [clojure.string :as s]
+    [clojure.stacktrace :as st]
+    ))
 
 ; Deserializes json string and extracts fields
 (defmacro parse-event [event-json & body]
@@ -17,7 +16,6 @@
          ~'body (:body ~event-json)
          ~'event-type (:type ~event-json)]
      ~@body))
-
 
 (defn handle-command
   [cmd args user opts]
@@ -131,7 +129,6 @@
 
 (defn strip-leading-! [body] (s/replace body #"^\!" ""))
 
-
 (defn handle-text-message [json]
   "parse a `TextMessage` campfire event into a command and its args"
   (println "handle-text-message")
@@ -153,58 +150,9 @@
                  "PasteMessage" (handle-text-message json)
                  (println "Unhandled event type: " event-type))))
 
-(defn find-namespaces [pattern]
-  (let [all-ns (ns/find-namespaces (cp/classpath))]
-    (filter #(re-matches pattern (str %)) all-ns)))
 
-(def yetibot-command-namespaces
-  [#"^yetibot\.commands.*" #"^plugins.*commands.*"])
+;;;;;;;;;;;;;
 
-(def yetibot-observer-namespaces
-  [#"^yetibot\.observers.*" #"^plugins.*observers.*"])
-
-(def yetibot-all-namespaces
-  (merge
-    (map last [yetibot-command-namespaces
-                yetibot-observer-namespaces])
-    ; with a negative lookahead assertion
-    #"^yetibot\.(.(?!(core)))*"))
-
-(defn load-ns [arg]
-  (println "Loading " arg)
-  (try (require arg :reload)
-    (catch Exception e
-      (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
-      (st/print-stack-trace (st/root-cause e) 15))))
-
-(defn find-and-load-namespaces
-  "Find namespaces matching ns-patterns: a seq of regex patterns. Load the matching
-  namespaces and return the seq of matched namespaces."
-  [ns-patterns]
-  (let [nss (flatten (map find-namespaces ns-patterns))]
-    (dorun (map load-ns nss))
-    nss))
-
-(defn load-commands []
-  (find-and-load-namespaces yetibot-command-namespaces))
-
-(defn load-observers []
-  (find-and-load-namespaces yetibot-observer-namespaces))
-
-(defn load-commands-and-observers []
-  (load-observers)
-  (load-commands))
-
-(defn reload-all-yetibot
-  "Reloads all of YetiBot's namespaces, including plugins. Loading yetibot.core is
-  temporarily disabled until we can figure out to unhook and rehook
-  handle-campfire-event and handle-command"
-  []
-  ;;; (refresh))
-  ;; only load commands and observers
-  ;; until https://github.com/devth/yetibot/issues/75 is fixed
-  (load-commands-and-observers))
-  ;;; (find-and-load-namespaces yetibot-all-namespaces))
 
 (defn welcome-message []
   (println (str "Welcome to YetiBot " version))
