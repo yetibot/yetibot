@@ -1,1 +1,1 @@
-{cmd yetibot.core/cmd-reader}
+{cmd yetibot.handler/cmd-reader}

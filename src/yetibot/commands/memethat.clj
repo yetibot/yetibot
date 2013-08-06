@@ -23,7 +23,7 @@
 (defn- meme-it [gen]
   (let [chat (find-chat-to-memeify)]
     (if chat
-      (yetibot.core/parse-and-handle-command
+      (yetibot.handler/parse-and-handle-command
         (format "meme %s: %s" gen (format-chat chat)) nil nil)
       (format "No history to %s." (if (= gen "troll") gen "meme")))))
 

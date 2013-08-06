@@ -19,7 +19,7 @@
         last-cmd (some valid-cmd? hist-for-user)]
     (prn "last command is" last-cmd)
     (if last-cmd
-      (yetibot.core/parse-and-handle-command (clean-cmd last-cmd) user)
+      (yetibot.handler/parse-and-handle-command (clean-cmd last-cmd) user)
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
 (cmd-hook ["!" #"!"]

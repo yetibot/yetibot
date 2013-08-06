@@ -5,7 +5,7 @@
     [compojure.handler :as handler]
     [compojure.response :as response]
     [hiccup.core :refer :all]
-    [yetibot.core :refer [direct-cmd]]
+    [yetibot.handler :refer [direct-cmd]]
     [yetibot.campfire :refer [chat-data-structure self]]
     [compojure.core :refer :all]))
 

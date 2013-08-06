@@ -1,7 +1,7 @@
 (ns yetibot.test.commands.order
-  (:require [yetibot.commands.order :as order])
-  (:use [clojure.test]
-        [yetibot.core]))
+  (:require
+    [clojure.test :refer :all]
+    [yetibot.commands.order :as order]))
 
 (def user {:name "TestBot"})
 

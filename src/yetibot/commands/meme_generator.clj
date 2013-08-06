@@ -1,7 +1,6 @@
 (ns yetibot.commands.meme-generator
   (:require [http.async.client :as client]
             [clojure.string :as s]
-            [yetibot.core :as core]
             [robert.hooke :as rh])
   (:use [yetibot.hooks :only [cmd-hook]]
         [yetibot.util.http]))

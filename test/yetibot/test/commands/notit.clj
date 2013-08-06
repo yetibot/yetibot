@@ -1,7 +1,7 @@
 (ns yetibot.test.commands.notit
-  (:require [yetibot.commands.notit :as notit])
-  (:use [clojure.test]
-        [yetibot.core]))
+  (:require
+    [yetibot.commands.notit :as notit]
+    [clojure.test :refer :all]))
 
 (def user {:name "TestBot"})
 
