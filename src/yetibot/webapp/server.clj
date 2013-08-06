@@ -13,7 +13,9 @@
   (if (empty? token)
     "Please provide a Campfire access token"
     (if-let [user (:user (yetibot.campfire/self token))]
-      (-> (direct-cmd command user) yetibot.campfire/chat-data-structure)
+      (let [res (direct-cmd command user)]
+        (yetibot.campfire/chat-data-structure res)
+        res)
       "Invalid user access token")))
 
 (defroutes app-routes
