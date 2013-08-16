@@ -4,6 +4,8 @@
             [clojure.test :refer :all]))
 
 (deftest single-cmd-test
+  (is (= (parse "uptime")
+         [:expr [:cmd "uptime"]]))
   (is (= (parse "echo qux") [:expr [:cmd "echo" "qux"]])
       "Single commands should be parsed"))
 

@@ -49,7 +49,7 @@
 (defn reload-all-yetibot
   "Reloads all of YetiBot's namespaces, including plugins. Loading yetibot.core is
    temporarily disabled until we can figure out to unhook and rehook
-   handle-campfire-event and handle-command"
+   handle-campfire-event and handle-cmd"
   []
   ;;; (refresh))
   ;; only load commands and observers

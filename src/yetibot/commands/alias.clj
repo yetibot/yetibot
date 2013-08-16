@@ -17,7 +17,7 @@
         docstring (str "alias for " a-cmd)
         existing-alias (@aliases a-name)
         cmd-fn (with-meta
-                 (fn [{:keys [user]}] (yetibot.handler/direct-cmd a-cmd user))
+                 (fn [{:keys [user]}] (yetibot.handler/handle-unparsed-expr a-cmd user))
                  {:doc docstring}) ]
     (swap! aliases assoc a-name a-cmd)
     (cmd-hook [a-name (re-pattern (str "^" a-name "$"))]

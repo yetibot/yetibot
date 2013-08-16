@@ -38,3 +38,13 @@
 (defn format-data-as-string [d]
   (let [[s _] (format-data-structure d)]
     s))
+
+(defn to-coll-if-contains-newlines
+  "Convert a String to a List if the string contains newlines. Bit of a hack but it
+   lets us get out of explicitly supporting streams in every command that we want
+   it."
+  [s]
+  (if (and (string? s) (re-find #"\n" s))
+    (s/split s #"\n")
+    s))
+

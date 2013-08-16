@@ -66,7 +66,7 @@
     (let [itms (ensure-items-collection opts)]
       (pmap (fn [item]
               (try
-                (yetibot.handler/parse-and-handle-command
+                (yetibot.handler/handle-unparsed-expr
                   (psuedo-format args item) user)
                 (catch Exception ex
                   ex)))

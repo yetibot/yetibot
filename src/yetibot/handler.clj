@@ -1,139 +1,93 @@
 (ns yetibot.handler
   (:require
     [yetibot.util :refer [psuedo-format]]
+    [yetibot.util.format :refer [to-coll-if-contains-newlines]]
     [yetibot.models.users :as users]
+    [yetibot.parser :refer [parse]]
     [yetibot.campfire :as cf]
+    [clojure.core.match :refer [match]]
     [clojure.string :as s]
     [clojure.stacktrace :as st]))
 
-(defn handle-command
-  [cmd args user opts]
-  "Receives parsed `cmd` prefix and `args` for commands to hook into. Typically
-  `args` will be a string, but it might be a seq when handle-command is called
-  from handle-piped-command. All commands hook this fn."
-  (println (str "nothing handled command " cmd " with args " args))
+(declare handle-expr)
+
+(defn handle-cmd
+  "Hooked entry point for all command handlers. If no handlers intercept, it falls
+   back to image search when available."
+  [cmd-with-args extra]
+  (println "nothing handled" cmd-with-args)
   ; default to looking up a random result from google image search instead of
   ; complaining about not knowing stuff.
   (if (find-ns 'yetibot.commands.image-search)
-    (handle-command "image" (str cmd " " args) user nil)
-    (format "I don't know how to handle %s %s" cmd args)))
+    (handle-cmd (into ["image"] cmd-with-args) extra)
+    (format "I don't know how to handle %s" (s/join " " cmd-with-args))))
 
-(defn parse-cmd-with-args
-  [cmd-with-args]
-  (let [[cmd args] (s/split cmd-with-args #"\s" 2)
-        args (or args "")]
-    [cmd args]))
+(defn expand-sub-exprs
+  "Individual args in a :cmd can either be:
+   - a plain string, which is returned as-is
+   - a sub-expression vector, which is evaluated and returned"
+  [arg]
+  (prn "expand-sub-exprs" arg)
+  (match arg
+    (arg :guard string?) arg
+    ; it must be a sub-expressions so recursively eval
+    (arg :guard vector?) (handle-expr arg)))
 
-(declare handle-expansion-pass)
+(defn expand-cmd
+  "Evaluates a single command, evaluating any sub-expressions in the process."
+  ([cmd-with-args] (expand-cmd cmd-with-args {}))
+  ([cmd-with-args extra]
+   ; expand potential sub-expressions
+   [(map expand-sub-exprs cmd-with-args) extra]))
 
-(defn parse-and-handle-command
-  "Optionally takes 2nd param `user` and 3rd param `opts`"
-  [cmd-with-args & rest]
-  (let [user (first rest)
-        cmd-with-args (handle-expansion-pass cmd-with-args user)
-        [cmd args] (parse-cmd-with-args cmd-with-args)
-        ; use into on a vector of rest args so the nils don't get prepended
-        rest-args (into (vec rest) (take (- 2 (count rest)) (repeat nil)))]
-    (apply handle-command (list* cmd (str args) rest-args))))
+(defn pipe-cmds
+  "Pipe acc into cmd-with-args by either appending or sending acc as an extra :opts"
+  [user acc cmd-vec]
+  (let [cmd-with-args (match cmd-vec [:cmd & cmd-with-args] cmd-with-args)
+        extra {:user user :raw acc}
+        possible-coll-acc (to-coll-if-contains-newlines acc)]
+    ; if possible-coll-acc is a string, append acc to args. otherwise send
+    ; possible-coll-acc as an extra :coll param and append nothing to cmd-with-args.
+    (apply handle-cmd
+           (apply expand-cmd
+                  (if (coll? possible-coll-acc)
+                    [cmd-with-args (conj extra {:opts possible-coll-acc})]
+                    [(conj cmd-with-args acc) extra])))))
 
-(defn cmd-reader [& args]
-  (parse-and-handle-command (s/join " " args)))
+(defn handle-expr
+  "An expression is the top-level command structure, consisting of one or more
+   commands. It cannot have any context passed into it."
+  [expr user]
+  (let [cmds (match expr [:expr & cmds] cmds)]
+    (reduce (partial pipe-cmds user) "" cmds)))
 
-(defn to-coll-if-contains-newlines
-  "Convert a String to a List if the string contains newlines. Bit of a hack but it
-   lets us get out of explicitly supporting streams in every command that we want
-   it."
-  [s]
-  (if (and (string? s) (re-find #"\n" s))
-    (s/split s #"\n")
-    s))
+(defn handle-unparsed-expr
+  ([body] (handle-unparsed-expr body nil))
+  ([body user] (handle-expr (parse body) user)))
 
-(defn handle-piped-command
-  "Parse commands out of piped delimiters and pipe the results of one to the next.
-   Whoa; this thing needs some refactoring o_O"
-  [body user]
-  ; Don't scrub body of *all* !s since we now have a ! command
-  (let [cleaned-body (-> body
-                         (s/replace #"\!(\w+)" (fn [[_ w]] w))
-                         (s/replace #"\!\!" "!"))
-        cmds (map s/trim (s/split cleaned-body #" \| "))]
-    (prn "cleaned body is" cleaned-body)
-    (prn "handle piped cmd " cmds)
-    ; cmd-with-args is the unparsed string
-    (let [res (reduce (fn [acc cmd-with-args]
-                        (let [acc-cmd (str cmd-with-args " " acc)
-                              ; split out the cmd and args
-                              [cmd args] (parse-cmd-with-args cmd-with-args)
-                              possible-coll-acc (to-coll-if-contains-newlines acc)]
-                          ; TODO
-                          ; acc could be a collection instead of a string. In that case we
-                          ; could:
-                          ; - take the first item and run the command with that
-                          ;   (head)
-                          ; - run handle-command for every item in the seq with the
-                          ;   assumption that this is the last command in the pipe
-                          ;   (xargs)
-                          (if-let [acc-coll (or (and (coll? acc) acc)
-                                                (and (coll? possible-coll-acc) possible-coll-acc))]
-                            ; acc was a collection, so pass the acc as opts instead
-                            ; of just concatting it to args.
-                            ; This allows the collections commands to deal with them.
-                            (parse-and-handle-command (str cmd " " args) user acc-coll)
-                            ; otherwise concat args and acc as the new args. args are
-                            ; likely empty anyway. (e.g. !urban random | image - the
-                            ; args to !image are empty, and acc would be the result
-                            ; of !urban random). Send args as opts in this case so
-                            ; that regular cmd output can be parsed as opts.
-                            (parse-and-handle-command (psuedo-format cmd-with-args acc) user acc))))
-                      ""
-                      cmds)]
-      (println "reduced the answer down to" res)
-      res)))
-
-; expand backticks as late as possible
-; complete foo | xargs echo %s\n`image %s`
-(defn direct-cmd
-  "Determine if this cmd is singular or piped and direct it accordingly"
-  [body user]
-  (cond
-    ; piped commands contain pipes
-    (re-find #" \| " body) (handle-piped-command body user)
-    ; must be a single command
-    true (parse-and-handle-command body user)))
-
-; TODO: handle nested sub-expressions / backticks
-(defn expand-backticks [body user]
-  "Expands backticked sub-expressions (if any)"
-  (if-let [ms (re-seq #"(`[^`]+`)+" body)]
-    (reduce (fn [acc [_ backticked-cmd]]
-              ; unescape the pipes and remove the backticks
-              (let [cmd (s/replace (s/replace backticked-cmd #"\`" "") "\\|" "|")
-                    cmd-result (direct-cmd cmd user)]
-                (s/replace-first acc backticked-cmd cmd-result)))
-            body
-            ms)
-    body))
-
-(defn handle-expansion-pass [body user]
-  (-> body (expand-backticks user)))
-
-(defn strip-leading-! [body] (s/replace body #"^\!" ""))
+(def exception-format ":cop::cop: %s :cop:cop:")
 
 (defn handle-text-message [json]
   "Parse a `TextMessage` campfire event into a command and its args"
   (try
-    (let [user (users/get-user (:user_id json))
-          cmd? (re-find #"^\!" (:body json))
-          body (-> (:body json) strip-leading-!)]
-      (when cmd? (cf/chat-data-structure (direct-cmd body user))))
+    (let [user (users/get-user (:user_id json))]
+      (if-let [[_ body] (re-find #"\!(.+)" (:body json))]
+        (cf/chat-data-structure (handle-unparsed-expr body user))))
     (catch Exception ex
       (println "Exception inside `handle-text-message`" ex)
-      (st/print-stack-trace (st/root-cause ex) 24)
-      (cf/send-message (str ":cop::cop: " ex " :cop::cop:")))))
+      (st/print-stack-trace (st/root-cause ex) 50)
+      (cf/send-message (format exception-format ex)))))
 
 (defn handle-campfire-event [json]
   (let [event-type (:type json)]
     (condp = event-type ; Handle the various types of messages
       "TextMessage" (handle-text-message json)
       "PasteMessage" (handle-text-message json)
-      (println "Unhandled event type: " event-type))))
+      (println "No handler for " event-type))))
+
+(defn cmd-reader [& args]
+  (handle-unparsed-expr (s/join " " args) nil))
+
+(let [e [:expr [:cmd "echo" "hi"]]]
+  (match e
+    [:expr & cmds] cmds))

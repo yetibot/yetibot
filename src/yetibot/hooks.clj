@@ -2,6 +2,7 @@
   (:require
     [yetibot.handler]
     [clojure.string :as s]
+    [yetibot.handler :refer [handle-cmd]]
     [yetibot.models.help :as help]
     [robert.hooke :as rh]
     [clojure.stacktrace :as st])
@@ -17,51 +18,53 @@
 
 (defn cmd-unhook [topic]
   (rh/remove-hook
-    #'yetibot.handler/handle-command
+    #'handle-cmd
     topic))
 
-; command hook
 (defmacro cmd-hook [prefix & exprs]
-  ; let user pass [topic regex] as prefix arg when a (str regex) isn't enough
+  ; let consumer pass [topic regex] as prefix arg when a (str regex) isn't enough
   (let [[topic prefix] (if (vector? prefix) prefix [(str prefix) prefix])
         callback (gensym "callback")
+        cmd-with-args (gensym "cmd-with-args")
         cmd (gensym "cmd")
         args (gensym "args")
         user (gensym "user")
         opts (gensym "opts")
-        match (gensym "match")]
+        match (gensym "match")
+        extra (gensym "extra")]
     `(do
        (rh/add-hook
-         #'yetibot.handler/handle-command
+         #'handle-cmd
          ~topic ; use topic string as the hook-key to enable removing/re-adding
-         (fn [~callback ~cmd ~args ~user ~opts]
-           ; only match against the
-           ; first word in ~args
-           (if (re-find ~prefix (s/lower-case ~cmd))
-             (do
-               (println (str "found " ~prefix " on cmd " ~cmd ". args are:" ~args))
-               ; try matching the available sub-commands
-               (cond-let [~match]
-                         ; rebuild the pairs in `exprs` as valid input for cond-let
-                         ~@(map (fn [i#]
-                                  (cond
-                                    ; prefix to match
-                                    (instance? Pattern i#) `(re-find ~i# ~args)
-                                    ; placeholder / fallthrough - set match equal to
-                                    ; :empty, which will trigger this match for
-                                    ; cond-let while not explicitly matching
-                                    ; anything.
-                                    (= i# '_) `(or :empty)
-                                    ; send result back to handle-command
-                                    :else `(~i# {:cmd ~cmd
-                                                 :args ~args
-                                                 :match ~match
-                                                 :user ~user
-                                                 :opts ~opts})))
-                                exprs)
-                         ; default to help
-                         true (yetibot.handler/handle-command "help" ~topic ~user ~opts)))
-             (~callback ~cmd ~args ~user ~opts))))
+         ; (fn [~callback ~cmd ~args ~user ~opts])
+         (fn [~callback ~cmd-with-args {:keys [~user ~opts] :as ~extra}]
+           (let [[~cmd & ~args] ~cmd-with-args]
+             ; only match against the first word in ~args
+             (if (re-find ~prefix (s/lower-case ~cmd))
+               (do
+                 (println (str "found " ~prefix " on cmd " ~cmd ". args are:" ~args))
+                 ; try matching the available sub-commands
+                 (cond-let [~match]
+                           ; rebuild the pairs in `exprs` as valid input for cond-let
+                           ~@(map (fn [i#]
+                                    (cond
+                                      ; prefix to match
+                                      (instance? Pattern i#) `(re-find ~i# ~args)
+                                      ; placeholder / fallthrough - set match equal to
+                                      ; :empty, which will trigger this match for
+                                      ; cond-let while not explicitly matching
+                                      ; anything.
+                                      (= i# '_) `(or :empty)
+                                      ; send result back to hooked fn
+                                      :else `(~i# {:cmd ~cmd
+                                                   :args (s/join " " ~args)
+                                                   :match ~match
+                                                   :user ~user
+                                                   :opts ~opts})))
+                                  exprs)
+                           ; default to help
+                           true (yetibot.handler/handle-unparsed-expr (str "help" ~topic) ~user)))
+               (~callback ~cmd-with-args ~extra)))))
        ; extract the meta from the commands and use it to build docs
        (help/add-docs ~topic
                       (map
