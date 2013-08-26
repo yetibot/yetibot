@@ -59,6 +59,14 @@
           #"(\d+)" tail-n
           _ tail-1)
 
+; rest
+(defn rest-cmd
+  "rest <list> # returns the last item from the <list>"
+  [{items :opts}] (rest items))
+
+(cmd-hook #"rest"
+          _ rest-cmd)
+
 ; xargs
 ; example usage: !users | xargs attack
 (defn xargs
@@ -122,7 +130,7 @@
 (defn list-cmd
   "list <comma-delimited-items> # construct a list"
   [{:keys [args]}]
-  (s/split args #","))
+  (map s/trim (s/split args #",")))
 
 (cmd-hook #"list"
           _ list-cmd)
