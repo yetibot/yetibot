@@ -31,11 +31,14 @@
 ; head
 (defn head-1
   "head <list> # returns the first item from the <list>"
-  [{items :opts}] (head 1 items))
+  [{items :opts}]
+  (prn "head-1 opts:" items)
+  (head 1 items))
 
 (defn head-n
   "head <n> <list> # return the first <n> items from the <list>"
   [{[_ n] :match items :opts}]
+  (prn "head-n opts:" items)
   (head (read-string n) items))
 
 (cmd-hook #"head"
@@ -56,6 +59,14 @@
           #"(\d+)" tail-n
           _ tail-1)
 
+; rest
+(defn rest-cmd
+  "rest <list> # returns the last item from the <list>"
+  [{items :opts}] (rest items))
+
+(cmd-hook #"rest"
+          _ rest-cmd)
+
 ; xargs
 ; example usage: !users | xargs attack
 (defn xargs
@@ -66,7 +77,7 @@
     (let [itms (ensure-items-collection opts)]
       (pmap (fn [item]
               (try
-                (yetibot.core/parse-and-handle-command
+                (yetibot.handler/handle-unparsed-expr
                   (psuedo-format args item) user)
                 (catch Exception ex
                   ex)))
@@ -79,6 +90,7 @@
 (defn join
   "join <list> # joins list with a single space or whatever character is given"
   [{match :match items :opts}]
+  (prn "hi join")
   (let [join-char (str (when-not (= match :empty) match) " ")]
     (s/join join-char (ensure-items-collection items))))
 
@@ -118,7 +130,7 @@
 (defn list-cmd
   "list <comma-delimited-items> # construct a list"
   [{:keys [args]}]
-  (s/split args #","))
+  (map s/trim (s/split args #",")))
 
 (cmd-hook #"list"
           _ list-cmd)

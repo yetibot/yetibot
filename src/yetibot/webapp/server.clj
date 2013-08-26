@@ -5,7 +5,7 @@
     [compojure.handler :as handler]
     [compojure.response :as response]
     [hiccup.core :refer :all]
-    [yetibot.core :refer [direct-cmd]]
+    [yetibot.handler :refer [handle-unparsed-expr]]
     [yetibot.campfire :refer [chat-data-structure self]]
     [compojure.core :refer :all]))
 
@@ -13,7 +13,9 @@
   (if (empty? token)
     "Please provide a Campfire access token"
     (if-let [user (:user (yetibot.campfire/self token))]
-      (-> (direct-cmd command user) yetibot.campfire/chat-data-structure)
+      (let [res (handle-unparsed-expr command user)]
+        (yetibot.campfire/chat-data-structure res)
+        res)
       "Invalid user access token")))
 
 (defroutes app-routes

@@ -6,8 +6,8 @@
 
 (defn report []
   (chat-data-structure
-    (yetibot.core/parse-and-handle-command
-      "image force push gif" nil nil)))
+    (yetibot.handler/handle-unparsed-expr
+      "image force push gif")))
 
 (obs-hook
   ["TextMessage" "PasteMessage"]

@@ -13,7 +13,7 @@
     (let [n (min max-repeat n)]
       (repeatedly
         n ; parse int
-        #(yetibot.core/parse-and-handle-command cmd user opts)))))
+        #(yetibot.handler/handle-unparsed-expr cmd user opts)))))
 
 (cmd-hook #"repeat"
           #"(\d+)\s(.+)" repeat-cmd)

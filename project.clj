@@ -14,10 +14,17 @@
                  [clj-campfire "2.2.0"]
                  [clj-time "0.4.4"]
 
+                 ; parsing
+                 [instaparse "1.2.2"]
+                 ; parser visualization
+                 [rhizome "0.1.9"]
+
                  [org.clojure/data.json "0.1.2"]
                  [org.clojure/tools.namespace "0.2.2"]
+                 [org.clojure/tools.trace "0.7.6"]
                  [org.clojure/java.classpath "0.2.0"]
                  [org.clojure/core.cache "0.6.2"]
+                 [org.clojure/core.match "0.2.0-rc5"]
 
                  [evaljs "0.1.2"]
                  [clj-ssh "0.4.0"]

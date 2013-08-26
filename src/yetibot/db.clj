@@ -2,7 +2,7 @@
   (:require [datomico.core :as dc]
             [yetibot.util :refer [env]]))
 
-; todo: loop through namespaces looking for a "schema" to load
+; TODO: loop through namespaces looking for a "schema" to load
 ; (do it manually for now)
 (def nss '[yetibot.models.twitter
            yetibot.models.history
