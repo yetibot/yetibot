@@ -2,7 +2,7 @@
   (:require
     [yetibot.handler]
     [clojure.string :as s]
-    [yetibot.handler :refer [handle-cmd]]
+    [yetibot.interpreter :refer [handle-cmd]]
     [yetibot.models.help :as help]
     [robert.hooke :as rh]
     [clojure.stacktrace :as st])
@@ -37,12 +37,16 @@
          #'handle-cmd
          ~topic ; use topic string as the hook-key to enable removing/re-adding
          ; (fn [~callback ~cmd ~args ~user ~opts])
-         (fn [~callback ~cmd-with-args {:keys [~user ~opts] :as ~extra}]
-           (let [[~cmd & ~args] ~cmd-with-args]
+         (fn [~callback ~cmd-with-args {~user :user ~opts :opts :as ~extra}]
+           (let [[~cmd & ~args] (s/split ~cmd-with-args #"\s+")
+                 ~args (s/join " " ~args)]
              ; only match against the first word in ~args
              (if (re-find ~prefix (s/lower-case ~cmd))
                (do
-                 (println (str "found " ~prefix " on cmd " ~cmd ". args are:" ~args))
+                 (prn "found" ~prefix "on cmd" ~cmd "."
+                      "args:" ~args
+                      "opts:" ~opts
+                      "extra" ~extra)
                  ; try matching the available sub-commands
                  (cond-let [~match]
                            ; rebuild the pairs in `exprs` as valid input for cond-let
@@ -57,7 +61,7 @@
                                       (= i# '_) `(or :empty)
                                       ; send result back to hooked fn
                                       :else `(~i# {:cmd ~cmd
-                                                   :args (s/join " " ~args)
+                                                   :args ~args
                                                    :match ~match
                                                    :user ~user
                                                    :opts ~opts})))

@@ -31,11 +31,14 @@
 ; head
 (defn head-1
   "head <list> # returns the first item from the <list>"
-  [{items :opts}] (head 1 items))
+  [{items :opts}]
+  (prn "head-1 opts:" items)
+  (head 1 items))
 
 (defn head-n
   "head <n> <list> # return the first <n> items from the <list>"
   [{[_ n] :match items :opts}]
+  (prn "head-n opts:" items)
   (head (read-string n) items))
 
 (cmd-hook #"head"
@@ -79,6 +82,7 @@
 (defn join
   "join <list> # joins list with a single space or whatever character is given"
   [{match :match items :opts}]
+  (prn "hi join")
   (let [join-char (str (when-not (= match :empty) match) " ")]
     (s/join join-char (ensure-items-collection items))))
 

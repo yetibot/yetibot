@@ -46,11 +46,11 @@
           json (if-not (empty? raw) (json/read-json raw))]
       (if (and json (:user json))
         (cf/send-tweet (format-url (:screen_name (:user json)) (:id json)))))
-    (catch Exception e (prn "exception parsing twitter json" e (str x) (str y)))))
+    (catch Exception e)))
 
 (def fail (comp println response-return-everything))
 
-(def exception exception-print)
+(def exception str)
 
 (def streaming-callback (AsyncStreamingCallback. succ fail exception))
 

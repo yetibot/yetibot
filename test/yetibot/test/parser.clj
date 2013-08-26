@@ -4,65 +4,69 @@
             [clojure.test :refer :all]))
 
 (deftest single-cmd-test
-  (is (= (parse "uptime")
-         [:expr [:cmd "uptime"]]))
-  (is (= (parse "echo qux") [:expr [:cmd "echo" "qux"]])
+  (is (= (parser "uptime")
+         [:expr [:cmd [:words "uptime"]]]))
+  (is (= (parser "echo qux") [:expr [:cmd [:words "echo" "qux"]]])
       "Single commands should be parsed"))
 
 (deftest piped-cmd-test
   (is
-    (= (parse "echo hello | echo bar")
-       [:expr [:cmd "echo" "hello"] [:cmd "echo" "bar"]])
+    (= (parser "echo hello | echo bar")
+       [:expr [:cmd [:words "echo" "hello"]] [:cmd [:words "echo" "bar"]]])
     "Piped commands should be parsed"))
 
 (deftest sub-expr-test
   (is
     (=
-     (parse "echo `catfact` | echo It is known:")
+     (parser "echo `catfact` | echo It is known:")
      [:expr
-      [:cmd "echo" [:expr [:cmd "catfact"]]]
-      [:cmd "echo" "It" "is" "known:"]])
+      [:cmd [:words "echo" [:expr [:cmd [:words "catfact"]]]]]
+      [:cmd [:words "echo" "It" "is" "known:"]]])
     "Backtick sub-expressions should be parsed")
   (is
     (=
-     (parse "echo $(random)")
-     [:expr [:cmd "echo" [:expr [:cmd "random"]]]])
+     (parser "echo $(random)")
+     [:expr [:cmd [:words "echo" [:expr [:cmd [:words "random"]]]]]])
     "Standard sub-expressions should be parsed"))
 
 (deftest nested-sub-expr-test
   (is
     (=
-     (parse "random | buffer | echo `number $(buffer | peek)`")
-     [:expr
-      [:cmd "random"]
-      [:cmd "buffer"]
-      [:cmd
-       "echo"
-       [:expr [:cmd "number" [:expr [:cmd "buffer"] [:cmd "peek"]]]]]])
+     (parser "random | buffer | echo `number $(buffer | peek)`")
+     [:expr [:cmd [:words "random"]] [:cmd [:words "buffer"]] [:cmd [:words "echo" [:expr [:cmd [:words "number" [:expr [:cmd [:words "buffer"]] [:cmd [:words "peek"]]]]]]]]])
     "Nested sub-expressions should be parsed")
   (is
     (=
-     (parse
+     (parser
        "urban random | buffer | echo `meme wizard: what is $(buffer peek | head)?`
         `meme chemistry: a $(buffer peek | head) is $(buffer peek | head 2 | tail)`")
      [:expr
-      [:cmd "urban" "random"]
-      [:cmd "buffer"]
+      [:cmd [:words "urban" "random"]]
+      [:cmd [:words "buffer"]]
       [:cmd
-       "echo"
-       [:expr
-        [:cmd
-         "meme"
-         "wizard:"
-         "what"
-         "is"
-         [:expr [:cmd "buffer" "peek"] [:cmd "head"]]
-         "?"
-         [:expr [:cmd "\n"]]
-         "meme"
-         "chemistry:"
-         "a"
-         [:expr [:cmd "buffer" "peek"] [:cmd "head"]]
-         "is"
-         [:expr [:cmd "buffer" "peek"] [:cmd "head" "2"] [:cmd "tail"]]]]]])
+       [:words
+        "echo"
+        [:expr
+         [:cmd
+          [:words
+           "meme"
+           "wizard:"
+           "what"
+           "is"
+           [:expr [:cmd [:words "buffer" "peek"]] [:cmd [:words "head"]]]
+           "?"]]]
+        "\n"
+        [:expr
+         [:cmd
+          [:words
+           "meme"
+           "chemistry:"
+           "a"
+           [:expr [:cmd [:words "buffer" "peek"]] [:cmd [:words "head"]]]
+           "is"
+           [:expr
+            [:cmd [:words "buffer" "peek"]]
+            [:cmd [:words "head" "2"]]
+            [:cmd [:words "tail"]]]]]]]]]
+     )
     "Complex nested sub-expressions with newlines should be parsed"))
