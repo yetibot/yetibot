@@ -13,6 +13,7 @@
    Note: alias args aren't supported yet:
    alias grid x = !repeat 10 `repeat 10 #{x} | join`"
   [{[_ a-name a-cmd] :match}]
+  (prn "wire alias" a-name a-cmd)
   (let [a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
         docstring (str "alias for " a-cmd)
         existing-alias (@aliases a-name)
@@ -32,7 +33,10 @@
 
 (defn load-aliases []
   (let [alias-cmds (model/find-all)]
-    (map (comp wire-alias read-string :alias-cmd) alias-cmds)))
+    (dorun (map (comp wire-alias
+                      (partial hash-map :match)
+                      read-string
+                      :alias-cmd) alias-cmds))))
 
 (def create-alias
   "alias <alias> = <cmd> # alias a cmd, where <cmd> is a normal command expression.
