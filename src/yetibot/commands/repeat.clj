@@ -9,11 +9,9 @@
   (let [n (read-string n)]
     (when (> n max-repeat)
       (yetibot.campfire/chat-data-structure
-        (str "Shut up " (:name user) ".")))
+        (format "Shut up %s." (:name user))))
     (let [n (min max-repeat n)]
-      (repeatedly
-        n ; parse int
-        #(yetibot.handler/handle-unparsed-expr cmd user opts)))))
+      (repeatedly n #(yetibot.handler/handle-unparsed-expr cmd user)))))
 
 (cmd-hook #"repeat"
           #"(\d+)\s(.+)" repeat-cmd)
