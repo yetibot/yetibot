@@ -1,6 +1,5 @@
 (ns yetibot.handler
   (:require
-    [yetibot.util :refer [psuedo-format]]
     [yetibot.util.format :refer [to-coll-if-contains-newlines]]
     [yetibot.models.users :as users]
     [yetibot.parser :refer [parse-and-eval]]

@@ -1,6 +1,8 @@
 (ns yetibot.interpreter
   "Handles evaluation of a parse tree"
-  (:require [yetibot.util.format :refer [to-coll-if-contains-newlines]]))
+  (:require
+    [yetibot.util :refer [psuedo-format]]
+    [yetibot.util.format :refer [to-coll-if-contains-newlines]]))
 
 (def ^:dynamic *current-user*)
 
@@ -24,7 +26,7 @@
     (apply handle-cmd
       (if (coll? possible-coll-acc)
         [cmd-with-args (conj extra {:opts possible-coll-acc})]
-        [(if (empty? acc) cmd-with-args (format "%s %s" cmd-with-args acc))
+        [(if (empty? acc) cmd-with-args (psuedo-format cmd-with-args acc))
          extra]))))
 
 (defn handle-expr [& cmds]
