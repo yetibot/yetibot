@@ -7,7 +7,7 @@
     [yetibot.util.format :as fmt]
     [yetibot.handler :refer [handle-unparsed-expr]]))
 
-(def config (select-keys env [:IRC_HOST :IRC_PORT :IRC_USERNAME :IRC_CHANNELS]))
+(def config (select-keys env [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
 
 (declare conn)
 
@@ -31,7 +31,7 @@
 ; only try connecting when config is present
 (defonce conn
   (when (conf-valid? config)
-    (irc/connect (:IRC_HOST env) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME env)
+    (irc/connect (:IRC_HOST config) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME config)
                  :callbacks callbacks)))
 
 (defn start []
