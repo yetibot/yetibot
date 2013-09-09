@@ -31,7 +31,7 @@
 ; only try connecting when config is present
 (defonce conn
   (when (conf-valid? config)
-    (irc/connect (:IRC_HOST env) (read-string (:IRC_PORT env)) (:IRC_USERNAME env)
+    (irc/connect (:IRC_HOST env) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME env)
                  :callbacks callbacks)))
 
 (defn start []
