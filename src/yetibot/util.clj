@@ -7,6 +7,10 @@
             [clojure.data.json :as json])
   (:use [clojure.contrib.cond]))
 
+(def env
+  (let [e (into {} (System/getenv))]
+    (zipmap (map keyword (keys e)) (vals e))))
+
 (def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
 
 (defn make-config [required-keys] (into {} (map (fn [k] [k (env k)]) required-keys)))
@@ -16,10 +20,6 @@
 (defmacro ensure-config [& body]
   `(when (every? identity ~'config)
      ~@body))
-
-(def env
-  (let [e (into {} (System/getenv))]
-    (zipmap (map keyword (keys e)) (vals e))))
 
 (defn psuedo-format
   "Similar to clojure.core/format, except it only supports %s, and it will replace
