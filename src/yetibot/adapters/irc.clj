@@ -2,12 +2,12 @@
   (:require
     [irclj.core :as irc]
     [clojure.string :refer [split-lines]]
-    [yetibot.util :refer [env conf-valid?]]
+    [yetibot.util :refer [env conf-valid? make-config]]
     [yetibot.chat :refer [chat-data-structure send-msg-for-each]]
     [yetibot.util.format :as fmt]
     [yetibot.handler :refer [handle-unparsed-expr]]))
 
-(def config (select-keys env [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
+(def config (make-config [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
 
 (declare conn)
 
@@ -37,3 +37,4 @@
 (defn start []
   (when conn
     (irc/join conn (:IRC_CHANNELS env))))
+

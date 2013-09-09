@@ -9,8 +9,9 @@
 
 (def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
 
-(defn conf-valid? [c]
-  (every? identity (vals c)))
+(defn make-config [required-keys] (into {} (map (fn [k] [k (env k)]) required-keys)))
+
+(defn conf-valid? [c] (every? identity (vals c)))
 
 (defmacro ensure-config [& body]
   `(when (every? identity ~'config)
