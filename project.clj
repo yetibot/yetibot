@@ -11,8 +11,11 @@
                  ; [org.clojars.adamwynne/http.async.client "0.4.1" ]
                  [org.apache.commons/commons-lang3 "3.1"]
                  [robert/hooke "1.3.0"]
-                 [clj-campfire "2.2.0"]
                  [clj-time "0.4.4"]
+
+                 ; chat protocols
+                 [clj-campfire "2.2.0"]
+                 [irclj "0.5.0-alpha2"]
 
                  ; parsing
                  [instaparse "1.2.2"]
