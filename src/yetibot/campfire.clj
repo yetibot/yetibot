@@ -3,49 +3,47 @@
             [clojure.data.json :as json]
             [clojure.string :as s]
             [clojure.stacktrace :as st]
+            [yetibot.util :refer [make-config conf-valid?]]
             [yetibot.util.http :as http]
             [yetibot.util.format :as fmt]
             [clj-campfire.core :as cf]))
 
 ; Settings
-(def u (System/getenv "CAMPFIRE_API_KEY"))
-(def p "x")
+(def config (make-config [:CAMPFIRE_API_KEY
+                          :CAMPFIRE_ROOM_ID
+                          :CAMPFIRE_SUBDOMAIN
+                          :CAMPFIRE_ROOM]))
+
 (def room-id (System/getenv "CAMPFIRE_ROOM_ID"))
 
 (def cf-settings
-  {:api-token u,
+  {:api-token (:CAMPFIRE_API_KEY config),
    :ssl true,
-   :sub-domain (System/getenv "CAMPFIRE_SUBDOMAIN")})
-(def room (System/getenv "CAMPFIRE_ROOM"))
+   :sub-domain (:CAMPFIRE_SUBDOMAIN config)})
+(def room (:CAMPFIRE_ROOM config))
 (def json-headers {:content-type "application/json"})
 (def escapees {\" "\\\""})
 
 (def base-uri (str "https://" (:sub-domain cf-settings) ".campfirenow.com"))
 (def streaming-uri "https://streaming.campfirenow.com")
-(def auth {:user u :password p :preemptive true})
+(def auth {:user (:CAMPFIRE_API_KEY config) :password "x" :preemptive true})
 
 (defn send-message [msg]
   (let [msg (if (s/blank? msg) "No results" msg)]
     (cf/message cf-settings room (str msg))))
 
-(defn send-paste [p]
-  (cf/paste cf-settings room p))
+(defn send-paste [p] (cf/paste cf-settings room p))
 
-(defn send-tweet [t]
-  (cf/tweet cf-settings room t))
+(defn send-tweet [t] (cf/tweet cf-settings room t))
 
 (defn self [token]
   (let [auth {:user token :password "x"}
         uri (str base-uri "/users/me.json")]
     (http/get-json uri auth)))
 
-(defn play-sound [sound]
-  (cf/play-sound cf-settings room sound))
+(defn play-sound [sound] (cf/play-sound cf-settings room sound))
 
-(defn send-message-for-each [msgs]
-  (println (str "send" (count msgs) "messages"))
-  (println msgs)
-  (doseq [m msgs] (send-message m)))
+(defn send-message-for-each [msgs] (doseq [m msgs] (send-message m)))
 
 (defn join-room []
   (with-open [client (c/create-client)]
@@ -82,18 +80,17 @@
                   (st/print-stack-trace (st/root-cause ex) 12))))))))))
 
 (defn start [message-callback]
-  (def event-loop
+  (if (conf-valid? config)
     (future
       (while true
         (try
           (listen-to-chat message-callback)
           (catch Exception ex
             (println "Exception while listening to streaming api")
-            (println ex)
-            ))
+            (println ex)))
         (println "Something bad happened. Sleeping for 2 seconds before reconnect")
-        (. Thread (sleep 2000))))))
-
+        (. Thread (sleep 2000))))
+    (println "✗ Campfire is not configured")))
 
 (defn contains-image-url-lines?
   "Returns true if the string contains an image url on its own line, separated from

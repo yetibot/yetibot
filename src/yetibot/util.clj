@@ -1,7 +1,6 @@
 (ns yetibot.util
   (:require [http.async.client :as client]
             [clojure.string :as s]
-            [yetibot.campfire :as cf]
             [robert.hooke :as rh]
             [clojure.stacktrace :as st]
             [clojure.data.json :as json])
