@@ -3,21 +3,20 @@
             [clojure.string :as s]
             [yetibot.hooks :refer [cmd-hook]]))
 
+(def chat-source "campfire/523232")
+
 (defn show-users
   "users # list all users presently in the room"
-  [_] (map :name (vals @users/users)))
+  [{:keys [chat-source]}]
+  (prn chat-source)
+  (map (comp :username second) (users/get-users chat-source)))
 
-(defn rand-user
-  "users random # get a random user"
-  [_] (:name (users/get-rand-user)))
-
-(defn reset
-  "users reset # reset the user list for the current room"
-  [_]
-  (users/reset-users)
-  "Users list reset complete")
+; (defn reset
+;   "users reset # reset the user list for the current room"
+;   [_]
+;   (users/reset-users)
+;   "Users list reset complete")
 
 (cmd-hook #"users"
-          #"reset" reset
-          #"random" rand-user
+          ; #"reset" reset
           #"^$" show-users)

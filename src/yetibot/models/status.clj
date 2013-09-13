@@ -15,8 +15,10 @@
 (def model-namespace :status)
 
 (def schema (dc/build-schema model-namespace
-                             [[:user-id :long]
-                              [:status :string]]))
+                             [[:user-id :string]
+                              [:chat-source :string]
+                              [:status :string]
+                              [:created-at :instant]]))
 
 (dc/create-model-fns model-namespace)
 
@@ -29,33 +31,58 @@
 
 ;;;; write
 
-(defn add-status [{:keys [id]} st]
-  (create {:user-id id :status st}))
+(defn add-status [{:keys [id]} chat-source st]
+  (create {:user-id (str id) :chat-source chat-source
+           :status st :created-at (java.util.Date.)}))
 
 ;;;; read
 
 (defn- statuses
   "Retrieve statuses for all users"
-  [] (seq (q '[:find ?user-id ?status ?txInstant
-               :where
-               [?tx :db/txInstant ?txInstant]
-               [?i :status/user-id ?user-id ?tx]
-               [?i :status/status ?status ?tx]])))
+  [chat-source]
+  (find-all {:chat-source chat-source}))
 
-(defn status-since
-  "Retrieve statuses after or equal to a given joda timestamp"
-  [ts] (let [after-ts? (fn [[_ _ inst]] (after-or-equal? (from-date inst) ts))]
-         (filter after-ts? (statuses))))
+;;
+(comment
+  (add-status {:id 993269} "campfire/523232" "foo")
 
-(def prepare-data
+  (add-status {:id "devth"} "irc/#yeti" "irc stats")
+
+  (find-all)
+
+  (statuses "campfire/523232" )
+
+  ({:id 17592186045418, :user-id 993269, :chat-source "campfire/523232", :status "hi"}
+   {:id 17592186045420, :user-id 993269, :chat-source "campfire/523232", :status
+    "hello"} {:id 17592186045422, :user-id 993269, :chat-source "campfire/523232",
+              :status "foo"})
+
+
+  (def chat-source "campfire/523232" )
+  "campfire/523232"
+
+  ({:id 17592186045418, :user-id "993269", :chat-source "campfire/523232", :status "foo"}
+   {:id 17592186045420, :user-id "devth", :chat-source "irc/#yeti", :status "irc stats"})
+
+  (seq (q '[:find ?user-id ?status ?txInstant
+            :where
+            [?tx :db/txInstant ?txInstant]
+            [?i :status/user-id ?user-id]
+            [?i :status/status ?status]
+            [?i :status/chat-source "campfire/523232"]
+            ]))
+)
+
+(def ^:private prepare-data
   "Turn user-ids into actual user maps and convert java dates to joda"
-  (partial map (fn [[uid st inst]] [(get-user uid) st (from-date inst)])))
+  (partial map (fn [{:keys [user-id status created-at]}]
+                 [(get-user yetibot.interpreter/*chat-source* user-id) status (from-date created-at)])))
 
-(def sort-st
+(def ^:private sort-st
   "Sort it by timestamp, descending"
   (partial sort-by (comp second rest) #(compare %2 %1)))
 
-(def sts-to-strings
+(def ^:private sts-to-strings
   "Format statuses collection as a collection of string"
   (partial map (fn [[user st date]]
                  (format "%s at %s: %s" (:name user) (format-time date) st))))
@@ -67,3 +94,10 @@
       prepare-data
       sort-st
       sts-to-strings))
+
+(defn status-since
+  "Retrieve statuses after or equal to a given joda timestamp"
+  [chat-source ts]
+  (let [after-ts? (fn [{:keys [created-at]}]
+                    (after-or-equal? (from-date created-at) ts))]
+    (filter after-ts? (statuses chat-source))))

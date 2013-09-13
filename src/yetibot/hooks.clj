@@ -31,13 +31,17 @@
         user (gensym "user")
         opts (gensym "opts")
         match (gensym "match")
+        chat-source (gensym "chat-source")
         extra (gensym "extra")]
     `(do
        (rh/add-hook
          #'handle-cmd
          ~topic ; use topic string as the hook-key to enable removing/re-adding
          ; (fn [~callback ~cmd ~args ~user ~opts])
-         (fn [~callback ~cmd-with-args {~user :user ~opts :opts :as ~extra}]
+         (fn [~callback ~cmd-with-args {~chat-source :chat-source
+                                        ~user :user
+                                        ~opts :opts
+                                        :as ~extra}]
            (let [[~cmd & ~args] (s/split ~cmd-with-args #"\s+")
                  ~args (s/join " " ~args)]
              ; only match against the first word in ~args
@@ -64,6 +68,7 @@
                                                    :args ~args
                                                    :match ~match
                                                    :user ~user
+                                                   :chat-source ~chat-source
                                                    :opts ~opts})))
                                   exprs)
                            ; default to help
@@ -77,24 +82,28 @@
                             (:doc (meta (resolve i#)))))
                         '~exprs)))))
 
-
 ; observer hook
 (defn obs-hook
   "Pass a collection of event-types you're interested in and an observer function
-  that accepts a single arg. If an event occurs that matches the events in your
-  event-types arg, your observer will be called with the event's json."
+   that accepts a single arg. If an event occurs that matches the events in your
+   event-types arg, your observer will be called with the event's json."
   [event-types observer]
   (rh/add-hook
-    #'yetibot.handler/handle-campfire-event
-    (fn [callback json]
-      ; when event-type is in event-types, observe it
-      (when (and
-              (not= (str (:user_id json)) bot-id) ; don't observer yourself
-              (some #{(:type json)} event-types))
-        ; swallow any exceptions from observers
-        (try
-          (observer json)
-          (catch Exception e
-            (println (str "observer exception: " e))
-            (st/print-stack-trace (st/root-cause e) 3))))
-      (callback json))))
+    #'yetibot.handler/handle-raw
+    (fn [callback body user]
+      ; TODO
+      (callback body user)
+      )))
+
+    ; (fn [callback json]
+    ;   ; when event-type is in event-types, observe it
+    ;   (when (and
+    ;           (not= (str (:user_id json)) bot-id) ; don't observer yourself
+    ;           (some #{(:type json)} event-types))
+    ;     ; swallow any exceptions from observers
+    ;     (try
+    ;       (observer json)
+    ;       (catch Exception e
+    ;         (println (str "observer exception: " e))
+    ;         (st/print-stack-trace (st/root-cause e) 3))))
+    ;   (callback json))))

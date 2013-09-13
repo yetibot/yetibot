@@ -19,8 +19,8 @@
 
                  ; parsing
                  [instaparse "1.2.2"]
-                 ; parser visualization
-                 [rhizome "0.1.9"]
+                 ; parser visualization - disable unless needed
+                 ; [rhizome "0.1.9"]
 
                  [org.clojure/data.json "0.1.2"]
                  [org.clojure/tools.namespace "0.2.2"]
@@ -47,7 +47,7 @@
                  [org.clojure/java.jdbc "0.2.3"]
                  [mysql/mysql-connector-java "5.1.6"]
                  [cheshire "5.0.1"]
-                 [incanter "1.4.0"]
+                 ; [incanter "1.4.0"]
 
                  [compojure "1.1.5"]
                  [hiccup "1.0.2"]

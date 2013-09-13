@@ -1,6 +1,6 @@
 (ns yetibot.observers.twss
   (:require [robert.hooke :as rh]
-            [yetibot.campfire :as cf]
+            [yetibot.adapters.campfire :as cf]
             [clojure.string :as s]
             [useful.fn :as useful :only rate-limited]
             [yetibot.hooks :refer [obs-hook]]

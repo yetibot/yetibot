@@ -1,6 +1,6 @@
 (ns yetibot.commands.poke
   (:require [yetibot.models.users :as u]
-            [yetibot.campfire :as cf])
+            [yetibot.adapters.campfire :as cf])
   (:use [yetibot.hooks :only [cmd-hook]]))
 
 (def ^:private config

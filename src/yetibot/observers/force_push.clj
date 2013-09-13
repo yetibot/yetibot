@@ -1,5 +1,5 @@
 (ns yetibot.observers.force-push
-  (:require [yetibot.campfire :refer [chat-data-structure]]
+  (:require [yetibot.chat :refer [chat-data-structure]]
             [yetibot.hooks :refer [obs-hook]]))
 
 (def regex #"(?i)force.*push")

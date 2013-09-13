@@ -1,12 +1,16 @@
-(ns yetibot.campfire
-  (:require [http.async.client :as c]
-            [clojure.data.json :as json]
-            [clojure.string :as s]
-            [clojure.stacktrace :as st]
-            [yetibot.util :refer [make-config conf-valid?]]
-            [yetibot.util.http :as http]
-            [yetibot.util.format :as fmt]
-            [clj-campfire.core :as cf]))
+(ns yetibot.adapters.campfire
+  (:require
+    [yetibot.chat :as chat]
+    [yetibot.handler :refer [handle-unparsed-expr]]
+    [http.async.client :as c]
+    [clojure.data.json :as json]
+    [yetibot.models.users :as users]
+    [clojure.string :as s]
+    [clojure.stacktrace :as st]
+    [yetibot.util :refer [make-config conf-valid?]]
+    [yetibot.util.http :as http]
+    [yetibot.util.format :as fmt]
+    [clj-campfire.core :as cf]))
 
 ; Settings
 (def config (make-config [:CAMPFIRE_API_KEY
@@ -15,6 +19,8 @@
                           :CAMPFIRE_ROOM]))
 
 (def room-id (System/getenv "CAMPFIRE_ROOM_ID"))
+
+(def chat-source (format "campfire/%s" room-id))
 
 (def cf-settings
   {:api-token (:CAMPFIRE_API_KEY config),
@@ -27,6 +33,7 @@
 (def base-uri (str "https://" (:sub-domain cf-settings) ".campfirenow.com"))
 (def streaming-uri "https://streaming.campfirenow.com")
 (def auth {:user (:CAMPFIRE_API_KEY config) :password "x" :preemptive true})
+
 
 (defn send-message [msg]
   (let [msg (if (s/blank? msg) "No results" msg)]
@@ -43,8 +50,6 @@
 
 (defn play-sound [sound] (cf/play-sound cf-settings room sound))
 
-(defn send-message-for-each [msgs] (doseq [m msgs] (send-message m)))
-
 (defn join-room []
   (with-open [client (c/create-client)]
     (let [uri (str base-uri "/room/" room-id "/join.json")
@@ -52,11 +57,9 @@
       (println (str "✓ Joining room at " uri))
       (c/await resp))))
 
-
 (defn get-room []
-  (let [uri (str base-uri "/room/" room-id ".json")
-        users (http/get-json uri auth)]
-    users))
+  (let [uri (str base-uri "/room/" room-id ".json")]
+    (http/get-json uri auth)))
 
 ; Monitor the chat room with the Streaming API
 (defn listen-to-chat [message-callback]
@@ -79,44 +82,50 @@
                   (println (str "Exception in chat handler " ex))
                   (st/print-stack-trace (st/root-cause ex) 12))))))))))
 
-(defn start [message-callback]
+(defn reset-users-from-room [room]
+  (let [users (-> room :room :users)]
+    (dorun (map (fn [{:keys [id name] :as user-info}]
+                  (users/add-user chat-source name user-info))
+                users))))
+
+(defn reset-users [] (reset-users-from-room (get-room)))
+
+(def exception-format ":cop::cop: %s :cop::cop:")
+
+(def messaging-fns
+  {:msg send-message
+   :paste send-paste})
+
+(defn handle-text-message [json]
+  "Parse a `TextMessage` campfire event into a command and its args"
+  (try
+    (let [user (users/get-user chat-source (:user_id json))]
+      (if-let [[_ body] (re-find #"\!(.+)" (:body json))]
+        (binding [chat/*messaging-fns* messaging-fns]
+          (chat/chat-data-structure (handle-unparsed-expr chat-source user body)))))
+    (catch Exception ex
+      (println "Exception inside `handle-text-message`" ex)
+      (st/print-stack-trace (st/root-cause ex) 50)
+      (send-message (format exception-format ex)))))
+
+(defn handle-campfire-event [json]
+  (let [event-type (:type json)]
+    (condp = event-type ; Handle the various types of messages
+      "TextMessage" (handle-text-message json)
+      "PasteMessage" (handle-text-message json)
+      (println "No handler for " event-type))))
+
+(defn start []
   (if (conf-valid? config)
-    (future
-      (while true
-        (try
-          (listen-to-chat message-callback)
-          (catch Exception ex
-            (println "Exception while listening to streaming api")
-            (println ex)))
-        (println "Something bad happened. Sleeping for 2 seconds before reconnect")
-        (. Thread (sleep 2000))))
+    (do
+      (future (reset-users))
+      (future
+        (while true
+          (try
+            (listen-to-chat handle-campfire-event)
+            (catch Exception ex
+              (println "Exception while listening to streaming api")
+              (println ex)))
+          (println "Something bad happened. Sleeping for 2 seconds before reconnect")
+          (. Thread (sleep 2000)))))
     (println "✗ Campfire is not configured")))
-
-(defn contains-image-url-lines?
-  "Returns true if the string contains an image url on its own line, separated from
-   other characters by a newline"
-  [string]
-  (not (empty? (filter #(re-find (re-pattern (str "(?m)^http.*\\." %)) string) ["jpeg" "jpg" "png" "gif"]))))
-
-(defn should-send-msg-for-each?
-  [d formatted]
-  (and
-    (coll? d)
-    (<= (count d) 30)
-    (re-find #"\n" formatted)
-    (contains-image-url-lines? formatted)))
-
-(defn chat-data-structure [d]
-  "Formatters to send data structures to chat.
-  If `d` is a nested data structure, it will attempt to recursively flatten
-  or merge (if it's a map)."
-  (when-not (:suppress (meta d))
-    (let [[formatted flattened] (fmt/format-data-structure d)]
-      (cond
-        ; send each item in the coll as a separate message if it contains images and
-        ; the total length of the collection is less than 20
-        (should-send-msg-for-each? d formatted) (send-message-for-each flattened)
-        ; send the message with newlines as a paste
-        (re-find #"\n" formatted) (send-paste formatted)
-        ; send as regular message
-        :else (send-message formatted)))))

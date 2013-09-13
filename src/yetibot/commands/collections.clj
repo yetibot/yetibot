@@ -1,7 +1,7 @@
 (ns yetibot.commands.collections
   (:require [clojure.string :as s]
             [yetibot.hooks :refer [cmd-hook]]
-            [yetibot.campfire :refer [chat-data-structure]]
+            [yetibot.chat :refer [chat-data-structure]]
             [yetibot.util :refer [psuedo-format split-kvs-with ensure-items-collection]]))
 
 ; random
@@ -71,14 +71,14 @@
 ; example usage: !users | xargs attack
 (defn xargs
   "xargs <cmd> <list> # run <cmd> for every item in <list>; behavior is similar to xargs(1)'s xargs -n1"
-  [{:keys [args opts user]}]
+  [{:keys [args opts]}]
   (if (s/blank? args)
     opts
     (let [itms (ensure-items-collection opts)]
       (pmap (fn [item]
               (try
                 (yetibot.handler/handle-unparsed-expr
-                  (psuedo-format args item) user)
+                  (psuedo-format args item))
                 (catch Exception ex
                   ex)))
             itms))))

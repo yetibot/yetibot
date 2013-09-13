@@ -5,7 +5,7 @@
             [tentacles [issues :as is]])
   (:use [yetibot.hooks :only [obs-hook cmd-hook]]
         [yetibot.util :only [env]]
-        [yetibot.campfire :only (chat-data-structure)]))
+        [yetibot.chat :only (chat-data-structure)]))
 
 (def rate-limit-ms 5000)
 

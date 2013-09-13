@@ -83,7 +83,7 @@
   ; the latest.
   (Thread/sleep 8000)
   (let [json (status job-name)]
-    (yetibot.campfire/chat-data-structure (:url json))))
+    (yetibot.chat/chat-data-structure (:url json))))
 
 (defn build
   "jen build <job-name>"

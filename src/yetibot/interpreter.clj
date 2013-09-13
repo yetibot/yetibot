@@ -5,6 +5,7 @@
     [yetibot.util.format :refer [to-coll-if-contains-newlines]]))
 
 (def ^:dynamic *current-user*)
+(def ^:dynamic *chat-source*)
 
 (defn handle-cmd
   "Hooked entry point for all command handlers. If no handlers intercept, it falls
@@ -19,7 +20,9 @@
 (defn pipe-cmds
   "Pipe acc into cmd-with-args by either appending or sending acc as an extra :opts"
   [acc cmd-with-args]
-  (let [extra {:raw acc :user *current-user*}
+  (let [extra {:raw acc
+               :user *current-user*
+               :chat-source *chat-source*}
         possible-coll-acc (to-coll-if-contains-newlines acc)]
     ; if possible-coll-acc is a string, append acc to args. otherwise send
     ; possible-coll-acc as an extra :opts param and append nothing to cmd-with-args.

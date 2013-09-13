@@ -42,7 +42,7 @@
 (defn fetch-and-announce-unread-mail []
   (let [formatted-mail (fetch-unread-mail)]
     (when formatted-mail
-      (yetibot.campfire/chat-data-structure formatted-mail))))
+      (yetibot.chat/chat-data-structure formatted-mail))))
 
 ; poll for new messages
 (defonce initial

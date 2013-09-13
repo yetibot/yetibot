@@ -1,13 +1,15 @@
 (ns yetibot.observers.users
   (:require [yetibot.models.users :as users]
-            [yetibot.campfire :as cf])
+            [yetibot.adapters.campfire :as cf])
   (:use [yetibot.hooks :only (obs-hook)]
-        [yetibot.campfire :only (chat-data-structure)]))
+        [yetibot.chat :only (chat-data-structure)]))
 
 (obs-hook
   ["KickMessage" "LeaveMessage" "EnterMessage"]
   (fn [event-json]
-    (users/reset-users)))
+    ; TODO
+    ; (users/reset-users)
+    ))
 
 (obs-hook
   ["TextMessage" "PasteMessage"]

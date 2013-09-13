@@ -1,15 +1,31 @@
 (ns yetibot.models.users
-  (:require [yetibot.campfire :as cf])
-  (:import java.util.Date)
-  (:import java.sql.Timestamp)
-  (:import java.text.SimpleDateFormat))
+  (:require
+    [clj-time.core :refer [now]]))
 
-(def active-threshold-minutes 15)
-(def active-threshold-milliseconds (* active-threshold-minutes 60 1000))
-(def campfire-date-pattern "yyyy/MM/dd HH:mm:ss Z")
-(def date-formatter (doto (new SimpleDateFormat campfire-date-pattern) (.setTimeZone (java.util.TimeZone/getTimeZone "GreenwichEtc"))))
+(def config {:active-threshold-milliseconds (* 15 60 1000)})
 
-(defonce users (atom {}))
+;; keys: username, id, last-active
+(defonce ^{:private true} users (atom {}))
+
+(defn add-user
+  "Add a user according to source. Source may be string identifying a Campfire room
+   or IRC channel"
+  [chat-source username {:keys [id] :as user-info}]
+  (let [id (str (or id username))] ; use username as the id if nil
+    (swap! users assoc-in [chat-source id]
+           (merge user-info {:username username
+                             :name username ; backward compat
+                             :id id
+                             :last-active (now)}))))
+
+(defn get-users [source]
+  (@users source))
+
+(defn get-user [source id]
+  ((get-users source) (str id)))
+
+; (def campfire-date-pattern "yyyy/MM/dd HH:mm:ss Z")
+; (def date-formatter (doto (new SimpleDateFormat campfire-date-pattern) (.setTimeZone (java.util.TimeZone/getTimeZone "GreenwichEtc"))))
 
 ;;; (defn add-user [id user]
 ;;;   (swap! user conj {id user}))
@@ -18,17 +34,8 @@
   "Returns an already existing user from the atom if available, otherwise a new user with a last_active timestamp"
   [user]
   (let [id (:id user)]
-    (get @users id (assoc user :last_active (.format date-formatter (new Date))))))
-
-(defn reset-users-from-room [room]
-  (let [us (-> room :room :users)
-        us-by-id (into {} (for [u us] [(:id u) (get-refreshed-user u)]))]
-    (reset! users us-by-id)))
-
-(defn reset-users [] (reset-users-from-room (cf/get-room)))
-
-(defn get-user [id]
-  (get @users id))
+    ))
+    ; (get @users id (assoc user :last_active (.format date-formatter (new Date))))))
 
 (defn get-user-by-name [name]
   (let [us (filter #(= name (:name %)) (vals @users))]
@@ -44,15 +51,17 @@
 (defn get-rand-user []
   (rand-nth (vals @users)))
 
-(defn get-user-ms [user] (.getTime (.parse date-formatter (:last_active user))))
+; (defn get-user-ms [user] (.getTime (.parse date-formatter (:last_active user))))
 
 (defn is-active?
   [user]
-  (if (contains? user :last_active)
-    (let [current-ms (.getTime (new Date))
-          ms-since-active (- current-ms (get-user-ms user))]
-      (< ms-since-active active-threshold-milliseconds))
-    false))
+  false)
+
+  ; (if (contains? user :last_active)
+  ;   (let [current-ms (.getTime (new Date))
+  ;         ms-since-active (- current-ms (get-user-ms user))]
+  ;     (< ms-since-active active-threshold-milliseconds))
+  ;   false))
 
 (defn is-yetibot? [user] (= (str (:id user)) (System/getenv "CAMPFIRE_BOT_ID")))
 

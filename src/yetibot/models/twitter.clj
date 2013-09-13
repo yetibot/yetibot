@@ -2,7 +2,7 @@
   (:require
     [yetibot.util :refer [ensure-config env]]
     [clojure.string :refer [join]]
-    [yetibot.campfire :as cf]
+    [yetibot.adapters.campfire :as cf]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
     [twitter.callbacks :refer :all]

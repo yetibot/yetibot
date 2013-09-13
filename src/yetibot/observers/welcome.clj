@@ -1,6 +1,6 @@
 (ns yetibot.observers.welcome
   (:require [robert.hooke :as rh]
-            [yetibot.campfire :as cf]
+            [yetibot.adapters.campfire :as cf]
             [clojure.string :as s]
             [yetibot.hooks :refer [obs-hook]]))
 

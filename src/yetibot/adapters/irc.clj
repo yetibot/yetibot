@@ -1,6 +1,8 @@
 (ns yetibot.adapters.irc
   (:require
+    [yetibot.chat]
     [irclj.core :as irc]
+    [yetibot.models.users :as users]
     [clojure.string :refer [split-lines]]
     [yetibot.util :refer [env conf-valid? make-config]]
     [yetibot.chat :refer [chat-data-structure send-msg-for-each]]
@@ -11,22 +13,49 @@
 
 (declare conn)
 
+(def chat-source (format "irc/%s" (:IRC_CHANNELS env)))
+
 (defn send-msg [msg]
   (irc/message conn (:IRC_CHANNELS env) msg))
 
 (defn send-paste
   "In IRC there are new newlines. Each line must be sent as a separate message, so
    split it and send one for each"
-  [p] (send-msg-for-each (split-lines p) send-msg))
+  [p] (send-msg-for-each (split-lines p)))
 
+(defn setup-users [users]
+  (prn "setup users" users)
+  (dorun (map (fn [[username user-info]]
+                (users/add-user chat-source username user-info))
+              users)))
+
+(def messaging-fns
+  {:msg send-msg
+   :paste send-paste})
+
+; todo lookup user by username
 (defn handle-message [_ info]
-  (prn info)
-  (if-let [[_ body] (re-find #"\!(.+)" (:text info))]
-    (chat-data-structure
-      (handle-unparsed-expr body)
-      send-msg send-paste)))
+  (let [nick (:nick info)
+        user (users/get-user chat-source nick)]
+    (prn "user is" user)
+    (if-let [[_ body] (re-find #"\!(.+)" (:text info))]
+      (binding [yetibot.chat/*messaging-fns* messaging-fns]
+        (chat-data-structure
+          (handle-unparsed-expr chat-source user body))))))
 
-(def callbacks {:privmsg handle-message})
+(defn raw-log [a b c]
+  (prn "raw-log")
+  (prn b c))
+
+(defn end-of-names
+  "Callback for end of names list from IRC"
+  [irc event]
+  (prn "end-of-names" irc)
+  (let [users (-> @irc :channels vals first :users)]
+    (setup-users users)))
+
+(def callbacks {:privmsg handle-message
+                :366 end-of-names})
 
 ; only try connecting when config is present
 (defonce conn
@@ -36,5 +65,8 @@
 
 (defn start []
   (when conn
-    (irc/join conn (:IRC_CHANNELS env))))
+    (irc/join conn (:IRC_CHANNELS config))))
 
+(defn part []
+  (when conn
+    (irc/part conn (:IRC_CHANNELS config))))

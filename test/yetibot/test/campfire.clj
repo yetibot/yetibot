@@ -1,5 +1,5 @@
 (ns yetibot.test.campfire
-  (:require [yetibot.campfire :refer :all]
+  (:require [yetibot.adapters.campfire :refer :all]
             [yetibot.util.format :refer :all]
             [clojure.test :refer :all]))
 
