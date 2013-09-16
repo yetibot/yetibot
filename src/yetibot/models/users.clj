@@ -7,16 +7,28 @@
 ;; keys: username, id, last-active
 (defonce ^{:private true} users (atom {}))
 
+(defn create-user
+  "Ensures a consistent data structure when creating users from multiple chat sources"
+  [username {:keys [id] :as user-info}]
+  (let [id (str (or id username))] ; use username as the id if nil
+    (merge user-info {:username username
+                      :name username ; backward compat
+                      :id id
+                      :last-active (now)})))
+
 (defn add-user
   "Add a user according to source. Source may be string identifying a Campfire room
    or IRC channel"
-  [chat-source username {:keys [id] :as user-info}]
-  (let [id (str (or id username))] ; use username as the id if nil
-    (swap! users assoc-in [chat-source id]
-           (merge user-info {:username username
-                             :name username ; backward compat
-                             :id id
-                             :last-active (now)}))))
+  [chat-source {:keys [id] :as user}]
+  (swap! users assoc-in [chat-source id] user))
+
+; (update-in {:irc {:yeti {:age 22} :devth {:age 2}}}
+;            [:irc]
+;            dissoc :devth)
+
+(defn remove-user
+  [chat-source id]
+  (swap! users update-in [chat-source] dissoc id))
 
 (defn get-users [source]
   (@users source))
@@ -24,32 +36,22 @@
 (defn get-user [source id]
   ((get-users source) (str id)))
 
+(defn find-user-like [chat-source name]
+  (let [patt (re-pattern (str "(?i)" name))]
+    (some #(when (re-find patt (:name %)) %)
+          (vals (get-users chat-source)))))
+
+
 ; (def campfire-date-pattern "yyyy/MM/dd HH:mm:ss Z")
 ; (def date-formatter (doto (new SimpleDateFormat campfire-date-pattern) (.setTimeZone (java.util.TimeZone/getTimeZone "GreenwichEtc"))))
 
-;;; (defn add-user [id user]
-;;;   (swap! user conj {id user}))
+; (defn get-refreshed-user
+;   "Returns an already existing user from the atom if available, otherwise a new user with a last_active timestamp"
+;   [user]
+;   (let [id (:id user)]
+;     ))
 
-(defn get-refreshed-user
-  "Returns an already existing user from the atom if available, otherwise a new user with a last_active timestamp"
-  [user]
-  (let [id (:id user)]
-    ))
     ; (get @users id (assoc user :last_active (.format date-formatter (new Date))))))
-
-(defn get-user-by-name [name]
-  (let [us (filter #(= name (:name %)) (vals @users))]
-    (if us (first us) nil)))
-
-(defn get-user-names []
-  (map :name (vals @users)))
-
-(defn find-user-like [name]
-  (let [patt (re-pattern (str "(?i)" name))]
-    (some #(when (re-find patt (:name %)) %) (vals @users))))
-
-(defn get-rand-user []
-  (rand-nth (vals @users)))
 
 ; (defn get-user-ms [user] (.getTime (.parse date-formatter (:last_active user))))
 

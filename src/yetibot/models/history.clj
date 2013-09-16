@@ -9,7 +9,7 @@
 (def model-namespace :history)
 
 (def schema (dc/build-schema model-namespace
-                             [[:user-id :long]
+                             [[:user-id :string]
                               [:body :string]]))
 
 (dc/create-model-fns model-namespace)
@@ -26,22 +26,21 @@
             [?i :history/body ?body ?tx]])
        (sort-by (fn [[_ _ inst]] inst))))
 
-(defn items-with-user []
+(defn items-with-user [chat-source]
   "Retrieve a map of user to chat body"
   (let [hist (history)]
     (for [[user-id body] hist]
-      {:user (u/get-user user-id) :body body})))
+      {:user (u/get-user chat-source user-id) :body body})))
 
-(defn fmt-items-with-user []
+(defn fmt-items-with-user [chat-source]
   "Format map of user to chat body as a string"
-  (for [m (items-with-user)]
+  (for [m (items-with-user chat-source)]
     (str (-> m :user :name) ": " (:body m))))
 
-(defn items-for-user [{:keys [id]}]
-  (filter #(= (-> % :user :id) id) (items-with-user)))
+(defn items-for-user [{:keys [chat-source user]}]
+  (filter #(= (-> % :user :id) (:id user)) (items-with-user chat-source)))
 
 ;;;; write
 
-(defn add [json]
-  (create {:user-id (:user_id json)
-           :body (:body json)}))
+(defn add [{:keys [user-id body] :as history-item}]
+  (create history-item))

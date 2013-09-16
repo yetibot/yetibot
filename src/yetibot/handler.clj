@@ -17,8 +17,16 @@
      (handle-unparsed-expr body)))
   ([body] (parse-and-eval body)))
 
+; TODO: move handle-unparsed-expr calls out of the adapters and call it from here
+; instead
 (defn handle-raw
-  "No-op handler for optional hooks"
-  [body user])
+  "No-op handler for optional hooks.
+   Expected event-types are:
+   :message
+   :leave
+   :enter
+   :sound
+   :kick"
+  [chat-source user event-type body])
 
 (defn cmd-reader [& args] (handle-unparsed-expr (join " " args)))

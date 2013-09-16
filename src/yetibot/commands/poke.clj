@@ -11,8 +11,8 @@
 
 (defn poke-someone
   "poke <user>                 # always do this"
-  [{name :match}]
-  (if-let [user (u/find-user-like name)]
+  [{name :match chat-source :chat-source}]
+  (if-let [user (u/find-user-like chat-source name)]
     (let [obj (rand-nth (:objects config))
           loc (rand-nth (:locations config))]
       (cf/play-sound "tada")

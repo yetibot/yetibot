@@ -7,7 +7,7 @@
     [yetibot.util :refer [env conf-valid? make-config]]
     [yetibot.chat :refer [chat-data-structure send-msg-for-each]]
     [yetibot.util.format :as fmt]
-    [yetibot.handler :refer [handle-unparsed-expr]]))
+    [yetibot.handler :refer [handle-raw handle-unparsed-expr]]))
 
 (def config (make-config [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
 
@@ -24,37 +24,49 @@
   [p] (send-msg-for-each (split-lines p)))
 
 (defn setup-users [users]
-  (prn "setup users" users)
-  (dorun (map (fn [[username user-info]]
-                (users/add-user chat-source username user-info))
-              users)))
+  (dorun
+    (map
+      (fn [[username user-info]]
+        (users/add-user chat-source (users/create-user username user-info)))
+      users)))
 
 (def messaging-fns
   {:msg send-msg
    :paste send-paste})
 
-; todo lookup user by username
 (defn handle-message [_ info]
   (let [nick (:nick info)
         user (users/get-user chat-source nick)]
-    (prn "user is" user)
+    (handle-raw chat-source user :message (:text info))
     (if-let [[_ body] (re-find #"\!(.+)" (:text info))]
       (binding [yetibot.chat/*messaging-fns* messaging-fns]
         (chat-data-structure
           (handle-unparsed-expr chat-source user body))))))
 
-(defn raw-log [a b c]
-  (prn "raw-log")
-  (prn b c))
+(defn handle-part [_ info]
+  (handle-raw chat-source
+              (users/create-user (:nick info) info)
+              :leave
+              nil))
+
+(defn handle-join [_ info]
+  (handle-raw chat-source
+              (users/create-user (:nick info) info)
+              :enter
+              nil))
+
+(defn raw-log [a b c] (prn b c))
 
 (defn end-of-names
   "Callback for end of names list from IRC"
   [irc event]
-  (prn "end-of-names" irc)
   (let [users (-> @irc :channels vals first :users)]
     (setup-users users)))
 
 (def callbacks {:privmsg handle-message
+                :raw-log raw-log
+                :part handle-part
+                :join handle-join
                 :366 end-of-names})
 
 ; only try connecting when config is present

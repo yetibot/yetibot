@@ -46,7 +46,8 @@
           (format "The following people need to hurry up: %s" (clojure.string/join ", " potential-its))))
       (str user-name ": you've been inactive for awhile so you're not eligible to be it."))))
 
-(cmd-hook #"notit"
-          #"reset" reset-its
-          #"show" show-its
-          #"^$" register-not-it)
+; disabled until it gets fixed
+; (cmd-hook #"notit"
+;           #"reset" reset-its
+;           #"show" show-its
+;           #"^$" register-not-it)

@@ -10,7 +10,7 @@
       "image force push gif")))
 
 (obs-hook
-  ["TextMessage" "PasteMessage"]
-  (fn [event-json]
-    (if-let [m (re-find regex (:body event-json))]
+  #{:message}
+  (fn [event-info]
+    (if-let [m (re-find regex (:body event-info))]
       (report))))

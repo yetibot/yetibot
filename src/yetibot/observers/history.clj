@@ -2,7 +2,7 @@
   (:require [yetibot.models.history :as h]
             [yetibot.hooks :refer [obs-hook]]))
 
-(obs-hook
-  ["TextMessage" "PasteMessage"]
-  (fn [event-json]
-    (h/add event-json)))
+(obs-hook #{:message}
+          (fn [event-info]
+            (h/add {:user-id (-> event-info :user :id)
+                    :body (:body event-info)})))

@@ -15,14 +15,14 @@
 
 (defn attack-cmd
   "attack <name> # attacks a person in the room"
-  [{:keys [user args]}]
-  (let [user-to-attack (users/get-user-by-name args)
+  [{:keys [user args chat-source]}]
+  (let [user-to-attack (users/find-user-like chat-source args)
         d (dmg)
         c (crit)
         total (+ c d)]
-    (str (:name user) " attacked " args
+    (str (:name user) " attacked " (:name user-to-attack)
          (if (or (= 0 d) (not user-to-attack))
-           " but you missed"
+           " but missed"
            (str " for " d " damage"
                 (when (> c 0)
                   (str " + " c " crit (" total " total)!")))))))

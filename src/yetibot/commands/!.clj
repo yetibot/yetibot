@@ -1,5 +1,6 @@
 (ns yetibot.commands.!
   (:require [yetibot.models.history :as h]
+            [yetibot.handler :refer [handle-unparsed-expr]]
             [clojure.string :as s])
   (:use [yetibot.hooks :only [cmd-hook]]))
 
@@ -11,12 +12,11 @@
 
 (defn !-cmd
   "! # execute your last command"
-  [{:keys [user]}]
-  (let [hist-for-user (reverse (h/items-for-user user))
+  [{:keys [user] :as cmd-info}]
+  (let [hist-for-user (reverse (h/items-for-user cmd-info))
         last-cmd (some valid-cmd? hist-for-user)]
-    (prn "last command is" last-cmd)
     (if last-cmd
-      (yetibot.handler/handle-unparsed-expr (clean-cmd last-cmd) user)
+      (-> last-cmd clean-cmd handle-unparsed-expr)
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
 (cmd-hook ["!" #"!"]

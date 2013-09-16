@@ -1,7 +1,7 @@
 (ns yetibot.adapters.campfire
   (:require
     [yetibot.chat :as chat]
-    [yetibot.handler :refer [handle-unparsed-expr]]
+    [yetibot.handler :refer [handle-raw handle-unparsed-expr]]
     [http.async.client :as c]
     [clojure.data.json :as json]
     [yetibot.models.users :as users]
@@ -84,9 +84,11 @@
 
 (defn reset-users-from-room [room]
   (let [users (-> room :room :users)]
-    (dorun (map (fn [{:keys [id name] :as user-info}]
-                  (users/add-user chat-source name user-info))
-                users))))
+    (dorun
+      (map
+        (fn [{:keys [id name] :as user-info}]
+          (users/add-user chat-source (users/create-user name user-info)))
+        users))))
 
 (defn reset-users [] (reset-users-from-room (get-room)))
 
@@ -96,12 +98,27 @@
   {:msg send-message
    :paste send-paste})
 
+(defn handle-enter [json]
+  (handle-raw
+    chat-source
+    (users/create-user (:name json) json)
+    :enter
+    nil))
+
+(defn handle-leave [json]
+  (handle-raw
+    chat-source
+    (users/create-user (:name json) json)
+    :leave
+    nil))
+
 (defn handle-text-message [json]
   "Parse a `TextMessage` campfire event into a command and its args"
   (try
     (let [user (users/get-user chat-source (:user_id json))]
-      (if-let [[_ body] (re-find #"\!(.+)" (:body json))]
-        (binding [chat/*messaging-fns* messaging-fns]
+      (binding [chat/*messaging-fns* messaging-fns]
+        (handle-raw chat-source user :message (:body json))
+        (if-let [[_ body] (re-find #"\!(.+)" (:body json))]
           (chat/chat-data-structure (handle-unparsed-expr chat-source user body)))))
     (catch Exception ex
       (println "Exception inside `handle-text-message`" ex)

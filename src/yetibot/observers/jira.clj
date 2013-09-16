@@ -24,9 +24,9 @@
                   (str "Status: " (-> fs :status :name))
                   (str jira/base-uri "/browse/" issue)])))
 
-(obs-hook
-  ["TextMessage" "PasteMessage"]
-  (fn [event-json]
-    (prn event-json)
-    (if-let [is (set (map first (re-seq issue-pattern (:body event-json))))]
-      (doall (map report-jira is)))))
+; (obs-hook
+;   ["TextMessage" "PasteMessage"]
+;   (fn [event-json]
+;     (prn event-json)
+;     (if-let [is (set (map first (re-seq issue-pattern (:body event-json))))]
+;       (doall (map report-jira is)))))

@@ -4,7 +4,7 @@
 
 (defn history-cmd
   "history # show chat history"
-  [_] (h/fmt-items-with-user))
+  [{:keys [chat-source]}] (h/fmt-items-with-user chat-source))
 
 (cmd-hook #"history"
           _ history-cmd)

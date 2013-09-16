@@ -90,10 +90,15 @@
   [event-types observer]
   (rh/add-hook
     #'yetibot.handler/handle-raw
-    (fn [callback body user]
-      ; TODO
-      (callback body user)
-      )))
+    (let [event-types (set event-types)]
+      (fn [callback chat-source user event-type body]
+        (if (contains? event-types event-type)
+          (observer {:chat-source chat-source
+                     :event-type event-type
+                     :user user
+                     :body body}))
+        (callback chat-source user event-type body)))))
+
 
     ; (fn [callback json]
     ;   ; when event-type is in event-types, observe it

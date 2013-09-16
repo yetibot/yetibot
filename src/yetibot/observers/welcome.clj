@@ -10,9 +10,9 @@
   (when ids
     (into {} (for [id ids] [(keyword id) (System/getenv (str "WELCOME_" id))]))))
 
-(obs-hook
-  ["EnterMessage"]
-  (fn [json]
-    (let [user_id (:user_id json)
-          resp ((keyword (str user_id)) enter-responses)]
-      (when resp (cf/play-sound resp)))))
+; (obs-hook
+;   ["EnterMessage"]
+;   (fn [json]
+;     (let [user_id (:user_id json)
+;           resp ((keyword (str user_id)) enter-responses)]
+;       (when resp (cf/play-sound resp)))))
