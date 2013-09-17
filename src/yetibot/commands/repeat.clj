@@ -8,10 +8,9 @@
   [{[_ n cmd] :match user :user opts :opts}]
   (let [n (read-string n)]
     (when (> n max-repeat)
-      (yetibot.chat/chat-data-structure
-        (format "Shut up %s." (:name user))))
+      (yetibot.chat/chat-data-structure (format "Shut up %s." (:name user))))
     (let [n (min max-repeat n)]
-      (repeatedly n #(yetibot.handler/handle-unparsed-expr cmd user)))))
+      (repeatedly n #(yetibot.handler/handle-unparsed-expr cmd)))))
 
 (cmd-hook #"repeat"
           #"(\d+)\s(.+)" repeat-cmd)
