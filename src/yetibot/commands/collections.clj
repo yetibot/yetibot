@@ -90,8 +90,7 @@
 (defn join
   "join <list> # joins list with a single space or whatever character is given"
   [{match :match items :opts}]
-  (prn "hi join")
-  (let [join-char (str (when-not (= match :empty) match) " ")]
+  (let [join-char (if (= match :empty) " " match)]
     (s/join join-char (ensure-items-collection items))))
 
 (cmd-hook #"join"
