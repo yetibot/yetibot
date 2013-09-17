@@ -49,6 +49,5 @@
   (cmd-hook #"features"
             _ lookup-features)
   (obs-hook
-    ["TextMessage" "PasteMessage"]
+    #{:message}
     listen-for-add-feature))
-
