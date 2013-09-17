@@ -5,9 +5,9 @@
     [yetibot.models.users :as users]
     [clojure.string :refer [split-lines]]
     [yetibot.util :refer [env conf-valid? make-config]]
-    [yetibot.chat :refer [chat-data-structure send-msg-for-each]]
+    [yetibot.chat :refer [send-msg-for-each]]
     [yetibot.util.format :as fmt]
-    [yetibot.handler :refer [handle-raw handle-unparsed-expr]]))
+    [yetibot.handler :refer [handle-raw]]))
 
 (def config (make-config [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
 
@@ -37,11 +37,8 @@
 (defn handle-message [_ info]
   (let [nick (:nick info)
         user (users/get-user chat-source nick)]
-    (handle-raw chat-source user :message (:text info))
-    (if-let [[_ body] (re-find #"\!(.+)" (:text info))]
-      (binding [yetibot.chat/*messaging-fns* messaging-fns]
-        (chat-data-structure
-          (handle-unparsed-expr chat-source user body))))))
+    (binding [yetibot.chat/*messaging-fns* messaging-fns]
+      (handle-raw chat-source user :message (:text info)))))
 
 (defn handle-part [_ info]
   (handle-raw chat-source

@@ -82,7 +82,6 @@
                             (:doc (meta (resolve i#)))))
                         '~exprs)))))
 
-; observer hook
 (defn obs-hook
   "Pass a collection of event-types you're interested in and an observer function
    that accepts a single arg. If an event occurs that matches the events in your
@@ -92,7 +91,7 @@
     #'yetibot.handler/handle-raw
     (let [event-types (set event-types)]
       (fn [callback chat-source user event-type body]
-        (if (contains? event-types event-type)
+        (when (contains? event-types event-type)
           (observer {:chat-source chat-source
                      :event-type event-type
                      :user user

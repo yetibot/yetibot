@@ -4,5 +4,5 @@
 
 (obs-hook #{:message}
           (fn [event-info]
-            (h/add {:user-id (-> event-info :user :id)
+            (h/add {:user-id (-> event-info :user :id str)
                     :body (:body event-info)})))

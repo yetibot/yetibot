@@ -1,7 +1,7 @@
 (ns yetibot.adapters.campfire
   (:require
     [yetibot.chat :as chat]
-    [yetibot.handler :refer [handle-raw handle-unparsed-expr]]
+    [yetibot.handler :refer [handle-raw]]
     [http.async.client :as c]
     [clojure.data.json :as json]
     [yetibot.models.users :as users]
@@ -33,7 +33,6 @@
 (def base-uri (str "https://" (:sub-domain cf-settings) ".campfirenow.com"))
 (def streaming-uri "https://streaming.campfirenow.com")
 (def auth {:user (:CAMPFIRE_API_KEY config) :password "x" :preemptive true})
-
 
 (defn send-message [msg]
   (let [msg (if (s/blank? msg) "No results" msg)]
@@ -92,8 +91,6 @@
 
 (defn reset-users [] (reset-users-from-room (get-room)))
 
-(def exception-format ":cop::cop: %s :cop::cop:")
-
 (def messaging-fns
   {:msg send-message
    :paste send-paste})
@@ -114,16 +111,9 @@
 
 (defn handle-text-message [json]
   "Parse a `TextMessage` campfire event into a command and its args"
-  (try
-    (let [user (users/get-user chat-source (:user_id json))]
-      (binding [chat/*messaging-fns* messaging-fns]
-        (handle-raw chat-source user :message (:body json))
-        (if-let [[_ body] (re-find #"\!(.+)" (:body json))]
-          (chat/chat-data-structure (handle-unparsed-expr chat-source user body)))))
-    (catch Exception ex
-      (println "Exception inside `handle-text-message`" ex)
-      (st/print-stack-trace (st/root-cause ex) 50)
-      (send-message (format exception-format ex)))))
+  (let [user (users/get-user chat-source (:user_id json))]
+    (binding [chat/*messaging-fns* messaging-fns]
+      (handle-raw chat-source user :message (:body json)))))
 
 (defn handle-campfire-event [json]
   (let [event-type (:type json)]
