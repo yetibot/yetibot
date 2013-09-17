@@ -12,16 +12,16 @@
     (when (every? #(nil? (re-find % body)) history-ignore)
       chat-item)))
 
-(defn- find-chat-to-memeify []
-  (some filter-chat (->> (h/items-with-user)
-                     (take-last 10)
-                      reverse)))
+(defn- find-chat-to-memeify [chat-source]
+  (some filter-chat (->> (h/items-with-user chat-source)
+                         (take-last 10)
+                         reverse)))
 
 (defn- format-chat [i]
   (:body i))
 
-(defn- meme-it [gen]
-  (let [chat (find-chat-to-memeify)]
+(defn- meme-it [chat-source gen]
+  (let [chat (find-chat-to-memeify chat-source)]
     (if chat
       (yetibot.handler/handle-unparsed-expr
         (format "meme %s: %s" gen (format-chat chat)))
@@ -30,10 +30,10 @@
 ; memethat
 (defn memethat
   "memethat # use a random generator from trending memes to memeify the last thing said"
-  [_]
+  [{:keys [chat-source]}]
   (let [trending (:result (meme/gen-trending))
         gen (if trending (rand-nth (map :displayName trending)) "y u no")]
-   (meme-it gen)))
+   (meme-it chat-source gen)))
 
 (cmd-hook #"memethat"
           _ memethat)
@@ -43,9 +43,9 @@
 
 (defn genthat
   "<gen>that # use <foo> generator to memify the last thing said"
-  [{:keys [cmd]}]
+  [{:keys [cmd chat-source]}]
   (let [[_ gen] (re-find genthat-pattern cmd)]
-    (meme-it gen)))
+    (meme-it chat-source gen)))
 
 (cmd-hook ["<gen>that" genthat-pattern]
           _ genthat)
