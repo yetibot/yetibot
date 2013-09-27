@@ -19,7 +19,7 @@
   ([body] (parse-and-eval body)))
 
 
-(def ^:private exception-format ":cop::cop: %s :cop::cop:")
+(def ^:private exception-format "👮 %s 👮")
 
 ; TODO: move handle-unparsed-expr calls out of the adapters and call it from here
 ; instead
