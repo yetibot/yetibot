@@ -9,6 +9,10 @@
   (is (= (parser "echo qux") [:expr [:cmd [:words "echo" "qux"]]])
       "Single commands should be parsed"))
 
+(deftest neighboring-sub-exprs
+  (is (= (parser "echo $(echo foo)bar")
+         [:expr [:cmd [:words "echo" [:expr [:cmd [:words "echo" "foo"]]] "bar"]]])))
+
 (deftest piped-cmd-test
   (is
     (= (parser "echo hello | echo bar")
