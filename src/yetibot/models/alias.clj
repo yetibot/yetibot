@@ -6,7 +6,7 @@
 (def model-ns :alias)
 
 (def schema (dc/build-schema model-ns
-                             [[:user-id :long]
+                             [[:userid :string] ; user-id was a long and can't be changed
                               [:alias-cmd :string]]))
 
 (dc/create-model-fns model-ns)
