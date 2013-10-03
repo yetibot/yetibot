@@ -1,6 +1,7 @@
 (ns yetibot.commands.image-search
   (:require [http.async.client :as client]
             [clojure.string :as s]
+            [clojure.pprint :refer [pprint]]
             [clojure.data.json :as json]
             [robert.hooke :as rh]
             [yetibot.util.http :refer [ensure-img-suffix]]
@@ -20,6 +21,9 @@
   ([q] (fetch-image q 8))
   ([q n]
    (let [results (google-image-search q n)]
+     (prn "google image search:")
+     (pprint results)
+     (prn "---")
      (:results (:responseData results)))))
 
 (defn image-cmd
