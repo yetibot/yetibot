@@ -3,7 +3,7 @@
         [yetibot.util :only [env]]
         [clojure.string :only [split]]))
 
-(def ^:private privs (set (map read-string (split (or (:YETIBOT_EVAL_PRIVS env) "") #","))))
+(def ^:private privs (set (split (or (:YETIBOT_EVAL_PRIVS env) "") #",")))
 
 (defn- user-is-allowed? [user]
   (boolean (some #{(:id user)} privs)))
