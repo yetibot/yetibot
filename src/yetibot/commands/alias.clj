@@ -1,6 +1,7 @@
 (ns yetibot.commands.alias
   (:require
     [clojure.string :as s]
+    [yetibot.models.help :as help]
     [yetibot.models.alias :as model]
     [yetibot.hooks :refer [cmd-hook cmd-unhook]]))
 
@@ -13,7 +14,6 @@
    Note: alias args aren't supported yet:
    alias grid x = !repeat 10 `repeat 10 #{x} | join`"
   [{[_ a-name a-cmd] :match}]
-  (prn "wire alias" a-name a-cmd)
   (let [a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
         docstring (str "alias for " a-cmd)
         existing-alias (@aliases a-name)
@@ -38,10 +38,13 @@
                       read-string
                       :alias-cmd) alias-cmds))))
 
-(def create-alias
+(defn create-alias
   "alias <alias> = <cmd> # alias a cmd, where <cmd> is a normal command expression.
    Note that pipes must be escaped like \"\\|\" to prevent normal pipe evaluation."
-  (comp wire-alias add-alias))
+  [{[_ a-name _] :match :as args}]
+  (if ((set (keys (help/get-docs))) a-name)
+    (str "Can not alias existing built-in command " a-name)
+    ((comp wire-alias add-alias) args)))
 
 (defn list-aliases
   "alias # show existing aliases"

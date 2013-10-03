@@ -1,6 +1,7 @@
 (ns yetibot.util.http
   (:require [http.async.client :as client]
             [clojure.string :as s]
+            [clojure.xml :as xml]
             [clojure.data.json :as json])
   (:import (java.net URL URLEncoder)))
 
@@ -26,6 +27,15 @@
         (println "Exception trying to fetch json")
         (prn args)
         (throw (Exception. (str "Unable to parse JSON from response:" raw)))))))
+
+(defn fetch-xml [& args]
+  (let [raw (apply fetch args)]
+    (try
+      (xml/parse raw)
+      (catch Exception e
+        (println "Exception trying to fetch xml")
+        (prn args)
+        (throw (Exception. (str "Unable to parse XML from response:" raw)))))))
 
 (defn encode [s]
   (URLEncoder/encode (str s) "UTF-8"))
