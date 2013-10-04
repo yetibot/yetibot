@@ -71,7 +71,7 @@
                                                    :opts ~opts})))
                                   exprs)
                            ; default to help
-                           true (yetibot.handler/handle-unparsed-expr (str "help" ~topic) ~user)))
+                           true (yetibot.handler/handle-unparsed-expr (str "help" ~topic))))
                (~callback ~cmd-with-args ~extra)))))
        ; extract the meta from the commands and use it to build docs
        (help/add-docs ~topic
