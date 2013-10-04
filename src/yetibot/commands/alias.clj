@@ -23,6 +23,8 @@
     (swap! aliases assoc a-name a-cmd)
     (cmd-hook [a-name (re-pattern (str "^" a-name "$"))]
               _ cmd-fn)
+    ; manually add docs since the meta on cmd-fn is lost in cmd-hook
+    (help/add-docs a-name [docstring])
     (if existing-alias
       (format "Replaced existing alias %s = %s" a-cmd existing-alias)
       (format "%s alias created" a-name))))
@@ -38,11 +40,17 @@
                       read-string
                       :alias-cmd) alias-cmds))))
 
+(defn- built-in? [cmd]
+  (let [as @aliases]
+    (and
+      (not ((set (keys as)) cmd))
+      ((set (keys (help/get-docs))) cmd))))
+
 (defn create-alias
   "alias <alias> = <cmd> # alias a cmd, where <cmd> is a normal command expression.
    Note that pipes must be escaped like \"\\|\" to prevent normal pipe evaluation."
   [{[_ a-name _] :match :as args}]
-  (if ((set (keys (help/get-docs))) a-name)
+  (if (built-in? a-name)
     (str "Can not alias existing built-in command " a-name)
     ((comp wire-alias add-alias) args)))
 
