@@ -17,9 +17,8 @@
   (with-meta data-structure {:suppress true}))
 
 (defn cmd-unhook [topic]
-  (rh/remove-hook
-    #'handle-cmd
-    topic))
+  (help/remove-docs topic)
+  (rh/remove-hook #'handle-cmd topic))
 
 (defmacro cmd-hook [prefix & exprs]
   ; let consumer pass [topic regex] as prefix arg when a (str regex) isn't enough
