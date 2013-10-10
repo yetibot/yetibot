@@ -26,7 +26,7 @@
     ; manually add docs since the meta on cmd-fn is lost in cmd-hook
     (help/add-docs a-name [docstring])
     (if existing-alias
-      (format "Replaced existing alias %s = %s" a-cmd existing-alias)
+      (format "Replaced existing alias %s = %s" a-name existing-alias)
       (format "%s alias created" a-name))))
 
 (defn add-alias [{:keys [user match] :as cmd-map}]
