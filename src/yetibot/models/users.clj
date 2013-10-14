@@ -12,7 +12,7 @@
   [username {:keys [id] :as user-info}]
   (let [id (str (or id username))] ; use username as the id if nil
     (merge user-info {:username username
-                      :name username ; backward compat
+                      :name username ; alias for backward compat
                       :id id
                       :last-active (now)})))
 

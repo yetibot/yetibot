@@ -1,5 +1,6 @@
 (ns yetibot.chat
   (:require
+    [clojure.string :refer [blank?]]
     [yetibot.util.format :as fmt]))
 
 ; the chat adapter should set this before firing off command handlers.
@@ -7,9 +8,18 @@
 ; TODO: with-scope might be nicer than binding dynamic messaging-fns
 (def ^:dynamic *messaging-fns*)
 
+
+(defn- mk-sender [sender-key]
+  (fn [msg]
+    (let [msg (str msg)]
+      ((sender-key *messaging-fns*) (if (blank? msg) "No results" msg)))))
+
+(def send-msg (mk-sender :msg))
+(def send-paste (mk-sender :paste))
+
 (defn send-msg-for-each [msgs]
   (prn "send" (count msgs) "messages")
-  (doseq [m msgs] ((:msg *messaging-fns*) m)))
+  (doseq [m msgs] (send-msg m)))
 
 (defn contains-image-url-lines?
   "Returns true if the string contains an image url on its own line, separated from
@@ -37,6 +47,6 @@
         ; the total length of the collection is less than 20
         (should-send-msg-for-each? d formatted) (send-msg-for-each flattened)
         ; send the message with newlines as a paste
-        (re-find #"\n" formatted) ((:paste *messaging-fns*) formatted)
+        (re-find #"\n" formatted) (send-paste formatted)
         ; send as regular message
-        :else ((:msg *messaging-fns*) formatted)))))
+        :else (send-msg formatted)))))

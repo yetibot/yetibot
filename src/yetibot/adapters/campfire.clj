@@ -34,9 +34,7 @@
 (def streaming-uri "https://streaming.campfirenow.com")
 (def auth {:user (:CAMPFIRE_API_KEY config) :password "x" :preemptive true})
 
-(defn send-message [msg]
-  (let [msg (if (s/blank? msg) "No results" msg)]
-    (cf/message cf-settings room (str msg))))
+(defn send-message [msg] (cf/message cf-settings room msg))
 
 (defn send-paste [p] (cf/paste cf-settings room p))
 
