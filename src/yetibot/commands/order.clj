@@ -24,6 +24,12 @@
       empty-order-message
       os)))
 
+(defn remove-item
+  "remove <user> # remove order for <user>"
+  [{[_ name-key] :match}]
+  (swap! orders dissoc name-key)
+  (show-order nil))
+
 (defn take-order
   "order <food> # add (or replace) your food for the current order"
   [{:keys [match user]}]
@@ -37,6 +43,7 @@
 
 (cmd-hook #"order"
           #"reset" start-taking-orders
+          #"remove\s+(.+)" remove-item
           #"show" show-order
           #"for\s(.+):(.+)" order-for
           #".+" take-order
