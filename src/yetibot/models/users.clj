@@ -20,15 +20,14 @@
   "Add a user according to source. Source may be string identifying a Campfire room
    or IRC channel"
   [chat-source {:keys [id] :as user}]
-  (swap! users assoc-in [chat-source id] user))
+  (swap! users assoc-in [chat-source (str id)] user))
 
-; (update-in {:irc {:yeti {:age 22} :devth {:age 2}}}
-;            [:irc]
-;            dissoc :devth)
+(defn update-user [source id attrs]
+  (swap! users update-in [source (str id)] merge attrs))
 
 (defn remove-user
   [chat-source id]
-  (swap! users update-in [chat-source] dissoc id))
+  (swap! users update-in [chat-source] dissoc (str id)))
 
 (defn get-users [source]
   (@users source))
