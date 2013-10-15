@@ -1,6 +1,7 @@
 (ns yetibot.commands.history
-  (:require [yetibot.models.history :as h])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [yetibot.models.history :as h]
+    [yetibot.hooks :refer [cmd-hook]]))
 
 (defn history-cmd
   "history # show chat history"

@@ -45,7 +45,6 @@
       (println (str "trying to fetch " uri))
       (client/await response)
       (let [unparsed (client/string response)]
-        (println (str "found " unparsed))
         (json/read-json unparsed)))))
 
 (defn job-status [job-name]

@@ -46,10 +46,9 @@
              ; only match against the first word in ~args
              (if (re-find ~prefix (s/lower-case ~cmd))
                (do
-                 (prn "found" ~prefix "on cmd" ~cmd "."
-                      "args:" ~args
-                      "opts:" ~opts
-                      "extra" ~extra)
+                 (println "found" ~prefix "on cmd" ~cmd
+                          ; "opts:" ~opts ; "extra" ~extra
+                          "args:" ~args)
                  ; try matching the available sub-commands
                  (cond-let [~match]
                            ; rebuild the pairs in `exprs` as valid input for cond-let
@@ -96,17 +95,3 @@
                      :user user
                      :body body}))
         (callback chat-source user event-type body)))))
-
-
-    ; (fn [callback json]
-    ;   ; when event-type is in event-types, observe it
-    ;   (when (and
-    ;           (not= (str (:user_id json)) bot-id) ; don't observer yourself
-    ;           (some #{(:type json)} event-types))
-    ;     ; swallow any exceptions from observers
-    ;     (try
-    ;       (observer json)
-    ;       (catch Exception e
-    ;         (println (str "observer exception: " e))
-    ;         (st/print-stack-trace (st/root-cause e) 3))))
-    ;   (callback json))))
