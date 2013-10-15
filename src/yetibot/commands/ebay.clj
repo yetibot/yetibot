@@ -13,7 +13,7 @@
                (juxt price-and-title
                      :viewItemURL
                      :galleryURL))
-         (take 10 items))))
+         (take 3 items))))
 
 (defn find-cmd
   "ebay <term> # search ebay listings for <term>"
