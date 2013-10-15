@@ -1,47 +1,46 @@
 (ns yetibot.commands.image-search
-  (:require [http.async.client :as client]
-            [clojure.string :as s]
-            [clojure.pprint :refer [pprint]]
-            [clojure.data.json :as json]
-            [robert.hooke :as rh]
+  (:require [clojure.string :as s]
+            [yetibot.models.google-search]
+            [yetibot.models.bing-search]
             [yetibot.util.http :refer [ensure-img-suffix]]
             [yetibot.hooks :refer [cmd-hook]]))
 
-(def base-google-image-url "http://ajax.googleapis.com/ajax/services/search/images")
-(def auth {:user "" :password ""})
+(def
+  ^{:private true
+    :doc "Sequence of configured namespaces to perform image searches on"}
+  engine-nss
+  (filter #(deref (ns-resolve % 'configured?))
+          ['yetibot.models.google-search
+           'yetibot.models.bing-search]))
 
-(defn google-image-search [q n]
-  (with-open [client (client/create-client)]
-    (let [resp (client/GET client base-google-image-url
-                           :query {:v "1.0", :rsz n, :q q :safe "active"})]
-      (client/await resp)
-      (json/read-json (client/string resp)))))
+(defn- fetch-image
+  "Search configured namespaces starting with the first and falling back to next when
+   there are no results"
+  ([q] (fetch-image q engine-nss))
+  ([q [n & nssrest]]
+   (prn "searching for " q "in" n)
+   (let [search-fn (ns-resolve n 'image-search)
+         res (search-fn q)]
+     (if (and (empty? res) (not (empty? nssrest)))
+       (fetch-image q nssrest) ; try another search engine
+       res))))
 
-(defn fetch-image
-  ([q] (fetch-image q 8))
-  ([q n]
-   (let [results (google-image-search q n)]
-     (prn "google image search:")
-     (pprint results)
-     (prn "---")
-     (:results (:responseData results)))))
+(defn- mk-fetcher
+  [f]
+  (fn [{[_ q] :match}]
+    (let [r (fetch-image q)]
+      (if (empty? r)
+        "No results :("
+        (f r)))))
 
-(defn image-cmd
-  "image <query> # fetch a random result from google images"
-  [{q :match}]
-  (let [images (fetch-image q)]
-    (if (seq images)
-      (ensure-img-suffix (:url (rand-nth images)))
-      (str "No images found for " q))))
+(def ^{:doc "image top <query> # fetch the first image from google images"}
+  top-image
+  (mk-fetcher first))
 
-(defn top-image
-  "image top <query> # fetch the first image from google images"
-  [{[_ q] :match}]
-  (let [images (fetch-image q)]
-    (if (seq images)
-      (str (:url (first images)) "?campfire=.jpg")
-      (str "No images found for " q))))
+(def ^{:doc "image <query> # fetch a random result from google images"}
+  image-cmd
+  (mk-fetcher rand-nth))
 
 (cmd-hook #"image"
           #"^top\s(.*)" top-image
-          #".*" image-cmd)
+          #"(.+)" image-cmd)
