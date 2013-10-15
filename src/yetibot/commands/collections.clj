@@ -45,6 +45,9 @@
           #"(\d+)" head-n
           _ head-1)
 
+(cmd-hook #"take"
+          #"(\d+)" head-n)
+
 ; tail
 (defn tail-1
   "tail <list> # returns the last item from the <list>"
