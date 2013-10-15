@@ -52,8 +52,9 @@
               (create-user info) :enter nil))
 
 (defn handle-nick [_ info]
-  (create-user info)
-  (prn "NICK" info))
+  (let [[nick] (:params info)
+        id (:user info)]
+    (users/update-user chat-source id {:username nick :name nick})))
 
 (defn handle-who-reply [_ info]
   (prn "352" info)
