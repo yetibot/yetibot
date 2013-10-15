@@ -170,9 +170,9 @@
 ; tee
 (defn tee-cmd
   "tee <list> # output <list> to chat and return list (useful for pipes)"
-  [{items :opts}]
-  (chat-data-structure items)
-  items)
+  [{:keys [items args]}]
+  (chat-data-structure (or items args))
+  (or items args))
 
 (cmd-hook #"tee"
           _ tee-cmd)
