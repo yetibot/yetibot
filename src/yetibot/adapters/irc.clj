@@ -1,5 +1,6 @@
 (ns yetibot.adapters.irc
   (:require
+    [taoensso.timbre :refer [info warn error debug]]
     [yetibot.chat]
     [irclj
      [core :as irc]
@@ -56,14 +57,14 @@
         id (:user info)]
     (users/update-user chat-source id {:username nick :name nick})))
 
-(defn handle-who-reply [_ info]
-  (prn "352" info)
-  (let [{[_ _ user _ _ nick] :params} info]
-    (prn "add user" user nick)
+(defn handle-who-reply [_ event-info]
+  (debug "352" event-info)
+  (let [{[_ _ user _ _ nick] :params} event-info]
+    (info "add user" user nick)
     (users/add-user chat-source
                     (create-user {:user user :nick nick}))))
 
-(defn raw-log [a b c] (prn b c))
+(defn raw-log [a b c] (debug b c))
 
 (defn handle-end-of-names
   "Callback for end of names list from IRC. Currently not doing anything with it."

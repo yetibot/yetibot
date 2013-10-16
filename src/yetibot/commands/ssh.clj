@@ -49,7 +49,6 @@
     (let [host (:host config)
           user (:user config)
           key-path (:key-path config)]
-      (println "Running" command "on" host)
       (let [agent (ssh-agent {:use-system-ssh-agent false})]
         (add-identity agent {:private-key-path key-path})
         (let [session

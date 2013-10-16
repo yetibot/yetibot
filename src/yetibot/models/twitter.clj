@@ -99,14 +99,12 @@
   (loop [cursor -1
          users []
          iter 0]
-    (prn "calling with cursor" cursor)
     (let [body (:body (friends-list :oauth-creds creds
                                     :params {:skip-status true
                                              :include-user-entities false
                                              :cursor cursor}))
           current-users (into users (:users body))
           next-cursor (:next_cursor body)]
-      (prn "next cursor" next-cursor)
       (if (or (> iter 10) (= 0 next-cursor)) ; limit to 10 pages
         current-users
         ; keep looping to fetch all pages until cursor is 0

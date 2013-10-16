@@ -1,5 +1,6 @@
 (ns yetibot.models.users
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clj-time.core :refer [now]]))
 
 (def config {:active-threshold-milliseconds (* 15 60 1000)})
@@ -76,4 +77,4 @@
 (defn update-active-timestamp [{id :user_id last_active :created_at}]
   (do
     (swap! users conj {id (get-updated-user id last_active)})
-    (prn @users)))
+    (info @users)))

@@ -1,8 +1,10 @@
 (ns yetibot.util.http
-  (:require [http.async.client :as client]
-            [clojure.string :as s]
-            [clojure.xml :as xml]
-            [clojure.data.json :as json])
+  (:require
+    [http.async.client :as client]
+    [taoensso.timbre :refer [info warn error]]
+    [clojure.string :as s]
+    [clojure.xml :as xml]
+    [clojure.data.json :as json])
   (:import (java.net URL URLEncoder)))
 
 ; synchronous api call helpers
@@ -24,8 +26,7 @@
     (try
       (json/read-json raw)
       (catch Exception e
-        (println "Exception trying to fetch json")
-        (prn args)
+        (error "Exception trying to fetch json" args)
         (throw (Exception. (str "Unable to parse JSON from response:" raw)))))))
 
 (defn fetch-xml [& args]
@@ -33,8 +34,7 @@
     (try
       (xml/parse raw)
       (catch Exception e
-        (println "Exception trying to fetch xml")
-        (prn args)
+        (error "Exception trying to fetch xml" args)
         (throw (Exception. (str "Unable to parse XML from response:" raw)))))))
 
 (defn encode [s]

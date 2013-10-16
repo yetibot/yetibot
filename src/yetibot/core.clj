@@ -1,5 +1,6 @@
 (ns yetibot.core
   (:require
+    [yetibot.logging]
     [yetibot.loader :refer [load-commands-and-observers]]
     [yetibot.handler :refer [handle-unparsed-expr]]
     [yetibot.logo :refer [logo]]

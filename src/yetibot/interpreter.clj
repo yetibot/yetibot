@@ -1,6 +1,7 @@
 (ns yetibot.interpreter
   "Handles evaluation of a parse tree"
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.util :refer [psuedo-format]]
     [yetibot.util.format :refer [to-coll-if-contains-newlines]]))
 
@@ -11,7 +12,7 @@
   "Hooked entry point for all command handlers. If no handlers intercept, it falls
    back to image search when available."
   [cmd-with-args extra]
-  (println "Nothing handled" cmd-with-args)
+  (info "nothing handled" cmd-with-args)
   ; default to looking up a random result from google image search
   (if (find-ns 'yetibot.commands.image-search)
     (handle-cmd (str "image " cmd-with-args) extra)

@@ -8,7 +8,6 @@
 (defn show-users
   "users # list all users presently in the room"
   [{:keys [chat-source]}]
-  (prn chat-source)
   (map (comp :username second) (users/get-users chat-source)))
 
 ; (defn reset

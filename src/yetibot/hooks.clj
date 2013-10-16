@@ -1,13 +1,14 @@
 (ns yetibot.hooks
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.handler]
     [clojure.string :as s]
     [yetibot.interpreter :refer [handle-cmd]]
     [yetibot.models.help :as help]
     [robert.hooke :as rh]
-    [clojure.stacktrace :as st])
-  (:use [clojure.contrib.cond :only (cond-let)]
-        [yetibot.util :only (bot-id)]))
+    [clojure.stacktrace :as st]
+    [clojure.contrib.cond :refer [cond-let]]
+    [yetibot.util :refer [bot-id]]))
 
 (def ^:private Pattern java.util.regex.Pattern)
 
@@ -46,7 +47,7 @@
              ; only match against the first word in ~args
              (if (re-find ~prefix (s/lower-case ~cmd))
                (do
-                 (println "found" ~prefix "on cmd" ~cmd
+                 (info "found" ~prefix "on cmd" ~cmd
                           ; "opts:" ~opts ; "extra" ~extra
                           "args:" ~args)
                  ; try matching the available sub-commands

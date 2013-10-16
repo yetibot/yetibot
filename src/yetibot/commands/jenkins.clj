@@ -21,7 +21,6 @@
 (def jenkins-cache (atom (cache/ttl-cache-factory {} :ttl cache-ttl)))
 
 (defn fetch-root []
-  (prn "fetching jenkins root api")
   (let [uri (format "%s/api/json" base-uri)]
     (get-json uri auth)))
 
@@ -38,11 +37,9 @@
 
 ; API Calls
 (defn status [job-name]
-  (println (str "Running status with " job-name))
   (with-open [client (client/create-client)]
     (let [uri (str base-uri "job/" job-name "/lastBuild/api/json")
           response (client/GET client uri :auth auth)]
-      (println (str "trying to fetch " uri))
       (client/await response)
       (let [unparsed (client/string response)]
         (json/read-json unparsed)))))
@@ -53,7 +50,6 @@
   Currently building? false
   [Changeset]"
   (let [json (status job-name)]
-    (println json)
     (if-let [building (str (:building json))] ; convert to string so a `false` doesn't give a false-negative
       (let [result (str (:result json))
                    changeset (s/join

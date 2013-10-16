@@ -1,10 +1,12 @@
 (ns yetibot.commands.mail
-  (:require [postal.core :as postal]
-            [yetibot.util.format :as fmt]
-            [yetibot.models.mail :refer [fetch-unread-mail]]
-            [clojure.string :as s])
-  (:use [yetibot.util :only [env ensure-config]]
-        [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [postal.core :as postal]
+    [yetibot.util.format :as fmt]
+    [clojure.string :as s]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.models.mail :refer [fetch-unread-mail]]
+    [yetibot.util :refer [env ensure-config]]
+    [yetibot.hooks :refer [cmd-hook]]))
 
 (def default-subject "A friendly message from YetiBot")
 (def success-message "Sent :email:")
@@ -35,7 +37,7 @@
 (defn send-mail
   ([to subject body opts] (send-mail to subject body opts (:bcc config)))
   ([to subject body opts bcc]
-   (prn "send-mail with " to subject body opts bcc)
+   (info "send-mail with " to subject body opts bcc)
    (let [res (postal/send-message
                (with-meta
                  {:from (:from config)

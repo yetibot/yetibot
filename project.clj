@@ -22,6 +22,9 @@
                  ; parser visualization - disable unless needed
                  ; [rhizome "0.1.9"]
 
+                 ; logging
+                 [com.taoensso/timbre "2.6.2"]
+
                  [org.clojure/data.json "0.1.2"]
                  [org.clojure/tools.namespace "0.2.2"]
                  [org.clojure/tools.trace "0.7.6"]

@@ -16,7 +16,6 @@
     (str "(" (s/join "|" project-keys) ")" "-\\d+")))
 
 (defn report-jira [issue]
-  (prn (str "lookup jira issue " issue))
   (let [ji (jira/get-issue issue)
         fs (:fields ji)]
     (chat-data-structure [(-> fs :summary)

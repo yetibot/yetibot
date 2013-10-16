@@ -1,5 +1,6 @@
 (ns yetibot.adapters.campfire
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.chat :as chat]
     [yetibot.handler :refer [handle-raw]]
     [http.async.client :as c]
@@ -129,8 +130,7 @@
           (try
             (listen-to-chat handle-campfire-event)
             (catch Exception ex
-              (println "Exception while listening to streaming api")
-              (println ex)))
-          (println "Something bad happened. Sleeping for 2 seconds before reconnect")
+              (error "Exception while listening to streaming api" (str ex))))
+          (error "Something bad happened. Sleeping for 2 seconds before reconnect")
           (. Thread (sleep 2000)))))
-    (println "✗ Campfire is not configured")))
+    (info "✗ Campfire is not configured")))

@@ -1,5 +1,6 @@
 (ns yetibot.chat
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.string :refer [blank?]]
     [yetibot.util.format :as fmt]))
 
@@ -18,7 +19,6 @@
 (def send-paste (mk-sender :paste))
 
 (defn send-msg-for-each [msgs]
-  (prn "send" (count msgs) "messages")
   (doseq [m msgs] (send-msg m)))
 
 (defn contains-image-url-lines?
@@ -40,8 +40,8 @@
    or merge (if it's a map)."
   (when-not (:suppress (meta d))
     (let [[formatted flattened] (fmt/format-data-structure d)]
-      (prn "formatted is " formatted)
-      (prn "flattened is " flattened)
+      (info "formatted is " formatted)
+      (info "flattened is " flattened)
       (cond
         ; send each item in the coll as a separate message if it contains images and
         ; the total length of the collection is less than 20

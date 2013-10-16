@@ -1,9 +1,11 @@
 (ns yetibot.commands.image-search
-  (:require [clojure.string :as s]
-            [yetibot.models.google-search]
-            [yetibot.models.bing-search]
-            [yetibot.util.http :refer [ensure-img-suffix]]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [taoensso.timbre :refer [info warn error]]
+    [clojure.string :as s]
+    [yetibot.models.google-search]
+    [yetibot.models.bing-search]
+    [yetibot.util.http :refer [ensure-img-suffix]]
+    [yetibot.hooks :refer [cmd-hook]]))
 
 (def
   ^{:private true
@@ -18,7 +20,7 @@
    there are no results"
   ([q] (fetch-image q engine-nss))
   ([q [n & nssrest]]
-   (prn "searching for " q "in" n)
+   (info "searching for " q "in" n)
    (let [search-fn (ns-resolve n 'image-search)
          res (search-fn q)]
      (if (and (empty? res) (not (empty? nssrest)))

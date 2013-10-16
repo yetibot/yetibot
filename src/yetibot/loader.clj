@@ -1,5 +1,6 @@
 (ns yetibot.loader
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.stacktrace :as st]
     [clojure.tools.namespace.find :as ns]
     [clojure.java.classpath :as cp]))
@@ -22,10 +23,10 @@
     #"^yetibot\.(.(?!(core)))*"))
 
 (defn load-ns [arg]
-  (println "Loading " arg)
+  (info "Loading " arg)
   (try (require arg :reload)
        (catch Exception e
-         (println "WARNING: problem requiring" arg "hook:" (.getMessage e))
+         (warn "WARNING: problem requiring" arg "hook:" (.getMessage e))
          (st/print-stack-trace (st/root-cause e) 15))))
 
 (defn find-and-load-namespaces

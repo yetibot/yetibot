@@ -26,7 +26,6 @@
 (defn gen-popular []
   "Retrieves popular generators"
   (let [uri (str base-uri (:popular apis))]
-    (println uri)
     (:result (get-json uri auth))))
 
 (defn search-generators [q]
@@ -43,7 +42,6 @@
   ([] (instances-popular ""))
   ([gen]
    "Retrieves popular instances. Retrieves popular only for `gen` if specified."
-   (println (str "gen is " gen))
    (let [uri (str base-uri (:instance-popular apis) "?"
                   (map-to-query-string
                     (merge {:languageCode "en" :pageSize 20 :days 7}
@@ -121,7 +119,6 @@
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"
   [{[_ inst line1 line2] :match}]
-  (println (str "generate meme " inst))
   (chat-instance
     (create-instance
       (map-to-query-string
@@ -130,7 +127,6 @@
 (defn generate-auto-split-cmd
   "meme <generator>: <text> # autosplit <text> in half and generate the instance"
   [{[_ inst text] :match}]
-  (prn "auto split" inst text)
   (let [spl (s/split text #"\s")]
     (generate-cmd
       {:match (list* nil inst
