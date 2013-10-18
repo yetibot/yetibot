@@ -1,10 +1,20 @@
 (ns yetibot.util
-  (:require [http.async.client :as client]
-            [clojure.string :as s]
-            [robert.hooke :as rh]
-            [clojure.stacktrace :as st]
-            [clojure.data.json :as json])
+  (:require
+    [datomico.db :as db :refer [with-latest-database]]
+    [datomic.api :as api]
+    [http.async.client :as client]
+    [clojure.string :as s]
+    [robert.hooke :as rh]
+    [clojure.stacktrace :as st]
+    [clojure.data.json :as json])
   (:use [clojure.contrib.cond]))
+
+
+(defmacro with-fresh-db
+  [& body]
+  `(binding [db/*connection* (api/connect db/*uri*)]
+     (with-latest-database
+       ~@body)))
 
 (def env
   (let [e (into {} (System/getenv))]

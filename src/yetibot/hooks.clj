@@ -1,6 +1,7 @@
 (ns yetibot.hooks
   (:require
     [taoensso.timbre :refer [info warn error]]
+    [yetibot.util :refer [with-fresh-db]]
     [yetibot.handler]
     [clojure.string :as s]
     [yetibot.interpreter :refer [handle-cmd]]
@@ -91,8 +92,9 @@
     (let [event-types (set event-types)]
       (fn [callback chat-source user event-type body]
         (when (contains? event-types event-type)
-          (observer {:chat-source chat-source
-                     :event-type event-type
-                     :user user
-                     :body body}))
+          (with-fresh-db
+            (observer {:chat-source chat-source
+                       :event-type event-type
+                       :user user
+                       :body body})))
         (callback chat-source user event-type body)))))

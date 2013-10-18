@@ -1,6 +1,7 @@
 (ns yetibot.handler
   (:require
     [taoensso.timbre :refer [info warn error]]
+    [yetibot.util :refer [with-fresh-db]]
     [yetibot.util.format :refer [to-coll-if-contains-newlines]]
     [yetibot.parser :refer [parse-and-eval]]
     [clojure.core.match :refer [match]]
@@ -37,15 +38,16 @@
   (when body
     ; see if it looks like a command
     (when-let [[_ body] (re-find #"^\!(.+)" body)]
-      (try
-        (chat-data-structure
-          (handle-unparsed-expr chat-source user body))
-        (catch Exception ex
-          (error
-            "error handling expression:" body
-            (with-out-str
-              (newline)
-              (st/print-stack-trace (st/root-cause ex) 50)))
-          (chat-data-structure (format exception-format ex)))))))
+      (with-fresh-db
+        (try
+          (chat-data-structure
+            (handle-unparsed-expr chat-source user body))
+          (catch Exception ex
+            (error
+              "error handling expression:" body
+              (with-out-str
+                (newline)
+                (st/print-stack-trace (st/root-cause ex) 50)))
+            (chat-data-structure (format exception-format ex))))))))
 
 (defn cmd-reader [& args] (handle-unparsed-expr (join " " args)))
