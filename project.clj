@@ -1,5 +1,5 @@
 (defproject yetibot "1.0.0-SNAPSHOT"
-  :description "A command line in your campfire."
+  :description "A command line in your chat, where chat ∈ {irc,campfire}."
   :profiles {:dev {:dependencies [[midje "1.5-beta1"]]}
              :plugins [[lein-midje "3.0-beta1"]]}
   :dependencies [[org.clojure/clojure "1.4.0"],
