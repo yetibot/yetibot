@@ -1,7 +1,8 @@
 (ns yetibot.test.campfire
-  (:require [yetibot.adapters.campfire :refer :all]
-            [yetibot.util.format :refer :all]
-            [clojure.test :refer :all]))
+  (:require
+    [yetibot.chat :refer [contains-image-url-lines?]]
+    [yetibot.util.format :refer :all]
+    [clojure.test :refer :all]))
 
 (def nested-list
   [["meme generator"
@@ -17,5 +18,3 @@
   (is
     (contains-image-url-lines? (first formatted-list))
     "it should find image urls in the string"))
-
-(run-tests)
