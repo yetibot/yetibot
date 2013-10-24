@@ -23,7 +23,7 @@
     #"^yetibot\.(.(?!(core)))*"))
 
 (defn load-ns [arg]
-  (info "Loading " arg)
+  (info "Loading" arg)
   (try (require arg :reload)
        (catch Exception e
          (warn "WARNING: problem requiring" arg "hook:" (.getMessage e))
