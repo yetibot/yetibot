@@ -1,5 +1,6 @@
 (ns yetibot.adapters.irc
   (:require
+    [rate-gate.core :refer [rate-limit]]
     [taoensso.timbre :refer [info warn error debug]]
     [yetibot.chat]
     [irclj
@@ -18,8 +19,10 @@
 
 (def chat-source (format "irc/%s" (:IRC_CHANNELS env)))
 
-(defn send-msg [msg]
-  (irc/message conn (:IRC_CHANNELS env) msg))
+(def send-msg
+  (rate-limit
+    (fn [msg] (irc/message conn (:IRC_CHANNELS env) msg))
+    1 200))
 
 (defn- create-user [info]
   (let [username (:nick info)

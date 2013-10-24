@@ -31,15 +31,20 @@
                  [org.clojure/java.classpath "0.2.0"]
                  [org.clojure/core.cache "0.6.2"]
                  [org.clojure/core.match "0.2.0-rc5"]
+                 [org.clojure/data.xml "0.0.6"]
+                 [org.clojure/data.zip "0.1.1"]
+                 [org.clojure/java.jdbc "0.2.3"]
 
                  [evaljs "0.1.2"]
                  [clj-ssh "0.4.0"]
+
+                 ; utils
                  [useful "0.8.3-alpha8"]
+                 [rate-gate "1.3.1"]
+
                  [clj-wordnik "0.1.0-alpha1"]
                  [tentacles "0.2.2"]
                  [clj-http "0.5.5"]
-                 [org.clojure/data.xml "0.0.6"]
-                 [org.clojure/data.zip "0.1.1"]
                  [clj-aws-s3 "0.3.2"]
                  [overtone/at-at "1.0.0"]
                  [com.draines/postal "1.9.0"]
@@ -47,7 +52,6 @@
                  [inflections "0.7.3"]
                  [environ "0.3.0"]
                  [com.bigml/closchema "0.1.8"]
-                 [org.clojure/java.jdbc "0.2.3"]
                  [mysql/mysql-connector-java "5.1.6"]
                  [cheshire "5.0.1"]
                  ; [incanter "1.4.0"]
@@ -61,7 +65,7 @@
                  [org.clojars.petterik/clojure-mail "0.1.8"]
                  ;;; [clojure-mail "0.1.0-SNAPSHOT"]
 
-                 ;;;; database
+                 ; database
                  [com.datomic/datomic-free "0.8.3814"]
                  [datomico "0.2.0"]
                  ]
