@@ -14,15 +14,24 @@
     [yetibot.handler :refer [handle-raw]]))
 
 (def config (make-config [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
-
-(declare conn)
-
+(def conn (atom nil))
+(declare connect start)
 (def chat-source (format "irc/%s" (:IRC_CHANNELS env)))
+(def wait-before-reconnect 15000)
 
 (def send-msg
   (rate-limit
-    (fn [msg] (irc/message conn (:IRC_CHANNELS env) msg))
-    1 200))
+    (fn [msg]
+      (info "conn is" conn "send message" msg)
+      (try
+        (irc/message @conn (:IRC_CHANNELS env) msg)
+        (catch java.net.SocketException e
+          ; it must have disconnect, try reconnecting again
+          (info "SocketException, trying to reconnect in" wait-before-reconnect "ms")
+          (Thread/sleep wait-before-reconnect)
+          (connect)
+          (start))))
+    3 600))
 
 (defn- create-user [info]
   (let [username (:nick info)
@@ -35,7 +44,7 @@
   [p] (send-msg-for-each (split-lines p)))
 
 (defn fetch-users []
-  (irc-conn/write-irc-line conn "WHO" (:IRC_CHANNELS env)))
+  (irc-conn/write-irc-line @conn "WHO" (:IRC_CHANNELS env)))
 
 (def messaging-fns
   {:msg send-msg
@@ -67,7 +76,7 @@
     (users/add-user chat-source
                     (create-user {:user user :nick nick}))))
 
-(defn raw-log [a b c] (debug b c))
+(defn raw-log [a b c] (debug "raw" b c))
 
 (defn handle-end-of-names
   "Callback for end of names list from IRC. Currently not doing anything with it."
@@ -82,19 +91,26 @@
                 :366 #'handle-end-of-names
                 :352 #'handle-who-reply})
 
+(defn connect []
+  (reset!
+    conn
+    (irc/connect
+      (:IRC_HOST config) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME config)
+      :callbacks callbacks)))
+
 ; only try connecting when config is present
-(defonce conn
+
+(defonce initial-conn
   (when (conf-valid? config)
-    (irc/connect (:IRC_HOST config) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME config)
-                 :callbacks callbacks)))
+    (connect)))
 
 (defn start
   "Join and fetch all users with WHO <channel>"
   []
   (when conn
-    (irc/join conn (:IRC_CHANNELS config))
+    (irc/join @conn (:IRC_CHANNELS config))
     (fetch-users)))
 
 (defn part []
   (when conn
-    (irc/part conn (:IRC_CHANNELS config))))
+    (irc/part @conn (:IRC_CHANNELS config))))

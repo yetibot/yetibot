@@ -9,7 +9,6 @@
 ; TODO: with-scope might be nicer than binding dynamic messaging-fns
 (def ^:dynamic *messaging-fns*)
 
-
 (defn- mk-sender [sender-key]
   (fn [msg]
     (let [msg (str msg)]
