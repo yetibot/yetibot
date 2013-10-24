@@ -14,8 +14,8 @@
   (println logo))
 
 (defn -main [& args]
-  (db/start)
   (welcome-message)
+  (db/start)
   (cf/start)
   (irc/start)
   (load-commands-and-observers))
