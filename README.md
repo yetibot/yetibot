@@ -46,7 +46,7 @@ export WELCOME_<userid2>=secret
 
 ## Usage
 
-All commands are prefixed by `!`. yetibot ignores everything else.
+All commands are prefixed by `!`.
 
 TODO: more examples
 
