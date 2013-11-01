@@ -1,6 +1,7 @@
 (ns yetibot.commands.alias
   (:require
     [clojure.string :as s]
+    [yetibot.util :refer [with-fresh-db]]
     [yetibot.models.help :as help]
     [yetibot.models.alias :as model]
     [yetibot.hooks :refer [cmd-hook cmd-unhook]]))
@@ -66,7 +67,9 @@
   (cmd-unhook cmd)
   (format "alias %s removed" cmd))
 
-(defonce loader (future (load-aliases)))
+(defonce loader
+  (with-fresh-db
+    (future (load-aliases))))
 
 (cmd-hook #"alias"
           #"^$" list-aliases
