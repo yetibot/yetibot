@@ -17,15 +17,16 @@
   [{[_ a-name a-cmd] :match}]
   (let [a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
         docstring (str "alias for " a-cmd)
-        existing-alias (@aliases a-name)
+        cmd-name (first (s/split a-name #" "))
+        existing-alias (@aliases cmd-name)
         cmd-fn (fn [{:keys [user]}] (yetibot.handler/handle-unparsed-expr a-cmd))]
-    (swap! aliases assoc a-name a-cmd)
-    (cmd-hook [a-name (re-pattern (str "^" a-name "$"))]
+    (swap! aliases assoc cmd-name a-cmd)
+    (cmd-hook [cmd-name (re-pattern (str "^" cmd-name "$"))]
               _ cmd-fn)
     ; manually add docs since the meta on cmd-fn is lost in cmd-hook
-    (help/add-docs a-name [docstring])
+    (help/add-docs cmd-name [docstring])
     (if existing-alias
-      (format "Replaced existing alias %s = %s" a-name existing-alias)
+      (format "Replaced existing alias %s = %s" cmd-name existing-alias)
       (format "%s alias created" a-name))))
 
 (defn add-alias [{:keys [user match] :as cmd-map}]
