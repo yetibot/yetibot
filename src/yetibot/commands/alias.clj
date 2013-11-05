@@ -74,4 +74,4 @@
 (cmd-hook #"alias"
           #"^$" list-aliases
           #"remove\s+(\w+)" remove-alias
-          #"(\S+)\s*\=\s*(.+)" create-alias)
+          #"([\S\s]+)\s*\=\s*(.+)" create-alias)

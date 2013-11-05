@@ -12,7 +12,7 @@
 (defn- mk-sender [sender-key]
   (fn [msg]
     (let [msg (str msg)]
-      ((sender-key *messaging-fns*) (if (blank? msg) "No results" msg)))))
+      ((sender-key *messaging-fns*) (if (empty? msg) "No results" msg)))))
 
 (def send-msg (mk-sender :msg))
 (def send-paste (mk-sender :paste))

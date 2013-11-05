@@ -20,9 +20,10 @@
 (def wait-before-reconnect 15000)
 
 (def send-msg
+  "Rate-limited function for sending messages to IRC. It's rate limited in order
+   to prevent 'Excess Flood' kicks"
   (rate-limit
     (fn [msg]
-      (info "conn is" conn "send message" msg)
       (try
         (irc/message @conn (:IRC_CHANNELS env) msg)
         (catch java.net.SocketException e
@@ -38,10 +39,17 @@
         id (:user info)]
     (users/create-user username (merge info {:id id}))))
 
+(def prepare-paste
+  "Since pastes are sent as individual messages, blank lines would get
+   translated into \"No Results\" by the chat namespace. Instead of a blank
+   line, map it into a single space."
+  (comp (fn [coll] (map #(if (empty? %) " " %) coll))
+        split-lines))
+
 (defn send-paste
   "In IRC there are new newlines. Each line must be sent as a separate message, so
    split it and send one for each"
-  [p] (send-msg-for-each (split-lines p)))
+  [p] (send-msg-for-each (prepare-paste p)))
 
 (defn fetch-users []
   (irc-conn/write-irc-line @conn "WHO" (:IRC_CHANNELS env)))
