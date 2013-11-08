@@ -2,7 +2,7 @@
   :description "A command line in your chat, where chat ∈ {irc,campfire}."
   :profiles {:dev {:dependencies [[midje "1.5-beta1"]]}
              :plugins [[lein-midje "3.0-beta1"]]}
-  :dependencies [[org.clojure/clojure "1.4.0"],
+  :dependencies [[org.clojure/clojure "1.5.0"],
 
                  ; TODO - kill this some day. We're only relying on it for
                  ; cond-let at this point.
