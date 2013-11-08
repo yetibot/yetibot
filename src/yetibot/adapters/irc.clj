@@ -106,16 +106,11 @@
       (:IRC_HOST config) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME config)
       :callbacks callbacks)))
 
-; only try connecting when config is present
-
-(defonce initial-conn
-  (when (conf-valid? config)
-    (connect)))
-
 (defn start
   "Join and fetch all users with WHO <channel>"
   []
-  (when conn
+  (when (conf-valid? config)
+    (connect)
     (irc/join @conn (:IRC_CHANNELS config))
     (fetch-users)))
 
