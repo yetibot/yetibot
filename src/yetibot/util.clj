@@ -12,9 +12,10 @@
 
 (defmacro with-fresh-db
   [& body]
-  `(binding [db/*connection* (api/connect db/*uri*)]
-     (with-latest-database
-       ~@body)))
+  `(when (bound? #'db/*uri*)
+     (binding [db/*connection* (api/connect db/*uri*)]
+       (with-latest-database
+         ~@body))))
 
 (def env
   (let [e (into {} (System/getenv))]
