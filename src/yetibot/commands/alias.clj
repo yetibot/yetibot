@@ -15,7 +15,8 @@
    Note: alias args aren't supported yet:
    alias grid x = !repeat 10 `repeat 10 #{x} | join`"
   [{[_ a-name a-cmd] :match}]
-  (let [a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
+  (let [a-name (s/trim a-name)
+        a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
         docstring (str "alias for " a-cmd)
         cmd-name (first (s/split a-name #" "))
         existing-alias (@aliases cmd-name)
