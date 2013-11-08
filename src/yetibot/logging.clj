@@ -1,14 +1,15 @@
 (ns yetibot.logging
   (:require
+    [yetibot.config :refer [get-config]]
     [yetibot.util :refer [with-fresh-db]]
     [yetibot.models.log :as log]
     [taoensso.timbre
      :as timbre
      :refer [trace debug info warn error fatal spy with-log-level]]))
 
+(timbre/set-level! (get-config :log-level))
 (timbre/set-config! [:appenders :spit :enabled?] true)
 (timbre/set-config! [:shared-appender-config :spit-filename] "/var/log/yetibot/yetibot.log")
-
 
 (defn log-to-db
   [{:keys [ap-config level prefix throwable message] :as args}]
