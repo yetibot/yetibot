@@ -9,6 +9,12 @@
 (timbre/set-config! [:appenders :spit :enabled?] true)
 (timbre/set-config! [:shared-appender-config :spit-filename] "/var/log/yetibot/yetibot.log")
 
+
+(defn log-to-db
+  [{:keys [ap-config level prefix throwable message] :as args}]
+  (with-fresh-db
+    (log/create (select-keys args [:level :prefix :message]))))
+
 ; log to datomic
 (timbre/set-config!
   [:appenders :datomic]
@@ -17,6 +23,4 @@
    :enabled?  true
    :async?    false
    :limit-per-msecs nil ; No rate limit
-   :fn (fn [{:keys [ap-config level prefix throwable message] :as args}]
-         (with-fresh-db
-           (log/create (select-keys args [:level :prefix :message]))))})
+   :fn #'log-to-db})
