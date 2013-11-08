@@ -11,7 +11,6 @@
 
 (defn clojure-cmd
   "clj <expression> # evaluate a clojure expression"
-  {:test #(assert (= #cmd "clj (+ 1 2)") "3")}
   [{:keys [args]}]
   (let [json (try-clojure args)]
     (if (:error json)
