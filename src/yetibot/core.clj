@@ -1,5 +1,6 @@
 (ns yetibot.core
   (:require
+    [yetibot.config :as config]
     [yetibot.db :as db]
     [yetibot.logging]
     [yetibot.loader :refer [load-commands-and-observers]]
@@ -15,6 +16,7 @@
 
 (defn -main [& args]
   (welcome-message)
+  (config/start)
   (db/start)
   (cf/start)
   (irc/start)
