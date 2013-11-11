@@ -1,28 +1,36 @@
 (ns yetibot.api.github
-  (:require [tentacles [users :as u]
-                       [repos :as r]
-                       [events :as e]
-                       [data :as data]
-                       [orgs :as o]]
-            [clojure.string :as s]
-            [clj-http.client :as client]
-            [yetibot.util :refer [env]]
-            [yetibot.util.http :refer [fetch]]))
+  (:require
+    [tentacles
+     [users :as u]
+     [repos :as r]
+     [events :as e]
+     [data :as data]
+     [orgs :as o]]
+    [clojure.string :as s]
+    [clj-http.client :as client]
+    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [yetibot.util.http :refer [fetch]]))
 
 
 ;;; uses tentacles for most api calls, but falls back to raw REST calls when
-;;; tentacles doesn't support something (like Accept headers for raw blob content).
-(def endpoint "https://api.github.com/")
-
+;;; tentacles doesn't support something (like Accept headers for raw blob
+;;; content).
 
 ;;; config
 
-(def token (:GITHUB_TOKEN env))
-(def auth {:oauth-token token})
-(def user (u/me auth))
+(def config (config-for-ns))
+(def configured? (conf-valid?))
+(def endpoint (or (:endpoint config) "https://api.github.com/"))
 
-(def user-name (:login user))
-(def org-name (:GITHUB_ORG env))
+; propogate the configured endpoint to the tentacles library
+(alter-var-root #'tentacles.core/url (constantly endpoint))
+
+(def token (:token config))
+(def auth {:oauth-token token})
+(future
+  (def user (u/me auth))
+  (def user-name (:login user)))
+(def org-name (:org config))
 
 (def org (first (filter
                   #(= (:login %) org-name)

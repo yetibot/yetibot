@@ -1,9 +1,11 @@
 (ns yetibot.commands.github
-  (:require [yetibot.api.github :as gh]
-            [yetibot.util.http :refer [get-json]]
-            [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util :only [env]]))
+  (:require
+    [yetibot.api.github :as gh]
+    [yetibot.util.http :refer [get-json]]
+    [clojure.string :as s]
+    [yetibot.hooks :refer [cmd-hook]]
+    [taoensso.timbre :refer [info]]
+    [yetibot.util :refer [env]]))
 
 (defn feed
   "gh feed # list recent activity"
@@ -39,11 +41,13 @@
         (map fmt-status (get-json "https://status.github.com/api/messages.json"))
         (repeat ["--"])))
 
-(cmd-hook ["gh" #"^gh|github$"]
-          #"feed" feed
-          #"repos urls" repos-urls
-          #"repos" repos
-          #"statuses" statuses
-          #"status$" status
-          #"tags\s+(\S+)" tags
-          #"branches\s+(\S+)" branches)
+(if gh/configured?
+  (cmd-hook ["gh" #"^gh|github$"]
+            #"feed" feed
+            #"repos urls" repos-urls
+            #"repos" repos
+            #"statuses" statuses
+            #"status$" status
+            #"tags\s+(\S+)" tags
+            #"branches\s+(\S+)" branches)
+  (info "GitHub is not configured"))

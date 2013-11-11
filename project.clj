@@ -46,7 +46,7 @@
                  [rate-gate "1.3.1"]
 
                  [clj-wordnik "0.1.0-alpha1"]
-                 [tentacles "0.2.2"]
+                 [tentacles "0.2.5"]
                  [clj-http "0.5.5"]
                  [clj-aws-s3 "0.3.2"]
                  [overtone/at-at "1.0.0"]
