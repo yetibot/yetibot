@@ -1,8 +1,9 @@
 (ns yetibot.commands.s3
-  (:require [yetibot.api.s3 :as s3]
-            [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util :only [env]]))
+  (:require
+    [yetibot.api.s3 :as s3]
+    [clojure.string :as s]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.hooks :refer [cmd-hook]]))
 
 (defn content-cmd
   "s3 content <path> # retrieve content of <path> from S3"
@@ -20,7 +21,9 @@
     (map #(format "%s/%s" bucket %)
          (concat (:common-prefixes res) (map :key (:objects res))))))
 
-(cmd-hook #"s3"
-          #"ls\s+(\S+)" ls
-          #"buckets" buckets
-          #"content\s+(\S+)" content-cmd)
+(if s3/configured?
+  (cmd-hook #"s3"
+            #"ls\s+(\S+)" ls
+            #"buckets" buckets
+            #"content\s+(\S+)" content-cmd)
+  (info "S3 is not configured"))

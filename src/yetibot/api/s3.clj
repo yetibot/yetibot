@@ -1,9 +1,10 @@
 (ns yetibot.api.s3
   (:require [aws.sdk.s3 :as s3]
             [clojure.string :as s]
-            [yetibot.config :refer [config-for-ns]]))
+            [yetibot.config :refer [conf-valid? config-for-ns]]))
 
 (def config (config-for-ns))
+(def configured? (conf-valid?))
 
 (defn content [path]
   (let [[bucket key] (s/split path #"\/" 2)]
