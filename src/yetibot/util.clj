@@ -23,11 +23,17 @@
 
 (def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
 
-(defn make-config [required-keys] (into {} (map (fn [k] [k (env k)]) required-keys)))
+(defn make-config
+  ^{:deprecated "0.1.0"}
+  [required-keys] (into {} (map (fn [k] [k (env k)]) required-keys)))
 
-(defn conf-valid? [c] (every? identity (vals c)))
+(defn conf-valid?
+  ^{:deprecated "0.1.0"}
+  [c] (every? identity (vals c)))
 
-(defmacro ensure-config [& body]
+(defmacro ensure-config
+  ^{:deprecated "0.1.0"}
+  [& body]
   `(when (every? identity ~'config)
      ~@body))
 
