@@ -1,9 +1,10 @@
 (ns yetibot.commands.eval
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util :only [env]]
-        [clojure.string :only [split]]))
+  (:require
+    [yetibot.config :refer [config-for-ns]]
+    [yetibot.hooks :refer [cmd-hook]]
+    [clojure.string :refer [split]]))
 
-(def ^:private privs (set (split (or (:YETIBOT_EVAL_PRIVS env) "") #",")))
+(def ^:private privs (:privs (config-for-ns)))
 
 (defn- user-is-allowed? [user]
   (boolean (some #{(:id user)} privs)))
