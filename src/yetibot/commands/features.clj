@@ -1,17 +1,19 @@
 (ns yetibot.commands.features
   (:require [yetibot.api.github :as gh]
             [clojure.string :as s]
-            [useful.fn :as useful :only rate-limited]
-            [tentacles [issues :as is]])
-  (:use [yetibot.hooks :only [obs-hook cmd-hook]]
-        [yetibot.util :only [env]]
-        [yetibot.chat :only (chat-data-structure)]))
+            [yetibot.config :refer [config-for-ns]]
+            [useful.fn :as useful :refer [rate-limited]]
+            [tentacles [issues :as is]]
+            [yetibot.hooks :refer [obs-hook cmd-hook]]
+            [yetibot.chat :refer (chat-data-structure)]))
 
 (def rate-limit-ms 5000)
 
-(def config {:auth {:oauth-token (:YETIBOT_GITHUB_TOKEN env)}
-             :user (:YETIBOT_GITHUB_ORG_OR_USER env)
-             :repo "yetibot"})
+(def config (:github (config-for-ns)))
+
+(def auth {:auth (:token config)
+           :user (:user config)
+           :repo "yetibot"})
 
 (defn should-add-feature?
   "Loop the regexes that think we should add a feature"
