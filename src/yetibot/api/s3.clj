@@ -1,20 +1,20 @@
 (ns yetibot.api.s3
   (:require [aws.sdk.s3 :as s3]
-            [clojure.string :as s])
-  (:use [yetibot.util :only (env)]))
+            [clojure.string :as s]
+            [yetibot.config :refer [config-for-ns]]))
 
-(def cred {:access-key (:AWS_ACCESS_KEY env), :secret-key (:AWS_SECRET_KEY env)})
+(def config (config-for-ns))
 
 (defn content [path]
   (let [[bucket key] (s/split path #"\/" 2)]
-    (slurp (:content (s3/get-object cred bucket key)))))
+    (slurp (:content (s3/get-object config bucket key)))))
 
 (defn put [path object]
   (let [[bucket key] (s/split path #"\/" 2)]
-    (s3/put-object cred bucket key object)))
+    (s3/put-object config bucket key object)))
 
 (defn buckets []
-  (s3/list-buckets cred))
+  (s3/list-buckets config))
 
 (defn list-objects [bucket prefix]
-  (s3/list-objects cred bucket {:delimiter "/" :prefix prefix}))
+  (s3/list-objects config bucket {:delimiter "/" :prefix prefix}))
