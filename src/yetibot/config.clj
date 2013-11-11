@@ -1,5 +1,8 @@
 (ns yetibot.config
-  (:require [clojure.edn :as edn]))
+  (:require
+    [taoensso.timbre :refer [info warn error]]
+    [clojure.edn :as edn]
+    [clojure.string :refer [blank?]]))
 
 (def ^:private config-path "config/config.edn")
 
@@ -9,12 +12,17 @@
   (edn/read-string (slurp path)))
 
 (defn reload-config []
-  (reset! config (load-edn config-path)))
+  (info "☐ Loading config")
+  (reset! config (load-edn config-path))
+  (info "☑ Config loaded"))
 
 (defn get-config
   [path]
   (let [path (if (coll? path) path [path])]
     (get-in @config (into [:yetibot] path))))
+
+(defn conf-valid? [c]
+  (every? (complement (comp blank? str)) (vals c)))
 
 (defn start []
   (reload-config))

@@ -8,32 +8,29 @@
     [yetibot.models.users :as users]
     [clojure.string :as s]
     [clojure.stacktrace :as st]
-    [yetibot.util :refer [make-config conf-valid?]]
+    [yetibot.config :refer [get-config conf-valid?]]
     [yetibot.util.http :as http]
     [yetibot.util.format :as fmt]
     [clj-campfire.core :as cf]))
 
 ; Settings
-(def config (make-config [:CAMPFIRE_API_KEY
-                          :CAMPFIRE_ROOM_ID
-                          :CAMPFIRE_SUBDOMAIN
-                          :CAMPFIRE_ROOM]))
+(def config (get-config :campfire))
 
-(def room-id (System/getenv "CAMPFIRE_ROOM_ID"))
+(def room-id (:room-id config))
 
 (def chat-source (format "campfire/%s" room-id))
 
 (def cf-settings
-  {:api-token (:CAMPFIRE_API_KEY config),
+  {:api-token (:api-key config),
    :ssl true,
-   :sub-domain (:CAMPFIRE_SUBDOMAIN config)})
-(def room (:CAMPFIRE_ROOM config))
+   :sub-domain (:subdomain config)})
+(def room (:room config))
 (def json-headers {:content-type "application/json"})
 (def escapees {\" "\\\""})
 
 (def base-uri (str "https://" (:sub-domain cf-settings) ".campfirenow.com"))
 (def streaming-uri "https://streaming.campfirenow.com")
-(def auth {:user (:CAMPFIRE_API_KEY config) :password "x" :preemptive true})
+(def auth {:user (:api-key config) :password "x" :preemptive true})
 
 (defn send-message [msg] (cf/message cf-settings room msg))
 

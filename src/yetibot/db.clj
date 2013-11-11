@@ -17,10 +17,8 @@
 (def schemas
   (for [n nss] (do (require n) (deref (ns-resolve n 'schema)))))
 
-(info "Loading Datomic schemas")
-
 (defn start []
+  (info "☐ Loading Datomic schemas")
   (dc/start {:uri (:YETIBOT_DATOMIC_URL env)
-             :schemas schemas}))
-
-(info "✓ Datomic connected")
+             :schemas schemas})
+  (info "☑ Datomic connected"))
