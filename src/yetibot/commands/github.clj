@@ -4,8 +4,7 @@
     [yetibot.util.http :refer [get-json]]
     [clojure.string :as s]
     [yetibot.hooks :refer [cmd-hook]]
-    [taoensso.timbre :refer [info]]
-    [yetibot.util :refer [env]]))
+    [taoensso.timbre :refer [info]]))
 
 (defn feed
   "gh feed # list recent activity"
