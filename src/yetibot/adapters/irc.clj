@@ -8,15 +8,16 @@
      [connection :as irc-conn]]
     [yetibot.models.users :as users]
     [clojure.string :refer [split-lines]]
-    [yetibot.util :refer [env conf-valid? make-config]]
+    [yetibot.config :refer [config-for-ns conf-valid?]]
     [yetibot.chat :refer [send-msg-for-each]]
     [yetibot.util.format :as fmt]
     [yetibot.handler :refer [handle-raw]]))
 
-(def config (make-config [:IRC_HOST :IRC_USERNAME :IRC_CHANNELS]))
+(def config (config-for-ns))
+(def channel (first (:channels config)))
 (def conn (atom nil))
 (declare connect start)
-(def chat-source (format "irc/%s" (:IRC_CHANNELS env)))
+(def chat-source (format "irc/%s" channel))
 (def wait-before-reconnect 15000)
 
 (def send-msg
@@ -25,7 +26,7 @@
   (rate-limit
     (fn [msg]
       (try
-        (irc/message @conn (:IRC_CHANNELS env) msg)
+        (irc/message @conn channel msg)
         (catch java.net.SocketException e
           ; it must have disconnect, try reconnecting again
           (info "SocketException, trying to reconnect in" wait-before-reconnect "ms")
@@ -52,7 +53,7 @@
   [p] (send-msg-for-each (prepare-paste p)))
 
 (defn fetch-users []
-  (irc-conn/write-irc-line @conn "WHO" (:IRC_CHANNELS env)))
+  (irc-conn/write-irc-line @conn "WHO" channel))
 
 (def messaging-fns
   {:msg send-msg
@@ -103,7 +104,7 @@
   (reset!
     conn
     (irc/connect
-      (:IRC_HOST config) (read-string (or (:IRC_PORT env) "6667")) (:IRC_USERNAME config)
+      (:host config) (read-string (or (:port config) "6667")) (:username config)
       :callbacks callbacks)))
 
 (defn start
@@ -111,9 +112,9 @@
   []
   (when (conf-valid? config)
     (connect)
-    (irc/join @conn (:IRC_CHANNELS config))
+    (irc/join @conn channel)
     (fetch-users)))
 
 (defn part []
   (when conn
-    (irc/part @conn (:IRC_CHANNELS config))))
+    (irc/part @conn channel)))

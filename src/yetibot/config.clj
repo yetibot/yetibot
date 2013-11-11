@@ -16,7 +16,6 @@
 (defn reload-config []
   (info "☐ Loading config")
   (reset! config (load-edn config-path))
-  (info (load-edn config-path))
   (info "☑ Config loaded"))
 
 (defn get-config
