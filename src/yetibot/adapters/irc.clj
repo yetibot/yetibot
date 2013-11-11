@@ -8,15 +8,13 @@
      [connection :as irc-conn]]
     [yetibot.models.users :as users]
     [clojure.string :refer [split-lines]]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [yetibot.config :refer [get-config config-for-ns conf-valid?]]
     [yetibot.chat :refer [send-msg-for-each]]
     [yetibot.util.format :as fmt]
     [yetibot.handler :refer [handle-raw]]))
 
-(def config (config-for-ns))
-(def channel (first (:channels config)))
 (def conn (atom nil))
-(declare connect start)
+(declare config channel connect start)
 (def chat-source (format "irc/%s" channel))
 (def wait-before-reconnect 15000)
 
@@ -85,7 +83,7 @@
     (users/add-user chat-source
                     (create-user {:user user :nick nick}))))
 
-(defn raw-log [a b c] (debug "raw" b c))
+(defn raw-log [a b c] #_(debug b c))
 
 (defn handle-end-of-names
   "Callback for end of names list from IRC. Currently not doing anything with it."
@@ -110,6 +108,8 @@
 (defn start
   "Join and fetch all users with WHO <channel>"
   []
+  (def config (get-config :yetibot :adapters :irc))
+  (def channel (first (:channels config)))
   (when (conf-valid? config)
     (connect)
     (irc/join @conn channel)

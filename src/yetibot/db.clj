@@ -1,6 +1,6 @@
 (ns yetibot.db
   (:require
-    [yetibot.config :as config :refer [config-for-ns conf-valid?]]
+    [yetibot.config :refer [get-config config-for-ns conf-valid?]]
     [datomico.db :as db]
     [datomico.core :as dc]
     [datomic.api :as api]
@@ -18,10 +18,10 @@
   (for [n nss] (do (require n) (deref (ns-resolve n 'schema)))))
 
 (defn start []
-  (if (conf-valid?)
+  (if (conf-valid? (get-config :yetibot :db))
     (do
       (info "☐ Loading Datomic schemas")
-      (dc/start {:uri (:datomic-url (config-for-ns))
+      (dc/start {:uri (:datomic-url (get-config :yetibot :db))
                  :schemas schemas})
       (info "☑ Datomic connected"))
     (warn ":datomic-url is not configured, unable to connect.")))

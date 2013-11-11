@@ -14,21 +14,24 @@
   (edn/read-string (slurp path)))
 
 (defn reload-config []
-  (info "☐ Loading config")
-  (reset! config (load-edn config-path))
-  (info "☑ Config loaded"))
+  (let [new-conf (load-edn config-path)]
+    (info "☐ Loading config")
+    (reset! config new-conf)
+    (info "☑ Config loaded")
+    new-conf))
 
 (defn get-config
-  [path]
+  [& path]
   (let [path (if (coll? path) path [path])]
     (get-in @config path)))
 
 (defn config-for-ns []
-  (get-config (map keyword (split (str *ns*) #"\."))))
+  (apply get-config (map keyword (split (str *ns*) #"\."))))
 
 (defn conf-valid?
   ([] (conf-valid? (config-for-ns)))
-  ([c] (every? (complement (comp blank? str)) (vals c))))
+  ([c]
+   (and c
+        (every? (complement (comp blank? str)) (vals c)))))
 
-(defn start []
-  (reload-config))
+(defonce load-conf (reload-config))

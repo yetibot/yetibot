@@ -16,7 +16,6 @@
 
 (defn -main [& args]
   (welcome-message)
-  (config/start)
   (db/start)
   (cf/start)
   (irc/start)
