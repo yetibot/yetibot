@@ -6,15 +6,18 @@
             [clj-time.core :as t]
             [clj-time.coerce :as c]
             [clojure.core.cache :as cache]
+            [yetibot.config :refer [config-for-ns]]
             [yetibot.hooks :refer [cmd-hook]]
             [yetibot.util.http :refer [fetch get-json with-client]]))
 
 
-(def base-uri (System/getenv "JENKINS_URI"))
-(def auth {:user (System/getenv "JENKINS_USER")
-           :password (System/getenv "JENKINS_API_KEY")
+(def config (config-for-ns))
+
+(def base-uri (:uri config))
+(def auth {:user (:user config)
+           :password (:api-key config)
            :preemptive true})
-(def default-job (System/getenv "JENKINS_DEFAULT_JOB"))
+(def default-job (:default-job config))
 
 ; Helpers
 (def cache-ttl (* 1000 60 60))
