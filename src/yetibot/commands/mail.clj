@@ -5,7 +5,7 @@
     [clojure.string :as s]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.models.mail :refer [fetch-unread-mail]]
-    [yetibot.util :refer [env ensure-config]]
+    [yetibot.config :refer [conf-valid? config-for-ns]]
     [yetibot.hooks :refer [cmd-hook]]))
 
 (def default-subject "A friendly message from YetiBot")
@@ -13,12 +13,7 @@
 (def error-message "Failed to send :poop:")
 (def no-messages "No new messages. :soon:")
 
-(def config {:host (:YETIBOT_EMAIL_HOST env)
-             :user (:YETIBOT_EMAIL_USER env)
-             :pass (:YETIBOT_EMAIL_PASS env)
-             :from (:YETIBOT_EMAIL_FROM env)
-             :bcc (:YETIBOT_EMAIL_BCC env)
-             :ssl true})
+(def config (merge (config-for-ns) {:ssl true}))
 
 (defn encode-images [content]
   (s/replace content #"(\S+)(.jpg|.png|.gif)" #(format "<img src='%s'>" (first %))))
@@ -69,7 +64,7 @@
   "mail fetch # fetch unread messages from YetiBot's mail"
   [_] (or (fetch-unread-mail) no-messages))
 
-(ensure-config
+(if (conf-valid?)
   (cmd-hook #"mail"
             #"fetch" fetch-cmd
             #"(.+) \/ (.+) \/ (.*)" send-body-and-subject
