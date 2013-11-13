@@ -21,8 +21,6 @@
   (let [e (into {} (System/getenv))]
     (zipmap (map keyword (keys e)) (vals e))))
 
-(def bot-id (str (System/getenv "CAMPFIRE_BOT_ID")))
-
 (defn make-config
   ^{:deprecated "0.1.0"}
   [required-keys] (into {} (map (fn [k] [k (env k)]) required-keys)))

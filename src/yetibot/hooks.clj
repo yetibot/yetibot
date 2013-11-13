@@ -8,8 +8,7 @@
     [yetibot.models.help :as help]
     [robert.hooke :as rh]
     [clojure.stacktrace :as st]
-    [clojure.contrib.cond :refer [cond-let]]
-    [yetibot.util :refer [bot-id]]))
+    [clojure.contrib.cond :refer [cond-let]]))
 
 (def ^:private Pattern java.util.regex.Pattern)
 
