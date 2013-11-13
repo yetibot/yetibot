@@ -1,9 +1,13 @@
 (ns yetibot.commands.wolfram
-  (:require [clojure.string :as s]
-            [clojure.xml :as xml]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [clojure.string :as s]
+    [clojure.xml :as xml]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [yetibot.hooks :refer [cmd-hook]]))
 
-(def app-id (System/getenv "WOLFRAM_APP_ID"))
+(def config (config-for-ns))
+(def app-id (:app-id config))
 (def endpoint (str "http://api.wolframalpha.com/v2/query?appid=" app-id))
 
 (defn parse-imgs-from-xml [xml]
@@ -15,8 +19,10 @@
   [{q :match}]
   (flatten
     (map #(str (second %) "&t=.jpg")
-      (parse-imgs-from-xml
-        (xml/parse (str endpoint "&input=" q))))))
+         (parse-imgs-from-xml
+           (xml/parse (str endpoint "&input=" q))))))
 
-(cmd-hook #"wolfram"
-          #".*" search-wolfram)
+(if (conf-valid?)
+  (cmd-hook #"wolfram"
+            #".*" search-wolfram)
+  (info "Wolfram is not configured"))

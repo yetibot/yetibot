@@ -1,7 +1,9 @@
 (ns yetibot.commands.weather
-  (:require [yetibot.util.http :refer [get-json]]
-            [yetibot.config :refer [config-for-ns conf-valid?]]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [yetibot.util.http :refer [get-json]]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [yetibot.hooks :refer [cmd-hook]]))
 
 (def config (config-for-ns))
 
@@ -16,7 +18,7 @@
   (let [co (:current_observation c)
         loc (:observation_location co)]
     [(format "Current conditions for %s:" (:full loc))
-     (:temperature_string co) 
+     (:temperature_string co)
      (format "Feels like: %s" (:feelslike_string co))
      (format "Windchill: %s" (:windchill_string co))
      (format "Wind: %s" (:wind_string co))
@@ -33,6 +35,8 @@
   "weather # look up weather for default location"
   [_] (weather-cmd {:match default-zip}))
 
-(cmd-hook #"weather"
-          #".+" weather-cmd
-          _ default-weather-cmd)
+(if (conf-valid?)
+  (cmd-hook #"weather"
+            #".+" weather-cmd
+            _ default-weather-cmd)
+  (info "Weather is not configured"))
