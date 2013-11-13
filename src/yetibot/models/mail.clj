@@ -1,12 +1,16 @@
 (ns yetibot.models.mail
   (:require [overtone.at-at :refer [at mk-pool every stop show-schedule]]
-            [yetibot.util :refer [env ensure-config]]
             [clojure.string :as s]
             [inflections.core :refer [pluralize]]
+            [yetibot.config :refer [config-for-ns conf-valid?]]
             [clojure-mail [core :refer :all]
                           [message :as msg]]))
 
-(auth! (:YETIBOT_EMAIL_USER env) (:YETIBOT_EMAIL_PASS env))
+(def config (config-for-ns))
+(def configured? (conf-valid?))
+
+(when (conf-valid?)
+  (auth! (:user config) (:pass config)))
 
 (def store (gen-store))
 (def pool (mk-pool))
