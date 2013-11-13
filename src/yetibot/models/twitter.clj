@@ -1,6 +1,6 @@
 (ns yetibot.models.twitter
   (:require
-    [yetibot.util :refer [ensure-config env]]
+    [yetibot.config :refer [config-for-ns conf-valid?]]
     [clojure.string :refer [join]]
     [yetibot.adapters.campfire :as cf]
     [clojure.data.json :as json]
@@ -16,6 +16,8 @@
     (twitter.callbacks.protocols SyncSingleCallback)
     (twitter.callbacks.protocols AsyncStreamingCallback)))
 
+(def config (config-for-ns))
+
 ;;;; schema for storing topics to track
 
 (def model-namespace :twitter)
@@ -28,10 +30,10 @@
 
 ;;;; config
 
-(def config {:consumer_key (:TWITTER_CONSUMER_KEY env)
-             :consumer_secret (:TWITTER_CONSUMER_SECRET env)
-             :token (:TWITTER_TOKEN env)
-             :secret (:TWITTER_SECRET env)})
+(def config {:consumer_key (:consumer-key config)
+             :consumer_secret (:consumer-secret config)
+             :token (:token config)
+             :secret (:secret config)})
 
 (def creds (apply make-oauth-creds
                   ((juxt :consumer_key :consumer_secret :token :secret) config)))
