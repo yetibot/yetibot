@@ -49,3 +49,18 @@
         (re-find #"\n" formatted) (send-paste formatted)
         ; send as regular message
         :else (send-msg formatted)))))
+
+; Passive chatters (those that are not responding to a command from a single
+; chat interface) need to be able to broadcast messages to any sources, so when
+; a namespace is configured it should add itself to this list.
+(defonce active-chat-namespaces
+  (atom []))
+
+(defn register-chat-adapter [n]
+  (swap! active-chat-namespaces conj n))
+
+(defn send-msg-to-all-adapters [msg]
+  (doseq [n @active-chat-namespaces]
+    (when-let [mfns (deref (ns-resolve n 'messaging-fns))]
+      (binding [*messaging-fns* mfns]
+        (chat-data-structure msg)))))

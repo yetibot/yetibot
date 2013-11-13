@@ -9,7 +9,7 @@
     [yetibot.models.users :as users]
     [clojure.string :refer [split-lines]]
     [yetibot.config :refer [get-config config-for-ns conf-valid?]]
-    [yetibot.chat :refer [send-msg-for-each]]
+    [yetibot.chat :refer [send-msg-for-each register-chat-adapter]]
     [yetibot.util.format :as fmt]
     [yetibot.handler :refer [handle-raw]]))
 
@@ -111,6 +111,7 @@
   (def config (get-config :yetibot :adapters :irc))
   (def channel (first (:channels config)))
   (when (conf-valid? config)
+    (register-chat-adapter (symbol (str *ns*)))
     (connect)
     (irc/join @conn channel)
     (fetch-users)))

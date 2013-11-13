@@ -1,7 +1,7 @@
 (ns yetibot.adapters.campfire
   (:require
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.chat :as chat]
+    [yetibot.chat :as chat :refer [register-chat-adapter]]
     [yetibot.handler :refer [handle-raw]]
     [http.async.client :as c]
     [clojure.data.json :as json]
@@ -121,6 +121,7 @@
 (defn start []
   (if (conf-valid? config)
     (do
+      (register-chat-adapter (symbol (str *ns*)))
       (future (reset-users))
       (future
         (while true
