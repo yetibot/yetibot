@@ -1,11 +1,15 @@
 (ns yetibot.commands.wordnik
-  (:require [wordnik.api.word :as word]
-            [wordnik.api.words :as words]
-            [yetibot.hooks :refer [cmd-hook]]
-            [clojure.string :as s])
+  (:require
+    [wordnik.api.word :as word]
+    [wordnik.api.words :as words]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.hooks :refer [cmd-hook]]
+    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [clojure.string :as s])
   (:use wordnik.core))
 
-(def ^:private api-key (System/getenv "WORDNIK_API_KEY"))
+(def config (config-for-ns))
+(def ^:private api-key (:api-key config))
 
 (defmacro ^:private with-auth [& body]
   `(with-api-key api-key ~@body))
@@ -36,7 +40,9 @@
   "wordnik wotd # look up the Word of the Day on Wordnik"
   [_] (with-auth (format-defs (words/wotd))))
 
-(cmd-hook #"wordnik"
-          #"define\s(\w+)" define
-          #"random" random
-          #"wotd" wotd)
+(if (conf-valid?)
+  (cmd-hook #"wordnik"
+            #"define\s(\w+)" define
+            #"random" random
+            #"wotd" wotd)
+  (info "Wordnik is not configured"))
