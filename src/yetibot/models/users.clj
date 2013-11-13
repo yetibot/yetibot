@@ -1,6 +1,7 @@
 (ns yetibot.models.users
   (:require
     [taoensso.timbre :refer [info warn error]]
+    [yetibot.config :refer [config-for-ns]]
     [clj-time.core :refer [now]]))
 
 (def config {:active-threshold-milliseconds (* 15 60 1000)})
@@ -65,7 +66,8 @@
   ;     (< ms-since-active active-threshold-milliseconds))
   ;   false))
 
-(defn is-yetibot? [user] (= (str (:id user)) (System/getenv "CAMPFIRE_BOT_ID")))
+; TODO: so borked
+(defn is-yetibot? [user] false)
 
 (defn get-active-users [] (filter is-active? (vals @users)))
 
