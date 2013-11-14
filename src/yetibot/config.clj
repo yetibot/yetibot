@@ -14,6 +14,7 @@
   (try
     (edn/read-string (slurp path))
     (catch Exception _
+      (warn "Config is missing")
       {})))
 
 (defn reload-config []
