@@ -6,7 +6,7 @@
     [clojure.edn :as edn]
     [clojure.string :refer [blank? split]]))
 
-(def ^:private config-path "config/config.edn")
+(def config-path "config/config.edn")
 
 (defonce ^:private config (atom nil))
 
@@ -19,7 +19,7 @@
 
 (defn reload-config []
   (let [new-conf (load-edn config-path)]
-    (info "☐ Loading config")
+    (info "☐ Loading config at" config-path)
     (reset! config new-conf)
     (info "☑ Config loaded")
     new-conf))

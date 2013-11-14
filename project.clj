@@ -1,6 +1,8 @@
 (defproject yetibot "0.1.0-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,campfire}."
-  :profiles {:dev {:dependencies [[midje "1.5-beta1"]]}
+  :profiles {:dev {:source-paths ["dev"]
+                   :dependencies [[midje "1.5-beta1"]]}
+             :test {:resource-paths ["test/config"]}
              :plugins [[lein-midje "3.0-beta1"]]}
   :resource-paths ["config"]
   :repl-options {:init-ns user
