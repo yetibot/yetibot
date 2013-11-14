@@ -1,14 +1,16 @@
 (ns yetibot.models.status
-  (:require [clj-time
-             [coerce :refer [from-date]]
-             [format :refer [formatter unparse]]
-             [core :refer [day year month
-                           to-time-zone after?
-                           default-time-zone now time-zone-for-id date-time utc
-                           ago hours days weeks years months]]]
-            [yetibot.models.users :refer [get-user]]
-            [datomico.core :as dc]
-            [datomico.db :refer [q]]))
+  (:require
+    [clj-time
+     [coerce :refer [from-date]]
+     [format :refer [formatter unparse]]
+     [core :refer [day year month
+                   to-time-zone after?
+                   default-time-zone now time-zone-for-id date-time utc
+                   ago hours days weeks years months]]]
+    [yetibot.models.users :refer [get-user]]
+    [yetibot.interpreter]
+    [datomico.core :as dc]
+    [datomico.db :refer [q]]))
 
 ;;;; schema
 

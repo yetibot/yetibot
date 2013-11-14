@@ -60,6 +60,8 @@
   (swap! active-chat-namespaces conj n))
 
 (defn send-msg-to-all-adapters [msg]
+  (prn "send msg to all" msg)
+  (prn @active-chat-namespaces)
   (doseq [n @active-chat-namespaces]
     (when-let [mfns (deref (ns-resolve n 'messaging-fns))]
       (binding [*messaging-fns* mfns]

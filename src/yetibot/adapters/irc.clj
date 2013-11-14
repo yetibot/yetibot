@@ -111,7 +111,7 @@
   (def config (get-config :yetibot :adapters :irc))
   (def channel (first (:channels config)))
   (when (conf-valid? config)
-    (register-chat-adapter (symbol (str *ns*)))
+    (register-chat-adapter 'yetibot.adapters.irc)
     (connect)
     (irc/join @conn channel)
     (fetch-users)))

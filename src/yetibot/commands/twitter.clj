@@ -1,5 +1,6 @@
 (ns yetibot.commands.twitter
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.string :refer [join]]
     [yetibot.models.twitter :as model]
     [yetibot.hooks :refer [cmd-hook suppress]]))
@@ -62,12 +63,14 @@
       (format "Stopped tracking %s" topic))
     (format "You're not tracking %s" topic)))
 
-(cmd-hook #"twitter"
-          #"^lookup\s+(.+)" lookup
-          #"^tweet\s+(.+)" tweet
-          #"^following" following
-          #"^follow\s+(.+)" follow
-          #"^unfollow\s+(.+)" unfollow
-          #"^tracking" tracking
-          #"^untrack\s+(.+)" untrack
-          #"^track\s+(.+)" track)
+(if model/configured?
+  (cmd-hook #"twitter"
+            #"^lookup\s+(.+)" lookup
+            #"^tweet\s+(.+)" tweet
+            #"^following" following
+            #"^follow\s+(.+)" follow
+            #"^unfollow\s+(.+)" unfollow
+            #"^tracking" tracking
+            #"^untrack\s+(.+)" untrack
+            #"^track\s+(.+)" track)
+  (info "Twitter is not configured."))

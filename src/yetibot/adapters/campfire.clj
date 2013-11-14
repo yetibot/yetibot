@@ -121,7 +121,7 @@
 (defn start []
   (if (conf-valid? config)
     (do
-      (register-chat-adapter (symbol (str *ns*)))
+      (register-chat-adapter 'yetibot.adapters.campfire)
       (future (reset-users))
       (future
         (while true

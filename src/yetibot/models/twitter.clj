@@ -2,7 +2,7 @@
   (:require
     [yetibot.config :refer [config-for-ns conf-valid?]]
     [clojure.string :refer [join]]
-    [yetibot.adapters.campfire :as cf]
+    [yetibot.chat :as chat]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
     [twitter.callbacks :refer :all]
@@ -17,6 +17,7 @@
     (twitter.callbacks.protocols AsyncStreamingCallback)))
 
 (def config (config-for-ns))
+(def configured? (conf-valid?))
 
 ;;;; schema for storing topics to track
 
@@ -38,16 +39,26 @@
 (def creds (apply make-oauth-creds
                   ((juxt :consumer_key :consumer_secret :token :secret) config)))
 
-;;;; streaming callback
+;;;; helper
 
 (defn format-url [user id] (format "https://twitter.com/%s/status/%s" user id))
+
+(defn send-tweet [json]
+  (let [screen-name (:screen_name (:user json))
+        url (format-url screen-name (:id json))]
+    (prn "send tweet" (:text json))
+    (chat/send-msg-to-all-adapters
+      [(format "%s – @%s" (:text json) screen-name)
+       url])))
+
+;;;; streaming callback
 
 (defn succ [x y]
   (try
     (let [raw (str y)
           json (if-not (empty? raw) (json/read-json raw))]
       (if (and json (:user json))
-        (cf/send-tweet (format-url (:screen_name (:user json)) (:id json)))))
+        (send-tweet json)))
     (catch Exception e)))
 
 (def fail (comp println response-return-everything))
