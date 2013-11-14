@@ -11,7 +11,10 @@
 (defonce ^:private config (atom nil))
 
 (defn- load-edn [path]
-  (edn/read-string (slurp path)))
+  (try
+    (edn/read-string (slurp path))
+    (catch Exception _
+      {})))
 
 (defn reload-config []
   (let [new-conf (load-edn config-path)]
