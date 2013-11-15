@@ -24,7 +24,7 @@
 (def model-namespace :twitter)
 
 (def schema (dc/build-schema model-namespace
-                             [[:user-id :long]
+                             [[:user :string]
                               [:topic :string]]))
 
 (dc/create-model-fns model-namespace)
@@ -88,7 +88,7 @@
 (defn reload-topics [] (reset-streaming-topics (map :topic (find-all))))
 
 (defn add-topic [user-id topic]
-  (create {:user-id user-id :topic topic})
+  (create {:user user-id :topic topic})
   (reload-topics))
 
 (defn remove-topic [topic-id]
