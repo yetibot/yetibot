@@ -18,5 +18,5 @@
 (use-fixtures :once wrap)
 
 (deftest test-config-lookup
-  (is (= "light" (lookup-config {:match "yetibot quod libet"})))
-  (is (= "baz" (lookup-config {:match "foo bar"}))))
+  (is (= "\"light\"\n" (lookup-config {:match "yetibot quod libet"})))
+  (is (= "\"baz\"\n"(lookup-config {:match "foo bar"}))))
