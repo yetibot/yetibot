@@ -91,10 +91,18 @@
 (defmulti fmt-event :type)
 
 (defmethod fmt-event "PushEvent" [e]
-  (str
-    (-> e :actor :login)
-    " pushed to "
-    (-> e :payload :ref)))
+  (into [(str (-> e :actor :login)
+              " pushed to "
+              (s/replace (-> e :payload :ref) "refs/heads/" "")
+              " at "
+              (-> e :repo :name))]
+        (map (fn [{:keys [author sha message]}]
+               (str "* "
+                    (apply str (take 7 sha))
+                    " "
+                    message
+                    " [" (:name author) "]"))
+             (-> e :payload :commits))))
 
 (defmethod fmt-event :default [e]
   (s/join " "
@@ -111,5 +119,3 @@
 
 (defn formatted-events []
   (fmt-events (events)))
-
-
