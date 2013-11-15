@@ -3,7 +3,7 @@
             [yetibot.hooks :refer [cmd-hook]]
             [yetibot.util.http :refer [fetch ensure-img-suffix]]))
 
-(def endpoint "http://replygif.net/r")
+(def endpoint "http://replygif.net/random")
 
 (def img-pattern #"(http://replygif.net/i/\d+)")
 
