@@ -19,7 +19,6 @@
 
 (def auth (config-for-ns))
 
-
 ; API calls
 (def gen-trending
   "Retrieves trending generators"
@@ -85,7 +84,9 @@
 
 ; Chat senders
 (defn chat-instance [i]
-  (str (s/replace (:instanceImageUrl i) "400x" "500x")))
+  (-> (:instanceImageUrl i)
+      (s/replace "cdn.memegenerator.co" "cdn.memegenerator.net")
+      (s/replace "400x" "500x")))
 
 (defn chat-instance-popular
   "meme popular                # list random popular meme instances from the top 20 in the last day"
