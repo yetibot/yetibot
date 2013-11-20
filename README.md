@@ -19,8 +19,8 @@ unix-style piping and arbitrarily-nested sub expressions.
 ## Configuration
 
 Configuration lives at `config/config.edn`, which is `.gitignore`d. See
-[config/config-sample.edn](config/config-sample.edn) for a sample config. You
-can `mv` this to `config/config.edn` and fill in the blanks.
+[config/config-sample.edn](config/config-sample.edn) for a sample config.
+`mv` this to `config/config.edn` and fill in the blanks to get started.
 
 ## Running
 
