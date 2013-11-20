@@ -2,12 +2,12 @@
 
 You can treat yetibot as a communal command line. It works well for:
 
- - teaching (how to run internal automation, language evaluation for JS, Scala,
-   Clojure)
- - productivity (automating things around Jenkins, JIRA, running SSH commands on
-   various servers, and interacting with internal APIs via private yetibot
-   plugins)
- - fun (google image search, gif lookups, meme generation)
+ - **teaching**: how to run internal automation, language evaluation for JS,
+   Scala, Clojure
+ - **productivity**: automating things around Jenkins, JIRA, running SSH
+   commands on various servers, and interacting with internal APIs via private
+   yetibot plugins
+ - **fun**: google image search, gif lookups, meme generation
 
 In addition to a wealth of commands (see `!help all` to view them), it supports
 unix-style piping and arbitrarily-nested sub expressions.
