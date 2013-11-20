@@ -51,7 +51,8 @@ does ie support ttf? No, it is sucky.
 
 ### Backticks
 
-Backticks can't be nested.
+Backticks provide a lighweight syntax for sub-expressions, but they can't be
+nested.
 
 ```
 !meme grumpy cat: `catfact` / False
