@@ -1,7 +1,8 @@
 (ns yetibot.commands.memethat
-  (:require [yetibot.models.history :as h]
-            ; [yetibot.commands.meme-generator :as meme]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [yetibot.models.history :as h]
+    [yetibot.models.imgflip :as meme]
+    [yetibot.hooks :refer [cmd-hook]]))
 
 (def ^:private history-ignore [#"^.trollthat$" #"^.(\w+)that$"])
 
@@ -20,20 +21,19 @@
 (defn- format-chat [i]
   (:body i))
 
-(defn- meme-it [chat-source gen]
+(defn- meme-it [chat-source meme-query]
   (let [chat (find-chat-to-memeify chat-source)]
     (if chat
       (yetibot.handler/handle-unparsed-expr
-        (format "meme %s: %s" gen (format-chat chat)))
-      (format "No history to %s." (if (= gen "troll") gen "meme")))))
+        (format "meme %s: %s" meme-query (format-chat chat)))
+      (format "No history to meme :("))))
 
 ; memethat
 (defn memethat
   "memethat # use a random generator from trending memes to memeify the last thing said"
   [{:keys [chat-source]}]
-  (let [trending (:result (meme/gen-trending))
-        gen (if trending (rand-nth (map :displayName trending)) "y u no")]
-   (meme-it chat-source gen)))
+  (let [random-meme (-> (meme/memes) :data :memes rand-nth)]
+    (meme-it chat-source (:name random-meme))))
 
 (cmd-hook #"memethat"
           _ memethat)

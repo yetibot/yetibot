@@ -8,7 +8,7 @@
 (defn- instance-result [json]
   (if (:success json)
     (-> json :data  :url)
-    (str "Failed to generate:" (-> json :error_message))))
+    (str "Failed to generate meme: " (-> json :error_message))))
 
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"
