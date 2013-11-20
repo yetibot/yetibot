@@ -22,6 +22,9 @@ Configuration lives at `config/config.edn`, which is `.gitignore`d. See
 [config/config-sample.edn](config/config-sample.edn) for a sample config. You
 can `mv` this to `config/config.edn` and fill in the blanks.
 
+## Running
+
+Once configuration is in place, simply `lein run`.
 
 ## Usage
 
