@@ -24,7 +24,7 @@
     (model/generate-meme-by-query inst text)))
 
 (defn preview-cmd
-  "meme search <term> # query available meme generators"
+  "meme preview <term> # preview an example of the first match for <term>"
   [{[_ term] :match}]
   (if-let [matches (model/search-memes term)]
     (str "http:" (-> matches first :url))
