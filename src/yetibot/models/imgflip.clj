@@ -1,6 +1,6 @@
 (ns yetibot.models.imgflip
   (:require
-    [clojure.string :refer [split join]]
+    [clojure.string :as s :refer [split join]]
     [yetibot.config :refer [get-config conf-valid?]]
     [yetibot.util.http :refer [get-json map-to-query-string encode]]
     [clojure.core.memoize :as m]))
@@ -12,10 +12,18 @@
 (defn fetch-memes [] (get-json (str endpoint "/get_memes")))
 (def memes (m/ttl fetch-memes :ttl/threshold 3600000)) ; one hour memo
 
+(defn- match-meme-name
+  "Remove spaces from meme name to provide great chance of match"
+  [p meme]
+  (or
+    (re-find p (:name meme))
+    (re-find p (s/replace (:name meme) #"\s" ""))))
+
 (defn search-memes [query]
   (let [ms (-> (memes) :data :memes)
-        p (re-pattern (str "(?i)" query))]
-    (let [matching-ms (filter #(re-find p (:name %)) ms)]
+        p (re-pattern (str "(?i)" query))
+        match-fn (partial match-meme-name p)]
+    (let [matching-ms (filter match-fn ms)]
       (when-not (empty? matching-ms)
         matching-ms))))
 
