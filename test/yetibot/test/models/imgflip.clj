@@ -1,0 +1,32 @@
+(ns yetibot.test.models.imgflip
+  (:require
+    [clojure.test :refer :all]
+    [yetibot.models.imgflip :refer :all]))
+
+(def ms (memes))
+
+(def not-nil? (complement nil?))
+
+(deftest config-test
+  (is (not (nil? config))))
+
+(deftest memes-list
+  (is (:success ms))
+  (is (> (-> ms :data :memes count) 0)))
+
+(deftest search-memes-test
+  (is (= "Chuck Norris Approves" (:name (first (search-memes "chuck"))))))
+
+(deftest generate-meme-test
+  (let [m (generate-meme "61579" "foo" "bar")]
+    (is (:success m))
+    (is (not-nil? (-> m :data)))))
+
+(deftest generate-meme-by-query-test
+  (is (:success (generate-meme-by-query "simply" "foo" "bar")))
+  (is (:success (generate-meme-by-query "simply" "foo bar"))))
+
+(deftest generate-meme-notfound-handling
+  (let [m (generate-meme-by-query "notfound" "foo")]
+    (is (not (:success m)) "it should not be successful")
+    (is (:error_message m) "it should have an error message")))

@@ -1,4 +1,6 @@
-(ns yetibot.commands.meme-generator
+(ns yetibot.models.meme-generator
+  "This is no longer in use as memegenerator.net is down currently and goes down
+   often."
   (:require
     [http.async.client :as client]
     [taoensso.timbre :refer [info warn error]]
@@ -6,7 +8,7 @@
     [yetibot.config :refer [config-for-ns conf-valid?]]
     [robert.hooke :as rh]
     [yetibot.hooks :refer [cmd-hook]]
-    [yetibot.util.http :refer [get-json encode map-to-query-string
+    [yetibot.util.http :refer [get-json encode map-to-query-string fetch
                                with-client]]))
 
 (def base-uri "http://version1.api.memegenerator.net/")
@@ -29,6 +31,12 @@
   "Retrieves popular generators"
   (let [uri (str base-uri (:popular apis))]
     (:result (get-json uri auth))))
+
+(let [q "rage"
+      url (str base-uri (:search-generators apis) (encode q))]
+  (prn url)
+  (fetch url))
+
 
 (defn search-generators [q]
   (let [result (:result (get-json (str base-uri (:search-generators apis) (encode q))))]
@@ -137,12 +145,12 @@
                      (map (partial s/join " ")
                           (split-at (/ (count spl) 2) spl)))})))
 
-(if (conf-valid?)
-  (cmd-hook ["meme" #"meme$"]
-            #"^popular$" chat-instance-popular
-            #"^popular\s(.+)" chat-instance-popular-for-gen
-            #"^trending" trending-cmd
-            #"^(.+?):(.+)\/(.*)$" generate-cmd
-            #"^(.+?):(.+)$" generate-auto-split-cmd
-            #"^(?:search\s)?(.+)" search-cmd)
-  (info "Meme generator is not configured"))
+; (if (conf-valid?)
+;   (cmd-hook ["meme" #"meme$"]
+;             #"^popular$" chat-instance-popular
+;             #"^popular\s(.+)" chat-instance-popular-for-gen
+;             #"^trending" trending-cmd
+;             #"^(.+?):(.+)\/(.*)$" generate-cmd
+;             #"^(.+?):(.+)$" generate-auto-split-cmd
+;             #"^(?:search\s)?(.+)" search-cmd)
+;   (info "Meme generator is not configured"))

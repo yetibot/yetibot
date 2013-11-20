@@ -1,6 +1,6 @@
 (ns yetibot.commands.memethat
   (:require [yetibot.models.history :as h]
-            [yetibot.commands.meme-generator :as meme]
+            ; [yetibot.commands.meme-generator :as meme]
             [yetibot.hooks :refer [cmd-hook]]))
 
 (def ^:private history-ignore [#"^.trollthat$" #"^.(\w+)that$"])
