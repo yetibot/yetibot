@@ -122,8 +122,9 @@ Curious how the internals of YetiBot works? At a high level:
   interpreter, which handles things like nested sub-expressions and piped
   commands:
   https://github.com/devth/yetibot/blob/master/src/yetibot/interpreter.clj
-- namespaces are `hook`ed into the interpreter's `handle-cmd` fn using a
-  `cmd-hook` macro and triggered via regex prefix matching:
+- [command namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
+  are `hook`ed into the interpreter's `handle-cmd` fn using a
+  cmd-hook` macro and triggered via regex prefix matching:
   https://github.com/devth/yetibot/blob/master/src/yetibot/hooks.clj
 
 ## Getting help
