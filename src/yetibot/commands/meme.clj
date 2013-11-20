@@ -23,6 +23,13 @@
   (instance-result
     (model/generate-meme-by-query inst text)))
 
+(defn preview-cmd
+  "meme search <term> # query available meme generators"
+  [{[_ term] :match}]
+  (if-let [matches (model/search-memes term)]
+    (str "http:" (-> matches first :url))
+    (str "Couldn't find any memes for " term)))
+
 (defn search-cmd
   "meme search <term> # query available meme generators"
   [{[_ term] :match}]
@@ -37,5 +44,6 @@
             ; #"^trending" trending-cmd
             #"^(.+?):(.+)\/(.*)$" generate-cmd
             #"^(.+?):(.+)$" generate-auto-split-cmd
+            #"^preview\s+(.+)" preview-cmd
             #"^(?:search\s)?(.+)" search-cmd)
   (info "Imgflip is not configured for meme generation"))
