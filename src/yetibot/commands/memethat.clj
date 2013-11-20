@@ -4,7 +4,7 @@
     [yetibot.models.imgflip :as meme]
     [yetibot.hooks :refer [cmd-hook]]))
 
-(def ^:private history-ignore [#"^.trollthat$" #"^.(\w+)that$"])
+(def ^:private history-ignore [#"^\!"])
 
 (defn- filter-chat
   "Return `chat-item` only if it doesn't match any regexes in `history-ignore`"
