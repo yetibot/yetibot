@@ -1,0 +1,76 @@
+{:doc "Rename this file to config.edn and fill in the blanks. config.edn is
+       already .gitignored. If you don't configure a specific node, it will not
+       be enabled at runtime. All config is optional depending on what you want
+       your yetibot to be able to do, except for at least one of the chat
+       adapters (Campfire or IRC)."
+ :yetibot
+ {:logging {:log-level :debug}
+  :db {:doc "yetibot runs an in-memory Datomic database by default, which will
+             dissapear on shutdown. Point it to your own running transactor if
+             you'd like persistent history and other features (e.g. aliases,
+             statuses)."
+       :datomic-url "datomic:mem://yetibot"}
+  :adapters {:doc "yetibot can listen on campfire, irc or both. Configure
+                   whatever you need."
+             :campfire {:api-key ""
+                        :subdomain ""
+                        :bot-id ""
+                        :room ""
+                        :room-id ""}
+             :irc {:doc "channels is a vector, but currently only one channel is
+                         actually supported."
+                   :host ""
+                   :port ""
+                   :username ""
+                   :channels [""]}}
+  :api {:ebay {:app-id ""}
+        :github {:token ""
+                 :org ""
+                 :doc "endpoint is optional: only specify if using GitHub enterprise."
+                 :endpoint ""}
+        :jira {:domain ""
+               :user ""
+               :password ""
+               :project-keys #{}}
+        :s3 {:access-key ""
+             :secret-key ""}}
+  :models {:imgflip {:doc "this is used for meme generation"
+                     :username "" :password ""}
+           :mail {:host ""
+                  :user ""
+                  :pass ""
+                  :from ""
+                  :bcc ""}
+           :twitter {:consumer-key ""
+                     :consumer-secret ""
+                     :token ""
+                     :secret ""}}
+  :commands {:eval {:doc "Set of Strings: Campfire IDs or IRC users (which have
+                          ~ prefixes) of users who can use the yetibot `eval`
+                          command."
+                    :privs #{"123", "~awesomeperson"}}
+             :features {:doc "Configure GitHub if you have your own fork of the
+                              yetibot repo. This will allow opening feature
+                              requests on your fork."
+                        :github {:token ""
+                                 :user ""}}
+             :jenkins {:uri ""
+                       :default-job ""
+                       :user ""
+                       :api-key ""}
+             :ssh {:doc "SSH servers are specified in groups so that multiple
+                         servers which share usernames and keys don't need to
+                         each specify duplicate config. Fill in your own
+                         key-names below instead of `:server-a-host`. This is
+                         the short name that the ssh command will refer to, e.g.:
+                         `ssh server-a-host ls -al`."
+                   :groups [{:key-file ""
+                             :user ""
+                             :servers {:server-a-host "" :server-b-host ""}}
+                            {:key-file ""
+                             :user ""
+                             :servers {:server- ""}}]}
+             :weather {:wunderground-api-key ""
+                       :default-zip ""}
+             :wolfram {:app-id ""}
+             :wordnik {:api-key ""}}}}

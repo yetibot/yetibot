@@ -1,54 +1,31 @@
 # yetibot
 
-Find me on Campfire, awaiting your command.
+You can treat yetibot as a communal command line. It works well for:
+
+ - teaching (how to run internal automation, language evaluation for JS, Scala,
+   Clojure)
+ - productivity (automating things around Jenkins, JIRA, running SSH commands on
+   various servers, and interacting with internal APIs via private yetibot
+   plugins)
+ - fun (google image search, gif lookups, meme generation)
+
+In addition to a wealth of commands (see `!help all` to view them), it supports
+unix-style piping and arbitrarily-nested sub expressions.
 
 ![yeti](yeti.png)
 
 [![Build Status](https://travis-ci.org/devth/yetibot.png?branch=master)](https://travis-ci.org/devth/yetibot)
 
-## Setup
+## Configuration
 
-Configure your `ENV` and `lein run` it.
-
-```
-export CAMPFIRE_API_KEY=
-export CAMPFIRE_ROOM=
-export CAMPFIRE_ROOM_ID=
-export CAMPFIRE_SUBDOMAIN=
-
-export JENKINS_URI=
-export JENKINS_USER=
-export JENKINS_API_KEY=
-# Default job to build when running !jenkins build with no args
-export JENKINS_DEFAULT_JOB=
-
-export MEME_USER=
-export MEME_PASS=
-
-# A list of host aliases
-export SSH_SERVERS=dev,test
-export SSH_dev=<dev.example.com>
-export SSH_test=<test.example.com>
-# The private key to connect to all hosts. This may be configurable per-host in the future.
-export SSH_PRIVATE_KEY_PATH=
-export SSH_USERNAME=
-
-export WOLFRAM_APP_ID=
-
-# Sounds to play when specific users enter the room
-export WELCOME_IDS=<userid1>,<userid2>
-# User 1
-export WELCOME_<userid1>=yeah
-# User 2
-export WELCOME_<userid2>=secret
-```
+Configuration lives at `config/config.edn`, which is `.gitignore`d. See
+[config/config-sample.edn](config/config-sample.edn) for a sample config. You
+can `mv` this to `config/config.edn` and fill in the blanks.
 
 
 ## Usage
 
 All commands are prefixed by `!`.
-
-TODO: more examples
 
 ### Pipes
 
@@ -71,16 +48,31 @@ does ie support ttf? No, it is sucky.
 
 ### Backticks
 
+Backticks can't be nested.
+
 ```
 !meme grumpy cat: `catfact` / False
 ```
 
 <img src="http://cdn.memegenerator.net/instances/500x/33734863.jpg" />
 
+
+### Nested sub-expressions
+
+For arbitrarily-nested sub-expressions, use `$(expr)` syntax, which
+disambiguates the open and closing of an expressions.
+
+```
+!meme chemistry: $(number $(js parseInt('$(weather 98105 | head 2 | tail)')))
+```
+
+<img src="http://i.imgflip.com/4xby8.jpg" />
+
+
 ### Combo
 
 ```
-!echo `repeat 10 echo i don't always repeat myself but | join`…StackOverflowError | meme interesting: 
+!echo `repeat 10 echo i don't always repeat myself but | join`…StackOverflowError | meme interesting:
 ```
 
 <img src="http://cdn.memegenerator.net/instances/500x/34461434.jpg" />
@@ -92,98 +84,52 @@ for `!help` to get a list of help topics. `!help all` shows fully expanded comma
 list for each topic.
 
 ```
-!help all
+!help | join ,
 ```
 
 ```
-head <list> # returns the first item from the <list>
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-clj <expression> # evaluate a clojure expression
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-help all # get help for all topics
-help <topic> # get help for <topic>
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-catfact # fetch a random cat fact
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-random <list> # returns a random item where <list> is a comma-separated list of items.
-  Can also be used to extract a random item when a collection is piped to random.
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-scala <expression> # evaluate a scala expression
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-wordnik define <word> # look up the definition for <word> on Wordnik
-wordnik random # look up a random word on Wordnik
-wordnik wotd # look up the Word of the Day on Wordnik
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-http <code>                 # look up http status code
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-users random # get a random user
-users # list all users presently in the room
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-ssh <server> <command> # run a command on <server>
-ssh servers # list servers configured for ssh access
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-attack <name> # attacks a person in the room
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-uptime # list uptime in milliseconds
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-js <expression> # evaluate a javascript expression
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-cls # clear screen after your co-worker posts something inappropriate
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-wolfram <query> # search for <query> on Wolfram Alpha
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-curl <options> <url> # execute standard curl tool
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-info <topic> # retrieve info about <topic> from DuckDuckGo
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-order reset # reset the orders list
-order show # show the current order
-order for <person>: <food> # order <food> for someone other than yourself
-order <food> # add (or replace) your food for the current order
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-classnamer # retrieves a legit OO class name
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-tail <list> # returns the last item from the <list>
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-meme popular                # list random popular meme instances from the top 20 in the last day
-meme popular <generator>    # list random popular meme instances for <generator> from the top 20 in the last day
-meme trending               # list trending generators
-meme <generator>: <line1> / <line2> # generate an instance
-meme search <term>          # query available meme generators
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-ascii <text> # generates ascii art representation of <text>
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-urban random # fetch a random definition from Urban Dictionary
-urban <query> # search for <query> on Urban Dictionary
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-jen build # build default job if configured
-jen build <job-name>
-jen status <job-name>
-jen list                    # lists first 20 jenkins jobs
-jen list <n>                # lists first <n> jenkins jobs
-jen list <string>           # lists jenkins jobs containing <string>
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-xargs <cmd> <list> # run <cmd> for every item in <list>; behavior is similar to xargs(1)'s xargs -n1
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-complete <phrase> # complete phrase from Google Complete
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-poke                        # NEVER do this
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-image top <query> # fetch the first image from google images
-image <query> # fetch a random result from google images
-▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬▬
-notit reset # resets the current not-it list
-notit show # show the current list of users registered as not-it
-notit # register a user as not-it
+Use help <topic> for more details, !, <gen>that, alias, ascii, asciichart,
+attack, buffer, catfact, chat, chuck, classnamer, clj, cls, complete, config,
+count, curl, ebay, echo, eval, features, gh, giftv, grep, haiku, head, help,
+history, horse, hs, http, image, info, jargon, jen, join, js, keys, list, log,
+mail, meme, memethat, mustachefact, number, order, poke, poms, random, raw,
+react, reload, repeat, rest, reverse, rhyme, scala, scalex, set, sort, source,
+split, ssh, status, tail, take, tee, twitter, update, uptime, urban, users,
+vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 ```
 
 ## Plugins
 
 YetiBot [looks in namespaces](https://github.com/devth/yetibot/blob/master/src/yetibot/core.clj#L100-104)
-starting with "plugins" when loading commands and observers. It also [ignores](https://github.com/devth/yetibot/blob/master/.gitignore#L10)
-`src/plugins` so that you can symlink it to a directory outside of YetiBot, which
-might be stored in some other repository.
+starting with "plugins" when loading commands and observers. It also
+[ignores](https://github.com/devth/yetibot/blob/master/.gitignore#L10)
+`src/plugins` so that you can symlink it to a directory outside of YetiBot,
+which might be stored in some other repository.
+
+
+## How it works
+
+Curious how the internals of YetiBot works? At a high level:
+
+- commands are run through a parser built on
+  [InstaParse](https://github.com/Engelberg/instaparse):
+  https://github.com/devth/yetibot/blob/master/src/yetibot/parser.clj
+- an InstaParse transformer is configured to evaluate expressions through the
+  interpreter, which handles things like nested sub-expressions and piped
+  commands:
+  https://github.com/devth/yetibot/blob/master/src/yetibot/interpreter.clj
+- namespaces are `hook`ed into the interpreter's `handle-cmd` fn using a
+  `cmd-hook` macro and triggered via regex prefix matching:
+  https://github.com/devth/yetibot/blob/master/src/yetibot/hooks.clj
+
+## Getting help
+
+If the doc or implementation code don't serve you well, I'm always interested in
+learning why and improving things. Open an issue or submit a pull request to get
+things moving!
 
 ## License
 
-Copyright &copy; 2012-2013 Trevor Hartman. Distributed under the [Eclipse Public License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as Clojure.
+Copyright &copy; 2012-2013 Trevor Hartman. Distributed under the [Eclipse Public
+License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as
+Clojure.
