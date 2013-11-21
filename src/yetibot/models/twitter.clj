@@ -1,7 +1,9 @@
 (ns yetibot.models.twitter
   (:require
+    [clj-http.client :as client]
+    [yetibot.util.http :refer [html-decode]]
     [yetibot.config :refer [config-for-ns conf-valid?]]
-    [clojure.string :refer [join]]
+    [clojure.string :as s :refer [join]]
     [yetibot.chat :as chat]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
@@ -43,12 +45,22 @@
 
 (defn format-url [user id] (format "https://twitter.com/%s/status/%s" user id))
 
+(defn expand-url [url]
+  (let [resp (client/get url)]
+    (if-let [redirs (:trace-redirects resp)]
+      (last redirs)
+      url)))
+
+(defn expand-twitter-urls [text]
+  (s/replace text #"http://t.co/\S+" expand-url))
+
 (defn send-tweet [json]
   (let [screen-name (:screen_name (:user json))
         url (format-url screen-name (:id json))]
-    (prn "send tweet" (:text json))
     (chat/send-msg-to-all-adapters
-      [(format "%s – @%s" (:text json) screen-name)
+      [(format "%s – @%s"
+               (-> (:text json) expand-twitter-urls html-decode)
+               screen-name)
        url])))
 
 ;;;; streaming callback
