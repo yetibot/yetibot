@@ -52,7 +52,7 @@
       url)))
 
 (defn expand-twitter-urls [text]
-  (s/replace text #"http://t.co/\S+" expand-url))
+  (s/replace text #"https*://t.co/\S+" expand-url))
 
 (defn send-tweet [json]
   (let [screen-name (:screen_name (:user json))
