@@ -40,6 +40,13 @@
 (defn encode [s]
   (URLEncoder/encode (str s) "UTF-8"))
 
+(defn html-decode [s]
+  (-> (str s)
+      (s/replace "&amp;" "&")
+      (s/replace "&lt;" "<")
+      (s/replace "&gt;" ">")
+      (s/replace "&quot;" "\"")))
+
 (defn ensure-img-suffix
   "Add an image url suffix if not already present."
   {:test #(assert (= "foo?.gif" (ensure-img-suffix "foo")))}
