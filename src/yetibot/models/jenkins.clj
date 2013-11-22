@@ -14,7 +14,7 @@
 
 ; Helpers
 
-(defn- instances [] (-> (config) :instances))
+(defn instances [] (-> (config) :instances))
 (defn- auth-for [instance]
   {:user (:user instance)
    :password (:api-key instance)

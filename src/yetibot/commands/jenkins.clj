@@ -46,7 +46,14 @@
     (list-jobs-matching (second args))
     (list-jobs)))
 
+(defn instances-cmd
+  "jen instances # show all configured instances"
+  [_]
+  (into {} (for [[inst-name inst-info] (model/instances)]
+             [(name inst-name) (:uri inst-info)])))
+
 (cmd-hook #"jen"
+          #"^instances$" instances-cmd
           #"^build$" build-default-cmd
           #"^build\s(\S+)\s*$" build
           #"^status$" status-cmd
