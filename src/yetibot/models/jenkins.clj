@@ -1,9 +1,10 @@
 (ns yetibot.models.jenkins
   (:require
+    [yetibot.chat]
     [yetibot.util.http :refer [get-json fetch]]
     [clojure.string :as s]
     [clj-time.coerce :as c]
-    [yetibot.config :refer [get-config conf-valid?]]
+    [yetibot.config :refer [get-config conf-valid? update-config]]
     [clojure.core.memoize :as memo]))
 
 (defonce instance-root-data (atom {}))
@@ -48,9 +49,26 @@
           ((:fetcher instance-info))))
       (instances))))
 
-(prime-memos)
+(defonce load-caches (prime-memos))
+
+; Config writer
+
+(defn add-instance [inst-name uri user api-key]
+  (let [inst-key (keyword inst-name)]
+    (update-config :yetibot :models :jenkins :instances inst-key
+                   {:uri uri
+                    :user user
+                    :api-key api-key}))
+  (prime-memos))
 
 ; Getters
+
+(defn instance-data [inst-name]
+  ((keyword inst-name) @instance-root-data))
+
+(defn jobs-for-instance [inst-name]
+  (let [id ((:fetcher (instance-data inst-name)))]
+    (-> id :jobs)))
 
 (defn jobs-to-info []
   (->> (map (fn [[inst-key inst-info]]

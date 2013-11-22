@@ -52,7 +52,24 @@
   (into {} (for [[inst-name inst-info] (model/instances)]
              [(name inst-name) (:uri inst-info)])))
 
+(defn add-instance
+  "jen add <name> <url> <user> <api-key> # add Jenkins instance with auth
+   jen add <name> <url> # add Jenkinst instance without auth"
+  [{[_ inst-name url _ user api-key] :match}]
+
+  (prn "add instance")
+  (prn inst-name url user api-key)
+  (let [user (or user "X")
+        api-key (or api-key "X")]
+    (model/add-instance inst-name url user api-key)
+    (let [js (model/jobs-for-instance inst-name)]
+      (format "%s added, found %s jobs" inst-name (count js)))))
+
+; (re-find #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" "add thartman http://cubejs-app-ci-47569 X X")
+; (re-find #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" "add thartman http://cubejs-app-ci-47569")
+
 (cmd-hook #"jen"
+          #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" add-instance
           #"^instances$" instances-cmd
           #"^build$" build-default-cmd
           #"^build\s(\S+)\s*$" build
