@@ -44,33 +44,46 @@
            :twitter {:consumer-key ""
                      :consumer-secret ""
                      :token ""
-                     :secret ""}}
-  :commands {:eval {:doc "Set of Strings: Campfire IDs or IRC users (which have
-                          ~ prefixes) of users who can use the yetibot `eval`
-                          command."
-                    :privs #{"123", "~awesomeperson"}}
-             :features {:doc "Configure GitHub if you have your own fork of the
-                              yetibot repo. This will allow opening feature
-                              requests on your fork."
-                        :github {:token ""
-                                 :user ""}}
-             :jenkins {:uri ""
-                       :default-job ""
-                       :user ""
-                       :api-key ""}
-             :ssh {:doc "SSH servers are specified in groups so that multiple
-                         servers which share usernames and keys don't need to
-                         each specify duplicate config. Fill in your own
-                         key-names below instead of `:server-a-host`. This is
-                         the short name that the ssh command will refer to, e.g.:
-                         `ssh server-a-host ls -al`."
-                   :groups [{:key-file ""
-                             :user ""
-                             :servers {:server-a-host "" :server-b-host ""}}
-                            {:key-file ""
-                             :user ""
-                             :servers {:server- ""}}]}
-             :weather {:wunderground-api-key ""
-                       :default-zip ""}
-             :wolfram {:app-id ""}
-             :wordnik {:api-key ""}}}}
+                     :secret ""}
+           :jenkins {:doc "Multiple Jenkins instances can be configured. They
+                           can also be configured at runtime, which writes to
+                           this config file. Only one `default-job` is
+                           supported—if multiple are specified, the first one
+                           wins."
+                     :cache-ttl 3600000
+                     :instances {:some-instance-key {:uri ""
+                                                     :doc "If your Jenkins doesn't require
+                                                           auth, set user and api-key to
+                                                           some non-blank value in order to pass
+                                                           the configuration check."
+                                                     :user ""
+                                                     :api-key ""}
+                                 :another-instance-key {:uri ""
+                                                        :default-job ""
+                                                        :user ""
+                                                        :api-key ""}}}}}
+ :commands {:eval {:doc "Set of Strings: Campfire IDs or IRC users (which have
+                         ~ prefixes) of users who can use the yetibot `eval`
+                         command."
+                   :privs #{"123", "~awesomeperson"}}
+            :features {:doc "Configure GitHub if you have your own fork of the
+                             yetibot repo. This will allow opening feature
+                             requests on your fork."
+                       :github {:token ""
+                                :user ""}}
+            :ssh {:doc "SSH servers are specified in groups so that multiple
+                        servers which share usernames and keys don't need to
+                        each specify duplicate config. Fill in your own
+                        key-names below instead of `:server-a-host`. This is
+                        the short name that the ssh command will refer to, e.g.:
+                        `ssh server-a-host ls -al`."
+                  :groups [{:key-file ""
+                            :user ""
+                            :servers {:server-a-host "" :server-b-host ""}}
+                           {:key-file ""
+                            :user ""
+                            :servers {:server- ""}}]}
+            :weather {:wunderground-api-key ""
+                      :default-zip ""}
+            :wolfram {:app-id ""}
+            :wordnik {:api-key ""}}}}
