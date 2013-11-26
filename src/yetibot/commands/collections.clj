@@ -210,8 +210,8 @@
 ; raw
 (defn raw-cmd
   "raw <coll> # output a string representation of the raw collection"
-  [{:keys [items args]}]
-  (pr-str (or items args)))
+  [{:keys [opts args]}]
+  (pr-str (or opts args)))
 
 (cmd-hook #"raw"
           _ raw-cmd)
