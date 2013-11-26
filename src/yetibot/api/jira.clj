@@ -7,7 +7,7 @@
 (def config (config-for-ns))
 (def configured? (conf-valid?))
 
-(def ^:private base-uri (str "https://" (:domain config)))
+(def base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
 (def ^:private auth (map config [:user :password]))
 (def ^:private client-opts {:as :json :basic-auth auth :insecure? true})

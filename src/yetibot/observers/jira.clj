@@ -25,7 +25,6 @@
     (obs-hook
       #{:message}
       (fn [event-json]
-        (prn "obs " event-json)
-        (if-let [is (set (map first (re-seq issue-pattern (:body event-json))))]
+        (when-let [is (set (map first (re-seq issue-pattern (:body event-json))))]
           (doall (map report-jira is))))))
   (info "JIRA is not configured"))
