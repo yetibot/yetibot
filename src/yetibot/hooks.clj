@@ -47,9 +47,9 @@
              ; only match against the first word in ~args
              (if (re-find ~prefix (s/lower-case ~cmd))
                (do
-                 #_(info "found" ~prefix "on cmd" ~cmd
-                          ; "opts:" ~opts ; "extra" ~extra
-                          "args:" ~args)
+                 (info "found" ~prefix "on cmd" ~cmd
+                       ; "opts:" ~opts ; "extra" ~extra
+                       "args:" ~args)
                  ; try matching the available sub-commands
                  (cond-let [~match]
                            ; rebuild the pairs in `exprs` as valid input for cond-let
