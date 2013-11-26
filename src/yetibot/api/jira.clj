@@ -4,7 +4,7 @@
     [yetibot.config :refer [config-for-ns conf-valid?]]
     [yetibot.util.http :refer [get-json fetch]]))
 
-(def ^:private config (config-for-ns))
+(def config (config-for-ns))
 (def configured? (conf-valid?))
 
 (def ^:private base-uri (str "https://" (:domain config)))
