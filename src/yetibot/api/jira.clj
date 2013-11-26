@@ -1,5 +1,6 @@
 (ns yetibot.api.jira
   (:require
+    [clojure.string :as s]
     [clj-http.client :as client]
     [yetibot.config :refer [config-for-ns conf-valid?]]
     [yetibot.util.http :refer [get-json fetch]]))
@@ -53,3 +54,16 @@
      (str "Assignee: " (-> fs :assignee :displayName))
      (str "Status: " (-> fs :status :name))
      (str base-uri "/browse/" (:key issue-data))]))
+
+;; users
+
+(defn get-users []
+  (:body
+    (client/get
+      (endpoint "/user/assignable/multiProjectSearch")
+      (merge client-opts
+             {:query-params
+              {"projectKeys" (->> config :project-keys (s/join ","))}}))))
+
+(def us (get-users))
+(->> us :body (map :name))

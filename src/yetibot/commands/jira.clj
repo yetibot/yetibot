@@ -3,6 +3,11 @@
     [yetibot.hooks :refer [cmd-hook]]
     [yetibot.api.jira :as api]))
 
+(defn users-cmd
+  "jira users # list the users for the configured project(s)"
+  [_]
+  (map :name (api/get-users)))
+
 (defn resolve-cmd
   "jira resolve <issue> <comment> # resolve an issue and set its resolution to fixed"
   [{[_ iss comment] :match user :user}]
@@ -18,4 +23,5 @@
       (str "Unable to find any issues for " iss))))
 
 (cmd-hook #"jira"
+          #"users" users-cmd
           #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)
