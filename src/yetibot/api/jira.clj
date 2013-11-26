@@ -7,7 +7,7 @@
 (def config (config-for-ns))
 (def configured? (conf-valid?))
 
-(def base-uri (str "https://" (:domain config)))
+(def ^:private base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
 (def ^:private auth (map config [:user :password]))
 (def ^:private client-opts {:as :json :basic-auth auth :insecure? true})
@@ -43,4 +43,13 @@
   "Fetch json for a given JIRA"
   [i]
   (let [uri (endpoint "/issue/%s" i)]
-    (:body (client/get uri client-opts))))
+    (try
+      (:body (client/get uri client-opts))
+      (catch Exception _ nil))))
+
+(defn format-issue [issue-data]
+  (let [fs (:fields issue-data)]
+    [(-> fs :summary)
+     (str "Assignee: " (-> fs :assignee :displayName))
+     (str "Status: " (-> fs :status :name))
+     (str base-uri "/browse/" (:key issue-data))]))
