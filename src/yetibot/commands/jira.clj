@@ -8,10 +8,11 @@
   [{[_ iss comment] :match user :user}]
   (let [comment (format "%s: %s" (:name user) comment)]
     (if-let [issue-data (api/get-issue iss)]
-      (if (api/resolve-issue iss comment)
-        ; refetch the issue data now that it's resolved
-        (let [issue-data (api/get-issue iss)
-              formatted (api/format-issue issue-data)]
+      (let [resolved? (api/resolve-issue iss comment)
+            ; refetch the issue data now that it's resolved
+            issue-data (api/get-issue iss)
+            formatted (api/format-issue issue-data)]
+        (if resolved?
           formatted
           (into [(str "Unable to resolve issue " iss)] formatted)))
       (str "Unable to find any issues for " iss))))
