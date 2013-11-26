@@ -1,8 +1,12 @@
 (ns yetibot.commands.collections
-  (:require [clojure.string :as s]
-            [yetibot.hooks :refer [cmd-hook]]
-            [yetibot.chat :refer [chat-data-structure]]
-            [yetibot.util :refer [psuedo-format split-kvs-with ensure-items-collection]]))
+  (:require
+    [yetibot.interpreter :refer [handle-cmd]]
+    [taoensso.timbre :refer [info warn error]]
+    [clojure.string :as s]
+    [yetibot.hooks :refer [cmd-hook]]
+    [yetibot.chat :refer [chat-data-structure]]
+    [yetibot.util.format :refer [format-exception-log]]
+    [yetibot.util :refer [psuedo-format split-kvs-with ensure-items-collection]]))
 
 ; random
 (defn random
@@ -74,15 +78,23 @@
   "xargs <cmd> <list> # run <cmd> for every item in <list>; behavior is similar to xargs(1)'s xargs -n1"
   [{:keys [args opts]}]
   (if (s/blank? args)
-    opts
+    opts ; passthrough if no args
     (let [itms (ensure-items-collection opts)]
-      (pmap (fn [item]
-              (try
-                (yetibot.handler/handle-unparsed-expr
-                  (psuedo-format args item))
-                (catch Exception ex
-                  ex)))
-            itms))))
+      (pmap
+        (fn [item]
+          (try
+            (apply handle-cmd
+                   ; item could be a collection, such as when xargs is used
+                   ; on nested collections, e.g.:
+                   ; repeat 5 jargon | xargs words | xargs head
+                   (if (coll? item)
+                     [args {:opts item}]
+                     [(psuedo-format args item) {}]))
+            (catch Exception ex
+              (error "Exception in xargs pmap"
+                     (format-exception-log ex))
+              ex)))
+        itms))))
 
 (cmd-hook #"xargs"
           _ xargs)
@@ -168,9 +180,9 @@
 ; tee
 (defn tee-cmd
   "tee <list> # output <list> to chat and return list (useful for pipes)"
-  [{:keys [items args]}]
-  (chat-data-structure (or items args))
-  (or items args))
+  [{:keys [opts args]}]
+  (chat-data-structure (or opts args))
+  (or opts args))
 
 (cmd-hook #"tee"
           _ tee-cmd)

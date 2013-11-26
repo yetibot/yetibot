@@ -2,7 +2,7 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [yetibot.util :refer [with-fresh-db]]
-    [yetibot.util.format :refer [to-coll-if-contains-newlines]]
+    [yetibot.util.format :refer [to-coll-if-contains-newlines format-exception-log]]
     [yetibot.parser :refer [parse-and-eval]]
     [clojure.core.match :refer [match]]
     [yetibot.chat :refer [chat-data-structure]]
@@ -45,9 +45,7 @@
           (catch Exception ex
             (error
               "error handling expression:" body
-              (with-out-str
-                (newline)
-                (st/print-stack-trace (st/root-cause ex) 50)))
+              (format-exception-log ex))
             (chat-data-structure (format exception-format ex))))))))
 
 (defn cmd-reader [& args] (handle-unparsed-expr (join " " args)))

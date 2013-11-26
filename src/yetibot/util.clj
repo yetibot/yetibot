@@ -48,6 +48,7 @@
 
 ; helpers for all collection cmds
 (defn ensure-items-collection [items]
+  {:pre [(not (nil? items))]}
   (if (coll? items)
     items
     (s/split items #"\n")))

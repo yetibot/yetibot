@@ -1,5 +1,7 @@
 (ns yetibot.util.format
-  (:require [clojure.string :as s])
+  (:require
+    [clojure.stacktrace :as st]
+    [clojure.string :as s])
   (:import [clojure.lang Associative Sequential]))
 
 (defmulti ^:private format-flattened type)
@@ -48,3 +50,7 @@
     (s/split s #"\n")
     s))
 
+(defn format-exception-log [ex]
+  (with-out-str
+    (newline)
+    (st/print-stack-trace (st/root-cause ex) 50)))
