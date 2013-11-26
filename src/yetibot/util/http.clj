@@ -5,7 +5,8 @@
     [clojure.string :as s]
     [clojure.xml :as xml]
     [clojure.data.json :as json])
-  (:import (java.net URL URLEncoder)))
+  (:import [java.net URL URLEncoder]))
+
 
 ; synchronous api call helpers
 (defmacro with-client [uri verb-fn auth & body]
