@@ -97,7 +97,7 @@ attack, buffer, catfact, chat, chuck, classnamer, clj, cls, complete, config,
 count, curl, ebay, echo, eval, features, gh, giftv, grep, haiku, head, help,
 history, horse, hs, http, image, info, jargon, jen, join, js, keys, list, log,
 mail, meme, memethat, mustachefact, number, order, poke, poms, random, raw,
-react, reload, repeat, rest, reverse, rhyme, scala, scalex, set, sort, source,
+react, reload, repeat, rest, reverse, rhyme, scala, scalex, sed, set, sort, source,
 split, ssh, status, tail, take, tee, twitter, update, uptime, urban, users,
 vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 ```
