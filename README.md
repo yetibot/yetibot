@@ -123,7 +123,7 @@ Curious how the internals of YetiBot works? At a high level:
   commands:
   https://github.com/devth/yetibot/blob/master/src/yetibot/interpreter.clj
 - [command namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
-  are `hook`ed into the interpreter's `handle-cmd` function using a cmd-hook`
+  are `hook`ed into the interpreter's `handle-cmd` function using a `cmd-hook`
   macro and triggered via regex prefix matching:
   https://github.com/devth/yetibot/blob/master/src/yetibot/hooks.clj
 
