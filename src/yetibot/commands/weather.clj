@@ -1,6 +1,6 @@
 (ns yetibot.commands.weather
   (:require
-    [yetibot.util.http :refer [get-json]]
+    [yetibot.util.http :refer [get-json encode]]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.config :refer [config-for-ns conf-valid?]]
     [yetibot.hooks :refer [cmd-hook]]))
@@ -12,7 +12,7 @@
 
 (defn- conditions [loc]
   (get-json (format "http://api.wunderground.com/api/%s/conditions/q/%s.json"
-                    api-key loc)))
+                    api-key (encode loc))))
 
 (defn- format-conditions [c]
   (let [co (:current_observation c)
