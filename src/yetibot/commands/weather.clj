@@ -18,6 +18,9 @@
   (tee (str "http://api.wunderground.com/api/" api-key
             (apply format url args))))
 
+(defn loc-endpoint [api loc]
+  (endpoint "%s/q/%s.json" api (encode loc)))
+
 (defn- conditions [loc]
   (let [url (endpoint "/conditions/q/%s.json" (encode loc))]
     (get-json url)))
@@ -25,6 +28,10 @@
 (defn- cams [loc]
   (let [url (endpoint "/webcams/q/%s.json" (encode loc))]
     (get-json url)))
+
+(defn- forecast [loc] (get-json (loc-endpoint "/forecast" loc)))
+
+(defn- satellite [loc] (get-json (loc-endpoint "/satellite" loc)))
 
 (defn- error-response [c] (-> c :response :error :description))
 
@@ -55,7 +62,7 @@
 
 (defn- format-webcams [res]
   (when-let [cams (:webcams res)]
-    (map (juxt :CURRENTIMAGEURL :neighborhood) cams)))
+    (map (juxt (fn [c] (str (:CURRENTIMAGEURL c) "&.jpg")) :neighborhood) cams)))
 
 (defn weather-cmd
   "weather <location> # look up current weather for <location>"
@@ -78,9 +85,18 @@
         (multiple-results res)
         (format-webcams res))))
 
+(defn satellite-cmd
+  "weather satellite <location> # look up satellite image for <location>"
+  [{[_ loc] :match}]
+  (let [res (satellite loc)]
+    (or (error-response res)
+        (multiple-results res)
+        (-> res :satellite :image_url_vis (str "&.jpg")))))
+
 (if (conf-valid?)
   (cmd-hook #"weather"
             #"cams\s+(.+)" cams-cmd
+            #"satellite\s+(.+)" satellite-cmd
             #".+" weather-cmd
             _ default-weather-cmd)
   (info "Weather is not configured"))
