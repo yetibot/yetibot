@@ -52,13 +52,11 @@
 (defn- format-conditions [c]
   (when-let [co (:current_observation c)]
     (let [loc (:observation_location co)]
-      [(format "Current conditions for %s:" (:full loc))
-       (:temperature_string co)
-       (:weather co)
+      [(format "Current conditions for %s elevation %s:" (:full loc) (:elevation loc))
+       (format "%s, %s" (:temperature_string co) (:weather co))
        (format "Feels like: %s" (:feelslike_string co))
        (format "Windchill: %s" (:windchill_string co))
        (format "Wind: %s" (:wind_string co))
-       (format "Precip today: %s" (:precip_today_string co))
        (format "Precip last hour: %s" (:precip_1hr_string co))
        ])))
 
