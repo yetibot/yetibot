@@ -9,11 +9,21 @@
 (def config (config-for-ns))
 
 (def api-key (:wunderground-api-key config))
-(def endpoint (str "http://api.wunderground.com/api/" api-key))
 (def default-zip (:default-zip config))
+(defn tee [s]
+  (prn s)
+  s)
+
+(defn endpoint [url & args]
+  (tee (str "http://api.wunderground.com/api/" api-key
+            (apply format url args))))
 
 (defn- conditions [loc]
-  (let [url (format "%s/conditions/q/%s.json" endpoint (encode loc))]
+  (let [url (endpoint "/conditions/q/%s.json" (encode loc))]
+    (get-json url)))
+
+(defn- cams [loc]
+  (let [url (endpoint "/webcams/q/%s.json" (encode loc))]
     (get-json url)))
 
 (defn- error-response [c] (-> c :response :error :description))
@@ -43,6 +53,10 @@
        (format "Precip last hour: %s" (:precip_1hr_string co))
        ])))
 
+(defn- format-webcams [res]
+  (when-let [cams (:webcams res)]
+    (map (juxt :CURRENTIMAGEURL :neighborhood) cams)))
+
 (defn weather-cmd
   "weather <location> # look up current weather for <location>"
   [{:keys [match]}]
@@ -56,8 +70,17 @@
   "weather # look up weather for default location"
   [_] (weather-cmd {:match default-zip}))
 
+(defn cams-cmd
+  "weather cams <location> # find web cams in <location>"
+  [{[_ loc] :match}]
+  (let [res (cams loc)]
+    (or (error-response res)
+        (multiple-results res)
+        (format-webcams res))))
+
 (if (conf-valid?)
   (cmd-hook #"weather"
+            #"cams\s+(.+)" cams-cmd
             #".+" weather-cmd
             _ default-weather-cmd)
   (info "Weather is not configured"))
