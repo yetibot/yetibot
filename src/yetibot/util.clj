@@ -9,6 +9,11 @@
     [clojure.data.json :as json])
   (:use [clojure.contrib.cond]))
 
+(defn filter-nil-vals [m]
+  (into {} (remove (comp nil? second) m)))
+
+(defn map-to-strs [m]
+  (map (fn [[k v]] (str (name k) ": " v)) m))
 
 (defmacro with-fresh-db
   [& body]

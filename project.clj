@@ -50,7 +50,7 @@
 
                  [clj-wordnik "0.1.0-alpha1"]
                  [tentacles "0.2.5"]
-                 [clj-http "0.5.5"]
+                 [clj-http "0.7.7"]
                  [clj-aws-s3 "0.3.2"]
                  [overtone/at-at "1.0.0"]
                  [com.draines/postal "1.9.0"]

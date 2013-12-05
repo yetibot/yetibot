@@ -1,5 +1,8 @@
 (ns yetibot.commands.jira
   (:require
+    [yetibot.observers.jira :refer [report-jira]]
+    [yetibot.util :refer [filter-nil-vals map-to-strs]]
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.hooks :refer [cmd-hook]]
     [yetibot.api.jira :as api]))
 
@@ -22,6 +25,35 @@
           (into [(str "Unable to resolve issue " iss)] formatted)))
       (str "Unable to find any issues for " iss))))
 
+(defn priorities-cmd
+  "jira pri # list the priorities for this JIRA instance"
+  [_]
+  (->> (api/priorities)
+       (map (juxt :name :description))
+       flatten
+       (apply sorted-map)))
+
+
+; currently doesn't support more than one project key, but it could
+(defn create-cmd
+  "jira create <summary> # create issue with summary, unassigned
+   jira create <summary> / <assignee> # create issue with summary and assignee
+   jira create <summary> / <assignee> / <desc> # create issue with summary, assignee, and description"
+  [{[_ summary assignee desc] :match}]
+  (let [res (api/create-issue
+              (filter-nil-vals {:summary summary
+                                :assignee assignee
+                                :desc desc}))]
+    (if (re-find #"^2" (str (:status res) "2"))
+      (let [iss-key (-> res :body :key)]
+        (report-jira iss-key)
+        (str "Created issue " iss-key))
+      (map-to-strs (->> res :body :errors)))))
+
 (cmd-hook #"jira"
-          #"users" users-cmd
+          #"^pri" priorities-cmd
+          #"^users" users-cmd
+          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
+          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
+          #"^create\s+([^\/]+)" create-cmd
           #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)

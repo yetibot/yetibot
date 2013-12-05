@@ -1,5 +1,6 @@
 (ns yetibot.api.jira
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
     [clj-http.client :as client]
     [yetibot.config :refer [config-for-ns conf-valid?]]
@@ -15,6 +16,8 @@
 
 (defn endpoint [& fmt-with-args]
   (str api-uri (apply format fmt-with-args)))
+
+;; issues
 
 (defn get-transitions [i]
   (client/get (endpoint "/issue/%s/transitions?transitionId" i)
@@ -55,6 +58,51 @@
      (str "Status: " (-> fs :status :name))
      (str base-uri "/browse/" (:key issue-data))]))
 
+(defn find-project [pk]
+  (try
+    (:body (client/get (endpoint "/project/%s" pk) client-opts))
+    (catch Exception _
+      nil)))
+
+(defn priorities []
+  (:body (client/get (endpoint "/priority") client-opts)))
+
+(defn find-priority-by-key [k]
+  (let [kp (re-pattern (str "(?i)" k))]
+    (first (filter #(re-find kp (:name %)) (priorities)))))
+
+(defn issue-types []
+  (:body (client/get (endpoint "/issuetype") client-opts)))
+
+(defn create-issue
+  "This thing is a beast"
+  [{:keys [summary assignee priority-key desc project-key]
+    :or {desc "" assignee "-1"
+         project-key (first (:project-keys config))}}]
+  (if-let [prj (find-project project-key)]
+    (if-let [priority (if priority-key
+                        (find-priority-by-key priority-key)
+                        (first (priorities)))]
+      (let [pri-id (:id priority)
+            prj-id (:id prj)
+            params {:fields
+                    {:assignee {:name assignee}
+                     :project {:id prj-id}
+                     :summary summary
+                     :description desc
+                     :issuetype {:id (:default-issue-type-id config)}
+                     :priority {:id pri-id}}}]
+        (prn params)
+        (client/post
+          (endpoint "/issue")
+          (merge client-opts
+                 {:coerce :always
+                  :throw-exceptions false
+                  :form-params params
+                  :content-type :json})))
+      (warn "Could not find a priority for key " priority-key))
+    (warn "Could not find project" project-key)))
+
 ;; users
 
 (defn get-users []
@@ -64,6 +112,3 @@
       (merge client-opts
              {:query-params
               {"projectKeys" (->> config :project-keys (s/join ","))}}))))
-
-(def us (get-users))
-(->> us :body (map :name))

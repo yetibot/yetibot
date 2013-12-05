@@ -5,7 +5,6 @@
             [yetibot.hooks :refer [obs-hook]]
             [yetibot.chat :refer [chat-data-structure]]))
 
-
 (defn report-jira [issue]
   (let [ji (jira/get-issue issue)]
     (chat-data-structure
