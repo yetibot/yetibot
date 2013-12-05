@@ -10,6 +10,8 @@
 (def api-key (:wunderground-api-key config))
 (def default-zip (:default-zip config))
 
+(defn- error-response [c] (-> c :response :error :description))
+
 (defn- conditions [loc]
   (get-json (format "http://api.wunderground.com/api/%s/conditions/q/%s.json"
                     api-key (encode loc))))
@@ -29,7 +31,10 @@
 (defn weather-cmd
   "weather <location> # look up current weather for <location>"
   [{:keys [match]}]
-  (format-conditions (conditions match)))
+  (let [cs (conditions match)]
+    (if-let [err (error-response cs)]
+      err
+      (format-conditions cs))))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
