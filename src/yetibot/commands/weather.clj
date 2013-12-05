@@ -96,7 +96,6 @@
 (if (conf-valid?)
   (cmd-hook #"weather"
             #"cams\s+(.+)" cams-cmd
-            #"satellite\s+(.+)" satellite-cmd
             #".+" weather-cmd
             _ default-weather-cmd)
   (info "Weather is not configured"))
