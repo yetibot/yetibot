@@ -17,8 +17,15 @@
 (def send-msg (mk-sender :msg))
 (def send-paste (mk-sender :paste))
 
+(def max-msg-count 50)
+
 (defn send-msg-for-each [msgs]
-  (doseq [m msgs] (send-msg m)))
+  (doseq [m (take max-msg-count msgs)] (send-msg m))
+  (when (> (count msgs) max-msg-count)
+    (send-msg (str "Results truncated. There were "
+                   (count msgs)
+                   " results but I only sent "
+                   max-msg-count "."))))
 
 (defn contains-image-url-lines?
   "Returns true if the string contains an image url on its own line, separated from
