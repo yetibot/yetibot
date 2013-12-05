@@ -13,6 +13,7 @@
 
 (def config (:github (config-for-ns)))
 (def auth {:oauth-token (:token config)})
+(def repo (or (:repo config) "yetibot"))
 (def endpoint "https://api.github.com/")
 
 (defn should-add-feature?
@@ -28,7 +29,7 @@
   (useful/rate-limited
     (fn [title]
       (binding [tc/url endpoint]
-        (is/create-issue (:user config) (:repo config) title auth)))
+        (is/create-issue (:user config) repo title auth)))
     rate-limit-ms))
 
 (defn listen-for-add-feature
