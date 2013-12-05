@@ -3,17 +3,17 @@
             [clojure.string :as s]
             [yetibot.config :refer [config-for-ns]]
             [useful.fn :as useful :refer [rate-limited]]
-            [tentacles [issues :as is]]
+            [tentacles
+             [issues :as is]
+             [core :as tc]]
             [yetibot.hooks :refer [obs-hook cmd-hook]]
             [yetibot.chat :refer (chat-data-structure)]))
 
 (def rate-limit-ms 5000)
 
 (def config (:github (config-for-ns)))
-
-(def auth {:auth (:token config)
-           :user (:user config)
-           :repo "yetibot"})
+(def auth {:oauth-token (:token config)})
+(def endpoint "https://api.github.com/")
 
 (defn should-add-feature?
   "Loop the regexes that think we should add a feature"
@@ -27,7 +27,8 @@
 (def post-issue
   (useful/rate-limited
     (fn [title]
-      (is/create-issue (:user config) (:repo config) title (:auth config)))
+      (binding [tc/url endpoint]
+        (is/create-issue (:user config) (:repo config) title auth)))
     rate-limit-ms))
 
 (defn listen-for-add-feature
@@ -36,8 +37,8 @@
     (let [title (s/trim (second match))]
       (chat-data-structure
         (if-let [issue (post-issue title)]
-          (format "Opened issue: %s" (:html_url issue))
-          "I feel like you're trying to spam me; ignored")))))
+          (format "Opened issue: %s" (:html_url issue)))))
+    "I feel like you're trying to spam me; ignored"))
 
 (defn- issues-in-yetibot-repo
   [] (apply is/issues (map config [:user :repo :auth])))
