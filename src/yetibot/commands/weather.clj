@@ -1,7 +1,7 @@
 (ns yetibot.commands.weather
   (:require
     [clojure.string :refer [join]]
-    [yetibot.util.http :refer [get-json encode]]
+    [yetibot.util.http :refer [get-json fetch encode map-to-query-string]]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.config :refer [config-for-ns conf-valid?]]
     [yetibot.hooks :refer [cmd-hook]]))
@@ -31,7 +31,9 @@
 
 (defn- forecast [loc] (get-json (loc-endpoint "/forecast" loc)))
 
-(defn- satellite [loc] (get-json (loc-endpoint "/satellite" loc)))
+(defn- satellite [loc]
+  (str (endpoint "/animatedradar/animatedsatellite/q/%s.gif" (encode loc))
+       "?" (map-to-query-string {:num 10})))
 
 (defn- error-response [c] (-> c :response :error :description))
 
@@ -88,10 +90,8 @@
 (defn satellite-cmd
   "weather satellite <location> # look up satellite image for <location>"
   [{[_ loc] :match}]
-  (let [res (satellite loc)]
-    (or (error-response res)
-        (multiple-results res)
-        (-> res :satellite :image_url_vis (str "&.jpg")))))
+  ; TODO: validate the loc. Currently this will 500 if the loc is not valid.
+  (satellite loc))
 
 (if (conf-valid?)
   (cmd-hook #"weather"
