@@ -16,7 +16,7 @@
 (def conn (atom nil))
 (declare config channel connect start)
 (def chat-source (format "irc/%s" channel))
-(def wait-before-reconnect 15000)
+(def wait-before-reconnect 25000)
 
 (def send-msg
   "Rate-limited function for sending messages to IRC. It's rate limited in order
