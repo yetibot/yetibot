@@ -8,16 +8,21 @@
 
 (defonce aliases (atom {}))
 
+(defn- clean-alias-cmd
+  "cmd should be a literal, so chop off the surrounding quotes"
+  [cmd]
+  (-> cmd s/trim (s/replace #"^\"([^\"]+)\"$" "$1")))
+
 (defn- wire-alias
-  "Example input (notice pipe is escaped so top-level command parser doesn't expand
-   the pipes):
-   i90 = random \\| echo http://images.wsdot.wa.gov/nw/090vc00508.jpg?nocache=%s&.jpg
+  "Example input (use quotes to make it a literal so it doesn't get evaluated):
+   i90 = \"random | echo http://images.wsdot.wa.gov/nw/090vc00508.jpg?nocache=%s&.jpg\"
    Note: alias args aren't supported yet:
-   alias grid x = !repeat 10 `repeat 10 #{x} | join`"
+   alias grid x = !repeat 10 `repeat 10 %s | join`"
   [{[_ a-name a-cmd] :match}]
   (let [a-name (s/trim a-name)
-        a-cmd (s/replace a-cmd "\\|" "|") ; unescape pipes
+        a-cmd (clean-alias-cmd a-cmd)
         docstring (str "alias for " a-cmd)
+        ; allow spaces in a-name, even though we just grab the first word
         cmd-name (first (s/split a-name #" "))
         existing-alias (@aliases cmd-name)
         cmd-fn (fn [{:keys [user]}] (yetibot.handler/handle-unparsed-expr a-cmd))]
@@ -43,12 +48,11 @@
 
 (defn- built-in? [cmd]
   (let [as @aliases]
-    (and
-      (not ((set (keys as)) cmd))
-      ((set (keys (help/get-docs))) cmd))))
+    (and (not ((set (keys as)) cmd))
+         ((set (keys (help/get-docs))) cmd))))
 
 (defn create-alias
-  "alias <alias> = <cmd> # alias a cmd, where <cmd> is a normal command expression.  Note that pipes must be escaped like \"\\|\" to prevent normal pipe evaluation."
+  "alias <alias> = \"<cmd>\" # alias a cmd, where <cmd> is a normal command expression. Note the use of quotes, which treats the right-hand side as a literal allowing the use of pipes."
   [{[_ a-name _] :match :as args}]
   (if (built-in? a-name)
     (str "Can not alias existing built-in command " a-name)
@@ -76,4 +80,4 @@
 (cmd-hook #"alias"
           #"^$" list-aliases
           #"remove\s+(\w+)" remove-alias
-          #"([\S\s]+)\s*\=\s*(.+)" create-alias)
+          #"([\S\s]+?)\s*\=\s*(.+)" create-alias)
