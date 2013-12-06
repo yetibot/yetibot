@@ -6,13 +6,17 @@
     [instaparse.core :as insta]))
 
 (def parser
-  "expr     - the top-level expression made up of cmds and sub-exprs. When multiple
+  "Major components of the parser:
+   expr     - the top-level expression made up of cmds and sub-exprs. When multiple
               cmds are present, it implies they should be sucessively piped.
    cmd      - a single command consisting of words.
    sub-expr - a backticked or $(..)-style sub-expression to be evaluated inline.
    parened  - a grouping of words wrapped in parenthesis, explicitly tokenized to
               allow parenthesis in cmds and disambiguate between sub-expression
-              syntax."
+              syntax.
+   literal  - a grouping of any characters but quote surrounded by quotes.
+              Allows the use of pipes and any other special characters to be
+              treated as literal rather than being parsed."
   (insta/parser
     "expr = cmd (<space> <pipe> <space> cmd)*
      cmd = words
@@ -23,7 +27,7 @@
      <word-chars> = #'[^ `$()|\"]+'
      parened = lparen words rparen
      <quote> = '\"'
-     literal = <quote> #'[^\"]+' <quote>
+     literal = quote #'[^\"]+' quote
      space = ' '
      <pipe> = #'[|]'
      <dollar> = <'$'>
