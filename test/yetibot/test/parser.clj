@@ -52,3 +52,32 @@
         `meme chemistry: a $(buffer peek | head) is $(buffer peek | head 2 | tail)`")
      [:expr [:cmd [:words "urban" [:space " "] "random"]] [:cmd [:words "buffer"]] [:cmd [:words "echo" [:space " "] [:expr [:cmd [:words "meme" [:space " "] "wizard:" [:space " "] "what" [:space " "] "is" [:space " "] [:expr [:cmd [:words "buffer" [:space " "] "peek"]] [:cmd [:words "head"]]] "?"]]] "\n" [:space " "] [:space " "] [:space " "] [:space " "] [:space " "] [:space " "] [:space " "] [:space " "] [:expr [:cmd [:words "meme" [:space " "] "chemistry:" [:space " "] "a" [:space " "] [:expr [:cmd [:words "buffer" [:space " "] "peek"]] [:cmd [:words "head"]]] [:space " "] "is" [:space " "] [:expr [:cmd [:words "buffer" [:space " "] "peek"]] [:cmd [:words "head" [:space " "] "2"]] [:cmd [:words "tail"]]]]]]]]])
     "Complex nested sub-expressions with newlines should be parsed"))
+
+
+(deftest literal-test
+  (is
+    (= (parser "alias foo = \"bar\"")
+       [:expr [:cmd [:words "alias" [:space " "] "foo" [:space " "] "=" [:space " "] [:literal "bar"]]]]))
+  (is
+    (= (parser "meme foo: \"lol")
+       [:expr [:cmd [:words "meme" [:space " "] "foo:" [:space " "] "\"" "lol"]]]))
+  (is
+    (= (parser "foo \"lol | foo\"")
+       [:expr [:cmd [:words "foo" [:space " "] [:literal "lol | foo"]]]]))
+  (is
+    (= (parser "foo \"lol | foo")
+       [:expr [:cmd [:words "foo" [:space " "] "\"" "lol"]] [:cmd [:words "foo"]]])))
+
+(deftest unmatched-parens-test
+  (is
+    (= (parser " foo)")
+       [:expr [:cmd [:words [:space " "] "foo" ")"]]]))
+  (is
+    (= (parser "foo)")
+       [:expr [:cmd [:words "foo" ")"]]]))
+  (is
+    (= (parser "foo (")
+       [:expr [:cmd [:words "foo" [:space " "] "("]]]))
+  (is
+    (= (parser " foo")
+       [:expr [:cmd [:words [:space " "] "foo"]]])))

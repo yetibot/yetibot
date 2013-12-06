@@ -18,10 +18,12 @@
      cmd = words
      <sub-expr> = <backtick> expr <backtick> | nestable-sub-expr
      <nestable-sub-expr> = <dollar> <lparen> expr <rparen>
-     words = word (space* word)*
-     <word> = sub-expr | parened | word-chars
-     <word-chars> = #'[^ `$()|]+'
+     words = space* word (space* word)*
+     <word> = sub-expr | parened | word-chars | lparen | rparen | quote | literal
+     <word-chars> = #'[^ `$()|\"]+'
      parened = lparen words rparen
+     <quote> = '\"'
+     literal = <quote> #'[^\"]+' <quote>
      space = ' '
      <pipe> = #'[|]'
      <dollar> = <'$'>
@@ -33,6 +35,7 @@
   (partial
     insta/transform
     {:words (fn [& words] (join words))
+     :literal str
      :space str
      :parened str
      :cmd identity
