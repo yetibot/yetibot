@@ -18,3 +18,8 @@
     (is
       (not-any? coll? flattened)
       "the flattened representation should not contain collections")))
+
+(deftest format-n-test
+  (is (= "foo 2" (format-n "foo %1" 2)))
+  (is (= (format-n "foo" 2 3 4)))
+  (format-n "list %1 | head" 1))

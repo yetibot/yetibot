@@ -1,8 +1,27 @@
 (ns yetibot.util.format
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.stacktrace :as st]
     [clojure.string :as s])
   (:import [clojure.lang Associative Sequential]))
+
+;; format alternates
+
+(defn format-n [s & args]
+  (let [subst-pattern #"%([0-9]+)"]
+    (if (re-find subst-pattern s)
+      (let [n (->> s
+                   (re-seq subst-pattern)
+                   (map (comp read-string second))
+                   seq
+                   (apply max))]
+        (reduce
+          (fn [acc-to-fmt i]
+            (s/replace acc-to-fmt (str "%" (inc i)) (str (nth args i ""))))
+          s (range n)))
+      s)))
+
+;; chat formaters
 
 (defmulti ^:private format-flattened type)
 

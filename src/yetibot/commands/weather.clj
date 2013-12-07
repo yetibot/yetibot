@@ -92,7 +92,7 @@
   (satellite loc))
 
 (if (conf-valid?)
-  (cmd-hook #"weather"
+  (cmd-hook ["weather" #"^weather$"]
             #"cams\s+(.+)" cams-cmd
             #".+" weather-cmd
             _ default-weather-cmd)

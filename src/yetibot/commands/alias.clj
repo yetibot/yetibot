@@ -1,7 +1,10 @@
 (ns yetibot.commands.alias
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
-    [yetibot.util :refer [with-fresh-db]]
+    [yetibot.util :refer [with-fresh-db psuedo-format]]
+    [yetibot.handler :refer [handle-unparsed-expr]]
+    [yetibot.util.format :refer [format-n]]
     [yetibot.models.help :as help]
     [yetibot.models.alias :as model]
     [yetibot.hooks :refer [cmd-hook cmd-unhook]]))
@@ -12,6 +15,11 @@
   "cmd should be a literal, so chop off the surrounding quotes"
   [cmd]
   (-> cmd s/trim (s/replace #"^\"([^\"]+)\"$" "$1")))
+
+(defn- build-alias-cmd-fn [cmd]
+  (fn [{:keys [user args]}]
+    (let [expr (apply (partial format-n cmd) (s/split args #" "))]
+      (handle-unparsed-expr expr))))
 
 (defn- wire-alias
   "Example input (use quotes to make it a literal so it doesn't get evaluated):
@@ -25,7 +33,7 @@
         ; allow spaces in a-name, even though we just grab the first word
         cmd-name (first (s/split a-name #" "))
         existing-alias (@aliases cmd-name)
-        cmd-fn (fn [{:keys [user]}] (yetibot.handler/handle-unparsed-expr a-cmd))]
+        cmd-fn (build-alias-cmd-fn a-cmd)]
     (swap! aliases assoc cmd-name a-cmd)
     (cmd-hook [cmd-name (re-pattern (str "^" cmd-name "$"))]
               _ cmd-fn)
