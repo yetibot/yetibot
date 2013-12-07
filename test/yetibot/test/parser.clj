@@ -57,13 +57,13 @@
 (deftest literal-test
   (is
     (= (parser "alias foo = \"bar\"")
-       [:expr [:cmd [:words "alias" [:space " "] "foo" [:space " "] "=" [:space " "] [:literal "bar"]]]]))
+       [:expr [:cmd [:words "alias" [:space " "] "foo" [:space " "] "=" [:space " "] [:literal "\"" "bar" "\""]]]]))
   (is
     (= (parser "meme foo: \"lol")
        [:expr [:cmd [:words "meme" [:space " "] "foo:" [:space " "] "\"" "lol"]]]))
   (is
     (= (parser "foo \"lol | foo\"")
-       [:expr [:cmd [:words "foo" [:space " "] [:literal "lol | foo"]]]]))
+       [:expr [:cmd [:words "foo" [:space " "] [:literal "\"" "lol | foo" "\""]]]]))
   (is
     (= (parser "foo \"lol | foo")
        [:expr [:cmd [:words "foo" [:space " "] "\"" "lol"]] [:cmd [:words "foo"]]])))
