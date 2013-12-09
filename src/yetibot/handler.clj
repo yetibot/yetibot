@@ -42,10 +42,11 @@
         (try
           (chat-data-structure
             (handle-unparsed-expr chat-source user body))
-          (catch Exception ex
+          (catch Throwable ex
             (error
               "error handling expression:" body
               (format-exception-log ex))
             (chat-data-structure (format exception-format ex))))))))
+
 
 (defn cmd-reader [& args] (handle-unparsed-expr (join " " args)))
