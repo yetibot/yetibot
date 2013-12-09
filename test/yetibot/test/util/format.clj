@@ -32,8 +32,10 @@
            "all --> foo bar baz <-- there"))
     (is (= (pseudo-format-n "just the second --> %2 <--" args)
            "just the second --> bar <--"))
-    (is (= (pseudo-format-n "append to end -->" args)
-           "append to end --> foo bar baz"))))
+    (is (= (pseudo-format-n "append to end -->" args))))
+  (is (= (pseudo-format-n "echo hi | echo bar" [])
+         "echo hi | echo bar")
+      "It shouldn't have a space at the end when args is empty"))
 
 (deftest pseudo-format-n-with-rebound-prefix
   (binding [*subst-prefix* "\\$"]

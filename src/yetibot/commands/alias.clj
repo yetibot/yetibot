@@ -2,7 +2,7 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
-    [yetibot.util.format :refer [pseudo-format-n]]
+    [yetibot.util.format :refer [pseudo-format-n *subst-prefix*]]
     [yetibot.util :refer [with-fresh-db]]
     [yetibot.handler :refer [handle-unparsed-expr]]
     [yetibot.util.format :refer [format-n]]
@@ -17,10 +17,14 @@
   [cmd]
   (-> cmd s/trim (s/replace #"^\"([^\"]+)\"$" "$1")))
 
+(def method-like-replacement-prefix "\\$")
+
 (defn- build-alias-cmd-fn [cmd]
   (fn [{:keys [user args]}]
-    (let [expr (pseudo-format-n cmd (s/split args #" "))]
-      (handle-unparsed-expr expr))))
+    (binding [*subst-prefix* method-like-replacement-prefix]
+      (let [args (if (empty? args) [] (s/split args #" "))
+            expr (pseudo-format-n cmd args)]
+        (handle-unparsed-expr expr)))))
 
 (defn- wire-alias
   "Example input (use quotes to make it a literal so it doesn't get evaluated):

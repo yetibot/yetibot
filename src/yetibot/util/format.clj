@@ -48,14 +48,16 @@
    contains both %s and %1 substitution placeholders. If neither are found, it
    appends joined args to end of string."
   [s args]
-  (let [gen? (re-find (general-subst-pattern) s)
-        num? (re-find (num-subst-pattern) s)
-        neither? (not (or gen? num?))
-        joined (s/join " " args)]
-    (cond-> s
-      gen? (pseudo-format joined)
-      num? (format-n args)
-      neither? (str " " joined))))
+  (if (empty? args)
+    s
+    (let [gen? (re-find (general-subst-pattern) s)
+          num? (re-find (num-subst-pattern) s)
+          neither? (not (or gen? num?))
+          joined (s/join " " args)]
+      (cond-> s
+        gen? (pseudo-format joined)
+        num? (format-n args)
+        neither? (str " " joined)))))
 
 ;; chat formaters
 

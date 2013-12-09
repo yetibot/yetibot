@@ -1,5 +1,6 @@
 (ns yetibot.parser
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clojure.core.match :refer [match]]
     [yetibot.interpreter :refer [handle-expr]]
     [clojure.string :refer [join]]
