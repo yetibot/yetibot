@@ -2,7 +2,8 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
-    [yetibot.util :refer [with-fresh-db psuedo-format]]
+    [yetibot.util.format :refer [pseudo-format-n]]
+    [yetibot.util :refer [with-fresh-db]]
     [yetibot.handler :refer [handle-unparsed-expr]]
     [yetibot.util.format :refer [format-n]]
     [yetibot.models.help :as help]
@@ -18,7 +19,7 @@
 
 (defn- build-alias-cmd-fn [cmd]
   (fn [{:keys [user args]}]
-    (let [expr (apply (partial format-n cmd) (s/split args #" "))]
+    (let [expr (pseudo-format-n cmd (s/split args #" "))]
       (handle-unparsed-expr expr))))
 
 (defn- wire-alias

@@ -1,5 +1,6 @@
 (ns yetibot.util.format
   (:require
+    [yetibot.util]
     [taoensso.timbre :refer [info warn error]]
     [clojure.stacktrace :as st]
     [clojure.string :as s])
@@ -7,19 +8,47 @@
 
 ;; format alternates
 
-(defn format-n [s & args]
-  (let [subst-pattern #"%([0-9]+)"]
-    (if (re-find subst-pattern s)
-      (let [n (->> s
-                   (re-seq subst-pattern)
-                   (map (comp read-string second))
-                   seq
-                   (apply max))]
-        (reduce
-          (fn [acc-to-fmt i]
-            (s/replace acc-to-fmt (str "%" (inc i)) (str (nth args i ""))))
-          s (range n)))
-      s)))
+(def general-subst-pattern #"%s")
+(def num-subst-pattern #"%([0-9]+)")
+
+(defn format-n
+  "Replace numbered placeholders %1, %2..$n with the nth arg. All args don't
+   have to be used."
+  [s args]
+  (if (re-find num-subst-pattern s)
+    (let [n (->> s
+                 (re-seq num-subst-pattern)
+                 (map (comp read-string second))
+                 seq
+                 (apply max))]
+      (reduce
+        (fn [acc-to-fmt i]
+          (s/replace acc-to-fmt (str "%" (inc i)) (str (nth args i ""))))
+        s (range n)))
+    s))
+
+(defn pseudo-format
+  "Similar to clojure.core/format, except it only supports %s, and it will
+   replace all occurances of %s with the single arg. If there is no %s found, it
+   appends the arg to the end of the string instead."
+  [s arg]
+  (if (re-find #"\%s" s)
+    (s/replace s "%s" arg)
+    s))
+
+(defn pseudo-format-n
+  "Combination of pseudo-format and format-n - it can do both if the string
+   contains both %s and %1 substitution placeholders. If neither are found, it
+   appends joined args to end of string."
+  [s args]
+  (let [gen? (re-find general-subst-pattern s)
+        num? (re-find num-subst-pattern s)
+        neither? (not (or gen? num?))
+        joined (s/join " " args)]
+    (cond-> s
+      gen? (pseudo-format joined)
+      num? (format-n args)
+      neither? (str " " joined))))
 
 ;; chat formaters
 

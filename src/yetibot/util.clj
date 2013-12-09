@@ -41,7 +41,8 @@
      ~@body))
 
 (defn psuedo-format
-  "Similar to clojure.core/format, except it only supports %s, and it will replace
+  "DEPRECATED
+   Similar to clojure.core/format, except it only supports %s, and it will replace
    all occurances of %s with the single arg. If there is no %s found, it appends the
    arg to the end of the string instead."
   [s arg]
