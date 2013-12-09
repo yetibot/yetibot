@@ -8,22 +8,29 @@
 
 ;; format alternates
 
-(def general-subst-pattern #"%s")
-(def num-subst-pattern #"%([0-9]+)")
+(def ^:dynamic *subst-prefix*
+  "Dynamic substitution prefix allowing substitution to happen with other
+   prefixes, such as $ or &. If a symbol need to be escaped inside a regex
+   normally, user should set it to the escapped value, e.g. \\$."
+  "%")
+
+(defn general-subst-pattern [] (re-pattern (str *subst-prefix* "s")))
+
+(defn num-subst-pattern [] (re-pattern (str *subst-prefix* "([0-9]+)")))
 
 (defn format-n
   "Replace numbered placeholders %1, %2..$n with the nth arg. All args don't
    have to be used."
   [s args]
-  (if (re-find num-subst-pattern s)
+  (if (re-find (num-subst-pattern) s)
     (let [n (->> s
-                 (re-seq num-subst-pattern)
+                 (re-seq (num-subst-pattern))
                  (map (comp read-string second))
                  seq
                  (apply max))]
       (reduce
         (fn [acc-to-fmt i]
-          (s/replace acc-to-fmt (str "%" (inc i)) (str (nth args i ""))))
+          (s/replace acc-to-fmt (re-pattern (str *subst-prefix* (inc i))) (str (nth args i ""))))
         s (range n)))
     s))
 
@@ -32,8 +39,8 @@
    replace all occurances of %s with the single arg. If there is no %s found, it
    appends the arg to the end of the string instead."
   [s arg]
-  (if (re-find #"\%s" s)
-    (s/replace s "%s" arg)
+  (if (re-find (general-subst-pattern) s)
+    (s/replace s (general-subst-pattern) arg)
     s))
 
 (defn pseudo-format-n
@@ -41,8 +48,8 @@
    contains both %s and %1 substitution placeholders. If neither are found, it
    appends joined args to end of string."
   [s args]
-  (let [gen? (re-find general-subst-pattern s)
-        num? (re-find num-subst-pattern s)
+  (let [gen? (re-find (general-subst-pattern) s)
+        num? (re-find (num-subst-pattern) s)
         neither? (not (or gen? num?))
         joined (s/join " " args)]
     (cond-> s

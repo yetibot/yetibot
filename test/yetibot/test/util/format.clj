@@ -34,3 +34,12 @@
            "just the second --> bar <--"))
     (is (= (pseudo-format-n "append to end -->" args)
            "append to end --> foo bar baz"))))
+
+(deftest pseudo-format-n-with-rebound-prefix
+  (binding [*subst-prefix* "\\$"]
+    (is (= (pseudo-format-n "foo --> $2 <-- two" [1 2])
+           "foo --> 2 <-- two")
+        "It should work with a new prefix.")
+    (is (= (pseudo-format-n "--> %s <--" [1 2])
+           "--> %s <-- 1 2")
+        "It shouldn't work with the old prefix after a new one is bound.")))
