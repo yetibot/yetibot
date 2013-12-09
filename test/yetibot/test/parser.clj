@@ -81,3 +81,12 @@
   (is
     (= (parser " foo")
        [:expr [:cmd [:words [:space " "] "foo"]]])))
+
+(deftest special-character-test
+  (is (= (parser "foo \"$\"")
+         [:expr [:cmd [:words "foo" [:space " "] [:literal "\"" "$" "\""]]]])
+      "Parsing a special character works if it's a literal")
+  (is (= (parser "foo $")
+         [:expr [:cmd [:words "foo" [:space " "] "$"]]])
+      "Parsing with a sub-expr special character works as long as it doesn't fit
+       the shape of the beginning of a sub-expr, e.g. $(....."))
