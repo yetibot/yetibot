@@ -65,7 +65,7 @@
          ((set (keys (help/get-docs))) cmd))))
 
 (defn create-alias
-  "alias <alias> = \"<cmd>\" # alias a cmd, where <cmd> is a normal command expression. Note the use of quotes, which treats the right-hand side as a literal allowing the use of pipes."
+  "alias <alias> = \"<cmd>\" # alias a cmd, where <cmd> is a normal command expression. Note the use of quotes, which treats the right-hand side as a literal allowing the use of pipes. Use $s as a placeholder for all args, or $n (where n is a 1-based index of which arg) as a placeholder for a specific arg."
   [{[_ a-name _] :match :as args}]
   (if (built-in? a-name)
     (str "Can not alias existing built-in command " a-name)

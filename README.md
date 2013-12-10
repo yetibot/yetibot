@@ -81,6 +81,32 @@ disambiguates the open and closing of an expressions.
 
 <img src="http://cdn.memegenerator.net/instances/500x/34461434.jpg" />
 
+
+### Aliases
+
+You can build your own aliases at runtime. These are stored in the configured
+database, so upon restart they are restored.
+
+```
+!alias nogrid = repeat 3 echo `repeat 3 meme grumpy: no | join`
+```
+
+Pipes can be used, but the right-hand side must be quoted in order to treat it
+as a literal instead of being evaluated according to normal pipe behavior.
+
+```
+!alias i5 = "random | http://icons.wunderground.com/webcamramdisk/w/a/wadot/324/current.jpg?t=%s&.jpg
+```
+
+You can specify placeholder arguments on the right-hand side using `$s` to
+indicate all arguments, or `$n` (where n is a 1-based index of which arg).
+
+```
+!alias temp = "weather $s | head 2 | tail"
+!temp 98104
+=> 33.6 F (0.9 C), Overcast
+```
+
 ### Help
 
 yetibot self-documents itself using the docstrings of its various commands. Ask it
