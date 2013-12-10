@@ -167,12 +167,19 @@
           _ sort-cmd)
 
 ; grep
+(defn grep-data-structure [pattern d]
+  (let [finder (partial re-find pattern)]
+    (filter (fn [i]
+              (cond
+                (string? i) (finder i)
+                (coll? i) (some finder (map str (flatten i))))) d)))
+
 (defn grep-cmd
   "grep <pattern> <list> # filters the items in a list by <pattern>"
   [{:keys [args opts]}]
   (let [pattern (re-pattern (str "(?i)" args))
         items (ensure-items-collection opts)]
-    (filter #(re-find pattern %) items)))
+    (grep-data-structure pattern items)))
 
 (cmd-hook #"grep"
           _ grep-cmd)
