@@ -44,25 +44,34 @@
               (filter-nil-vals {:summary summary
                                 :assignee assignee
                                 :desc desc}))]
-    (if (re-find #"^2" (str (:status res) "2"))
+    (if (re-find #"^2" (str (:status res) "2")) ; success?
       (let [iss-key (-> res :body :key)]
         (report-jira iss-key)
         (str "Created issue " iss-key))
       (map-to-strs (->> res :body :errors)))))
 
+(defn- short-jira-list [resp]
+  (map api/format-issue-short
+       (->> resp
+            :body
+            :issues
+            (take 5))))
+
 (defn recent-cmd
   "jira recent # show the 5 most recent issues"
   [_]
-  (map api/format-issue-short
-       (->> (api/recent)
-           :body
-           :issues
-           (take 5))))
+  (short-jira-list (api/recent)))
+
+(defn search-cmd
+  "jira search <query> # return up to 5 issues issues matching <query> across all configured projects"
+  [{[_ query] :match}]
+  (short-jira-list (api/search-by-query query)))
 
 (cmd-hook #"jira"
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd
+          #"^search\s+(.+)" search-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
           #"^create\s+([^\/]+)" create-cmd

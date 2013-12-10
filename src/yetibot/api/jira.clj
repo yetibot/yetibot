@@ -13,7 +13,10 @@
 (def ^:private base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
 (def ^:private auth (map config [:user :password]))
-(def ^:private client-opts {:as :json :basic-auth auth :insecure? true})
+(def ^:private client-opts {:as :json
+                            :basic-auth auth
+                            :throw-entire-message? true
+                            :insecure? true})
 
 (defn endpoint [& fmt-with-args]
   (str api-uri (apply format fmt-with-args)))
@@ -128,15 +131,23 @@
 
 ;; search
 
+(defn- projects-jql [] (str "(project in (" (project-keys-str) "))"))
+
 (defn search [jql]
+  (info "JQL search" jql)
   (client/get
     (endpoint "/search")
     (merge client-opts
            {:query-params
             {:jql jql
              :startAt 0
-             :maxResults 15
-             :fields ["summary" "status" "assignee"]
-             }})))
+             :maxResults 5
+             :fields ["summary" "status" "assignee"]}})))
 
-(defn recent [] (search (str "(project in (" (project-keys-str) "))")))
+(defn search-by-query [query]
+  (search
+    (str (projects-jql)
+         " AND (summary ~ \"" query "\" OR description ~ \"" query
+         "\" OR comment ~ \"" query "\")")))
+
+(defn recent [] (search (projects-jql)))
