@@ -53,7 +53,7 @@
 (cmd-hook #"jira"
           #"^pri" priorities-cmd
           #"^users" users-cmd
-          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
+          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
           #"^create\s+([^\/]+)" create-cmd
           #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)
