@@ -33,6 +33,8 @@
        flatten
        (apply sorted-map)))
 
+(defn success? [res]
+  (re-find #"^2" (str (:status res) "2")))
 
 ; currently doesn't support more than one project key, but it could
 (defn create-cmd
@@ -44,18 +46,20 @@
               (filter-nil-vals {:summary summary
                                 :assignee assignee
                                 :desc desc}))]
-    (if (re-find #"^2" (str (:status res) "2")) ; success?
+    (if (success? res)
       (let [iss-key (-> res :body :key)]
         (report-jira iss-key)
         (str "Created issue " iss-key))
       (map-to-strs (->> res :body :errors)))))
 
-(defn- short-jira-list [resp]
-  (map api/format-issue-short
-       (->> resp
-            :body
-            :issues
-            (take 5))))
+(defn- short-jira-list [res]
+  (if (success? res)
+    (map api/format-issue-short
+         (->> res
+              :body
+              :issues
+              (take 5)))
+    (-> res :body :errorMessages)))
 
 (defn recent-cmd
   "jira recent # show the 5 most recent issues"
@@ -63,15 +67,21 @@
   (short-jira-list (api/recent)))
 
 (defn search-cmd
-  "jira search <query> # return up to 5 issues issues matching <query> across all configured projects"
+  "jira search <query> # return up to 5 issues matching <query> across all configured projects"
   [{[_ query] :match}]
   (short-jira-list (api/search-by-query query)))
+
+(defn jql-cmd
+  "jira jql <jql> # return up to 5 issues matching <jql> query across all configured projects"
+  [{[_ jql] :match}]
+  (short-jira-list (api/search-in-projects jql)))
 
 (cmd-hook #"jira"
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd
           #"^search\s+(.+)" search-cmd
+          #"^jql\s+(.+)" jql-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
           #"^create\s+([^\/]+)" create-cmd

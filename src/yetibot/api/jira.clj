@@ -138,16 +138,20 @@
   (client/get
     (endpoint "/search")
     (merge client-opts
-           {:query-params
+           {:coerce :always
+            :throw-exceptions false
+            :query-params
             {:jql jql
              :startAt 0
              :maxResults 5
              :fields ["summary" "status" "assignee"]}})))
 
+(defn search-in-projects [jql]
+  (search (str (projects-jql) " AND (" jql ")")))
+
 (defn search-by-query [query]
-  (search
-    (str (projects-jql)
-         " AND (summary ~ \"" query "\" OR description ~ \"" query
-         "\" OR comment ~ \"" query "\")")))
+  (search-in-projects
+    "(summary ~ \"" query "\" OR description ~ \"" query
+    "\" OR comment ~ \"" query "\")"))
 
 (defn recent [] (search (projects-jql)))
