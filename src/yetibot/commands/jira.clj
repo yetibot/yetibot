@@ -50,7 +50,17 @@
         (str "Created issue " iss-key))
       (map-to-strs (->> res :body :errors)))))
 
+(defn recent-cmd
+  "jira recent # show the 5 most recent issues"
+  [_]
+  (map api/format-issue-short
+       (->> (api/recent)
+           :body
+           :issues
+           (take 5))))
+
 (cmd-hook #"jira"
+          #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd

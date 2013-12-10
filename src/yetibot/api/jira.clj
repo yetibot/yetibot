@@ -8,6 +8,7 @@
 
 (def config (config-for-ns))
 (def configured? (conf-valid?))
+(defn project-keys-str [] (->> config :project-keys (s/join ",")))
 
 (def ^:private base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
@@ -16,6 +17,25 @@
 
 (defn endpoint [& fmt-with-args]
   (str api-uri (apply format fmt-with-args)))
+
+;; formatters
+
+(defn url-from-key [k]
+  (str base-uri "/browse/" k))
+
+(defn format-issue [issue-data]
+  (let [fs (:fields issue-data)]
+    [(-> fs :summary)
+     (str "Assignee: " (-> fs :assignee :displayName))
+     (str "Status: " (-> fs :status :name))
+     (url-from-key (:key issue-data))]))
+
+(defn format-issue-short [issue-data]
+  (let [fs (:fields issue-data)]
+    (format "%s: %s %s"
+            (-> fs :status :name)
+            (-> fs :summary)
+            (url-from-key (:key issue-data)))))
 
 ;; issues
 
@@ -51,13 +71,6 @@
       (:body (client/get uri client-opts))
       (catch Exception _ nil))))
 
-(defn format-issue [issue-data]
-  (let [fs (:fields issue-data)]
-    [(-> fs :summary)
-     (str "Assignee: " (-> fs :assignee :displayName))
-     (str "Status: " (-> fs :status :name))
-     (str base-uri "/browse/" (:key issue-data))]))
-
 (defn find-project [pk]
   (try
     (:body (client/get (endpoint "/project/%s" pk) client-opts))
@@ -92,7 +105,6 @@
                      :description desc
                      :issuetype {:id (:default-issue-type-id config)}
                      :priority {:id pri-id}}}]
-        (prn params)
         (client/post
           (endpoint "/issue")
           (merge client-opts
@@ -111,4 +123,20 @@
       (endpoint "/user/assignable/multiProjectSearch")
       (merge client-opts
              {:query-params
-              {"projectKeys" (->> config :project-keys (s/join ","))}}))))
+              {"projectKeys" (project-keys-str)}}))))
+
+
+;; search
+
+(defn search [jql]
+  (client/get
+    (endpoint "/search")
+    (merge client-opts
+           {:query-params
+            {:jql jql
+             :startAt 0
+             :maxResults 15
+             :fields ["summary" "status" "assignee"]
+             }})))
+
+(defn recent [] (search (str "(project in (" (project-keys-str) "))")))
