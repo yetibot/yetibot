@@ -17,6 +17,8 @@
                             :basic-auth auth
                             :throw-entire-message? true
                             :insecure? true})
+(def ^:private error-handling-opts {:coerce :always
+                                    :throw-exceptions false})
 
 (defn endpoint [& fmt-with-args]
   (str api-uri (apply format fmt-with-args)))
@@ -118,6 +120,15 @@
       (warn "Could not find a priority for key " priority-key))
     (warn "Could not find project" project-key)))
 
+(defn assign-issue
+  [issue-key assignee]
+  (client/put
+    (endpoint "/issue/%s/assignee" issue-key)
+    (merge client-opts
+           ; error-handling-opts
+           {:content-type :json
+            :form-params {:name assignee}})))
+
 ;; users
 
 (defn get-users []
@@ -151,7 +162,8 @@
 
 (defn search-by-query [query]
   (search-in-projects
-    "(summary ~ \"" query "\" OR description ~ \"" query
-    "\" OR comment ~ \"" query "\")"))
+    (str
+      "(summary ~ \"" query "\" OR description ~ \"" query
+      "\" OR comment ~ \"" query "\")")))
 
 (defn recent [] (search (projects-jql)))

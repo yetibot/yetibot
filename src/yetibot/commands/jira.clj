@@ -43,6 +43,11 @@
 (defn success? [res]
   (re-find #"^2" (str (:status res) "2")))
 
+(defn report-if-error [res succ-fn]
+  (if (success? res)
+    (succ-fn res)
+    (-> res :body :errorMessages)))
+
 ; currently doesn't support more than one project key, but it could
 (defn create-cmd
   "jira create <summary> # create issue with summary, unassigned
@@ -68,6 +73,13 @@
               (take 5)))
     (-> res :body :errorMessages)))
 
+(defn assign-cmd
+  "jira assign <issue> <assignee> # assign <issue> to <assignee>"
+  [{[_ iss-key assignee] :match}]
+  (report-if-error
+    (api/assign-issue iss-key assignee)
+    (fn [res] (report-jira iss-key) "Success")))
+
 (defn recent-cmd
   "jira recent # show the 5 most recent issues"
   [_]
@@ -88,6 +100,7 @@
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd
+          #"^assign\s+(\S+)\s+(\S+)" assign-cmd
           #"^search\s+(.+)" search-cmd
           #"^jql\s+(.+)" jql-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
