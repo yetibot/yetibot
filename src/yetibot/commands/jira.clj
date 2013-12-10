@@ -6,6 +6,13 @@
     [yetibot.hooks :refer [cmd-hook]]
     [yetibot.api.jira :as api]))
 
+
+(defn projects-cmd
+  [_]
+  "jira projects # list configured projects"
+  (->> api/config :project-keys
+      (map api/url-from-key)))
+
 (defn users-cmd
   "jira users # list the users for the configured project(s)"
   [_]
@@ -77,6 +84,7 @@
   (short-jira-list (api/search-in-projects jql)))
 
 (cmd-hook #"jira"
+          #"^projects" projects-cmd
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd
