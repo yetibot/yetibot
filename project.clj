@@ -7,6 +7,7 @@
   :resource-paths ["config"]
   :repl-options {:init-ns user
                  :welcome (println "Welcome to the YetiBot development repl!")}
+  :jvm-opts ["-server" "-Xmx2G"]
   :dependencies [[org.clojure/clojure "1.5.0"],
 
                  ; TODO - kill this some day. We're only relying on it for
