@@ -167,21 +167,44 @@
           _ sort-cmd)
 
 ; grep
-(defn grep-data-structure [pattern d]
-  (let [finder (partial re-find pattern)]
-    (filter (fn [i]
-              (cond
-                (string? i) (finder i)
-                (coll? i) (some finder (map str (flatten i))))) d)))
+(defn slide-context [coll i n]
+  (reduce
+    (fn [acc i]
+      (if-let [v (nth coll i nil)]
+        (conj acc v)
+        acc))
+    []
+    (range (- i n) (+ i n 1))))
+
+(defn sliding-filter [slide-n filter-fn coll]
+  (reduce
+    (fn [acc i]
+      (if (filter-fn (nth coll i))
+        (conj acc (slide-context coll i slide-n))
+        acc))
+    []
+    (range (count coll))))
+
+(defn grep-data-structure [pattern d & [opts]]
+  (let [finder (partial re-find pattern)
+        around-count (or (:context opts) 0)
+        filter-fn (fn [i]
+                    (cond
+                      (string? i) (finder i)
+                      (coll? i) (some finder (map str (flatten i)))))]
+    (sliding-filter around-count filter-fn d)))
 
 (defn grep-cmd
-  "grep <pattern> <list> # filters the items in a list by <pattern>"
+  "grep <pattern> <list> # filters the items in <list> by <pattern>
+   grep -C <n> <pattern> <list> # filter items in <list> by <patttern> and include <n> items before and after each matched item"
   [{:keys [args opts]}]
-  (let [pattern (re-pattern (str "(?i)" args))
+  (let [[_ n p] (if (sequential? args) args [nil "0" args])
+        pattern (re-pattern (str "(?i)" p))
         items (ensure-items-collection opts)]
-    (grep-data-structure pattern items)))
+    (grep-data-structure pattern items {:context (read-string n)})))
 
 (cmd-hook #"grep"
+          #"-C\s+(\d+)\s+(.+)" grep-cmd
           _ grep-cmd)
 
 ; tee
