@@ -170,7 +170,7 @@
 (defn count-cmd
   "count <list> # count the number of items in <list>"
   [{items :opts}]
-  (count (ensure-items-collection items)))
+  (str (count (ensure-items-collection items))))
 
 (cmd-hook #"count"
           _ count-cmd)
