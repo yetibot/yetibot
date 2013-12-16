@@ -129,6 +129,15 @@
 (cmd-hook #"split"
           #"(?is)^(\S+)\s+(.+)$" split)
 
+; trim
+(defn trim
+  "trim <string> # remove whitespace from both ends of <string>"
+  [{args :args}]
+  (s/trim args))
+
+(cmd-hook ["trim" #"^trim$"]
+          _ trim)
+
 ; words
 (defn words
   "words <string> # split <string> by spaces into a list"
