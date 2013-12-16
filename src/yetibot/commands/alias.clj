@@ -59,7 +59,7 @@
 
 (defn load-aliases []
   (let [alias-cmds (model/find-all)]
-    (dorun (map (comp wire-alias add-alias)) alias-cmds)))
+    (dorun (map (comp wire-alias add-alias) alias-cmds))))
 
 (defn- built-in? [cmd]
   (let [as (model/find-all)]
