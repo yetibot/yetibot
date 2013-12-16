@@ -97,6 +97,7 @@
         new-as (reduce (fn [acc ent]
                          (if-let [ac (:alias-cmd ent)]
                            (let [[_ a-name a-cmd] (read-string ac)]
+                             (datomico.core/delete (:id ent))
                              (conj acc (merge (select-keys ent [:userid])
                                               {:cmd-name (cleaned-cmd-name a-name)
                                                :cmd (clean-alias-cmd a-cmd)})))
