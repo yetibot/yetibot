@@ -64,6 +64,15 @@
           #"(\d+)" tail-n
           _ tail-1)
 
+; droplast
+(defn drop-last-cmd
+  "droplast <list> # drop the last item from <list>"
+  [{items :opts}]
+  (drop-last (ensure-items-collection items)))
+
+(cmd-hook ["droplast" #"^droplast$"]
+          _ drop-last-cmd)
+
 ; rest
 (defn rest-cmd
   "rest <list> # returns the last item from the <list>"
@@ -187,21 +196,22 @@
 
 (defn grep-data-structure [pattern d & [opts]]
   (let [finder (partial re-find pattern)
-        around-count (or (:context opts) 0)
+        context-count (or (:context opts) 0)
         filter-fn (fn [i]
                     (cond
                       (string? i) (finder i)
                       (coll? i) (some finder (map str (flatten i)))))]
-    (sliding-filter around-count filter-fn d)))
+    (sliding-filter context-count filter-fn d)))
 
 (defn grep-cmd
   "grep <pattern> <list> # filters the items in <list> by <pattern>
    grep -C <n> <pattern> <list> # filter items in <list> by <patttern> and include <n> items before and after each matched item"
-  [{:keys [args opts]}]
-  (let [[_ n p] (if (sequential? args) args [nil "0" args])
+  [{:keys [match opts args]}]
+  (let [[n p] (if (sequential? match) (rest match) ["0" args])
         pattern (re-pattern (str "(?i)" p))
         items (ensure-items-collection opts)]
     (grep-data-structure pattern items {:context (read-string n)})))
+
 
 (cmd-hook #"grep"
           #"-C\s+(\d+)\s+(.+)" grep-cmd

@@ -25,6 +25,11 @@
 
 (deftest grep-around-test
   (is (= (grep-data-structure
+           #"yes"
+           '("devth: foo" "devth: yes" "devth: bar" "devth: lol" "devth: ok" "devth: baz" "devth: !history | grep -C 2 yes")
+           {:context 2})
+         [["devth: foo" "devth: yes" "devth: bar" "devth: lol"] ["devth: ok" "devth: baz" "devth: !history | grep -C 2 yes"]]))
+  (is (= (grep-data-structure
            #"foo"
            ["bar" "lol" "foo" "baz" "qux"]
            {:context 1})
@@ -34,6 +39,6 @@
   (is (= (grep-cmd {:args "foo"
                     :opts ["foo" "bar"]})
          [["foo"]]))
-  (is (= (grep-cmd {:args (re-find #"-C\s+(\d+)\s+(.+)" "-C 1 baz")
+  (is (= (grep-cmd {:match (re-find #"-C\s+(\d+)\s+(.+)" "-C 1 baz")
                     :opts ["foo" "bar" "baz"]})
          [["bar" "baz"]])))
