@@ -1,6 +1,7 @@
 (ns yetibot.repl
   "Load this namespace when working with YetiBot in the REPL or during dev."
   (:require
+    [yetibot.db :refer [repl-start]]
     [yetibot.models.users :as users]
     [yetibot.loader :refer [load-commands-and-observers load-ns]]))
 
@@ -11,6 +12,8 @@
   (require 'yetibot.commands.collections :reload))
 
 (load-minimal)
+
+(repl-start)
 
 (defn load-all []
   (future

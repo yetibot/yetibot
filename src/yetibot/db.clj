@@ -25,3 +25,14 @@
                  :schemas schemas})
       (info "☑ Datomic connected"))
     (warn ":datomic-url is not configured, unable to connect.")))
+
+
+(defn repl-start []
+  (if (conf-valid? (get-config :yetibot :db))
+    (do
+      (info "☐ Loading Datomic schemas with dynamic-vars for repl")
+      (dc/start {:uri (:datomic-url (get-config :yetibot :db))
+                 :dynamic-vars true
+                 :schemas schemas})
+      (info "☑ Datomic connected"))
+    (warn ":datomic-url is not configured, unable to connect.")))

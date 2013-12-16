@@ -10,8 +10,6 @@
     [yetibot.models.alias :as model]
     [yetibot.hooks :refer [cmd-hook cmd-unhook]]))
 
-(defonce aliases (atom {}))
-
 (defn- clean-alias-cmd
   "cmd should be a literal, so chop off the surrounding quotes"
   [cmd]
@@ -26,69 +24,86 @@
             expr (pseudo-format-n cmd args)]
         (handle-unparsed-expr expr)))))
 
+(defn- existing-alias [cmd-name] (model/find-first {:cmd-name cmd-name}))
+
+(defn- cleaned-cmd-name [a-name]
+  ; allow spaces in a-name, even though we just grab the first word to use as
+  ; the actual cmd
+  (-> a-name s/trim (s/split #" ") first))
+
 (defn- wire-alias
   "Example input (use quotes to make it a literal so it doesn't get evaluated):
    i90 = \"random | echo http://images.wsdot.wa.gov/nw/090vc00508.jpg?nocache=%s&.jpg\"
-   Note: alias args aren't supported yet:
-   alias grid x = !repeat 10 `repeat 10 %s | join`"
-  [{[_ a-name a-cmd] :match}]
-  (let [a-name (s/trim a-name)
-        a-cmd (clean-alias-cmd a-cmd)
-        docstring (str "alias for " a-cmd)
-        ; allow spaces in a-name, even though we just grab the first word
-        cmd-name (first (s/split a-name #" "))
-        existing-alias (@aliases cmd-name)
-        cmd-fn (build-alias-cmd-fn a-cmd)]
-    (swap! aliases assoc cmd-name a-cmd)
+   Alias args are also supported (all args inserted):
+   alias grid = \"repeat 10 `repeat 10 $s | join`\"
+   Use first arg only:
+   alias sayhi = echo hi, $1"
+  [{:keys [cmd-name cmd]}]
+  (let [docstring (str "alias for " cmd)
+        existing-alias (existing-alias cmd-name)
+        cmd-fn (build-alias-cmd-fn cmd)]
     (cmd-hook [cmd-name (re-pattern (str "^" cmd-name "$"))]
               _ cmd-fn)
     ; manually add docs since the meta on cmd-fn is lost in cmd-hook
     (help/add-docs cmd-name [docstring])
     (if existing-alias
-      (format "Replaced existing alias %s = %s" cmd-name existing-alias)
-      (format "%s alias created" a-name))))
+      (format "Replaced existing alias %s = %s" cmd-name (:cmd existing-alias))
+      (format "%s alias created" cmd-name))))
 
-(defn add-alias [{:keys [user match] :as cmd-map}]
-  (model/create {:userid (:id user) :alias-cmd (prn-str match)})
-  cmd-map)
+(defn add-alias [{:keys [cmd-name cmd userid] :as alias-info}]
+  (let [new-alias-map {:userid userid :cmd-name cmd-name :cmd cmd}]
+    (if (existing-alias cmd-name)
+      (model/update (:id existing-alias) new-alias-map)
+      (model/create new-alias-map)))
+  alias-info)
 
 (defn load-aliases []
   (let [alias-cmds (model/find-all)]
-    (dorun (map (comp wire-alias
-                      (partial hash-map :match)
-                      read-string
-                      :alias-cmd) alias-cmds))))
+    (dorun (map (comp wire-alias add-alias)) alias-cmds)))
 
 (defn- built-in? [cmd]
-  (let [as @aliases]
-    (and (not ((set (keys as)) cmd))
+  (let [as (model/find-all)]
+    (and (not ((set (map :cmd-name as)) cmd))
          ((set (keys (help/get-docs))) cmd))))
 
 (defn create-alias
   "alias <alias> = \"<cmd>\" # alias a cmd, where <cmd> is a normal command expression. Note the use of quotes, which treats the right-hand side as a literal allowing the use of pipes. Use $s as a placeholder for all args, or $n (where n is a 1-based index of which arg) as a placeholder for a specific arg."
-  [{[_ a-name _] :match :as args}]
-  (if (built-in? a-name)
-    (str "Can not alias existing built-in command " a-name)
-    ((comp wire-alias add-alias) args)))
+  [{[_ a-name a-cmd] :match user :user}]
+  (let [cmd-name (cleaned-cmd-name a-name)
+        cmd (clean-alias-cmd a-cmd)]
+    (if (built-in? cmd-name)
+      (str "Can not alias existing built-in command " a-name)
+      ((comp wire-alias add-alias) {:userid (:id user) :cmd-name cmd-name :cmd cmd}))))
 
 (defn list-aliases
   "alias # show existing aliases"
   [_]
-  (let [as @aliases]
+  (let [as (model/find-all)]
     (if (empty? as)
       "No aliases have been defined"
-      as)))
+      (into {} (map (juxt :cmd-name :cmd) as)))))
 
 (defn remove-alias
   "alias remove <alias> # remove alias by name"
   [{[_ cmd] :match}]
-  (swap! aliases dissoc cmd)
+  (model/delete-all {:cmd-name cmd})
   (cmd-unhook cmd)
   (format "alias %s removed" cmd))
 
-(defonce loader
-  (with-fresh-db
-    (future (load-aliases))))
+(defonce loader (with-fresh-db (future (load-aliases))))
+
+(defn port-old-aliases []
+  (let [as (model/find-all)
+        new-as (reduce (fn [acc ent]
+                         (if-let [ac (:alias-cmd ent)]
+                           (let [[_ a-name a-cmd] (read-string ac)]
+                             (conj acc (merge (select-keys ent [:userid])
+                                              {:cmd-name (cleaned-cmd-name a-name)
+                                               :cmd (clean-alias-cmd a-cmd)})))
+                           acc))
+                       [] as)]
+    (info "Remap:" (pr-str new-as))
+    (doall (map model/create new-as))))
 
 (cmd-hook #"alias"
           #"^$" list-aliases

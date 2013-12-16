@@ -5,7 +5,7 @@
              :test {}
              :plugins [[lein-midje "3.0-beta1"]]}
   :resource-paths ["config"]
-  :repl-options {:init-ns user
+  :repl-options {:init-ns yetibot.repl
                  :welcome (println "Welcome to the YetiBot development repl!")}
   :jvm-opts ["-server" "-Xmx2G"]
   :dependencies [[org.clojure/clojure "1.5.0"],
