@@ -92,20 +92,6 @@
 
 (defonce loader (with-fresh-db (future (load-aliases))))
 
-(defn port-old-aliases []
-  (let [as (model/find-all)
-        new-as (reduce (fn [acc ent]
-                         (if-let [ac (:alias-cmd ent)]
-                           (let [[_ a-name a-cmd] (read-string ac)]
-                             (datomico.core/delete (:id ent))
-                             (conj acc (merge (select-keys ent [:userid])
-                                              {:cmd-name (cleaned-cmd-name a-name)
-                                               :cmd (clean-alias-cmd a-cmd)})))
-                           acc))
-                       [] as)]
-    (info "Remap:" (pr-str new-as))
-    (doall (map model/create new-as))))
-
 (cmd-hook #"alias"
           #"^$" list-aliases
           #"remove\s+(\w+)" remove-alias
