@@ -10,10 +10,10 @@
     (filter #(re-matches pattern (str %)) all-ns)))
 
 (def yetibot-command-namespaces
-  [#"^yetibot\.commands.*" #"^plugins.*commands.*"])
+  [#"^yetibot\.commands.*" #"^.*plugins\.commands.*"])
 
 (def yetibot-observer-namespaces
-  [#"^yetibot\.observers.*" #"^plugins.*observers.*"])
+  [#"^yetibot\.observers.*" #"^.*plugins\.observers.*"])
 
 (def yetibot-all-namespaces
   (merge
