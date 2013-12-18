@@ -31,7 +31,7 @@ There are two primary ways of installing yetibot:
 
 Configuration lives at `config/config.edn`, which is git-ignored. See
 [config/config-sample.edn](config/config-sample.edn) for a sample config.
-`mv` this to `config/config.edn` and fill in the blanks to get started.
+`cp` this to `config/config.edn` and fill in the blanks to get started.
 
 ## Running
 
