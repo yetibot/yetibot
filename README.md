@@ -174,9 +174,8 @@ Curious how the internals of Yetibot works? At a high level:
 
 ## Getting help
 
-If the doc or implementation code don't serve you well, I'm always interested in
-learning why and improving things. Open an issue or submit a pull request to get
-things moving!
+If the docs or implementation code don't serve you well, please open a pull
+request and explain why so we can improve the docs.
 
 ## License
 
