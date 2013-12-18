@@ -3,7 +3,6 @@
   :profiles {:dev {:source-paths ["dev"]}
              :test {}
              :plugins [[lein-git-deps "0.0.1-SNAPSHOT"]]}
-  :resource-paths ["config"]
   :repl-options {:init-ns yetibot.core.repl
                  :welcome (println "Welcome to the YetiBot development repl!")}
   :jvm-opts ["-server" "-Xmx2G"]
