@@ -16,7 +16,7 @@
     (is (> (-> ms :data :memes count) 0)))
 
   (deftest search-memes-test
-    (is (= "Chuck Norris Approves" (:name (first (search-memes "chuck"))))))
+    (is (= "Ancient Aliens" (:name (first (search-memes "alien"))))))
 
   (deftest generate-meme-test
     (let [m (generate-meme "61579" "foo" "bar")]
