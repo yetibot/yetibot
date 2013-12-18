@@ -23,6 +23,9 @@
                  ; utils
                  [useful "0.8.3-alpha8"]
 
+                 ; NLP
+                 [clojure-opennlp "0.3.2"]
+
                  ; [incanter "1.4.0"]
                  ]
   :plugins [[lein-ring "0.8.2"]]
