@@ -142,7 +142,7 @@ matching the regexes at:
 https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L12-16
 
 This lets you build any number of independent plugin projects and combine them
-in any fashion through standard leiningen dependencies.
+via standard leiningen dependencies.
 
 
 ## How it works
