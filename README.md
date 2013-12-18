@@ -16,9 +16,20 @@ unix-style piping and arbitrarily-nested sub expressions.
 
 [![Build Status](https://travis-ci.org/devth/yetibot.png?branch=master)](https://travis-ci.org/devth/yetibot)
 
+## Installation
+
+There are two primary ways of installing yetibot:
+
+ 1. **Clone this repo**: this gives you a standard yetibot installation and
+    provides a git-ignored place to store configuration.
+ 2. **Make your own repo and depend on yetibot**: this gives you ultimate
+    customizability, allowing you to depend on custom yetibot plugins, and gives
+    you control over where you store your config (manual management, commit to
+    private git repo, etc...)
+
 ## Configuration
 
-Configuration lives at `config/config.edn`, which is `.gitignore`d. See
+Configuration lives at `config/config.edn`, which is git-ignored. See
 [config/config-sample.edn](config/config-sample.edn) for a sample config.
 `mv` this to `config/config.edn` and fill in the blanks to get started.
 
