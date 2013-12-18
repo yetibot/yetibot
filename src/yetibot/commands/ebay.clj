@@ -1,6 +1,7 @@
 (ns yetibot.commands.ebay
-  (:require [yetibot.api.ebay :refer [find-item]]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [yetibot.api.ebay :refer [find-item]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn price-and-title [json]
   (let [price ((comp (partial str "$") :__value__ first :currentPrice first :sellingStatus) json)

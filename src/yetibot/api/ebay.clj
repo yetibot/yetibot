@@ -1,7 +1,7 @@
 (ns yetibot.api.ebay
   (:require
-    [yetibot.config :refer [config-for-ns]]
-    [yetibot.util.http :refer [encode get-json]]))
+    [yetibot.core.config :refer [config-for-ns]]
+    [yetibot.core.util.http :refer [encode get-json]]))
 
 (def config (config-for-ns))
 

@@ -1,7 +1,7 @@
 (ns yetibot.commands.cls
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require [yetibot.core.hooks :refer [cmd-hook]]))
 
-(def cls-image "http://f.cl.ly/items/1P2P0y0M0m0C413x0a1l/cls.jpg")
+(def cls-image "http://virtualeconomics.typepad.com/photos/uncategorized/ae1_3.jpg")
 
 (defn clear-screen-cmd
   "cls # clear screen after your co-worker posts something inappropriate"

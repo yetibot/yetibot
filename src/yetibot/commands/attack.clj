@@ -1,7 +1,8 @@
 (ns yetibot.commands.attack
-  (:require [clojure.string :as s]
-            [yetibot.models.users :as users])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.models.users :as users]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def config {:min-crit 6 :max-crit 10
              :min-dmg 0 :max-dmg 20})

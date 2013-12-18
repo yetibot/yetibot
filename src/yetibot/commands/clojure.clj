@@ -1,7 +1,8 @@
 (ns yetibot.commands.clojure
-  (:require [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [get-json map-to-query-string]]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json map-to-query-string]]))
 
 (def endpoint "http://tryclj.com/eval.json")
 

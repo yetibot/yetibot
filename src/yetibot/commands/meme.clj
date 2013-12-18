@@ -1,7 +1,7 @@
 (ns yetibot.commands.meme
   (:require
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.hooks :refer [cmd-hook]]
+    [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.models.imgflip :as model]))
 
 

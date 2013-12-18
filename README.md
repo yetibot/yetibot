@@ -130,28 +130,36 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 
 ## Plugins
 
-YetiBot [looks in namespaces](https://github.com/devth/yetibot/blob/master/src/yetibot/core.clj#L100-104)
-starting with "plugins" when loading commands and observers. It also
-[ignores](https://github.com/devth/yetibot/blob/master/.gitignore#L10)
-`src/plugins` so that you can symlink it to a directory outside of YetiBot,
-which might be stored in some other repository.
+Yetibot has a plugin-based architecture. Its core lives at:
+https://github.com/devth/yetibot.core and can be depended on with:
+
+```
+[yetibot.core "0.1.0"]
+```
+
+Yetibot will load all commands and observers with namespaces on the classpath
+matching the regexes at:
+https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L12-16
+
+This lets you build any number of independent plugin projects and combine them
+in any fashion through standard leiningen dependencies.
 
 
 ## How it works
 
-Curious how the internals of YetiBot works? At a high level:
+Curious how the internals of Yetibot works? At a high level:
 
 - commands are run through a parser built on
   [InstaParse](https://github.com/Engelberg/instaparse):
-  https://github.com/devth/yetibot/blob/master/src/yetibot/parser.clj
+  https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/parser.clj
 - an InstaParse transformer is configured to evaluate expressions through the
   interpreter, which handles things like nested sub-expressions and piped
   commands:
-  https://github.com/devth/yetibot/blob/master/src/yetibot/interpreter.clj
+  https://github.com/devth/yetibot.core/blob/master/src/yetibot.core/interpreter.clj
 - [command namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
   are `hook`ed into the interpreter's `handle-cmd` function using a `cmd-hook`
   macro and triggered via regex prefix matching:
-  https://github.com/devth/yetibot/blob/master/src/yetibot/hooks.clj
+  https://github.com/devth/yetibot.core/blob/master/src/yetibot.core.core.hooks.clj
 
 ## Getting help
 

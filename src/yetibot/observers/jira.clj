@@ -1,9 +1,10 @@
 (ns yetibot.observers.jira
-  (:require [yetibot.api.jira :as jira]
-            [clojure.string :as s]
-            [taoensso.timbre :refer [info warn error]]
-            [yetibot.hooks :refer [obs-hook]]
-            [yetibot.chat :refer [chat-data-structure]]))
+  (:require
+    [yetibot.api.jira :as jira]
+    [clojure.string :as s]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.core.hooks :refer [obs-hook]]
+    [yetibot.core.chat :refer [chat-data-structure]]))
 
 (defn report-jira [issue]
   (let [ji (jira/get-issue issue)]

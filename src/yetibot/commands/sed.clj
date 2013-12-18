@@ -1,7 +1,7 @@
 (ns yetibot.commands.sed
   (:require
     [clojure.string :as s]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn sed-cmd
   "sed s/<search-pattern>/<replace-pattern> # replace <search-pattern> with <replace-pattern>

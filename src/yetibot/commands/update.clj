@@ -3,7 +3,7 @@
     [taoensso.timbre :refer [info warn error]]
     [clojure.java.shell :as shell]
     [clojure.string :as s]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def gpr "git pull --rebase")
 (def log "git log --oneline @{1}..")

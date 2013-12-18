@@ -1,7 +1,8 @@
 (ns yetibot.commands.scalex
-  (:require [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [get-json]]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json]]))
 
 (def endpoint "http://api.scalex.org/?per_page=1&q=")
 

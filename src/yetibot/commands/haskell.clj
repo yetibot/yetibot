@@ -1,6 +1,7 @@
 (ns yetibot.commands.haskell
-  (:require [yetibot.hooks :refer [cmd-hook]]
-            [yetibot.util.http :refer [get-json encode]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json encode]]))
 
 (def endpoint "http://tryhaskell.org/haskell.json?method=eval&random=0.6923271066043526&expr=")
 

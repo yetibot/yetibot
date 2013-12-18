@@ -1,7 +1,8 @@
 (ns yetibot.webapp.views.common
-  (:require [yetibot.version :refer [version]])
-  (:use [hiccup.page :only [include-css include-js html5]]
-        [hiccup.element]))
+  (:require
+    [yetibot.core.version :refer [version]]
+    [hiccup.page :refer [include-css include-js html5]]
+    [hiccup.element :refer :all]))
 
 (def title "YetiBot – A command line in your Campfire")
 

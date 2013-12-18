@@ -1,7 +1,8 @@
 (ns yetibot.commands.haiku
-  (:require [clojure.xml :as xml]
-            [yetibot.hooks :refer [cmd-hook]]
-            [yetibot.util.http :refer [get-json]]))
+  (:require
+    [clojure.xml :as xml]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json]]))
 
 (def endpoint "http://www.randomhaiku.com/haiku.xml")
 

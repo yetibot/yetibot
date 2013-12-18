@@ -1,5 +1,6 @@
 (ns yetibot.commands.http-status
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn status-code
   "http <code>                 # look up http status code"

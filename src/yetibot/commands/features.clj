@@ -1,13 +1,12 @@
 (ns yetibot.commands.features
-  (:require [yetibot.api.github :as gh]
-            [clojure.string :as s]
-            [yetibot.config :refer [config-for-ns]]
-            [useful.fn :as useful :refer [rate-limited]]
-            [tentacles
-             [issues :as is]
-             [core :as tc]]
-            [yetibot.hooks :refer [obs-hook cmd-hook]]
-            [yetibot.chat :refer (chat-data-structure)]))
+  (:require
+    [clojure.string :as s]
+    [tentacles [issues :as is] [core :as tc]]
+    [useful.fn :as useful :refer [rate-limited]]
+    [yetibot.api.github :as gh]
+    [yetibot.core.chat :refer [chat-data-structure]]
+    [yetibot.core.config :refer [config-for-ns]]
+    [yetibot.core.hooks :refer [obs-hook cmd-hook]]))
 
 (def rate-limit-ms 5000)
 

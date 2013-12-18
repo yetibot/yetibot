@@ -1,10 +1,10 @@
 (ns yetibot.commands.weather
   (:require
     [clojure.string :refer [join]]
-    [yetibot.util.http :refer [get-json fetch encode map-to-query-string]]
+    [yetibot.core.util.http :refer [get-json fetch encode map-to-query-string]]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def config (config-for-ns))
 

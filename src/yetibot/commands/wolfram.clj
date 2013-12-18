@@ -3,8 +3,8 @@
     [clojure.string :as s]
     [clojure.xml :as xml]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def config (config-for-ns))
 (def app-id (:app-id config))

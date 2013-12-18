@@ -1,6 +1,7 @@
 (ns yetibot.commands.scala
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [encode fetch]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [encode fetch]]))
 
 (def endpoint "http://www.simplyscala.com/interp?bot=irc&code=")
 

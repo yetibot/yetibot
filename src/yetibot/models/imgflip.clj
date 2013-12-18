@@ -1,8 +1,8 @@
 (ns yetibot.models.imgflip
   (:require
     [clojure.string :as s :refer [split join]]
-    [yetibot.config :refer [get-config conf-valid?]]
-    [yetibot.util.http :refer [get-json map-to-query-string encode]]
+    [yetibot.core.config :refer [get-config conf-valid?]]
+    [yetibot.core.util.http :refer [get-json map-to-query-string encode]]
     [clojure.core.memoize :as m]))
 
 (def config (get-config :yetibot :models :imgflip))

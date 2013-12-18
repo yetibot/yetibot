@@ -1,5 +1,6 @@
 (ns yetibot.commands.mustache
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def facts
   ["Women are attracted to men with Moustaches"

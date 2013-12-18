@@ -3,7 +3,7 @@
     [yetibot.api.s3 :as s3]
     [clojure.string :as s]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn content-cmd
   "s3 content <path> # retrieve content of <path> from S3"

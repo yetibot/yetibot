@@ -1,9 +1,10 @@
 (ns yetibot.commands.wikipedia
-  (:require [yetibot.util.http :refer [get-json encode]]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [yetibot.core.util.http :refer [get-json encode]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn endpoint-search [q]
-  (str "http://en.wikipedia.org/w/api.php?format=json&action=opensearch&search=" 
+  (str "http://en.wikipedia.org/w/api.php?format=json&action=opensearch&search="
        (encode q)))
 
 (defn endpoint-summary [title]

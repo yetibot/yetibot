@@ -1,8 +1,9 @@
 (ns yetibot.commands.memethat
   (:require
-    [yetibot.models.history :as h]
+    [yetibot.core.handler :refer [handle-unparsed-expr]]
+    [yetibot.core.models.history :as h]
     [yetibot.models.imgflip :as meme]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def ^:private history-ignore [#"^\!"])
 
@@ -24,8 +25,7 @@
 (defn- meme-it [chat-source meme-query]
   (let [chat (find-chat-to-memeify chat-source)]
     (if chat
-      (yetibot.handler/handle-unparsed-expr
-        (format "meme %s: %s" meme-query (format-chat chat)))
+      (handle-unparsed-expr (format "meme %s: %s" meme-query (format-chat chat)))
       (format "No history to meme :("))))
 
 ; memethat

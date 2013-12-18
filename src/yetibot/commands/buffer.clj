@@ -1,5 +1,5 @@
 (ns yetibot.commands.buffer
-  (:require [yetibot.hooks :refer [cmd-hook cmd-unhook]]))
+  (:require [yetibot.core.hooks :refer [cmd-hook cmd-unhook]]))
 
 (defonce buffer (atom []))
 

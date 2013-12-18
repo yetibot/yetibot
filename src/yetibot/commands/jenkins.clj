@@ -2,7 +2,7 @@
   (:require
     [yetibot.models.jenkins :as model]
     [clojure.string :as s]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn find-job-and-do [job-to-match f]
   (if-let [job (model/resolve-job-info job-to-match)]

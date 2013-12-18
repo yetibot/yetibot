@@ -1,8 +1,8 @@
 (ns yetibot.commands.horse
   (:require
     [clojure.string :refer [trim]]
-    [yetibot.hooks :refer [cmd-hook]]
-    [yetibot.util.http :refer [fetch]]))
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [fetch]]))
 
 (def endpoint "http://horsefortun.es/get")
 

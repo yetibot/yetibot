@@ -1,9 +1,9 @@
 (ns yetibot.commands.github
   (:require
     [yetibot.api.github :as gh]
-    [yetibot.util.http :refer [get-json]]
     [clojure.string :as s]
-    [yetibot.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json]]
+    [yetibot.core.hooks :refer [cmd-hook]]
     [taoensso.timbre :refer [info]]))
 
 (defn feed

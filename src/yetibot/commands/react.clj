@@ -1,7 +1,8 @@
 (ns yetibot.commands.react
-  (:require [clojure.string :as s]
-            [yetibot.hooks :refer [cmd-hook]]
-            [yetibot.util.http :refer [fetch ensure-img-suffix]]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [fetch ensure-img-suffix]]))
 
 (def endpoint "http://replygif.net/random")
 

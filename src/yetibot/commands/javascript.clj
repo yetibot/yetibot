@@ -1,7 +1,8 @@
 (ns yetibot.commands.javascript
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [evaljs.core]
-        [evaljs.rhino]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [evaljs.core :refer :all]
+    [evaljs.rhino :refer :all]))
 
 (def statements (atom []))
 

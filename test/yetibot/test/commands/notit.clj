@@ -7,6 +7,6 @@
 
 ; !order reset
 (deftest reset-its
-         (notit/reset-its nil)
-         (is (= @notit/not-its #{})
-           "it should reset the its list"))
+  (notit/reset-its nil)
+  (is (= @notit/not-its #{})
+      "it should reset the its list"))

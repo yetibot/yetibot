@@ -1,10 +1,10 @@
 (ns yetibot.models.twitter
   (:require
     [clj-http.client :as client]
-    [yetibot.util.http :refer [html-decode]]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.util.http :refer [html-decode]]
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
     [clojure.string :as s :refer [join]]
-    [yetibot.chat :as chat]
+    [yetibot.core.chat :as chat]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
     [twitter.callbacks :refer :all]

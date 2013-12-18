@@ -1,7 +1,7 @@
 (ns yetibot.commands.zen
   (:require
-    [yetibot.hooks :refer [cmd-hook]]
-    [yetibot.util.http :refer [fetch]]))
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [fetch]]))
 
 (def endpoint "https://api.github.com/zen")
 

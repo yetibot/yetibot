@@ -1,6 +1,6 @@
 (ns yetibot.commands.jargon
   (:require
-    [yetibot.hooks :refer [cmd-hook]]
+    [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.models.jargon :refer [jargon]]))
 
 (defn list-cmd

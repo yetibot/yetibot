@@ -13,3 +13,4 @@ target/
 .lein-repl-history
 .ruby-version
 config/config.edn
+/checkouts

@@ -1,9 +1,9 @@
 (ns yetibot.observers.users
   (:require
-    [yetibot.models.users :as users]
-    [yetibot.adapters.campfire :as cf]
-    [yetibot.hooks :refer [obs-hook]]
-    [yetibot.chat :refer [chat-data-structure]]))
+    [yetibot.core.models.users :as users]
+    [yetibot.core.adapters.campfire :as cf]
+    [yetibot.core.hooks :refer [obs-hook]]
+    [yetibot.core.chat :refer [chat-data-structure]]))
 
 (obs-hook
   #{:enter}

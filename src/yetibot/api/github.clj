@@ -8,8 +8,8 @@
      [orgs :as o]]
     [clojure.string :as s]
     [clj-http.client :as client]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
-    [yetibot.util.http :refer [fetch]]))
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.util.http :refer [fetch]]))
 
 
 ;;; uses tentacles for most api calls, but falls back to raw REST calls when

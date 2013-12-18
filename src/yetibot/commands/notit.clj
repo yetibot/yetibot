@@ -1,7 +1,8 @@
 (ns yetibot.commands.notit
-  (:require [yetibot.models.users :as users]
-            [clojure.set])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [yetibot.core.models.users :as users]
+    [clojure.set]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 ; Users who have registered as not-it
 (def not-its (atom #{}))

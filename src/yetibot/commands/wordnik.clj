@@ -3,10 +3,10 @@
     [wordnik.api.word :as word]
     [wordnik.api.words :as words]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.hooks :refer [cmd-hook]]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
-    [clojure.string :as s])
-  (:use wordnik.core))
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [clojure.string :as s]
+    [wordnik.core :refer :all]))
 
 (def config (config-for-ns))
 (def ^:private api-key (:api-key config))

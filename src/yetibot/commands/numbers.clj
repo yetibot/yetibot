@@ -1,6 +1,7 @@
 (ns yetibot.commands.numbers
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [fetch]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [fetch]]))
 
 (defn endpoint [number]
   (format "http://numbersapi.com/%s/math" number))

@@ -1,13 +1,14 @@
 (ns yetibot.commands.complete
-  (:require [clojure.xml :as xml])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [encode]]))
+  (:require
+    [clojure.xml :as xml]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [encode]]))
 
 (def endpoint "http://google.com/complete/search?output=toolbar&q=")
 
 (defn parse-suggestions [xml]
   (let [xs (xml-seq xml)]
-    (for [el xs :when (= :suggestion (:tag el))] 
+    (for [el xs :when (= :suggestion (:tag el))]
       (-> el :attrs :data))))
 
 (defn complete

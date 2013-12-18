@@ -1,8 +1,9 @@
 (ns yetibot.commands.urban-dictionary
-  (:require [clojure.string :as s]
-            [yetibot.hooks :refer [cmd-hook]]
-            [yetibot.util.http :refer [encode get-json]]
-            [clojure.data.json :as json]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [encode get-json]]
+    [clojure.data.json :as json]))
 
 (def endpoint "http://api.urbandictionary.com/v0/")
 

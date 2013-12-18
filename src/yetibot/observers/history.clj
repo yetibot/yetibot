@@ -1,6 +1,7 @@
 (ns yetibot.observers.history
-  (:require [yetibot.models.history :as h]
-            [yetibot.hooks :refer [obs-hook]]))
+  (:require
+    [yetibot.core.models.history :as h]
+    [yetibot.core.hooks :refer [obs-hook]]))
 
 (obs-hook #{:message}
           (fn [event-info]

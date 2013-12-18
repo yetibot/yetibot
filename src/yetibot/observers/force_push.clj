@@ -1,12 +1,13 @@
 (ns yetibot.observers.force-push
-  (:require [yetibot.chat :refer [chat-data-structure]]
-            [yetibot.hooks :refer [obs-hook]]))
+  (:require
+    [yetibot.core.chat :refer [chat-data-structure]]
+    [yetibot.core.hooks :refer [obs-hook]]))
 
 (def regex #"(?i)force.*push")
 
 (defn report []
   (chat-data-structure
-    (yetibot.handler/handle-unparsed-expr
+    (yetibot.core.handler/handle-unparsed-expr
       "image force push gif")))
 
 (obs-hook

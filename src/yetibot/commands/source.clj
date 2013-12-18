@@ -1,6 +1,7 @@
 (ns yetibot.commands.source
-  (:require [clojure.repl :as r])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [clojure.repl :as r]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn lookup-source
   "source <fn> # lookup the source for <fn> in YetiBot's own source or deps"

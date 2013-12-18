@@ -1,7 +1,8 @@
 (ns yetibot.api.s3
-  (:require [aws.sdk.s3 :as s3]
-            [clojure.string :as s]
-            [yetibot.config :refer [conf-valid? config-for-ns]]))
+  (:require
+    [aws.sdk.s3 :as s3]
+    [clojure.string :as s]
+    [yetibot.core.config :refer [conf-valid? config-for-ns]]))
 
 (def config (config-for-ns))
 (def configured? (conf-valid?))

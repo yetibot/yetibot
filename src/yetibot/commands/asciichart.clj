@@ -1,8 +1,8 @@
 (ns yetibot.commands.asciichart
   (:require
     [clojure.string :refer [join]]
-    [yetibot.util :refer [split-kvs]]
-    [yetibot.hooks :refer [cmd-hook]]))
+    [yetibot.core.util :refer [split-kvs]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 ; TODO: smart scaling
 (defn chartify [padding [label x]]

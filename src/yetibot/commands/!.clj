@@ -1,8 +1,9 @@
 (ns yetibot.commands.!
-  (:require [yetibot.models.history :as h]
-            [yetibot.handler :refer [handle-unparsed-expr]]
-            [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [yetibot.core.models.history :as h]
+    [yetibot.core.handler :refer [handle-unparsed-expr]]
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn- valid-cmd? [json]
   (let [body (:body json)]

@@ -3,8 +3,8 @@
     [clojure.string :as s]
     [taoensso.timbre :refer [info warn error]]
     [clj-ssh.ssh :refer :all]
-    [yetibot.hooks :refer [cmd-hook]]
-    [yetibot.config :refer [config-for-ns conf-valid?]]))
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]))
 
 (def ^:private config (config-for-ns))
 

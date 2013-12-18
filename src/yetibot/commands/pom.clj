@@ -1,10 +1,11 @@
 (ns yetibot.commands.pom
-  (:require [clojure.string :as s]
-            [yetibot.api.github :as gh]
-            [clojure.data.xml :as xml]
-            [clojure.zip :as zip])
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [clojure.data.zip.xml :only [attr text xml->]]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.api.github :as gh]
+    [clojure.data.xml :as xml]
+    [clojure.zip :as zip]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [clojure.data.zip.xml :refer [attr text xml->]]))
 
 (def tree-art "└──") ;;; "├── "
 

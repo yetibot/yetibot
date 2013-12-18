@@ -1,6 +1,7 @@
 (ns yetibot.commands.catfacts
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [get-json]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json]]))
 
 (def endpoint "http://catfacts-api.appspot.com/api/facts")
 

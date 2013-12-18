@@ -1,6 +1,7 @@
 (ns yetibot.commands.info
-  (:use [yetibot.hooks :only [cmd-hook]]
-        [yetibot.util.http :only [get-json encode]]))
+  (:require
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json encode]]))
 
 (def endpoint "http://api.duckduckgo.com/?format=json&q=")
 

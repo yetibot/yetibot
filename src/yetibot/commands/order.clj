@@ -1,6 +1,7 @@
 (ns yetibot.commands.order
-  (:require [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def empty-order-message "You haven't ordered anything yet.")
 

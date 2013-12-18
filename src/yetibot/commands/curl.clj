@@ -1,7 +1,8 @@
 (ns yetibot.commands.curl
-  (:require [clojure.java.shell :as shell]
-            [clojure.string :as s])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [clojure.java.shell :as shell]
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn curl
   "curl <options> <url> # execute standard curl tool"

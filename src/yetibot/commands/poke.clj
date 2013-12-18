@@ -1,7 +1,8 @@
 (ns yetibot.commands.poke
-  (:require [yetibot.models.users :as u]
-            [yetibot.adapters.campfire :as cf])
-  (:use [yetibot.hooks :only [cmd-hook]]))
+  (:require
+    [yetibot.core.models.users :as u]
+    [yetibot.core.adapters.campfire :as cf]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def ^:private config
   {:objects ["pencil" "needle" "sharp stick" "katana" "bisento"

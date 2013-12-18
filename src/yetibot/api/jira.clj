@@ -3,8 +3,8 @@
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
     [clj-http.client :as client]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
-    [yetibot.util.http :refer [get-json fetch]]))
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.util.http :refer [get-json fetch]]))
 
 (def config (config-for-ns))
 (def configured? (conf-valid?))

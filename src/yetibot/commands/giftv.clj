@@ -1,7 +1,8 @@
 (ns yetibot.commands.giftv
-  (:require [clojure.string :as s])
-  (:use [yetibot.hooks :only (cmd-hook)]
-        [yetibot.util.http :only (fetch)]))
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [fetch]]))
 
 (def endpoint "http://www.gif.tv/gifs/get.php")
 

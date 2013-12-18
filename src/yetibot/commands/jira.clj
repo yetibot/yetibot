@@ -1,9 +1,9 @@
 (ns yetibot.commands.jira
   (:require
     [yetibot.observers.jira :refer [report-jira]]
-    [yetibot.util :refer [filter-nil-vals map-to-strs]]
+    [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.hooks :refer [cmd-hook]]
+    [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.jira :as api]))
 
 

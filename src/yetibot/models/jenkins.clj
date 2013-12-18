@@ -1,10 +1,10 @@
 (ns yetibot.models.jenkins
   (:require
-    [yetibot.chat]
-    [yetibot.util.http :refer [get-json fetch]]
+    [yetibot.core.chat]
+    [yetibot.core.util.http :refer [get-json fetch]]
     [clojure.string :as s]
     [clj-time.coerce :as c]
-    [yetibot.config :refer [get-config conf-valid? update-config]]
+    [yetibot.core.config :refer [get-config conf-valid? update-config]]
     [clojure.core.memoize :as memo]))
 
 (defonce instance-root-data (atom {}))
@@ -143,7 +143,7 @@
   ; instead of the latest.
   (Thread/sleep 8000)
   (let [json (status [job-name job-info])]
-    (yetibot.chat/chat-data-structure (:url json))))
+    (yetibot.core.chat/chat-data-structure (:url json))))
 
 (defn build-job [[job-name job-info]]
   (let [base-uri (-> job-info :config :uri)

@@ -1,6 +1,7 @@
 (ns yetibot.commands.xkcd
-  (:require [yetibot.util.http :refer [get-json]]
-            [yetibot.hooks :refer [cmd-hook]]))
+  (:require
+    [yetibot.core.util.http :refer [get-json]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def endpoint "http://xkcd.com/info.0.json")
 

@@ -5,10 +5,10 @@
     [http.async.client :as client]
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
-    [yetibot.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [config-for-ns conf-valid?]]
     [robert.hooke :as rh]
-    [yetibot.hooks :refer [cmd-hook]]
-    [yetibot.util.http :refer [get-json encode map-to-query-string fetch
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json encode map-to-query-string fetch
                                with-client]]))
 
 (def base-uri "http://version1.api.memegenerator.net/")
