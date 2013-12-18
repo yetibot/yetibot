@@ -23,9 +23,9 @@ There are two primary ways of installing yetibot:
  1. **Clone this repo**: this gives you a standard yetibot installation and
     provides a git-ignored place to store configuration.
  2. **Make your own repo and depend on yetibot**: this gives you ultimate
-    customizability, allowing you to depend on custom yetibot plugins, and gives
-    you control over where you store your config (manual management, commit to
-    private git repo, etc...)
+    customizability, allowing you to depend on custom yetibot plugins or define
+    your own commands in-project, and gives you control over where you store
+    your config (manual management, commit to private git repo, etc...)
 
 ## Configuration
 
