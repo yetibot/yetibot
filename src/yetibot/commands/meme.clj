@@ -4,10 +4,16 @@
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.models.imgflip :as model]))
 
+(defn- urlify
+  "Imgflip likes to return urls missing the http: prefix for some reason."
+  [weird-url]
+  (if-not (re-find #"^http" weird-url)
+    (str "http:" weird-url)
+    weird-url))
 
 (defn- instance-result [json]
   (if (:success json)
-    (-> json :data  :url)
+    (urlify (-> json :data  :url))
     (str "Failed to generate meme: " (-> json :error_message))))
 
 (defn generate-cmd
@@ -27,7 +33,7 @@
   "meme preview <term> # preview an example of the first match for <term>"
   [{[_ term] :match}]
   (if-let [matches (model/search-memes term)]
-    (str "http:" (-> matches first :url))
+    (urlify (-> matches first :url))
     (str "Couldn't find any memes for " term)))
 
 (defn search-cmd
