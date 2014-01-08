@@ -3,6 +3,7 @@
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s]
     [clj-http.client :as client]
+    [clojure.core.memoize :as memo]
     [yetibot.core.config :refer [config-for-ns conf-valid?]]
     [yetibot.core.util.http :refer [get-json fetch]]))
 
@@ -139,9 +140,9 @@
     (endpoint "/project/%s/components" project-key)
     client-opts))
 
-(defn all-components []
-  (map component (project-keys)))
-
+(def all-components
+  (memo/ttl #(map component (project-keys))
+            :ttl/threshold 3600000))
 
 ;; users
 
@@ -181,3 +182,7 @@
       "\" OR comment ~ \"" query "\")")))
 
 (defn recent [] (search (projects-jql)))
+
+;; prime cache
+
+(future (all-components))
