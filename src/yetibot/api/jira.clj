@@ -8,7 +8,8 @@
 
 (def config (config-for-ns))
 (def configured? (conf-valid?))
-(defn project-keys-str [] (->> config :project-keys (s/join ",")))
+(defn project-keys [] (->> config :project-keys))
+(defn project-keys-str [] (->> (project-keys) (s/join ",")))
 
 (def ^:private base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
@@ -130,6 +131,17 @@
            ; error-handling-opts
            {:content-type :json
             :form-params {:name assignee}})))
+
+;; components
+
+(defn component [project-key]
+  (client/get
+    (endpoint "/project/%s/components" project-key)
+    client-opts))
+
+(defn all-components []
+  (map component (project-keys)))
+
 
 ;; users
 

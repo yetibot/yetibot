@@ -94,8 +94,14 @@
   [{[_ jql] :match}]
   (short-jira-list (api/search-in-projects jql)))
 
+(defn components-cmd
+  "jira components # list components across all configured projects"
+  [_]
+  (mapcat (comp (partial map :name) :body) (api/all-components)))
+
 (cmd-hook #"jira"
           #"^projects" projects-cmd
+          #"^components" components-cmd
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd
