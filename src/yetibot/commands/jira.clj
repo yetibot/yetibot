@@ -60,8 +60,7 @@
                                 :desc desc}))]
     (if (success? res)
       (let [iss-key (-> res :body :key)]
-        (report-jira iss-key)
-        (str "Created issue " iss-key))
+        (api/fetch-and-format-issue-short iss-key))
       (map-to-strs (->> res :body :errors)))))
 
 (defn- short-jira-list [res]

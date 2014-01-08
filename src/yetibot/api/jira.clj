@@ -76,6 +76,8 @@
       (:body (client/get uri client-opts))
       (catch Exception _ nil))))
 
+(def fetch-and-format-issue-short (comp format-issue-short get-issue))
+
 (defn find-project [pk]
   (try
     (:body (client/get (endpoint "/project/%s" pk) client-opts))
