@@ -50,12 +50,14 @@
 
 ; currently doesn't support more than one project key, but it could
 (defn create-cmd
-  "jira create <summary> # create issue with summary, unassigned
-   jira create <summary> / <assignee> # create issue with summary and assignee
-   jira create <summary> / <assignee> / <desc> # create issue with summary, assignee, and description"
-  [{[_ summary assignee desc] :match}]
-  (let [res (api/create-issue
+  "jira create <summary> / <component> # create issue with summary and component, unassigned
+   jira create <summary> / <component> / <assignee> # create issue with summary, component, and assignee
+   jira create <summary> / <component> / <assignee> / <desc> # create issue with summary, component, assignee, and description"
+  [{[_ summary component assignee desc] :match}]
+  (let [component-ids (map :id (api/find-component-like component))
+        res (api/create-issue
               (filter-nil-vals {:summary summary
+                                :component-ids component-ids
                                 :assignee assignee
                                 :desc desc}))]
     (if (success? res)
@@ -108,7 +110,7 @@
           #"^assign\s+(\S+)\s+(\S+)" assign-cmd
           #"^search\s+(.+)" search-cmd
           #"^jql\s+(.+)" jql-cmd
+          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
           #"^create\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
-          #"^create\s+([^\/]+)" create-cmd
           #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)

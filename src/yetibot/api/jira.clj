@@ -98,7 +98,7 @@
 
 (defn create-issue
   "This thing is a beast"
-  [{:keys [summary assignee priority-key desc project-key]
+  [{:keys [summary component-ids assignee priority-key desc project-key]
     :or {desc "" assignee "-1"
          project-key (first (:project-keys config))}}]
   (if-let [prj (find-project project-key)]
@@ -111,6 +111,7 @@
                     {:assignee {:name assignee}
                      :project {:id prj-id}
                      :summary summary
+                     :components (map #(hash-map :id %) component-ids)
                      :description desc
                      :issuetype {:id (:default-issue-type-id config)}
                      :priority {:id pri-id}}}]
@@ -143,6 +144,12 @@
 (def all-components
   (memo/ttl #(map component (project-keys))
             :ttl/threshold 3600000))
+
+(defn find-component-like
+  "Match components across all projects"
+  [pattern-str]
+  (let [re (re-pattern (str "(?i)" pattern-str))]
+    (filter #(re-find re (:name %)) (mapcat :body (all-components)))))
 
 ;; users
 
