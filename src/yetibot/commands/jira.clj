@@ -142,8 +142,13 @@
   [_]
   (mapcat (comp (partial map :name) :body) (api/all-components)))
 
+(defn parse-cmd
+  [{[_ text] :match}]
+  (second (re-find #"browse\/([^\/]+)" text)))
+
 (cmd-hook #"jira"
           #"^projects" projects-cmd
+          #"^parse\s+(.+)" parse-cmd
           #"^components" components-cmd
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
