@@ -4,7 +4,7 @@
     [yetibot.observers.jira :refer [report-jira]]
     [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
     [taoensso.timbre :refer [info warn error]]
-    [clojure.string :refer [split join]]
+    [clojure.string :refer [split join trim]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.jira :as api]))
 
@@ -49,21 +49,23 @@
     (succ-fn res)
     (-> res :body :errorMessages)))
 
-(def create-issue-opts
-  [["-c" "--component COMPONENT" "Component" :validate-fn identity]
+(def issue-opts
+  [["-c" "--component COMPONENT" "Component"]
+   ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
    ["-d" "--desc DESCRIPTION" "Description"]
    ["-t" "--time TIME ESTIAMTED" "Time estimated"]
+   ["-r" "--remaining REMAINING TIME ESTIAMTED" "Remaining time estimated"]
    ["-p" "--parent PARENT ISSUE KEY" "Parent issue key; creates a sub-task if specified"]])
 
-(defn parse-create-opts [opts]
-  (parse-opts (split opts #"\s") create-issue-opts))
+(defn parse-issue-opts [opts]
+  (parse-opts (map trim (split opts #"(?=-\w)|(?<=-\w)")) issue-opts))
 
 ; currently doesn't support more than one project key, but it could
 (defn create-cmd
   "jira create <summar> -c <component> [-a <assignee>] [-d <description>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   [{[_ opts-str] :match}]
-  (let [parsed (parse-create-opts opts-str)
+  (let [parsed (parse-issue-opts opts-str)
         summary (->> parsed :arguments (join " "))
         opts (:options parsed)]
     (if-not (:component opts)
@@ -80,15 +82,37 @@
             (api/fetch-and-format-issue-short iss-key))
           (map-to-strs (->> res :body :errors)))))))
 
+(defn report-errors [res]
+  (prn "report errors for" res)
+  (or (->> res :body :errorMessages) (->> res :body :errors map-to-strs)))
 
+(defn update-cmd
+  "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-t <time estimated>] [-r <remaining time estimated>]"
+  [{[_ issue-key opts-str] :match}]
+  (let [parsed (parse-issue-opts opts-str)
+        opts (:options parsed)]
+    (clojure.pprint/pprint parsed)
+    (let [component-ids (when (:component opts) (map :id (api/find-component-like (:component opts))))
+          res (api/update-issue
+                issue-key
+                (filter-nil-vals
+                  (merge
+                    {:component-ids component-ids}
+                    (select-keys opts [:summary :desc :assignee])
+                    (when (or (:remaining opts) (:time opts))
+                      {:timetracking
+                       (merge (when (:remaining opts) {:remainingEstimate (:remaining opts)})
+                              (when (:time opts) {:originalEstimate (:time opts)}))}))))]
+      (if (success? res)
+        (let [iss-key (-> res :body :key)]
+          (str "Updated: "
+               (api/fetch-and-format-issue-short issue-key)))
+        (report-errors res)))))
 
 (defn- short-jira-list [res]
   (if (success? res)
     (map api/format-issue-short
-         (->> res
-              :body
-              :issues
-              (take 5)))
+         (->> res :body :issues (take 5)))
     (-> res :body :errorMessages)))
 
 (defn assign-cmd
@@ -128,4 +152,5 @@
           #"^search\s+(.+)" search-cmd
           #"^jql\s+(.+)" jql-cmd
           #"^create\s+(.+)" create-cmd
+          #"^update\s+(\S+)\s+(.+)" update-cmd
           #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)

@@ -102,6 +102,29 @@
 (defn issue-types []
   (:body (client/get (endpoint "/issuetype") client-opts)))
 
+(defn update-issue
+  [issue-key {:keys [summary component-ids assignee priority-key desc timetracking]}]
+  (prn timetracking)
+  (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
+        params {:fields
+                (merge
+                  {}
+                  (when summary {:summary summary})
+                  (when assignee {:assignee assignee})
+                  (when component-ids {:components (map #(hash-map :id %) component-ids)})
+                  (when desc {:description desc})
+                  (when timetracking {:timetracking timetracking})
+                  (when pri-id {:priority {:id pri-id}}))}]
+    (prn (endpoint "/issue/%s" issue-key))
+    (client/put
+      (endpoint "/issue/%s" issue-key)
+      (merge client-opts
+             {:coerce :always
+              :throw-exceptions false
+              :form-params params
+              :content-type :json}))))
+
+
 (defn create-issue
   "This thing is a beast"
   [{:keys [summary component-ids assignee priority-key desc project-key
@@ -127,7 +150,6 @@
                             :issuetype {:id issue-type-id}
                             :priority {:id pri-id}}
                            (when parent {:parent {:id parent}}))}]
-        (clojure.pprint/pprint params)
         (client/post
           (endpoint "/issue")
           (merge client-opts
