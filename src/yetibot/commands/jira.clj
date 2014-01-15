@@ -112,7 +112,7 @@
 (defn- short-jira-list [res]
   (if (success? res)
     (map api/format-issue-short
-         (->> res :body :issues (take 5)))
+         (->> res :body :issues (take 15)))
     (-> res :body :errorMessages)))
 
 (defn assign-cmd
@@ -123,17 +123,17 @@
     (fn [res] (report-jira iss-key) "Success")))
 
 (defn recent-cmd
-  "jira recent # show the 5 most recent issues"
+  "jira recent # show the 15 most recent issues"
   [_]
   (short-jira-list (api/recent)))
 
 (defn search-cmd
-  "jira search <query> # return up to 5 issues matching <query> across all configured projects"
+  "jira search <query> # return up to 15 issues matching <query> across all configured projects"
   [{[_ query] :match}]
   (short-jira-list (api/search-by-query query)))
 
 (defn jql-cmd
-  "jira jql <jql> # return up to 5 issues matching <jql> query across all configured projects"
+  "jira jql <jql> # return up to 15 issues matching <jql> query across all configured projects"
   [{[_ jql] :match}]
   (short-jira-list (api/search-in-projects jql)))
 
