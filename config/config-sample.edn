@@ -31,6 +31,8 @@
         :jira {:domain ""
                :user ""
                :password ""
+                :default-issue-type-id "3",
+                :sub-task-issue-type-id "27",
                :project-keys #{}}
         :s3 {:access-key ""
              :secret-key ""}}

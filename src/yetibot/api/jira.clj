@@ -25,6 +25,10 @@
 (defn endpoint [& fmt-with-args]
   (str api-uri (apply format fmt-with-args)))
 
+;; helpers
+
+(defn GET [& fmt-with-args] (client/get (apply endpoint fmt-with-args) client-opts))
+
 ;; formatters
 
 (defn url-from-key [k]
@@ -45,6 +49,8 @@
             (url-from-key (:key issue-data)))))
 
 ;; issues
+
+(defn issue-create-meta [] (GET "/issue/createmeta"))
 
 (defn get-transitions [i]
   (client/get (endpoint "/issue/%s/transitions?transitionId" i)
@@ -98,8 +104,12 @@
 
 (defn create-issue
   "This thing is a beast"
-  [{:keys [summary component-ids assignee priority-key desc project-key]
+  [{:keys [summary component-ids assignee priority-key desc project-key
+           timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
+         issue-type-id (if parent
+                         (:sub-task-issue-type-id config)
+                         (:default-issue-type-id config))
          project-key (first (:project-keys config))}}]
   (if-let [prj (find-project project-key)]
     (if-let [priority (if priority-key
@@ -108,13 +118,16 @@
       (let [pri-id (:id priority)
             prj-id (:id prj)
             params {:fields
-                    {:assignee {:name assignee}
-                     :project {:id prj-id}
-                     :summary summary
-                     :components (map #(hash-map :id %) component-ids)
-                     :description desc
-                     :issuetype {:id (:default-issue-type-id config)}
-                     :priority {:id pri-id}}}]
+                    (merge {:assignee {:name assignee}
+                            :project {:id prj-id}
+                            :summary summary
+                            :components (map #(hash-map :id %) component-ids)
+                            :description desc
+                            :timetracking timetracking
+                            :issuetype {:id issue-type-id}
+                            :priority {:id pri-id}}
+                           (when parent {:parent {:id parent}}))}]
+        (clojure.pprint/pprint params)
         (client/post
           (endpoint "/issue")
           (merge client-opts

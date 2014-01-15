@@ -1,11 +1,12 @@
 (ns yetibot.commands.jira
   (:require
+    [clojure.tools.cli :refer [parse-opts]]
     [yetibot.observers.jira :refer [report-jira]]
     [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
     [taoensso.timbre :refer [info warn error]]
+    [clojure.string :refer [split join]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.jira :as api]))
-
 
 (defn projects-cmd
   [_]
@@ -48,22 +49,38 @@
     (succ-fn res)
     (-> res :body :errorMessages)))
 
+(def create-issue-opts
+  [["-c" "--component COMPONENT" "Component" :validate-fn identity]
+   ["-a" "--assignee ASSIGNEE" "Assignee"]
+   ["-d" "--desc DESCRIPTION" "Description"]
+   ["-t" "--time TIME ESTIAMTED" "Time estimated"]
+   ["-p" "--parent PARENT ISSUE KEY" "Parent issue key; creates a sub-task if specified"]])
+
+(defn parse-create-opts [opts]
+  (parse-opts (split opts #"\s") create-issue-opts))
+
 ; currently doesn't support more than one project key, but it could
 (defn create-cmd
-  "jira create <summary> / <component> # create issue with summary and component, unassigned
-   jira create <summary> / <component> / <assignee> # create issue with summary, component, and assignee
-   jira create <summary> / <component> / <assignee> / <desc> # create issue with summary, component, assignee, and description"
-  [{[_ summary component assignee desc] :match}]
-  (let [component-ids (map :id (api/find-component-like component))
-        res (api/create-issue
-              (filter-nil-vals {:summary summary
-                                :component-ids component-ids
-                                :assignee assignee
-                                :desc desc}))]
-    (if (success? res)
-      (let [iss-key (-> res :body :key)]
-        (api/fetch-and-format-issue-short iss-key))
-      (map-to-strs (->> res :body :errors)))))
+  "jira create <summar> -c <component> [-a <assignee>] [-d <description>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  [{[_ opts-str] :match}]
+  (let [parsed (parse-create-opts opts-str)
+        summary (->> parsed :arguments (join " "))
+        opts (:options parsed)]
+    (if-not (:component opts)
+      "Component is required when creating JIRA issues"
+      (let [component-ids (map :id (api/find-component-like (:component opts)))
+            res (api/create-issue
+                  (filter-nil-vals (merge
+                                     {:summary summary :component-ids component-ids}
+                                     (select-keys opts [:parent :desc :assignee])
+                                     (when (:time opts)
+                                       {:timetracking {:originalEstimate (:time opts) :remainingEstimate (:time opts)}}))))]
+        (if (success? res)
+          (let [iss-key (-> res :body :key)]
+            (api/fetch-and-format-issue-short iss-key))
+          (map-to-strs (->> res :body :errors)))))))
+
+
 
 (defn- short-jira-list [res]
   (if (success? res)
@@ -110,7 +127,5 @@
           #"^assign\s+(\S+)\s+(\S+)" assign-cmd
           #"^search\s+(.+)" search-cmd
           #"^jql\s+(.+)" jql-cmd
-          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
-          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)\s+\/\s+(.+)" create-cmd
-          #"^create\s+([^\/]+)\s+\/\s+([^\/]+)" create-cmd
+          #"^create\s+(.+)" create-cmd
           #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)

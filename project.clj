@@ -22,6 +22,7 @@
 
                  ; utils
                  [useful "0.8.3-alpha8"]
+                 [org.clojure/tools.cli "0.3.1"]
 
                  ; NLP
                  [clojure-opennlp "0.3.2"]
