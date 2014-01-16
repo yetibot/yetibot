@@ -143,6 +143,7 @@
   (mapcat (comp (partial map :name) :body) (api/all-components)))
 
 (defn parse-cmd
+  "jira parse <text> # parse the issue key out of a jira issue URL"
   [{[_ text] :match}]
   (second (re-find #"browse\/([^\/]+)" text)))
 
