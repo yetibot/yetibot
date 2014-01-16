@@ -104,7 +104,6 @@
 
 (defn update-issue
   [issue-key {:keys [summary component-ids assignee priority-key desc timetracking]}]
-  (prn timetracking)
   (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
         params {:fields
                 (merge
@@ -115,7 +114,6 @@
                   (when desc {:description desc})
                   (when timetracking {:timetracking timetracking})
                   (when pri-id {:priority {:id pri-id}}))}]
-    (prn (endpoint "/issue/%s" issue-key))
     (client/put
       (endpoint "/issue/%s" issue-key)
       (merge client-opts
@@ -146,9 +144,9 @@
                             :summary summary
                             :components (map #(hash-map :id %) component-ids)
                             :description desc
-                            :timetracking timetracking
                             :issuetype {:id issue-type-id}
                             :priority {:id pri-id}}
+                           (when timetracking {:timetracking timetracking})
                            (when parent {:parent {:id parent}}))}]
         (client/post
           (endpoint "/issue")
