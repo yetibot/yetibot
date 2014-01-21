@@ -61,6 +61,10 @@
 (defn parse-issue-opts [opts]
   (parse-opts (map trim (split opts #"(?=\s-\w)|(?<=\s-\w)")) issue-opts))
 
+(defn report-errors [res]
+  (info "report errors for" res)
+  (or (->> res :body :errorMessages) (->> res :body :errors map-to-strs)))
+
 ; currently doesn't support more than one project key, but it could
 (defn create-cmd
   "jira create <summary> -c <component> [-a <assignee>] [-d <description>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
@@ -81,10 +85,6 @@
           (let [iss-key (-> res :body :key)]
             (api/fetch-and-format-issue-short iss-key))
           (report-errors res))))))
-
-(defn report-errors [res]
-  (info "report errors for" res)
-  (or (->> res :body :errorMessages) (->> res :body :errors map-to-strs)))
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-t <time estimated>] [-r <remaining time estimated>]"
