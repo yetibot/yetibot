@@ -145,14 +145,14 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 
 ## Plugins
 
-Yetibot has a plugin-based architecture. Its core lives at:
+yetibot has a plugin-based architecture. Its core lives at:
 https://github.com/devth/yetibot.core and can be depended on with:
 
 ```
 [yetibot.core "0.1.0"]
 ```
 
-Yetibot will load all commands and observers with namespaces on the classpath
+yetibot will load all commands and observers with namespaces on the classpath
 matching the regexes at:
 https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L12-16
 
@@ -162,7 +162,7 @@ via standard leiningen dependencies.
 
 ## How it works
 
-Curious how the internals of Yetibot works? At a high level:
+Curious how the internals of yetibot works? At a high level:
 
 - commands are run through a parser built on
   [InstaParse](https://github.com/Engelberg/instaparse):
