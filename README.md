@@ -27,6 +27,10 @@ There are two primary ways of installing yetibot:
     your own commands in-project, and gives you control over where you store
     your config (manual management, commit to private git repo, etc...)
 
+    ```clojure
+    [yetibot "0.1.8"]
+    ```
+
 ## Configuration
 
 Configuration lives at `config/config.edn`, which is git-ignored. See
