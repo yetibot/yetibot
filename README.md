@@ -148,7 +148,7 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 yetibot has a plugin-based architecture. Its core lives at:
 https://github.com/devth/yetibot.core and can be depended on with:
 
-```
+```clojure
 [yetibot.core "0.1.0"]
 ```
 
