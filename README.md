@@ -3,7 +3,7 @@
 You can treat yetibot as a communal command line. It works well for:
 
  - **teaching**: how to run internal automation, language evaluation for JS,
-   Scala, Clojure
+   Scala, Clojure, and Haskell
  - **productivity**: automating things around Jenkins, JIRA, running SSH
    commands on various servers, and interacting with internal APIs via private
    yetibot plugins
