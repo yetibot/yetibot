@@ -110,7 +110,7 @@ Pipes can be used, but the right-hand side must be quoted in order to treat it
 as a literal instead of being evaluated according to normal pipe behavior.
 
 ```
-!alias i5 = "random | http://icons.wunderground.com/webcamramdisk/w/a/wadot/324/current.jpg?t=%s&.jpg
+!alias i5 = "random | http://icons.wunderground.com/webcamramdisk/w/a/wadot/324/current.jpg?t=%s&.jpg"
 ```
 
 You can specify placeholder arguments on the right-hand side using `$s` to
