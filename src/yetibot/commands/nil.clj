@@ -1,4 +1,4 @@
-(ns yetibot.commands.curl
+(ns yetibot.commands.nil
   (:require
     [clojure.string :as s]
     [yetibot.core.hooks :refer [cmd-hook]]))
