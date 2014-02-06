@@ -170,7 +170,7 @@ Curious how the internals of yetibot works? At a high level:
 0. an InstaParse transformer is configured to evaluate expressions through the
    interpreter, which handles things like nested sub-expressions and piped
    commands:
-   https://github.com/devth/yetibot.core/blob/master/src/yetibot.core/interpreter.clj
+   https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/interpreter.clj
 0. [command namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
    are `hook`ed into the interpreter's `handle-cmd` function using a `cmd-hook`
    macro and triggered via regex prefix matching:
