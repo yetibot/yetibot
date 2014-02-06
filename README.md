@@ -174,7 +174,7 @@ Curious how the internals of yetibot works? At a high level:
 - [command namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
   are `hook`ed into the interpreter's `handle-cmd` function using a `cmd-hook`
   macro and triggered via regex prefix matching:
-  https://github.com/devth/yetibot.core/blob/master/src/yetibot.core.core.hooks.clj
+  https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/hooks.clj
 
 ## Getting help
 
