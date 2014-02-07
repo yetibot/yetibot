@@ -17,7 +17,7 @@
   (let [hist-for-user (reverse (h/items-for-user cmd-info))
         last-cmd (some valid-cmd? hist-for-user)]
     (if last-cmd
-      (-> last-cmd clean-cmd handle-unparsed-expr)
+      @(future (-> last-cmd clean-cmd handle-unparsed-expr))
       (format "I couldn't find any command history for you, %s." (:name user)))))
 
 (cmd-hook ["!" #"!"]
