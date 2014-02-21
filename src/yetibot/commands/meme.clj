@@ -44,7 +44,7 @@
     (str "Couldn't find any memes for " term)))
 
 (if model/configured?
-  (cmd-hook ["meme" #"meme$"]
+  (cmd-hook ["meme" #"^meme$"]
             ; #"^popular$" chat-instance-popular
             ; #"^popular\s(.+)" chat-instance-popular-for-gen
             ; #"^trending" trending-cmd
