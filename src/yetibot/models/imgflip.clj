@@ -10,7 +10,7 @@
 (def endpoint "http://api.imgflip.com")
 
 (defn fetch-memes [] (get-json (str endpoint "/get_memes")))
-(def memes (m/ttl fetch-memes :ttl/threshold 3600000)) ; one hour memo
+(defonce memes (m/ttl fetch-memes :ttl/threshold 3600000)) ; one hour memo
 
 (defn- match-meme-name
   "Remove spaces from meme name to provide great chance of match"

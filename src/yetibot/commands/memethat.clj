@@ -19,8 +19,7 @@
                          (take-last 10)
                          reverse)))
 
-(defn- format-chat [i]
-  (:body i))
+(defn- format-chat [i] (:body i))
 
 (defn- meme-it [chat-source meme-query]
   (let [chat (find-chat-to-memeify chat-source)]
@@ -28,24 +27,17 @@
       (handle-unparsed-expr (format "meme %s: %s" meme-query (format-chat chat)))
       (format "No history to meme :("))))
 
-; memethat
-(defn memethat
-  "memethat # use a random generator from trending memes to memeify the last thing said"
-  [{:keys [chat-source]}]
-  (let [random-meme (-> (meme/memes) :data :memes rand-nth)]
-    (meme-it chat-source (:name random-meme))))
-
-(cmd-hook #"memethat"
-          _ memethat)
+(defn rand-meme [] (-> (meme/memes) :data :memes rand-nth :name))
 
 ; <gen>that
 (def genthat-pattern #"^(\w+)that$")
 
 (defn genthat
-  "<gen>that # use <foo> generator to memify the last thing said"
+  "<gen>that # use <foo> generator to memify the last thing said
+   memethat # memeify the last thing said with random generator"
   [{:keys [cmd chat-source]}]
   (let [[_ gen] (re-find genthat-pattern cmd)]
-    (meme-it chat-source gen)))
+    (meme-it chat-source (if (= "meme" gen) (rand-meme) gen))))
 
-(cmd-hook ["<gen>that" genthat-pattern]
+(cmd-hook ["genthat" genthat-pattern]
           _ genthat)
