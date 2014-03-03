@@ -1,5 +1,6 @@
 (ns yetibot.commands.repeat
   (:require
+    [yetibot.core.interpreter :refer [handle-cmd]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def max-repeat 10)
@@ -11,7 +12,9 @@
     (when (> n max-repeat)
       (yetibot.core.chat/chat-data-structure (format "Shut up %s." (:name user))))
     (let [n (min max-repeat n)]
-      @(future (pmap identity (repeatedly n #(yetibot.core.handler/handle-unparsed-expr cmd)))))))
+      (pmap
+        identity
+        (repeatedly n #(handle-cmd cmd {:user user :opts opts}))))))
 
 (cmd-hook #"repeat"
           #"(\d+)\s(.+)" repeat-cmd)
