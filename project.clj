@@ -15,7 +15,7 @@
 
                  ; apis
                  [tentacles "0.2.5"]
-                 [twitter-api "0.7.4"]
+                 [twitter-api "0.7.5"]
 
                  ; s3
                  [clj-aws-s3 "0.3.2"]
