@@ -48,8 +48,8 @@
             ; #"^popular$" chat-instance-popular
             ; #"^popular\s(.+)" chat-instance-popular-for-gen
             ; #"^trending" trending-cmd
-            #"^(.+?):(.+)\/(.*)$" generate-cmd
-            #"^(.+?):(.+)$" generate-auto-split-cmd
+            #"^(.+?)\s*:(.+)\/(.*)$" generate-cmd
+            #"^(.+?)\s*:(.+)$" generate-auto-split-cmd
             #"^preview\s+(.+)" preview-cmd
             #"^(?:search\s)?(.+)" search-cmd)
   (info "Imgflip is not configured for meme generation"))
