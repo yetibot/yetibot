@@ -39,7 +39,7 @@ Configuration lives at `config/config.edn`, which is git-ignored. See
 
 ## Running
 
-Once configuration is in place, simply `lein run`.
+Once configuration is in place, simply `lein run` (requires [leiningen](https://github.com/technomancy/leiningen#installation)).
 
 ## Usage
 
