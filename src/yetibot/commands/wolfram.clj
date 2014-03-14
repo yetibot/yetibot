@@ -1,5 +1,6 @@
 (ns yetibot.commands.wolfram
   (:require
+    [yetibot.core.util.http :refer [encode]]
     [clojure.string :as s]
     [clojure.xml :as xml]
     [taoensso.timbre :refer [info warn error]]
@@ -20,7 +21,7 @@
   (flatten
     (map #(str (second %) "&t=.jpg")
          (parse-imgs-from-xml
-           (xml/parse (str endpoint "&input=" q))))))
+           (xml/parse (str endpoint "&input=" (encode q)))))))
 
 (if (conf-valid?)
   (cmd-hook #"wolfram"
