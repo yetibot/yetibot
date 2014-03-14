@@ -10,5 +10,5 @@
   "horse # fetch wisdom from horse_ebooks"
   [_] (-> endpoint fetch trim))
 
-(cmd-hook #"horse"
+(cmd-hook ["horse" #"^horse$"]
           _ horse)
