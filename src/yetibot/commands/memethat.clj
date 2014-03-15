@@ -3,6 +3,7 @@
     [yetibot.core.handler :refer [handle-unparsed-expr]]
     [yetibot.core.models.history :as h]
     [yetibot.models.imgflip :as meme :refer [rand-meme]]
+    [yetibot.commands.meme]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def ^:private history-ignore [#"^\!"])
@@ -32,10 +33,14 @@
 
 (defn genthat
   "<gen>that # use <foo> generator to memify the last thing said
-   memethat # memeify the last thing said with random generator"
-  [{:keys [cmd chat-source]}]
+   memethat # memeify the last thing said with random generator
+   memethat angry picard # memeify the last thing said with a specific generator (allows spaces, unlike <gen>that)"
+  [{:keys [cmd chat-source match]}]
   (let [[_ gen] (re-find genthat-pattern cmd)]
-    (meme-it chat-source (if (= "meme" gen) (rand-meme) gen))))
+    (meme-it chat-source
+             (if (= "meme" gen)
+               (if (empty? match) (rand-meme) match)
+               gen))))
 
 (cmd-hook ["genthat" genthat-pattern]
           _ genthat)
