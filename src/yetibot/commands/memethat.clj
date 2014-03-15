@@ -17,7 +17,7 @@
 
 (defn- find-chat-to-memeify [chat-source]
   (some filter-chat (->> (h/items-with-user chat-source)
-                         (take-last 10)
+                         (take-last 100)
                          reverse)))
 
 (defn- format-chat [i] (:body i))
