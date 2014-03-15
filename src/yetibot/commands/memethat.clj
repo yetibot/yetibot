@@ -2,7 +2,7 @@
   (:require
     [yetibot.core.handler :refer [handle-unparsed-expr]]
     [yetibot.core.models.history :as h]
-    [yetibot.models.imgflip :as meme]
+    [yetibot.models.imgflip :as meme :refer [rand-meme]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def ^:private history-ignore [#"^\!"])
@@ -26,8 +26,6 @@
     (if chat
       (handle-unparsed-expr (format "meme %s: %s" meme-query (format-chat chat)))
       (format "No history to meme :("))))
-
-(defn rand-meme [] (-> (meme/memes) :data :memes rand-nth :name))
 
 ; <gen>that
 (def genthat-pattern #"^(\w+)that$")

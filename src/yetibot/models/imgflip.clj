@@ -14,6 +14,8 @@
 (defn fetch-memes [] (get-json (str endpoint "/get_memes")))
 (defonce memes (m/ttl fetch-memes :ttl/threshold 3600000)) ; one hour memo
 
+(defn rand-meme [] (-> (memes) :data :memes rand-nth :name))
+
 (defn- parse-base-36-int [s] (Integer/parseInt s 36))
 
 (defn- match-meme-name
