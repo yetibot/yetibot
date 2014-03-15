@@ -4,11 +4,15 @@
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn sed-cmd
-  "sed s/<search-pattern>/<replace-pattern> # replace <search-pattern> with <replace-pattern>
-   sed s/<search-pattern/ # replace <search-pattern> with nothing"
-  [{[_ sp rp str] :match}]
-  (let [sp (re-pattern sp)]
-    (s/replace str sp rp)))
+  "sed s/<search-pattern>/<replace-pattern> <string> # replace <search-pattern> with <replace-pattern> on piped contents
+   sed s/<search-pattern/ <string> # replace <search-pattern> with nothing on piped contents"
+  [{[_ sp rp] :match raw :raw}]
+  (prn raw)
+  (let [re-raw (re-pattern (str " " raw "$"))
+        rp (s/replace rp re-raw "") ; clear out the appended args on rp - this is mainly to support spaces in rp
+        sp (re-pattern sp)]
+    (s/replace raw sp rp)))
 
 (cmd-hook ["sed" #"^sed"]
-          #"^s\/(.+)\/(\S*)\s+(.*)" sed-cmd)
+          #"^s\/(.+)\/(.*)" sed-cmd)
+
