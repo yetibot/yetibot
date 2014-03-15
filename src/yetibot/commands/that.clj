@@ -7,7 +7,7 @@
 (defn that-nocmd-cmd
   "that nocmd # retrieve last non-command from history"
   [{:keys [chat-source]}]
-  (if-let [nocmd (h/items-with-user chat-source)]
+  (if-let [nocmd (h/non-cmd-items chat-source)]
     (second nocmd)
     "Couldn't find a non-command in the last 100 history items :("))
 
