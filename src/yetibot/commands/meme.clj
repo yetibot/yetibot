@@ -23,13 +23,12 @@
     (model/generate-meme-by-query inst line1 line2)))
 
 (defn rand-generate-cmd
-  "meme: <line1> / <line2> # generate random meme"
+  "meme <line1> / <line2> # generate random meme"
   [{[_ line1 line2] :match}]
   (generate-cmd {:match [nil (model/rand-meme) line1 line2]}))
 
 (defn generate-auto-split-cmd
-  "meme <generator>: <text> # autosplit <text> in half and generate the
-   instance"
+  "meme <generator>: <text> # autosplit <text> in half and generate the instance"
   [{[_ inst text] :match}]
   (instance-result
     (model/generate-meme-by-query inst text)))
