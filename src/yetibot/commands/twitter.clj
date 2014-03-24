@@ -66,7 +66,7 @@
 (if model/configured?
   (cmd-hook #"twitter"
             #"^lookup\s+(.+)" lookup
-            #"^tweet\s+(.+)" tweet
+            #"^tweet:*\s+(.+)" tweet
             #"^following" following
             #"^follow\s+(.+)" follow
             #"^unfollow\s+(.+)" unfollow
