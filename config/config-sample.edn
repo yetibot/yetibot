@@ -22,7 +22,7 @@
                    :host ""
                    :port ""
                    :username ""
-                   :channels [""]}}
+                   :channels #{"channel1" "someotherchannel"}}}
   :api {:ebay {:app-id ""}
         :github {:token ""
                  :org ""
