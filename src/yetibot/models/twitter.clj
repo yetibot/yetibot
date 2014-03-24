@@ -58,10 +58,9 @@
   (let [screen-name (:screen_name (:user json))
         url (format-url screen-name (:id json))]
     (chat/send-msg-to-all-adapters
-      [(format "%s – @%s"
-               (-> (:text json) expand-twitter-urls html-decode)
-               screen-name)
-       url])))
+      (format "%s — @%s %s"
+              (-> (:text json) expand-twitter-urls html-decode)
+              screen-name url))))
 
 ;;;; streaming callback
 
