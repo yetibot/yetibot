@@ -28,7 +28,7 @@ There are two primary ways of installing yetibot:
     your config (manual management, commit to private git repo, etc...)
 
     ```clojure
-    [yetibot "0.1.21"]
+    [yetibot "0.1.22"]
     ```
 
 ## Configuration
@@ -149,7 +149,7 @@ yetibot has a plugin-based architecture. Its core lives at:
 https://github.com/devth/yetibot.core and can be depended on with:
 
 ```clojure
-[yetibot.core "0.1.11"]
+[yetibot.core "0.1.12"]
 ```
 
 yetibot will load all commands and observers with namespaces on the classpath
