@@ -28,7 +28,7 @@ There are two primary ways of installing yetibot:
     your config (manual management, commit to private git repo, etc...)
 
     ```clojure
-    [yetibot "0.1.25"]
+    [yetibot "0.1.26"]
     ```
 
 ## Configuration
