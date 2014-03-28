@@ -1,0 +1,37 @@
+(ns yetibot.commands.stock
+  (:require
+    [clojure.string :as s]
+    [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.http :refer [get-json]]))
+
+(defn create-yql
+  "Creates a YQL query from stock symbol"
+  [stock-symbol]
+  (str "http://dev.markitondemand.com/Api/v2/Quote/json?symbol=" stock-symbol))
+
+(defn format-percent 
+  "Formats number in map as percent"
+  [k m] 
+  (update-in m [k] #(format "%.2f%%" %)))
+
+(defn get-price
+  "Gets the price from a stock symbol via Yahoo API"
+  [stock-symbol]
+  (let [stock-info (get-json (create-yql stock-symbol))]
+    (if (:Name stock-info)
+      (->> stock-info
+           (format-percent :ChangePercent)
+           ((juxt :Name :LastPrice :High :Low :MarketCap :ChangePercent))
+           (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:"])
+           (partition 2)
+           (map #(s/join " " %))
+           )
+      (:Message stock-info))))
+
+(defn stock-cmd
+  "stock <symbol> # displays current value in market"
+  [{:keys [args]}]
+  (get-price args))
+
+(cmd-hook ["stock" #"^stock$"]
+          _ stock-cmd)
