@@ -17,12 +17,11 @@
                         :bot-id ""
                         :room ""
                         :room-id ""}
-             :irc {:doc "channels is a vector, but currently only one channel is
-                         actually supported."
+             :irc {:doc "channels is a set of all channels yetibot should join."
                    :host ""
                    :port ""
                    :username ""
-                   :channels #{"channel1" "someotherchannel"}}}
+                   :channels #{"#channel1" "#someotherchannel"}}}
   :api {:ebay {:app-id ""}
         :github {:token ""
                  :org ""

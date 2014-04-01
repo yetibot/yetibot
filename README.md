@@ -122,6 +122,21 @@ indicate all arguments, or `$n` (where n is a 1-based index of which arg).
 => 33.6 F (0.9 C), Overcast
 ```
 
+### Multiple channel support
+
+**IRC Only**: yetibot can listen on any number of channels. You configure
+channels in
+[config.edn](https://github.com/devth/yetibot/blob/master/config/config-sample.edn#L24).
+You can also invite yetibot to a channel at runtime using the IRC `/invite`
+command:
+
+```
+/invite yetibot #whoa
+```
+
+When you invite yetibot to a new channel, `config.edn` is overwritten, so next
+time you restart yetibot, it will re-join the same channels.
+
 ### Help
 
 yetibot self-documents itself using the docstrings of its various commands. Ask it
