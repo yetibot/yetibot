@@ -1,5 +1,6 @@
 (ns yetibot.models.twitter
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [clj-http.client :as client]
     [yetibot.core.util.http :refer [html-decode]]
     [yetibot.core.config :refer [config-for-ns conf-valid?]]
@@ -54,13 +55,35 @@
 (defn expand-twitter-urls [text]
   (s/replace text #"https*://t.co/\S+" expand-url))
 
+(defn format-screen-name [json]
+  (:screen_name (:user json)))
+
+(defn format-media-urls [json]
+  (info (:entities json))
+  (->> (:entities json)
+       :media
+       (map :media_url)
+       (join " ")))
+
+(defn format-tweet-text [json]
+  (str (:text json) " " (format-media-urls json)))
+
+(defn format-tweet [json]
+  (let [screen-name (format-screen-name json)
+        url (format-url screen-name (:id json))
+        retweeted-status (:retweeted_status json)
+        text (if retweeted-status
+               (str "RT " (format-screen-name retweeted-status) ": "
+                    (format-tweet-text retweeted-status))
+               (format-tweet-text json))]
+    ; (info json)
+    (format "%s — @%s %s"
+            text
+            ; (-> (:text json) expand-twitter-urls html-decode)
+            screen-name url)))
+
 (defn send-tweet [json]
-  (let [screen-name (:screen_name (:user json))
-        url (format-url screen-name (:id json))]
-    (chat/send-msg-to-all-adapters
-      (format "%s — @%s %s"
-              (-> (:text json) expand-twitter-urls html-decode)
-              screen-name url))))
+  (chat/send-msg-to-all-adapters (format-tweet json)))
 
 ;;;; streaming callback
 
@@ -82,6 +105,14 @@
 
 (defonce user-stream-resp
   (future (user-stream :oauth-creds creds :callbacks streaming-callback)))
+
+;;;; search
+
+(defn search [query]
+  (info "twitter search for" query)
+  (search-tweets
+    :oauth-creds creds
+    :params {:count 20 :q query}))
 
 ;;;; topic tracking
 
