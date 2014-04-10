@@ -66,11 +66,10 @@
 (defn search
   "twitter search <query> # find most recent 20 tweets matching <query>"
   [{[_ query] :match}]
-  (let [query "seattle"]
-    (->> (model/search query)
-         :body
-         :statuses
-         (map model/format-tweet))))
+  (->> (model/search query)
+       :body
+       :statuses
+       (map model/format-tweet)))
 
 (if model/configured?
   (cmd-hook #"twitter"
