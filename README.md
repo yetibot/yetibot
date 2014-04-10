@@ -14,7 +14,7 @@ unix-style piping and arbitrarily-nested sub expressions.
 
 ![yeti](yeti.png)
 
-[![Build Status](https://travis-ci.org/devth/yetibot.png?branch=master)](https://travis-ci.org/devth/yetibot)
+[![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 
 ## Installation
 
