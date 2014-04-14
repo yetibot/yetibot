@@ -3,7 +3,7 @@
     [taoensso.timbre :refer [info warn error]]
     [clj-http.client :as client]
     [yetibot.core.util.http :refer [html-decode]]
-    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [get-config config-for-ns conf-valid?]]
     [clojure.string :as s :refer [join]]
     [yetibot.core.chat :as chat]
     [clojure.data.json :as json]
@@ -19,9 +19,6 @@
     (twitter.callbacks.protocols SyncSingleCallback)
     (twitter.callbacks.protocols AsyncStreamingCallback)))
 
-(def config (config-for-ns))
-(def configured? (conf-valid?))
-
 ;;;; schema for storing topics to track
 
 (def model-namespace :twitter)
@@ -34,13 +31,12 @@
 
 ;;;; config
 
-(def config {:consumer_key (:consumer-key config)
-             :consumer_secret (:consumer-secret config)
-             :token (:token config)
-             :secret (:secret config)})
+(defn config [] (get-config :yetibot :models :twitter))
+
+(defn configured? [] (conf-valid? (config)))
 
 (def creds (apply make-oauth-creds
-                  ((juxt :consumer_key :consumer_secret :token :secret) config)))
+                  ((juxt :consumer-key :consumer-secret :token :secret) (config))))
 
 ;;;; helper
 
@@ -112,7 +108,7 @@
   (info "twitter search for" query)
   (search-tweets
     :oauth-creds creds
-    :params {:count 20 :q query}))
+    :params {:count 20 :q query :lang (:search_lang (config))}))
 
 ;;;; topic tracking
 

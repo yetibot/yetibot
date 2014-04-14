@@ -71,7 +71,7 @@
        :statuses
        (map model/format-tweet)))
 
-(if model/configured?
+(if (model/configured?)
   (cmd-hook #"twitter"
     #"^lookup\s+(.+)" lookup
     #"^tweet:*\s+(.+)" tweet

@@ -45,7 +45,9 @@
            :twitter {:consumer-key ""
                      :consumer-secret ""
                      :token ""
-                     :secret ""}
+                     :secret ""
+                     :doc "ISO 639-1 code: http://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
+                     :search_lang "en"}
            :jenkins {:doc "Multiple Jenkins instances can be configured. They
                            can also be configured at runtime, which writes to
                            this config file. Only one `default-job` is
