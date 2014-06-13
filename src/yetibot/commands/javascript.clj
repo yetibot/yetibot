@@ -16,7 +16,7 @@
               (catch Exception e e))]
     (when-not (instance? Exception res)
       (swap! statements conj expr))
-    res))
+    (str res)))
 
 (cmd-hook #"js"
           #".*" javascript-cmd)
