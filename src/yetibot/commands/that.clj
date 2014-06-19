@@ -4,21 +4,20 @@
     [yetibot.core.models.history :as h]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
-(defn that-nocmd-cmd
-  "that nocmd # retrieve last non-command from history"
+(defn that-with-cmd-cmd
+  "that cmd # retrieve last command from history"
   [{:keys [chat-source]}]
-  (if-let [nocmd (h/non-cmd-items chat-source)]
-    (second nocmd)
-    "Couldn't find a non-command in the last 100 history items :("))
+  (if-let [cmds (h/cmd-only-items chat-source)]
+    (-> cmds second second) ; the first result will be this cmd itself so use the second
+    "Couldn't find a command in the last 100 history items :("))
 
 (defn that-cmd
-  "that # retrieve last chat from history"
+  "that # retrieve last non-command chat from history"
   [{:keys [chat-source]}]
-  (-> (h/items-with-user chat-source)
-      butlast
-      last
-      :body))
+  (if-let [nocmd (h/non-cmd-items chat-source)]
+    (-> nocmd first second)
+    "Couldn't find a non-command in the last 100 history items :("))
 
 (cmd-hook ["that" #"^that$"]
-  #"nocmd" that-nocmd-cmd
+  #"cmd" that-with-cmd-cmd
   _ that-cmd)
