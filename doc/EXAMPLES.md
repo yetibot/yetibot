@@ -61,3 +61,12 @@ Fun use cases for yetibot. Open a PR to add your own!
 
 I think you get the idea :ok_hand:
 
+## Hide yo wife
+
+```
+!alias hide = "meme hide yo: hide yo /"
+!list wife, kids, husband too | xargs hide | unwords
+
+![hide yo wife](http://i.imgflip.com/9ovn9.jpg "hide yo wife")
+![hide yo kids](http://i.imgflip.com/9ovnb.jpg "hide yo kids")
+![hide yo husband too](http://i.imgflip.com/9ovna.jpg "hide yo husband too")
