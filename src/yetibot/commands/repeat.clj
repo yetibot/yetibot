@@ -10,7 +10,7 @@
   [{[_ n cmd] :match user :user opts :opts}]
   (let [n (read-string n)]
     (when (> n max-repeat)
-      (yetibot.core.chat/chat-data-structure (format "Shut up %s." (:name user))))
+      (yetibot.core.chat/chat-data-structure (format "LOL %s 🐴🐴" (:name user))))
     (let [n (min max-repeat n)]
       (pmap
         identity
