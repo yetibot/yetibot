@@ -119,6 +119,14 @@
     (api/assign-issue iss-key assignee)
     (fn [res] (report-jira iss-key) "Success")))
 
+(defn comment-cmd
+  "jira comment <issue> <comment> # comment on <issue>"
+  [{[_ iss-key body] :match user :user}]
+  (let [body (format "%s: %s" (:name user) body)]
+    (report-if-error
+      (api/post-comment iss-key body)
+      (fn [res] (report-jira iss-key) "Success"))))
+
 (defn recent-cmd
   "jira recent # show the 15 most recent issues"
   [_]
@@ -152,6 +160,7 @@
           #"^pri" priorities-cmd
           #"^users" users-cmd
           #"^assign\s+(\S+)\s+(\S+)" assign-cmd
+          #"^comment\s+(\S+)\s+(.+)" comment-cmd
           #"^search\s+(.+)" search-cmd
           #"^jql\s+(.+)" jql-cmd
           #"^create\s+(.+)" create-cmd

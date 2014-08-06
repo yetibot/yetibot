@@ -76,6 +76,13 @@
     (when-let [t (first resolve-t)]
       (transition-issue i (:id t) comment))))
 
+(defn post-comment [issue-key body]
+  (let [uri (endpoint "/issue/%s/comment" issue-key)]
+    (client/post uri
+                 (merge client-opts
+                        {:content-type :json
+                         :form-params {:body body}}))))
+
 (defn get-issue
   "Fetch json for a given JIRA"
   [i]
