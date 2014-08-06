@@ -79,9 +79,10 @@
 (defn get-issue
   "Fetch json for a given JIRA"
   [i]
-  (let [uri (endpoint "/issue/%s" i)]
+  (let [uri (endpoint "/issue/%s" i)
+        opts (merge client-opts {:query-params {"fields" "*navigable"}})]
     (try
-      (:body (client/get uri client-opts))
+      (:body (client/get uri opts))
       (catch Exception _ nil))))
 
 (def fetch-and-format-issue-short (comp format-issue-short get-issue))
