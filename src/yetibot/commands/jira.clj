@@ -147,6 +147,21 @@
   [_]
   (mapcat (comp (partial map :name) :body) (api/all-components)))
 
+(defn print-version [v]
+  (str (:name v)
+       (when-let [rd (:releaseDate v)] (str " [release date " rd "]"))
+       (when (:archived v) " [archived]")
+       (when (:released v) " [released]")))
+
+(defn versions-cmd
+  "jira versions [<project-key>] # list versions for <project-key>. Uses default project-key if not specified."
+  [{[_ project-key] :match}]
+  (let [args (keep identity [project-key])
+        versions (apply api/versions args)]
+    (->> versions
+         :body
+         (map print-version))))
+
 (defn parse-cmd
   "jira parse <text> # parse the issue key out of a jira issue URL"
   [{[_ text] :match}]
@@ -156,6 +171,7 @@
           #"^projects" projects-cmd
           #"^parse\s+(.+)" parse-cmd
           #"^components" components-cmd
+          #"^versions\s*(\S+)*" versions-cmd
           #"^recent" recent-cmd
           #"^pri" priorities-cmd
           #"^users" users-cmd

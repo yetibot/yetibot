@@ -11,6 +11,7 @@
 (def configured? (conf-valid?))
 (defn project-keys [] (->> config :project-keys))
 (defn project-keys-str [] (->> (project-keys) (s/join ",")))
+(defn default-project-key [] (or (:default-project-key config) (first (project-keys))))
 
 (def ^:private base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
@@ -174,6 +175,15 @@
            ; error-handling-opts
            {:content-type :json
             :form-params {:name assignee}})))
+
+;; versions
+
+(defn versions
+  ([] (versions (default-project-key)))
+  ([project-key]
+   (client/get
+     (endpoint "/project/%s/versions" project-key)
+     client-opts)))
 
 ;; components
 
