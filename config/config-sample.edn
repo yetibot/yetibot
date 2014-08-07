@@ -30,9 +30,10 @@
         :jira {:domain ""
                :user ""
                :password ""
-                :default-issue-type-id "3",
-                :sub-task-issue-type-id "27",
-               :project-keys #{}}
+               :default-issue-type-id "3",
+               :sub-task-issue-type-id "27",
+               :project-keys #{}
+               :default-project-key "Optional"}
         :s3 {:access-key ""
              :secret-key ""}}
   :models {:imgflip {:doc "this is used for meme generation"
