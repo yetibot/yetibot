@@ -5,13 +5,21 @@
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
     [yetibot.core.config :refer [config-for-ns conf-valid?]]
-    [yetibot.core.util.http :refer [get-json fetch]]))
+    [yetibot.core.util.http :refer [get-json fetch]]
+    [clj-time [format :refer [formatter formatters show-formatters parse unparse]] ]
+    ))
 
 (def config (config-for-ns))
 (def configured? (conf-valid?))
 (defn project-keys [] (->> config :project-keys))
 (defn project-keys-str [] (->> (project-keys) (s/join ",")))
 (defn default-project-key [] (or (:default-project-key config) (first (project-keys))))
+
+;; move to yetibot.core util if anyone else needs date parsing and formatting:
+(def date-time-format (:date-hour-minute formatters))
+(defn parse-and-format-date-string [date-string]
+  (unparse date-time-format (parse date-string)))
+
 
 (def ^:private base-uri (str "https://" (:domain config)))
 (def ^:private api-uri (str base-uri "/rest/api/latest"))
@@ -44,10 +52,53 @@
 
 (defn format-issue-short [issue-data]
   (let [fs (:fields issue-data)]
-    (format "%s: %s %s"
+    (format "[%s] [%s] %s %s"
+            (-> fs :assignee :name)
             (-> fs :status :name)
             (-> fs :summary)
             (url-from-key (:key issue-data)))))
+
+(defn format-comment [c]
+  (str "📞 "
+    (-> c :author :name) " "
+    (parse-and-format-date-string (:created c))
+     ": " (-> c :body)))
+
+(defn format-worklog-item [w]
+  (str "🚧 " (-> w :author :name) " " (:timeSpent w) ": " (:comment w)
+       " [" (parse-and-format-date-string (:started w)) "]"))
+
+(defn format-worklog-items [issue-data]
+  (when-let [worklog (-> issue-data :fields :worklog :worklogs)]
+    (map format-worklog-item worklog)))
+
+(defn format-subtasks [issue-data]
+  ;; TODO
+  nil)
+
+(defn format-issue-long
+  "Show the full details for an issue"
+  [issue-data]
+  (let [fs (:fields issue-data)]
+    (flatten
+      (keep identity
+            [(str (:key issue-data) " ↪︎ " (-> fs :status :name) " ↪︎ " (-> fs :summary))
+             (-> fs :description)
+             (s/join
+               "  "
+               [(str " 👷 " (-> fs :assignee :name))
+                (str " 👮 " (-> fs :reporter :name))])
+             (s/join
+               " "
+               [(str "❗️ Priority: " (-> fs :priority :name))
+                (str " ✅ Fix version: " (s/join ", " (map :name (-> fs :fixVersions))))])
+             (str "🕐 Created: " (parse-and-format-date-string (:created fs))
+                  "  🕗 Updated: " (parse-and-format-date-string (:updated fs)))
+             (map format-comment (-> fs :comment :comments))
+             (format-worklog-items issue-data)
+             (format-subtasks issue-data)
+             (str "👉 " (url-from-key (:key issue-data)))]))))
+
 
 ;; issues
 
@@ -88,7 +139,7 @@
   "Fetch json for a given JIRA"
   [i]
   (let [uri (endpoint "/issue/%s" i)
-        opts (merge client-opts {:query-params {"fields" "*navigable"}})]
+        opts (merge client-opts {:query-params {"fields" "*navigable,comment,worklog"}})]
     (try
       (:body (client/get uri opts))
       (catch Exception _ nil))))

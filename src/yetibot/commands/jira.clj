@@ -167,9 +167,15 @@
   [{[_ text] :match}]
   (second (re-find #"browse\/([^\/]+)" text)))
 
+(defn show-cmd
+  "jira show <issue> # show the full details of an issue"
+  [{[_ issue-key] :match}]
+  (-> issue-key api/get-issue api/format-issue-long))
+
 (cmd-hook #"jira"
           #"^projects" projects-cmd
           #"^parse\s+(.+)" parse-cmd
+          #"^show\s+(\S+)" show-cmd
           #"^components" components-cmd
           #"^versions\s*(\S+)*" versions-cmd
           #"^recent" recent-cmd
