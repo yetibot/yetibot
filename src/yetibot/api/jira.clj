@@ -14,7 +14,7 @@
 (defn project-keys [] (->> config :project-keys))
 (defn project-keys-str [] (->> (project-keys) (s/join ",")))
 (defn default-project-key [] (or (:default-project-key config) (first (project-keys))))
-(defn max-results (or (:max-results config) 10))
+(def max-results (or (:max-results config) 10))
 
 ;; move to yetibot.core util if anyone else needs date parsing and formatting:
 (def date-time-format (:date-hour-minute formatters))
