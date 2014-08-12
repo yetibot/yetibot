@@ -61,9 +61,9 @@
 
 (defn format-comment [c]
   (str "📞 "
-    (-> c :author :name) " "
-    (parse-and-format-date-string (:created c))
-     ": " (-> c :body)))
+       (-> c :author :name) " "
+       (parse-and-format-date-string (:created c))
+       ": " (-> c :body)))
 
 (defn format-worklog-item [w]
   (str "🚧 " (-> w :author :name) " " (:timeSpent w) ": " (:comment w)
@@ -76,6 +76,16 @@
 (defn format-subtasks [issue-data]
   ;; TODO
   nil)
+
+(defn format-attachment-item [a]
+  (str "📎 "
+       (-> a :author :name) " "
+       (parse-and-format-date-string (:created a))
+       ": " (-> a :content)))
+
+(defn format-attachments [issue-data]
+  (when-let [attachments (-> issue-data :fields :attachment)]
+    (map format-attachment-item attachments)))
 
 (defn format-issue-long
   "Show the full details for an issue"
@@ -98,6 +108,7 @@
              (map format-comment (-> fs :comment :comments))
              (format-worklog-items issue-data)
              (format-subtasks issue-data)
+             (format-attachments issue-data)
              (str "👉 " (url-from-key (:key issue-data)))]))))
 
 
@@ -140,7 +151,7 @@
   "Fetch json for a given JIRA"
   [i]
   (let [uri (endpoint "/issue/%s" i)
-        opts (merge client-opts {:query-params {"fields" "*navigable,comment,worklog"}})]
+        opts (merge client-opts {:query-params {"fields" "*navigable,comment,worklog,attachment"}})]
     (try
       (:body (client/get uri opts))
       (catch Exception _ nil))))
