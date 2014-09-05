@@ -23,8 +23,8 @@
                    ; map where keys are channel names and values are settings.
                    ; `broadcast?` is used to determine whether to send Tweets to a
                    ; room, for example.
-                   :rooms {"#channel1" {:broadcast? true}
-                           "#someotherchannel" {:broadcast? false}}}}
+                   :rooms {"#forthelols" {:broadcast? true}
+                           "#doingwork" {:broadcast? false}}}}
   :api {:ebay {:app-id ""}
         :github {:token ""
                  :org ""
