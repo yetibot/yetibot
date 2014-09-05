@@ -137,6 +137,17 @@ command:
 When you invite yetibot to a new channel, `config.edn` is overwritten, so next
 time you restart yetibot, it will re-join the same channels.
 
+You can also use the `!room` command to tell yetibot to join or leave a channel,
+and whether to broadcast Tweets to that channel.
+
+```
+!help room
+room list # list rooms that yetibot is in and whether broadcast is enabled
+room broadcast <room> # toggle whether yetibot broadcasts to <room> (e.g.  incoming Tweets)
+room join <room> # join <room>
+room leave <room> # leave <room>
+```
+
 ### Help
 
 yetibot self-documents itself using the docstrings of its various commands. Ask it
