@@ -17,11 +17,14 @@
                         :bot-id ""
                         :room ""
                         :room-id ""}
-             :irc {:doc "channels is a set of all channels yetibot should join."
-                   :host ""
+             :irc {:host ""
                    :port ""
-                   :username ""
-                   :channels #{"#channel1" "#someotherchannel"}}}
+                   :username "yetibot"
+                   ; map where keys are channel names and values are settings.
+                   ; `broadcast?` is used to determine whether to send Tweets to a
+                   ; room, for example.
+                   :rooms {"#channel1" {:broadcast? true}
+                           "#someotherchannel" {:broadcast? false}}}}
   :api {:ebay {:app-id ""}
         :github {:token ""
                  :org ""
