@@ -16,7 +16,7 @@
 (defn fetch-random [] (call "random"))
 
 (defn format-def [result]
-  (first (for [i (:list result)] [(:word i) (:definition i)])))
+  (first (for [i (:list result)] (str (:word i) \newline (:definition i)))))
 
 (defn random-cmd
   "urban random # fetch a random definition from Urban Dictionary"
