@@ -12,7 +12,7 @@
   :repl-options {:init-ns yetibot.core.repl
                  :welcome (println "Welcome to the YetiBot development repl!")}
   :jvm-opts ["-server" "-Xmx2G"]
-  :dependencies [[org.clojure/clojure "1.5.1"],
+  :dependencies [[org.clojure/clojure "1.6.0"],
                  [yetibot.core "0.2.1"]
 
                  ; apis
