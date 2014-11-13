@@ -71,6 +71,11 @@
        :statuses
        (map model/format-tweet)))
 
+(defn retweet
+  "twitter retweet <id>"
+  [{[_ id] :match}]
+  (model/retweet id))
+
 (if (model/configured?)
   (cmd-hook #"twitter"
     #"^lookup\s+(.+)" lookup
@@ -79,6 +84,7 @@
     #"^follow\s+(.+)" follow
     #"^unfollow\s+(.+)" unfollow
     #"^search\s+(.+)" search
+    #"^retweet\s+(\d+)" retweet
     #"^tracking" tracking
     #"^untrack\s+(.+)" untrack
     #"^track\s+(.+)" track)

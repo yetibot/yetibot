@@ -167,6 +167,10 @@
   (statuses-update :oauth-creds creds
                    :params {:status status}))
 
+(defn retweet [id]
+  (statuses-retweet-id :oauth-creds creds
+                       :params {:id id}))
+
 ;;;; users
 
 (defn user-timeline [screen-name]
