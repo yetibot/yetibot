@@ -1,11 +1,11 @@
-(defproject yetibot "0.1.38"
+(defproject yetibot "0.1.39-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,campfire}."
   :url "https://github.com/devth/yetibot"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :lein-release {:deploy-via :clojars}
   :signing {:gpg-key "C9764E34"}
-  :deploy-repositories [["clojars" {:creds :gpg}]]
+  :deploy-repositories [["releases" :clojars]]
   :profiles {:dev {:source-paths ["dev"]}
              :test {}
              :plugins [[lein-git-deps "0.0.1-SNAPSHOT"]]}
