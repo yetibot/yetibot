@@ -74,7 +74,7 @@
 (defn retweet
   "twitter retweet <id>"
   [{[_ id] :match}]
-  (model/retweet id))
+  (suppress (model/retweet id)))
 
 (defn reply
   "twitter reply <id> <status> # note that the author's username of the referenced tweet must be mentioned"
