@@ -171,6 +171,11 @@
   (statuses-retweet-id :oauth-creds creds
                        :params {:id id}))
 
+(defn reply [id status]
+  (statuses-update :oauth-creds creds
+                   :params {:in_reply_to_status_id id
+                            :status status}))
+
 ;;;; users
 
 (defn user-timeline [screen-name]

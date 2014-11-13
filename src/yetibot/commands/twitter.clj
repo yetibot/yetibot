@@ -76,6 +76,11 @@
   [{[_ id] :match}]
   (model/retweet id))
 
+(defn reply
+  "twitter reply <id> <status> # note that the author's username of the referenced tweet must be mentioned"
+  [{[_ id status] :match}]
+  (suppress (model/reply id status)))
+
 (if (model/configured?)
   (cmd-hook #"twitter"
     #"^lookup\s+(.+)" lookup
@@ -85,6 +90,7 @@
     #"^unfollow\s+(.+)" unfollow
     #"^search\s+(.+)" search
     #"^retweet\s+(\d+)" retweet
+    #"^reply\s+(\d+)\s+(.+)" reply
     #"^tracking" tracking
     #"^untrack\s+(.+)" untrack
     #"^track\s+(.+)" track)
