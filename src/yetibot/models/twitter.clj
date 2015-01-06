@@ -91,7 +91,9 @@
         (send-tweet json)))
     (catch Exception e)))
 
-(def fail (comp println response-return-everything))
+(def fail (comp
+            (fn [error-response] (error "twitter streaming error" error-response))
+            response-return-everything))
 
 (def exception str)
 
