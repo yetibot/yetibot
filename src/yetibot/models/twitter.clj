@@ -95,7 +95,7 @@
             (fn [error-response] (error "twitter streaming error" error-response))
             response-return-everything))
 
-(def exception str)
+(def exception (fn [exception] (error "twitter streaming exception" exception)))
 
 (def streaming-callback (AsyncStreamingCallback. succ fail exception))
 
