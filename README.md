@@ -209,6 +209,6 @@ request and explain why so we can improve the docs.
 
 ## License
 
-Copyright &copy; 2012-2014 Trevor Hartman. Distributed under the [Eclipse Public
+Copyright &copy; 2012-2015 Trevor Hartman. Distributed under the [Eclipse Public
 License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as
 Clojure.
