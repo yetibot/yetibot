@@ -4,6 +4,7 @@
     [yetibot.core.util.http :refer [get-json fetch]]
     [clojure.string :as s]
     [clj-time.coerce :as c]
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config conf-valid? update-config]]
     [clojure.core.memoize :as memo]))
 
@@ -45,8 +46,11 @@
   (doall
     (pmap
       (fn [[inst-name inst]]
-        (when-let [instance-info (inst-name @instance-root-data)]
-          ((:fetcher instance-info))))
+        (try
+          (when-let [instance-info (inst-name @instance-root-data)]
+            ((:fetcher instance-info)))
+          (catch Exception e
+            (warn "Unable to load info for Jenkins instance" inst-name e))))
       (instances))))
 
 (defonce load-caches (prime-memos))
