@@ -5,7 +5,7 @@
     [clojure.string :as s]
     [clj-time.coerce :as c]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.core.config :refer [get-config conf-valid? update-config]]
+    [yetibot.core.config :refer [get-config conf-valid? update-config remove-config]]
     [clojure.core.memoize :as memo]))
 
 (defonce instance-root-data (atom {}))
@@ -65,6 +65,14 @@
                     :api-key api-key}))
   (prime-memos))
 
+(defn remove-instance [inst-name]
+  (let [inst-key (keyword inst-name)
+        exists? (inst-key @instance-root-data)]
+    (when exists?
+      (remove-config :yetibot :models :jenkins :instances inst-key)
+      (swap! instance-root-data dissoc inst-key)
+      true)))
+
 ; Getters
 
 (defn instance-data [inst-name]
@@ -75,17 +83,19 @@
     (-> id :jobs)))
 
 (defn jobs-to-info []
-  (->> (map (fn [[inst-key inst-info]]
-              (let [data ((:fetcher inst-info))]
-                (map (fn [job]
-                       {(:name job) (merge {:job-name (:name job)} inst-info)})
-                     (:jobs data))))
-            @instance-root-data)
-       flatten
-       (reduce conj)))
+  (some->> (map (fn [[inst-key inst-info]]
+                  (let [data ((:fetcher inst-info))]
+                    (map (fn [job]
+                           {(:name job) (merge {:job-name (:name job)} inst-info)})
+                         (:jobs data))))
+                @instance-root-data)
+           flatten
+           (reduce conj)))
 
 (defn job-names []
-  (keys (jobs-to-info)))
+  (if-not (empty? @instance-root-data)
+    (keys (jobs-to-info))
+    []))
 
 (defn resolve-job-info [job-to-match]
   (let [p (re-pattern job-to-match)

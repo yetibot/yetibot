@@ -2,6 +2,7 @@
   (:require
     [yetibot.models.jenkins :as model]
     [clojure.string :as s]
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn find-job-and-do [job-to-match f]
@@ -29,8 +30,8 @@
         "No default job configured"))
 
 (defn status-cmd
-  "jen status <job-name>       # show Jenkins status for <job-name>
-   jen status                  # show Jenkins status for default job if configured"
+  "jen status <job-name> # show Jenkins status for <job-name>
+   jen status # show Jenkins status for default job if configured"
   [{args :match}]
   (if (coll? args)
     (find-job-and-do (second args) model/job-status)
@@ -39,8 +40,8 @@
       "No default job configured")))
 
 (defn list-cmd
-  "jen list                    # lists all jenkins jobs
-   jen list <pattern>          # lists jenkins jobs containing <string>"
+  "jen list # lists all jenkins jobs
+   jen list <pattern> # lists jenkins jobs containing <string>"
   [{args :match}]
   (if (coll? args)
     (list-jobs-matching (second args))
@@ -56,20 +57,26 @@
   "jen add <name> <url> <user> <api-key> # add Jenkins instance with auth
    jen add <name> <url> # add Jenkinst instance without auth"
   [{[_ inst-name url _ user api-key] :match}]
-
-  (prn "add instance")
-  (prn inst-name url user api-key)
+  (info "add jenkins instance" inst-name url user api-key)
   (let [user (or user "X")
         api-key (or api-key "X")]
     (model/add-instance inst-name url user api-key)
     (let [js (model/jobs-for-instance inst-name)]
       (format "%s added, found %s jobs" inst-name (count js)))))
 
+(defn remove-instance
+  "jen remove <name> # remove a Jenkins instance"
+  [{[_ inst-name ] :match}]
+  (if (model/remove-instance inst-name)
+    (str "Removed Jenkins instance " inst-name)
+    (str "Couldn't find an instanced named " inst-name)))
+
 ; (re-find #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" "add thartman http://cubejs-app-ci-47569 X X")
 ; (re-find #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" "add thartman http://cubejs-app-ci-47569")
 
 (cmd-hook #"jen"
           #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" add-instance
+          #"^remove\s+(\w+)" remove-instance
           #"^instances$" instances-cmd
           #"^build$" build-default-cmd
           #"^build\s(\S+)\s*$" build

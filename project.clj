@@ -13,7 +13,7 @@
                  :welcome (println "Welcome to the YetiBot development repl!")}
   :jvm-opts ["-server" "-Xmx2G"]
   :dependencies [[org.clojure/clojure "1.6.0"],
-                 [yetibot.core "0.2.17"]
+                 [yetibot.core "0.2.20"]
 
                  ; apis
                  [tentacles "0.2.5"]
