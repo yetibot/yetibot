@@ -74,7 +74,7 @@
                (format-tweet-text json))]
     ; (info json)
     (format "%s — @%s %s"
-            text
+            (-> text html-decode)
             ; (-> (:text json) expand-twitter-urls html-decode)
             screen-name url)))
 
