@@ -1,5 +1,6 @@
 (ns yetibot.commands.github
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.api.github :as gh]
     [clojure.string :as s]
     [yetibot.core.util.http :refer [get-json]]
@@ -7,21 +8,33 @@
     [taoensso.timbre :refer [info]]))
 
 (defn feed
-  "gh feed # list recent activity"
-  [_] (gh/formatted-events))
+  "gh feed <org-name> # list recent activity for <org-name>"
+  [{[_ org-name] :match}] (gh/formatted-events org-name))
 
 (defn repos
-  "gh repos # list all known repos"
-  [_] (map :name (gh/repos)))
+  "gh repos # list all known repos
+   gh repos <org-name> # list repos under <org-name>"
+  [{match :match}]
+  (if (sequential? match)
+    (let [[_ org-name] match]
+      (map #(format "%s/%s" org-name (:name %)) (gh/repos org-name)))
+    (mapcat
+      (fn [[org-name repos]]
+        (map #(format "%s/%s" org-name (:name %))))
+      (gh/repos-by-org))))
 
 (defn repos-urls
   "gh repos urls # list the ssh urls of all repos"
   [_] (map :ssh_url (gh/repos)))
 
+(defn orgs
+  "gh orgs # show configured orgs"
+  [_] gh/org-names)
+
 (defn tags
-  "gh tags <repo> # list the tags for <repo>"
-  [{[_ repo] :match}]
-  (map :name (gh/tags repo)))
+  "gh tags <org-name>/<repo> # list the tags for <org-name>/<repo>"
+  [{[_ org-name repo] :match}]
+  (map :name (gh/tags org-name repo)))
 
 (defn branches
   "gh branches <repo> # list branches for <repo>"
@@ -42,11 +55,13 @@
 
 (if gh/configured?
   (cmd-hook ["gh" #"^gh|github$"]
-            #"feed" feed
+            #"feed\s+(\S+)" feed
             #"repos urls" repos-urls
+            #"repos\s+(\S+)" repos
             #"repos" repos
+            #"orgs" orgs
             #"statuses" statuses
             #"status$" status
-            #"tags\s+(\S+)" tags
+            #"tags\s+(\S+)\/(\S+)" tags
             #"branches\s+(\S+)" branches)
   (info "GitHub is not configured"))

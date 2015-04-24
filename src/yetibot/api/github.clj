@@ -18,28 +18,32 @@
 
 ;;; config
 
-(def config (config-for-ns))
+(defn config [] (config-for-ns))
 (def configured? (conf-valid?))
-(def endpoint (or (:endpoint config) "https://api.github.com/"))
+(def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
 ; propogate the configured endpoint to the tentacles library
 (alter-var-root #'tentacles.core/url (constantly endpoint))
 
-(def token (:token config))
+(def token (:token (config)))
 (def auth {:oauth-token token})
 (future
   (def user (u/me auth))
   (def user-name (:login user)))
-(def org-name (:org config))
 
-(def org (first (filter
-                  #(= (:login %) org-name)
-                  (o/orgs auth))))
+; ensure org-names is a sequence; config allows either
+(def org-names
+  (let [c (:org (config))]
+    (if (sequential? c) c [c])))
+
+; (def org (first (filter
+;                   #(= (:login %) org-name)
+;                   (o/orgs auth))))
 
 ;;; data
 
 (defn tree
-  [repo & [opts]]
+  [org-name repo & [opts]]
   (data/tree org-name repo (or (:branch opts) "master")
           (merge auth {:recursive true} opts)))
 
@@ -48,7 +52,7 @@
 
 (defn raw
   "Retrieve raw contents from GitHub"
-  [repo path & [{:keys [branch]}]]
+  [org-name repo path & [{:keys [branch]}]]
   (let [git-ref (or branch "master")]
     (let [uri (format (str endpoint "/repos/%s/%s/contents/%s?ref=%s") org-name repo path git-ref)]
       (client/get uri
@@ -57,7 +61,7 @@
 
 (defn changed-files
   "Retrieves a list of the filenames which have changed in a single commit, or between two commits"
-  [repo sha1 & [sha2]]
+  [org-name repo sha1 & [sha2]]
   (let [uri (if sha2
               (format (str endpoint "/repos/%s/%s/compare/%s...%s") org-name repo sha1 sha2)
               (format (str endpoint "/repos/%s/%s/commits/%s") org-name repo sha1))
@@ -73,13 +77,16 @@
 
 ;;; repos
 
-(defn repos []
-  (r/org-repos org-name (merge auth {:per-page 100})))
+(defn repos [org-name]
+  (remove empty? (r/org-repos org-name (merge auth {:per-page 100}))))
 
-(defn branches [repo]
+(defn repos-by-org []
+  (into {} (for [org-name org-names] [org-name (repos org-name)])))
+
+(defn branches [org-name repo]
   (r/branches org-name repo auth))
 
-(defn tags [repo]
+(defn tags [org-name repo]
   (r/tags org-name repo auth))
 
 ;;; (defn contents [repo path]
@@ -114,8 +121,8 @@
   [evts]
   (map fmt-event evts))
 
-(defn events []
+(defn events [org-name]
   (e/org-events user-name org-name auth))
 
-(defn formatted-events []
-  (fmt-events (events)))
+(defn formatted-events [org-name]
+  (fmt-events (events org-name)))
