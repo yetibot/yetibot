@@ -1,6 +1,9 @@
 (ns yetibot.api.github
   (:require
     [tentacles
+     [search :as search]
+     [pulls :as pulls]
+     [issues :as issues]
      [users :as u]
      [repos :as r]
      [events :as e]
@@ -89,8 +92,21 @@
 (defn tags [org-name repo]
   (r/tags org-name repo auth))
 
+(defn pulls [org-name repo]
+  (pulls/pulls org-name repo auth))
+
 ;;; (defn contents [repo path]
 ;;;   (r/contents org-name repo path auth))
+
+(defn org-issues [org-name]
+  (issues/org-issues org-name auth))
+
+;; search
+
+(defn search-pull-requests [org-name keywords & [opts]]
+  (search/search-issues keywords
+                        (merge {:state "open" :type "pr" :user org-name} opts)
+                        (merge {:sort "created"} auth)))
 
 
 ;;; events / feed

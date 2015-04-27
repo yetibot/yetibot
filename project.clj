@@ -16,7 +16,7 @@
                  [yetibot.core "0.2.20"]
 
                  ; apis
-                 [tentacles "0.2.5"]
+                 [tentacles "0.3.0"]
                  [twitter-api "0.7.6"]
 
                  ; s3

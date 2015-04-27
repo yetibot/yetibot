@@ -53,6 +53,19 @@
         (map fmt-status (get-json "https://status.github.com/api/messages.json"))
         (repeat ["--"])))
 
+(defn pull-requests
+  "gh pr <org-name> # list open pull requests for <org-name>"
+  [{[_ org-name] :match}]
+  (let [prs (gh/search-pull-requests org-name "" {:state "open"})]
+    (->> prs
+         :items
+         (map (fn [pr]
+                (s/join " "
+                        [(format "[%s]" (-> pr :user :login))
+                         (:title pr)
+                         (-> pr :pull_request :html_url)
+                         ]))))))
+
 (if gh/configured?
   (cmd-hook ["gh" #"^gh|github$"]
             #"feed\s+(\S+)" feed
@@ -62,6 +75,7 @@
             #"orgs" orgs
             #"statuses" statuses
             #"status$" status
+            #"pr\s+(\S+)" pull-requests
             #"tags\s+(\S+)\/(\S+)" tags
             #"branches\s+(\S+)" branches)
   (info "GitHub is not configured"))
