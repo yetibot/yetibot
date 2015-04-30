@@ -10,9 +10,11 @@
 
 (defn projects-cmd
   [_]
-  "jira projects # list configured projects"
-  (->> api/config :project-keys
-      (map api/url-from-key)))
+  "jira projects # list configured projects (default project is marked with *)"
+  (for [pk (api/project-keys)]
+    (str
+      (when (= pk (api/default-project-key)) "* ")
+      (api/url-from-key pk))))
 
 (defn users-cmd
   "jira users # list the users for the configured project(s)"
@@ -41,13 +43,23 @@
 (defn success? [res]
   (re-find #"^2" (str (:status res) "2")))
 
-(defn report-if-error [res succ-fn]
+(defn report-if-error
+  "Checks the stauts of the HTTP response for 2xx, and if not, looks in the body
+   for :errorMessages or :errors. To use this, make sure to use the
+   `:throw-exceptions false`, `:content-type :json` and, `:coerce :always`
+   options in the HTTP request."
+  [res succ-fn]
   (if (success? res)
     (succ-fn res)
-    (-> res :body :errorMessages)))
+    (do
+      (info "jira api error" res)
+      (or
+        (seq (-> res :body :errorMessages))
+        (-> res :body :errors)))))
 
 (def issue-opts
-  [["-c" "--component COMPONENT" "Component"]
+  [["-j" "--project-key PROJECT KEY" "Project key"]
+   ["-c" "--component COMPONENT" "Component"]
    ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
    ["-d" "--desc DESCRIPTION" "Description"]
@@ -58,30 +70,27 @@
 (defn parse-issue-opts [opts]
   (parse-opts (map trim (split opts #"(?=\s-\w)|(?<=\s-\w)")) issue-opts))
 
-(defn report-errors [res]
-  (info "report errors for" res)
-  (or (->> res :body :errorMessages) (->> res :body :errors map-to-strs)))
-
-; currently doesn't support more than one project key, but it could
 (defn create-cmd
-  "jira create <summary> -c <component> [-a <assignee>] [-d <description>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  "jira create <summary> -c <component> [-j project-key] [-a <assignee>] [-d <description>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   [{[_ opts-str] :match}]
   (let [parsed (parse-issue-opts opts-str)
         summary (->> parsed :arguments (join " "))
         opts (:options parsed)]
+    (info "create" opts)
     (if-not (:component opts)
       "Component is required when creating JIRA issues"
       (let [component-ids (map :id (api/find-component-like (:component opts)))
             res (api/create-issue
                   (filter-nil-vals (merge
                                      {:summary summary :component-ids component-ids}
-                                     (select-keys opts [:parent :desc :assignee])
+                                     (select-keys opts [:project-key :parent :desc :assignee])
                                      (when (:time opts)
                                        {:timetracking {:originalEstimate (:time opts) :remainingEstimate (:time opts)}}))))]
-        (if (success? res)
-          (let [iss-key (-> res :body :key)]
-            (api/fetch-and-format-issue-short iss-key))
-          (report-errors res))))))
+        (report-if-error
+          res
+          (fn [res]
+            (let [iss-key (-> res :body :key)]
+              (api/fetch-and-format-issue-short iss-key))))))))
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-t <time estimated>] [-r <remaining time estimated>]"
@@ -100,11 +109,12 @@
                       {:timetracking
                        (merge (when (:remaining opts) {:remainingEstimate (:remaining opts)})
                               (when (:time opts) {:originalEstimate (:time opts)}))}))))]
-      (if (success? res)
-        (let [iss-key (-> res :body :key)]
-          (str "Updated: "
-               (api/fetch-and-format-issue-short issue-key)))
-        (report-errors res)))))
+      (report-if-error
+        res
+        (fn [res]
+          (info "updated" res)
+          (let [iss-key (-> res :body :key)]
+            (str "Updated: " (api/fetch-and-format-issue-short issue-key))))))))
 
 (defn- short-jira-list [res]
   (if (success? res)
@@ -143,9 +153,22 @@
   (short-jira-list (api/search-in-projects jql)))
 
 (defn components-cmd
-  "jira components # list components across all configured projects"
+  "jira components # list components and their leads by project"
   [_]
-  (mapcat (comp (partial map :name) :body) (api/all-components)))
+  (mapcat
+    (fn [prj]
+      (map
+        (fn [c]
+          (str
+            "[" prj "] "
+            "[" (-> c :lead :name) "] "
+            (:name c)
+            " — "
+            (:description c)))
+        (:body (api/components prj))))
+    (api/project-keys)))
+
+  ; (mapcat (comp (partial map :name) :body) (api/all-components)))
 
 (defn print-version [v]
   (str (:name v)
@@ -172,19 +195,29 @@
   [{[_ issue-key] :match}]
   (-> issue-key api/get-issue api/format-issue-long))
 
+(defn delete-cmd
+  "jira delete <issue> # delete the issue"
+  [{[_ issue-key] :match}]
+  (report-if-error
+    (api/delete-issue issue-key)
+    (fn [res]
+      (info "deleted jira issue" issue-key res)
+      (str "Deleted " issue-key))))
+
 (cmd-hook #"jira"
-          #"^projects" projects-cmd
-          #"^parse\s+(.+)" parse-cmd
-          #"^show\s+(\S+)" show-cmd
-          #"^components" components-cmd
-          #"^versions\s*(\S+)*" versions-cmd
-          #"^recent" recent-cmd
-          #"^pri" priorities-cmd
-          #"^users" users-cmd
-          #"^assign\s+(\S+)\s+(\S+)" assign-cmd
-          #"^comment\s+(\S+)\s+(.+)" comment-cmd
-          #"^search\s+(.+)" search-cmd
-          #"^jql\s+(.+)" jql-cmd
-          #"^create\s+(.+)" create-cmd
-          #"^update\s+(\S+)\s+(.+)" update-cmd
-          #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)
+  #"^projects" projects-cmd
+  #"^parse\s+(.+)" parse-cmd
+  #"^show\s+(\S+)" show-cmd
+  #"^delete\s+(\S+)" delete-cmd
+  #"^components" components-cmd
+  #"^versions\s*(\S+)*" versions-cmd
+  #"^recent" recent-cmd
+  #"^pri" priorities-cmd
+  #"^users" users-cmd
+  #"^assign\s+(\S+)\s+(\S+)" assign-cmd
+  #"^comment\s+(\S+)\s+(.+)" comment-cmd
+  #"^search\s+(.+)" search-cmd
+  #"^jql\s+(.+)" jql-cmd
+  #"^create\s+(.+)" create-cmd
+  #"^update\s+(\S+)\s+(.+)" update-cmd
+  #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)

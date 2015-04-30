@@ -14,26 +14,25 @@
 (defn project-keys [] (->> config :project-keys))
 (defn project-keys-str [] (->> (project-keys) (s/join ",")))
 (defn default-project-key [] (or (:default-project-key config) (first (project-keys))))
-(def max-results (or (:max-results config) 10))
+(defn max-results [] (or (:max-results config) 10))
 
 ;; move to yetibot.core util if anyone else needs date parsing and formatting:
 (def date-time-format (:date-hour-minute formatters))
 (defn parse-and-format-date-string [date-string]
   (unparse date-time-format (parse date-string)))
 
-
-(def ^:private base-uri (str "https://" (:domain config)))
-(def ^:private api-uri (str base-uri "/rest/api/latest"))
-(def ^:private auth (map config [:user :password]))
-(def ^:private client-opts {:as :json
-                            :basic-auth auth
-                            :throw-entire-message? true
-                            :insecure? true})
-(def ^:private error-handling-opts {:coerce :always
-                                    :throw-exceptions false})
+(defn base-uri [] (str "https://" (:domain config)))
+(defn api-uri [] (str (base-uri) "/rest/api/latest"))
+(def auth (map config [:user :password]))
+(def client-opts {:as :json
+                  :basic-auth auth
+                  :throw-entire-message? true
+                  :insecure? true})
+(def error-handling-opts {:coerce :always
+                          :throw-exceptions false})
 
 (defn endpoint [& fmt-with-args]
-  (str api-uri (apply format fmt-with-args)))
+  (str (api-uri) (apply format fmt-with-args)))
 
 ;; helpers
 
@@ -42,7 +41,7 @@
 ;; formatters
 
 (defn url-from-key [k]
-  (str base-uri "/browse/" k))
+  (str (base-uri) "/browse/" k))
 
 (defn format-issue [issue-data]
   (let [fs (:fields issue-data)]
@@ -203,7 +202,7 @@
          issue-type-id (if parent
                          (:sub-task-issue-type-id config)
                          (:default-issue-type-id config))
-         project-key (first (:project-keys config))}}]
+         project-key (default-project-key)}}]
   (if-let [prj (find-project project-key)]
     (if-let [priority (if priority-key
                         (find-priority-by-key priority-key)
@@ -220,6 +219,7 @@
                             :priority {:id pri-id}}
                            (when timetracking {:timetracking timetracking})
                            (when parent {:parent {:id parent}}))}]
+        (info "create issue" params)
         (client/post
           (endpoint "/issue")
           (merge client-opts
@@ -229,6 +229,13 @@
                   :content-type :json})))
       (warn "Could not find a priority for key " priority-key))
     (warn "Could not find project" project-key)))
+
+(defn delete-issue [issue-key]
+  (client/delete
+    (endpoint "/issue/%s" issue-key)
+    (merge client-opts {:coerce :always
+                        :content-type :json
+                        :throw-exceptions false})))
 
 (defn assign-issue
   [issue-key assignee]
@@ -250,13 +257,13 @@
 
 ;; components
 
-(defn component [project-key]
+(defn components [project-key]
   (client/get
     (endpoint "/project/%s/components" project-key)
     client-opts))
 
 (def all-components
-  (memo/ttl #(map component (project-keys))
+  (memo/ttl #(map components (project-keys))
             :ttl/threshold 3600000))
 
 (defn find-component-like
@@ -290,7 +297,7 @@
             :query-params
             {:jql jql
              :startAt 0
-             :maxResults max-results
+             :maxResults (max-results)
              :fields ["summary" "status" "assignee"]}})))
 
 (defn search-in-projects [jql]
