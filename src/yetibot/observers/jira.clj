@@ -12,7 +12,7 @@
       (jira/format-issue ji))))
 
 (defn start []
-  (let [project-keys (:project-keys jira/config)
+  (let [project-keys (jira/project-keys)
         issue-pattern (re-pattern
                         ; build a regex pattern to match jira issues
                         (str "(" (s/join "|" project-keys) ")" "-\\d+"))]
@@ -24,6 +24,6 @@
           (when-let [is (set (map first (re-seq issue-pattern (:body event-json))))]
             (doall (map report-jira is))))))))
 
-(if jira/configured?
+(if (jira/configured?)
   (start)
   (info "JIRA is not configured"))

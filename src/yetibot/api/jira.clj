@@ -4,26 +4,49 @@
     [clojure.string :as s]
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
-    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [get-config conf-valid?]]
     [yetibot.core.util.http :refer [get-json fetch]]
-    [clj-time [format :refer [formatter formatters show-formatters parse unparse]] ]
-    ))
+    [clj-time [format :refer [formatter formatters show-formatters parse unparse]]]))
 
-(def config (config-for-ns))
-(def configured? (conf-valid?))
-(defn project-keys [] (->> config :project-keys))
+;; config
+
+(defn config [] (get-config :yetibot :api :jira))
+
+(defn configured? [] (conf-valid? (config)))
+
+(defn projects [] (->> (config) :projects))
+
+(defn project-for-key [k] (get (projects) k))
+
+(defn project-keys [] (keys (projects)))
+
 (defn project-keys-str [] (->> (project-keys) (s/join ",")))
-(defn default-project-key [] (or (:default-project-key config) (first (project-keys))))
-(defn max-results [] (or (:max-results config) 10))
 
+(defn default-version-id [project-key] (:default-version-id (project-for-key project-key)))
+
+(defn default-project-key [] (or (:default-project-key (config)) (first (project-keys))))
+
+(defn default-project [] (project-for-key (default-project-key)))
+
+(defn max-results [] (or (:max-results (config)) 10))
+
+(defn sub-task-issue-type-id [] (:sub-task-issue-type-id (config)))
+
+(defn default-issue-type-id [] (:default-issue-type-id (config)))
+
+(defn base-uri [] (str "https://" (:domain (config))))
+
+(defn api-uri [] (str (base-uri) "/rest/api/latest"))
+
+(def auth (map (config) [:user :password]))
+
+;; formatters
 ;; move to yetibot.core util if anyone else needs date parsing and formatting:
+
 (def date-time-format (:date-hour-minute formatters))
 (defn parse-and-format-date-string [date-string]
   (unparse date-time-format (parse date-string)))
 
-(defn base-uri [] (str "https://" (:domain config)))
-(defn api-uri [] (str (base-uri) "/rest/api/latest"))
-(def auth (map config [:user :password]))
 (def client-opts {:as :json
                   :basic-auth auth
                   :throw-entire-message? true
@@ -199,9 +222,7 @@
   [{:keys [summary component-ids assignee priority-key desc project-key
            timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
-         issue-type-id (if parent
-                         (:sub-task-issue-type-id config)
-                         (:default-issue-type-id config))
+         issue-type-id (if parent (sub-task-issue-type-id) (default-issue-type-id))
          project-key (default-project-key)}}]
   (if-let [prj (find-project project-key)]
     (if-let [priority (if priority-key
@@ -212,6 +233,7 @@
             params {:fields
                     (merge {:assignee {:name assignee}
                             :project {:id prj-id}
+                            :fixVersions [{:id (default-version-id project-key)}]
                             :summary summary
                             :components (map #(hash-map :id %) component-ids)
                             :description desc
@@ -271,6 +293,8 @@
   [pattern-str]
   (let [re (re-pattern (str "(?i)" pattern-str))]
     (filter #(re-find re (:name %)) (mapcat :body (all-components)))))
+
+:id "28241"
 
 ;; users
 
