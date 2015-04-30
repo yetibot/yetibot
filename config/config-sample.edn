@@ -35,7 +35,7 @@
                :password ""
                :default-issue-type-id "3",
                :sub-task-issue-type-id "27",
-               :project-keys #{}
+               :projects {"FOO" {:default-version-id "42"}}
                :default-project-key "Optional"}
         :s3 {:access-key ""
              :secret-key ""}}
