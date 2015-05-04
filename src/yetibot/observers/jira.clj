@@ -7,23 +7,26 @@
     [yetibot.core.chat :refer [chat-data-structure]]))
 
 (defn report-jira [issue]
-  (let [ji (jira/get-issue issue)]
+  (if-let [ji (jira/get-issue issue)]
     (chat-data-structure
-      (jira/format-issue ji))))
+      (jira/format-issue-short ji))
+    (info "issue" issue "not found")))
 
-(defn start []
-  (let [project-keys (jira/project-keys)
-        issue-pattern (re-pattern
-                        ; build a regex pattern to match jira issues
-                        (str "(" (s/join "|" project-keys) ")" "-\\d+"))]
-    (obs-hook
-      #{:message}
-      (fn [event-json]
-        ; ignore issues mentioned in commands
-        (when-not (re-find #"^!" (:body event-json))
-          (when-let [is (set (map first (re-seq issue-pattern (:body event-json))))]
-            (doall (map report-jira is))))))))
+(defn issue-pattern []
+  (let [project-keys (jira/project-keys)]
+    (re-pattern
+      ; build a regex pattern to match jira issues
+      (str "(" (s/join "|" project-keys) ")" "-\\d+"))))
+
+(defn jira-observer [event-json]
+  ; ignore issues mentioned in commands
+  (when-not (re-find #"^!" (:body event-json))
+    (when-let [is (set (map first (re-seq (issue-pattern) (:body event-json))))]
+      (doall (map report-jira is)))))
+
+(defn start [] (obs-hook #{:message} #'jira-observer))
 
 (if (jira/configured?)
-  (start)
+  ;; ensure a single observer
+  (defonce jira-observer-hook (start))
   (info "JIRA is not configured"))
