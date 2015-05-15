@@ -28,4 +28,4 @@
   (get-json (endpoint (str "/gifs/random?rating=pg-13&api_key=" (api-key)))))
 
 (defn trending []
-  (get-json (endpoint (str "/gifs/rating=pg-13&trending?api_key=" (api-key)))))
+  (get-json (endpoint (str "/gifs/trending?rating=pg-13&api_key=" (api-key)))))
