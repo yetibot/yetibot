@@ -119,8 +119,8 @@
              (-> fs :description)
              (s/join
                "  "
-               [(str " 👷 " (-> fs :assignee :name))
-                (str " 👮 " (-> fs :reporter :name))])
+               [(str "👷 " (-> fs :assignee :name))
+                (str "👮 " (-> fs :reporter :name))])
              (s/join
                " "
                [(str "❗️ Priority: " (-> fs :priority :name))
@@ -197,17 +197,19 @@
   (:body (client/get (endpoint "/issuetype") client-opts)))
 
 (defn update-issue
-  [issue-key {:keys [summary component-ids assignee priority-key desc timetracking]}]
+  [issue-key {:keys [fix-version summary component-ids assignee priority-key desc timetracking]}]
   (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
         params {:fields
                 (merge
                   {}
+                  (when fix-version {:fixVersions [{:name fix-version}]})
                   (when summary {:summary summary})
                   (when assignee {:assignee assignee})
                   (when component-ids {:components (map #(hash-map :id %) component-ids)})
                   (when desc {:description desc})
                   (when timetracking {:timetracking timetracking})
                   (when pri-id {:priority {:id pri-id}}))}]
+    (info "update issue" (pr-str params))
     (client/put
       (endpoint "/issue/%s" issue-key)
       (merge client-opts
@@ -220,7 +222,7 @@
 (defn create-issue
   "This thing is a beast"
   [{:keys [summary component-ids assignee priority-key desc project-key
-           timetracking issue-type-id parent]
+           fix-version timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
          issue-type-id (if parent (sub-task-issue-type-id) (default-issue-type-id))
          project-key (default-project-key)}}]
@@ -230,10 +232,11 @@
                         (first (priorities)))]
       (let [pri-id (:id priority)
             prj-id (:id prj)
+            fix-version-map (if fix-version {:name fix-version} {:id (default-version-id project-key)})
             params {:fields
                     (merge {:assignee {:name assignee}
                             :project {:id prj-id}
-                            :fixVersions [{:id (default-version-id project-key)}]
+                            :fixVersions [fix-version-map]
                             :summary summary
                             :components (map #(hash-map :id %) component-ids)
                             :description desc
@@ -241,7 +244,7 @@
                             :priority {:id pri-id}}
                            (when timetracking {:timetracking timetracking})
                            (when parent {:parent {:id parent}}))}]
-        (info "create issue" params)
+        (info "create issue" (pr-str params))
         (client/post
           (endpoint "/issue")
           (merge client-opts

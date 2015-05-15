@@ -53,37 +53,46 @@
     (succ-fn res)
     (do
       (info "jira api error" res)
-      (or
-        (seq (-> res :body :errorMessages))
-        (-> res :body :errors)))))
+      (into
+        ["👮 JIRA error 👮"]
+        (or
+          (seq (-> res :body :errorMessages))
+          (map
+            (fn [[k v]] (str (name k) ": " v))
+            (-> res :body :errors)))))))
 
 (def issue-opts
   [["-j" "--project-key PROJECT KEY" "Project key"]
    ["-c" "--component COMPONENT" "Component"]
    ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
+   ["-f" "--fix-version FIX VERSION" "Fix version"]
    ["-d" "--desc DESCRIPTION" "Description"]
    ["-t" "--time TIME ESTIAMTED" "Time estimated"]
    ["-r" "--remaining REMAINING TIME ESTIAMTED" "Remaining time estimated"]
    ["-p" "--parent PARENT ISSUE KEY" "Parent issue key; creates a sub-task if specified"]])
 
-(defn parse-issue-opts [opts]
-  (parse-opts (map trim (split opts #"(?=\s-\w)|(?<=\s-\w)")) issue-opts))
+(defn parse-issue-opts
+  "Parse opts using issue-opts and trim all the values of the keys in options"
+  [opts]
+  (let [parsed (parse-opts (map trim (split opts #"(?=\s-\w)|(?<=\s-\w)")) issue-opts)]
+    (update-in parsed [:options]
+               (fn [options]
+                 (into {} (map (fn [[k v]] [k (trim v)]) options))))))
 
 (defn create-cmd
-  "jira create <summary> -c <component> [-j project-key] [-a <assignee>] [-d <description>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  "jira create <summary> -c <component> [-j project-key] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   [{[_ opts-str] :match}]
   (let [parsed (parse-issue-opts opts-str)
         summary (->> parsed :arguments (join " "))
         opts (:options parsed)]
-    (info "create" opts)
     (if-not (:component opts)
       "Component is required when creating JIRA issues"
       (let [component-ids (map :id (api/find-component-like (:component opts)))
             res (api/create-issue
                   (filter-nil-vals (merge
                                      {:summary summary :component-ids component-ids}
-                                     (select-keys opts [:project-key :parent :desc :assignee])
+                                     (select-keys opts [:fix-version :project-key :parent :desc :assignee])
                                      (when (:time opts)
                                        {:timetracking {:originalEstimate (:time opts) :remainingEstimate (:time opts)}}))))]
         (report-if-error
@@ -93,7 +102,7 @@
               (api/fetch-and-format-issue-short iss-key))))))))
 
 (defn update-cmd
-  "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-t <time estimated>] [-r <remaining time estimated>]"
+  "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-r <remaining time estimated>]"
   [{[_ issue-key opts-str] :match}]
   (let [parsed (parse-issue-opts opts-str)
         opts (:options parsed)]
@@ -104,7 +113,7 @@
                 (filter-nil-vals
                   (merge
                     {:component-ids component-ids}
-                    (select-keys opts [:summary :desc :assignee])
+                    (select-keys opts [:fix-version :summary :desc :assignee])
                     (when (or (:remaining opts) (:time opts))
                       {:timetracking
                        (merge (when (:remaining opts) {:remainingEstimate (:remaining opts)})
@@ -168,22 +177,21 @@
         (:body (api/components prj))))
     (api/project-keys)))
 
-  ; (mapcat (comp (partial map :name) :body) (api/all-components)))
-
-(defn print-version [v]
+(defn format-version [v]
   (str (:name v)
        (when-let [rd (:releaseDate v)] (str " [release date " rd "]"))
        (when (:archived v) " [archived]")
        (when (:released v) " [released]")))
 
 (defn versions-cmd
-  "jira versions [<project-key>] # list versions for <project-key>. Uses default project-key if not specified."
+  "jira versions [<project-key>] # list versions for <project-key>. Lists versions for all configured project-keys if not specified."
   [{[_ project-key] :match}]
-  (let [args (keep identity [project-key])
-        versions (apply api/versions args)]
-    (->> versions
-         :body
-         (map print-version))))
+  (let [project-keys (if project-key [project-key] (api/project-keys))]
+    (mapcat
+      (fn [project-key]
+        (map (fn [version] (str "[" project-key "] " (format-version version)))
+             (:body (api/versions project-key))))
+      project-keys)))
 
 (defn parse-cmd
   "jira parse <text> # parse the issue key out of a jira issue URL"
