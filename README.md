@@ -174,9 +174,8 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 yetibot has a plugin-based architecture. Its core lives at:
 https://github.com/devth/yetibot.core and can be depended on with:
 
-```clojure
-[yetibot.core "0.1.15"]
-```
+[<img src="http://clojars.org/yetibot.core/latest-version.svg" />](https://clojars.org/yetibot.core)
+
 
 yetibot will load all commands and observers with namespaces on the classpath
 matching the regexes at:
