@@ -232,16 +232,19 @@
                         (first (priorities)))]
       (let [pri-id (:id priority)
             prj-id (:id prj)
-            fix-version-map (if fix-version {:name fix-version} {:id (default-version-id project-key)})
+            fix-version-map (if fix-version
+                              {:name fix-version}
+                              (when-let [dvi (default-version-id project-key)]
+                                {:id dvi}))
             params {:fields
                     (merge {:assignee {:name assignee}
                             :project {:id prj-id}
-                            :fixVersions [fix-version-map]
                             :summary summary
                             :components (map #(hash-map :id %) component-ids)
                             :description desc
                             :issuetype {:id issue-type-id}
                             :priority {:id pri-id}}
+                           (when fix-version-map :fixVersions [fix-version-map])
                            (when timetracking {:timetracking timetracking})
                            (when parent {:parent {:id parent}}))}]
         (info "create issue" (pr-str params))
