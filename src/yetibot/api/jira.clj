@@ -76,7 +76,7 @@
 (defn format-issue-short [issue-data]
   (let [fs (:fields issue-data)]
     (format "[%s] [%s] %s %s"
-            (-> fs :assignee :name)
+            (or (-> fs :assignee :name) "unassigned")
             (-> fs :status :name)
             (-> fs :summary)
             (url-from-key (:key issue-data)))))
