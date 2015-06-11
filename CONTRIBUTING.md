@@ -12,5 +12,11 @@ Tests are appreciated, especially when there's logic beyond a simple API call.
 
 ### Style
 
-Please adhere to yetibot's existing conventions. A few nitpicks
-are 2 spaces, no lines beyond 80 characters wide, and no trailing whitespace.
+Please adhere to yetibot's existing conventions. A few nitpicks:
+
+- 2 spaces
+- no lines beyond 80 characters wide
+- no trailing whitespace
+
+![thanks](doc/thanks.jpg)
+
