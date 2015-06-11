@@ -153,7 +153,7 @@ room configuration doesn't apply. Instead, `/invite @yetibot` to any channel
 that you're in, and `/kick @yetibot` if you want it to leave. NB: you might need
 special privileges in order to kick.
 
-`broadcast` doesn't apply to Slack yet, but [it should](#494).
+`broadcast` doesn't apply to Slack yet, but [it should](https://github.com/devth/yetibot/issues/494).
 
 **Campfire**: the Campfire adapter doesn't support multiple channels yet, but
 it easily could! Submit a PR, or just open an issue and we'll quickly get to it.
