@@ -124,7 +124,7 @@ indicate all arguments, or `$n` (where n is a 1-based index of which arg).
 
 ### Multiple channel support
 
-**IRC Only**: yetibot can listen on any number of channels. You configure
+**IRC**: yetibot can listen on any number of channels. You configure
 channels in
 [config.edn](https://github.com/devth/yetibot/blob/master/config/config-sample.edn#L24).
 You can also invite yetibot to a channel at runtime using the IRC `/invite`
@@ -147,6 +147,16 @@ room broadcast <room> # toggle whether yetibot broadcasts to <room> (e.g.  incom
 room join <room> # join <room>
 room leave <room> # leave <room>
 ```
+
+**Slack**: bots can't join a channel on their own, they must be invited, so
+room configuration doesn't apply. Instead, `/invite @yetibot` to any channel
+that you're in, and `/kick @yetibot` if you want it to leave. NB: you might need
+special privileges in order to kick.
+
+`broadcast` doesn't apply to Slack yet, but [it should](#494).
+
+**Campfire**: the Campfire adapter doesn't support multiple channels yet, but
+it easily could! Submit a PR, or just open an issue and we'll quickly get to it.
 
 ### Help
 
