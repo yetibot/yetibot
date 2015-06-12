@@ -1,10 +1,9 @@
-(ns yetibot.webapp.server
+(ns yetibot.webapp.routes.api
   (:require
     [yetibot.webapp.views.common :as views]
     [compojure.route :as route]
     [compojure.handler :as handler]
     [compojure.response :as response]
-    [hiccup.core :refer :all]
     [yetibot.core.handler :refer [handle-unparsed-expr]]
     [yetibot.core.chat :refer [chat-data-structure]]
     [yetibot.core.adapters.campfire :refer [self]]
@@ -19,10 +18,6 @@
         res)
       "Invalid user access token")))
 
-(defroutes app-routes
-  (GET "/" [] (views/layout))
+(defroutes api-routes
   (GET "/api" [& params] (api params))
-  (POST "/api" [& params] (api params))
-  (route/resources "/"))
-
-(def app (handler/site app-routes))
+  (POST "/api" [& params] (api params)))

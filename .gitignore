@@ -1,6 +1,7 @@
 .set_env
 pom.xml
 *jar
+*.log
 /lib/
 /classes/
 .lein-deps-sum
@@ -15,3 +16,4 @@ target/
 config/config.edn
 /checkouts
 pom.xml.asc
+
