@@ -58,8 +58,8 @@
    jen add <name> <url> # add Jenkinst instance without auth"
   [{[_ inst-name url _ user api-key] :match}]
   (info "add jenkins instance" inst-name url user api-key)
-  (let [user (or user "X")
-        api-key (or api-key "X")]
+  (let [user (or user nil)
+        api-key (or api-key nil)]
     (model/add-instance inst-name url user api-key)
     (let [js (model/jobs-for-instance inst-name)]
       (format "%s added, found %s jobs" inst-name (count js)))))

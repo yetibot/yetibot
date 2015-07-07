@@ -17,10 +17,12 @@
 ; Helpers
 
 (defn instances [] (-> (config) :instances))
+
 (defn- auth-for [instance]
-  {:user (:user instance)
-   :password (:api-key instance)
-   :preemptive true})
+  (when (and (:user instance) (:api-key instance))
+    {:user (:user instance)
+     :password (:api-key instance)
+     :preemptive true}))
 
 (defn setup-instance-pairs
   "If instance name key doesn't already exist, assoc it with its value set to
@@ -34,9 +36,20 @@
         inst-name
         {:config inst
          :fetcher (-> (fn []
-                        (let [uri (format "%s/api/json" (:uri inst))]
-                          (get-json uri (auth-for inst))))
+                        (let [uri (format "%s/api/json" (:uri inst))
+                              auth (auth-for inst)]
+                          (if auth
+                            (get-json uri auth)
+                            (get-json uri))))
                       (memo/ttl :ttl/threshold cache-ttl))}))))
+
+(let [inst {:uri "https://ebayci.qa.ebay.com/shfe-ci"
+            :user "X"
+            :api-key "X"}
+      uri (format "%s/api/json" (:uri inst))]
+  (println (auth-for inst))
+  (fetch uri))
+
 
 (defn prime-memos
   "Executes all the fetcher functions in parallel in order to prime their memo
