@@ -1,6 +1,7 @@
 (ns yetibot.commands.wikipedia
   (:require
-    [yetibot.core.util.http :refer [get-json encode]]
+    [clj-http.client :as client]
+    [yetibot.core.util.http :refer [encode]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn endpoint-search [q]
@@ -12,21 +13,25 @@
     "http://en.wikipedia.org/w/api.php?action=query&prop=extracts&explaintext=true&format=json&exintro=true&titles="
     (encode title)))
 
+; TODO: fix "foo may refer too" - probably need more than just extracts
+; (:body (json-get (endpoint-summary "Sherlock")))
+
 (defn has-match? [res]
   (and (not (empty? res))
        (not (empty? (second res)))))
 
-(defn- no-match [q]
-  (str "No match for " q))
+(defn- no-match [q] (str "No match for " q))
+
+(defn json-get [uri] (client/get uri {:as :json}))
 
 (defn summary-for-title [title]
-  (let [res (get-json (endpoint-summary title))]
+  (let [res (:body (json-get (endpoint-summary title)))]
     (first (keep :extract (tree-seq map? vals res)))))
 
 (defn search-cmd
   "wiki search <term> # search Wikipedia for titles"
   [{[_ term] :match}]
-  (let [res (get-json (endpoint-search term))]
+  (let [res (:body (json-get (endpoint-search term)))]
     (if (has-match? res)
       (second res)
       (no-match term))))
@@ -34,9 +39,11 @@
 (defn wiki-cmd
   "wiki <term> # look up Wikipedia summary for <term>"
   [{:keys [match]}]
-  (let [search-res (get-json (endpoint-search match))]
+  (let [search-res (:body (json-get (endpoint-search match)))]
     (if (has-match? search-res)
-      (summary-for-title (first (second search-res)))
+      (do
+        (prn (second search-res))
+        (summary-for-title (first (second search-res))))
       (no-match match))))
 
 (cmd-hook ["wiki" #"^wiki(pedia)*"]
