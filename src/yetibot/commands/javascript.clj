@@ -2,6 +2,7 @@
   (:require
     [yetibot.core.hooks :refer [cmd-hook]]
     [evaljs.core :refer :all]
+    [taoensso.timbre :refer [info]]
     [evaljs.rhino :refer :all]))
 
 (def statements (atom []))
@@ -9,6 +10,7 @@
 (defn javascript-cmd
   "js <expression> # evaluate a javascript expression"
   [{expr :match}]
+  (info "js" (prn-str expr))
   (let [res (try
               (with-context (rhino-context)
                             (dorun (map evaljs @statements))
