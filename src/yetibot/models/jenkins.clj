@@ -4,6 +4,7 @@
     [yetibot.core.util.http :refer [get-json fetch]]
     [clojure.string :as s]
     [clj-time.coerce :as c]
+    [clj-http.client :as client]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config conf-valid? update-config remove-config]]
     [clojure.core.memoize :as memo]))
@@ -175,6 +176,9 @@
 (defn build-job [[job-name job-info]]
   (let [base-uri (-> job-info :config :uri)
         uri (format "%sjob/%s/build" base-uri job-name)
-        response (fetch uri (auth-for (:config job-info)))]
+        auth (when-let [{user :user pass :password} (auth-for (:config job-info))]
+               [user pass])
+        response (client/post uri {:basic-auth auth})]
+    (info "build job response" response)
     (future (report-job-url [job-name job-info]))
     (str "Starting build on " job-name)))
