@@ -130,7 +130,7 @@
 (defn status [[job-name job-info]]
   (let [base-uri (-> job-info :config :uri)
         uri (str base-uri "job/" job-name "/lastBuild/api/json")]
-    (prn "get status from uri" uri)
+    (info "get status from uri" uri)
     (get-json uri (auth-for (:config job-info)))))
 
 (defn job-status [[job-name job-info]]

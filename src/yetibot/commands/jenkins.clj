@@ -71,9 +71,6 @@
     (str "Removed Jenkins instance " inst-name)
     (str "Couldn't find an instanced named " inst-name)))
 
-; (re-find #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" "add thartman http://cubejs-app-ci-47569 X X")
-; (re-find #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" "add thartman http://cubejs-app-ci-47569")
-
 (cmd-hook #"jen"
           #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" add-instance
           #"^remove\s+(\w+)" remove-instance
