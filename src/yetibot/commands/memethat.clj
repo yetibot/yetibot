@@ -6,27 +6,15 @@
     [yetibot.commands.meme]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
-(def ^:private history-ignore [#"^\!"])
-
-(defn- filter-chat
-  "Return `chat-item` only if it doesn't match any regexes in `history-ignore`"
-  [chat-item]
-  (let [body (:body chat-item)]
-    (when (every? #(nil? (re-find % body)) history-ignore)
-      chat-item)))
-
 (defn- find-chat-to-memeify [chat-source]
-  (some filter-chat (->> (h/items-with-user chat-source)
-                         (take-last 100)
-                         reverse)))
+  (first (h/touch-all (h/last-chat-for-room chat-source false))))
 
-(defn- format-chat [i] (:body i))
+(defn- format-chat [i] (:history/body i))
 
 (defn- meme-it [chat-source meme-query]
-  (let [chat (find-chat-to-memeify chat-source)]
-    (if chat
-      (handle-unparsed-expr (format "meme %s: %s" meme-query (format-chat chat)))
-      (format "No history to meme :("))))
+  (if-let [chat (find-chat-to-memeify chat-source)]
+    (handle-unparsed-expr (format "meme %s: %s" meme-query (format-chat chat)))
+    (format "No history to meme :(")))
 
 ; <gen>that
 (def genthat-pattern #"^(\w+)that$")
