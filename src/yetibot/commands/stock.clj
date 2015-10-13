@@ -7,7 +7,7 @@
 (defn endpoint
   "Creates a YQL query from stock symbol"
   [stock-symbol]
-  (str "http://dev.markitondemand.com/Api/v2/Quote/json?symbol=" stock-symbol))
+  (str "http://dev.markitondemand.com/MODApis/Api/v2/Quote/json?symbol=" stock-symbol))
 
 (defn format-percent
   "Formats number in map as percent"
