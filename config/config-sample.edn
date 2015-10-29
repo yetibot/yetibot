@@ -2,95 +2,149 @@
        already .gitignored. If you don't configure a specific node, it will not
        be enabled at runtime. All config is optional depending on what you want
        your yetibot to be able to do, except for at least one of the chat
-       adapters (Campfire or IRC)."
+       adapters (Slack, IRC, or Campfire)."
  :yetibot
- {:logging {:log-level :debug}
+ {
+
+  :logging {:log-level :debug}
+
   :db {:doc "yetibot runs an in-memory Datomic database by default, which will
              dissapear on shutdown. Point it to your own running transactor if
              you'd like persistent history and other features (e.g. aliases,
              statuses)."
        :datomic-url "datomic:mem://yetibot"}
-  :adapters {:doc "yetibot can listen on campfire, irc or both. Configure
-                   whatever you need."
-             :campfire {:api-key ""
-                        :subdomain ""
-                        :bot-id ""
-                        :room ""
-                        :room-id ""}
-             :irc {:host ""
-                   :port ""
-                   :username "yetibot"
-                   ; map where keys are channel names and values are settings.
-                   ; `broadcast?` is used to determine whether to send Tweets to a
-                   ; room, for example.
-                   :rooms {"#forthelols" {:broadcast? true}
-                           "#doingwork" {:broadcast? false}}}}
-  :api {:ebay {:app-id ""}
-        :github {:token ""
-                 :org ""
-                 :doc "endpoint is optional: only specify if using GitHub enterprise."
-                 :endpoint ""}
-        :jira {:domain ""
-               :user ""
-               :password ""
-               :default-issue-type-id "3",
-               :sub-task-issue-type-id "27",
-               :projects {"FOO" {:default-version-id "42"}}
-               :default-project-key "Optional"}
-        :s3 {:access-key ""
-             :secret-key ""}}
-  :models {:imgflip {:doc "this is used for meme generation"
-                     :username "" :password ""}
-           :mail {:host ""
-                  :user ""
-                  :pass ""
-                  :from ""
-                  :bcc ""}
-           :twitter {:consumer-key ""
-                     :consumer-secret ""
-                     :token ""
-                     :secret ""
-                     :doc "ISO 639-1 code: http://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
-                     :search_lang "en"}
-           :jenkins {:doc "Multiple Jenkins instances can be configured. They
-                           can also be configured at runtime, which writes to
-                           this config file. Only one `default-job` is
-                           supported—if multiple are specified, the first one
-                           wins."
-                     :cache-ttl 3600000
-                     :instances {:some-instance-key {:uri ""
-                                                     :doc "If your Jenkins doesn't require
-                                                           auth, set user and api-key to
-                                                           some non-blank value in order to pass
-                                                           the configuration check."
-                                                     :user ""
-                                                     :api-key ""}
-                                 :another-instance-key {:uri ""
-                                                        :default-job ""
-                                                        :user ""
-                                                        :api-key ""}}}}}
- :commands {:eval {:doc "Set of Strings: Campfire IDs or IRC users (which have
-                         ~ prefixes) of users who can use the yetibot `eval`
-                         command."
-                   :privs #{"123", "~awesomeperson"}}
-            :features {:doc "Configure GitHub if you have your own fork of the
-                             yetibot repo. This will allow opening feature
-                             requests on your fork."
-                       :github {:token ""
-                                :user ""}}
-            :ssh {:doc "SSH servers are specified in groups so that multiple
-                        servers which share usernames and keys don't need to
-                        each specify duplicate config. Fill in your own
-                        key-names below instead of `:server-a-host`. This is
-                        the short name that the ssh command will refer to, e.g.:
-                        `ssh server-a-host ls -al`."
-                  :groups [{:key-file ""
+
+  :adapters
+  {:doc "yetibot can listen on slack, campfire or IRC. It isn't
+         limited to a single adapter. So it could listen on all 3.  Slack
+         adapter supports multiple Slack configurations in a vector, or a single
+         config map."
+
+   :slack
+   [{:token "xoxb-4242424242424242"}
+    {:token "xoxb-9999999999999999"}]
+
+   :campfire {:api-key ""
+              :subdomain ""
+              :bot-id ""
+              :room ""
+              :room-id ""}
+
+   :irc {:host "" :port "" :username "yetibot"
+         ; map where keys are channel names and values are settings.
+         ; `broadcast?` is used to determine whether to send Tweets to
+         ; a room, for example.
+         :rooms {"#forthelols" {:broadcast? true}
+                 "#doingwork" {:broadcast? false}}}
+   }
+
+
+  :api
+  {
+   ;; enable gif lookups with the `giphy` command
+   :giphy {:api-key "sdfsdfsfd"}
+
+   ;; enables ebay searches with the `ebay` command
+   :ebay {:app-id ""}
+
+   ;; `gh` command
+   :github {:doc ":endpoint is optional: only specify if using GitHub enterprise."
+            :token ""
+            :org ""
+            :endpoint ""}
+
+   ;; `jira`
+   :jira {:domain ""
+          :user ""
+          :password ""
+          :default-issue-type-id "3",
+          :sub-task-issue-type-id "27",
+          :projects {"FOO" {:default-version-id "42"}}
+          :default-project-key "Optional"}
+
+   :s3 {:access-key ""
+        :secret-key ""}
+   }
+
+  :models
+  {
+
+   ;; used to generate memes with the `meme` command
+   :imgflip {:username "" :password ""}
+
+   ;; send and receive emails with `mail`
+   :mail {:host ""
+          :user ""
+          :pass ""
+          :from ""
+          :bcc ""}
+
+   ;; stream tweets from followers and followed topics directly into chat, and
+   ;; post tweets
+   :twitter {:consumer-key ""
+             :consumer-secret ""
+             :token ""
+             :secret ""
+             :doc ":search_lang uses ISO 639-1 code:
+                   http://en.wikipedia.org/wiki/List_of_ISO_639-1_codes"
+             :search_lang "en"}
+
+   :jenkins
+   {:doc "Multiple Jenkins instances can be configured. They can also be
+          configured at runtime, which writes to this config file.  Only one
+          `default-job` is supported—if multiple are specified, the first one
+          wins."
+    :cache-ttl 3600000
+    :instances {:inst-name {:uri ""
+                            :doc "If your Jenkins doesn't require auth, set user
+                                  and api-key to some non-blank value in order
+                                  to pass the configuration check."
                             :user ""
-                            :servers {:server-a-host "" :server-b-host ""}}
-                           {:key-file ""
-                            :user ""
-                            :servers {:server- ""}}]}
-            :weather {:wunderground-api-key ""
-                      :default-zip ""}
-            :wolfram {:app-id ""}
-            :wordnik {:api-key ""}}}}
+                            :api-key ""}
+                :other-inst-name {:uri ""
+                                  :default-job ""
+                                  :user ""
+                                  :api-key ""}}}
+   }
+
+  :commands
+  {
+
+   :eval {:doc "Set of Strings: Campfire IDs or IRC users (which have ~
+                prefixes) of users who can use the yetibot `eval` command."
+          :privs #{"123", "~awesomeperson"}}
+
+   :features {:doc "Configure GitHub if you have your own fork of the yetibot
+                    repo. This will allow opening feature requests on your
+                    fork."
+              :github {:token ""
+                       :user ""}}
+   :ssh {:doc "SSH servers are specified in groups so that multiple
+               servers which share usernames and keys don't need to
+               each specify duplicate config. Fill in your own
+               key-names below instead of `:server-a-host`. This is
+               the short name that the ssh command will refer to, e.g.:
+               `ssh server-a-host ls -al`."
+         :groups [{:key-file ""
+                   :user ""
+                   :servers {:server-a-host "" :server-b-host ""}}
+                  {:key-file ""
+                   :user ""
+                   :servers {:server- ""}}]}
+
+   ;; `weather` command
+   :weather {:wunderground-api-key ""
+             :default-zip ""}
+
+   ;; `wolfram`
+   :wolfram {:app-id ""}
+
+   ;; `wordnik` dictionary
+   :wordnik {:api-key ""}
+
+   }
+
+ }
+
+}
+
