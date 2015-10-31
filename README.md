@@ -16,6 +16,18 @@ unix-style piping and arbitrarily-nested sub expressions.
 
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 
+## Roadmap
+
+Yetibot has been undergoing continuous improvement since its inception. These
+are the immediate priorities, in addition to any bugfixes. Feedback and
+contributions are very welcome!
+
+0. Dockerize yetibot and Datomic Pro Starter edition to simplify deployment
+0. Integrate with [StackStorm](https://stackstorm.com/) for automation on
+   steriods
+0. Create a Heroku deploy button to make it easy to get started
+0. Run a demo yetibot instance
+
 ## Installation
 
 There are two primary ways of installing yetibot:
