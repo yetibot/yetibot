@@ -42,7 +42,8 @@
   ;; start the expired session cleanup job
   (session/start-cleanup-job!)
   (timbre/info "=[ yetibot.webapp started successfully"
-               (when (env :dev) "using the development profile") "]="))
+               (when (env :dev) "using the development profile")
+               "]="))
 
 (defn destroy
   "destroy will be called when your application shuts down. put any clean up
