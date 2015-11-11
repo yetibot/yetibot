@@ -159,7 +159,7 @@
 (defn jql-cmd
   "jira jql <jql> # return up to 15 issues matching <jql> query across all configured projects"
   [{[_ jql] :match}]
-  (short-jira-list (api/search-in-projects jql)))
+  (short-jira-list (api/search jql)))
 
 (defn components-cmd
   "jira components # list components and their leads by project"
