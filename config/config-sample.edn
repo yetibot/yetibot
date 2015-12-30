@@ -14,29 +14,24 @@
              statuses)."
        :datomic-url "datomic:mem://yetibot"}
 
+  :adapters-doc
+  "yetibot can listen on multiple adapters. Current adapter types are: Slack,
+   Campfire and IRC.
+
+   :name is used as a uuid so it must be unique to this Yetibot. The uuid is
+   used by the API to post messages to the correct instance, and also used to
+   store room configuration for each adapter config. If you change it, all your
+   room configuration will be lost (unless you manually update the config with
+   the changed uuid).
+
+   Each config map must have:
+   - a :type key with value :slack or :irc
+   - a :name key with a unique value (i.e. uuid)"
   :adapters
-  {:doc "yetibot can listen on slack, campfire or IRC. It isn't
-         limited to a single adapter. So it could listen on all 3.  Slack
-         adapter supports multiple Slack configurations in a vector, or a single
-         config map."
-
-   :slack
-   [{:token "xoxb-4242424242424242"}
-    {:token "xoxb-9999999999999999"}]
-
-   :campfire {:api-key ""
-              :subdomain ""
-              :bot-id ""
-              :room ""
-              :room-id ""}
-
-   :irc {:host "" :port "" :username "yetibot"
-         ; map where keys are channel names and values are settings.
-         ; `broadcast?` is used to determine whether to send Tweets to
-         ; a room, for example.
-         :rooms {"#forthelols" {:broadcast? true}
-                 "#doingwork" {:broadcast? false}}}
-   }
+  [{:name "company-slack" :type :slack :token "xoxb-4242424242424242"}
+   {:name "side-project-slack" :type :slack :token "xoxb-9999999999999999"}
+   {:name "freenode-irc" :type :irc :host "" :port "" :username "yetibot"
+    :rooms #{"#yetibot" "#clojure"}}]
 
 
   :api
@@ -147,4 +142,6 @@
  }
 
 }
+
+
 

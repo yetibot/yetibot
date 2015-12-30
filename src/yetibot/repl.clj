@@ -1,33 +1,27 @@
 (ns yetibot.repl
+  "Not used. Deprecated in favor of yetibot.core.repl. Remains as
+   scratch."
   (:require
+    [yetibot.core.init]
     [yetibot.core.repl :refer :all]
-    [yetibot.webapp.handler :refer [app init destroy]]
-    [ring.adapter.jetty :refer [run-jetty]]
+    [yetibot.core.webapp.handler :refer [app init destroy]]
+    [yetibot.core.loader :refer [load-commands]]
+    ; [ring.adapter.jetty :refer [run-jetty]]
     [ring.middleware.reload :as reload]
-    [environ.core :refer [env]])
-  (:gen-class))
+    [environ.core :refer [env]]
 
-(defonce server (atom nil))
+    [clojure.tools.namespace.find :as ns]
+    [clojure.java.classpath :as cp]
+    ))
 
-(defn parse-port [port]
-  (Integer/parseInt (or port (env :port) "3000")))
+(defn find-namespaces [pattern]
+  (let [all-ns (ns/find-namespaces (cp/classpath))]
+    (filter #(re-matches pattern (str %)) all-ns)))
 
-(defn start-server [port]
-  (init)
-  (reset! server
-          (run-jetty
-            (if (env :dev) (reload/wrap-reload #'app) app)
-            {:port port
-             :join? false})))
+(map find-namespaces yetibot-command-namespaces)
 
-(defn stop-server []
-  (when @server
-    (destroy)
-    (.stop @server)
-    (reset! server nil)))
+(find-namespaces yetibot-command-namespaces)
 
-(defn -main [& [port]]
-  (let [port (parse-port port)]
-    (.addShutdownHook (Runtime/getRuntime) (Thread. stop-server))
-    (start-server port)))
+(use 'yetibot.core.loader)
+
 

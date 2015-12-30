@@ -79,7 +79,7 @@
             screen-name url)))
 
 (defn send-tweet [json]
-  (chat/send-msg-to-all-adapters (format-tweet json)))
+  (chat/broadcast (format-tweet json)))
 
 ;;;; streaming callback
 

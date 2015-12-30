@@ -167,8 +167,8 @@ special privileges in order to kick.
 
 `broadcast` doesn't apply to Slack yet, but [it should](https://github.com/devth/yetibot/issues/494).
 
-**Campfire**: the Campfire adapter doesn't support multiple channels yet, but
-it easily could! Submit a PR, or just open an issue and we'll quickly get to it.
+**Campfire is no longer supported.** If you use Campfire, open an
+issue and we can add it back in!
 
 ### Help
 

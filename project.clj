@@ -1,5 +1,5 @@
 (defproject yetibot "0.1.61-SNAPSHOT"
-  :description "A command line in your chat, where chat ∈ {irc,campfire}."
+  :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/devth/yetibot"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
@@ -9,14 +9,14 @@
   :profiles {:dev {:source-paths ["dev"]}
              :test {}
              :plugins [[lein-git-deps "0.0.1-SNAPSHOT"]]}
-  :repl-options {:init-ns yetibot.repl
+  :repl-options {:init-ns yetibot.core.repl
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server" "-Xmx2G"]
   :dependencies [[org.clojure/clojure "1.6.0"],
-                 [yetibot.core "0.2.56"]
+                 [yetibot.core "0.3.0"]
 
                  ; apis
-                 [tentacles "0.3.0"]
+                 [tentacles "0.4.0"]
                  [twitter-api "0.7.6"]
 
                  ; s3
