@@ -7,6 +7,7 @@
 
 (defn repeat-cmd
   "repeat <n> <cmd> # repeat <cmd> <n> times"
+  {:yb/cat #{:util}}
   [{[_ n cmd] :match user :user opts :opts}]
   (let [n (read-string n)]
     (when (> n max-repeat)

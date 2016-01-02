@@ -7,6 +7,7 @@
 
 (defn sleep-cmd
   "sleep <n> # sleep for <n> milliseconds up to 10,000"
+  {:yb/cat #{:util}}
   [{:keys [match]}]
   (let [wait (min max-sleep (read-string match))]
     (Thread/sleep wait)

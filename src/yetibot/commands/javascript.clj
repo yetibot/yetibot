@@ -9,6 +9,7 @@
 
 (defn javascript-cmd
   "js <expression> # evaluate a javascript expression"
+  {:yb/cat #{:repl}}
   [{expr :match}]
   (info "js" (prn-str expr))
   (let [res (try

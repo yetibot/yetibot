@@ -37,6 +37,7 @@
 
 (defn no-cmd
   "no # show your dissaproval"
+  {:yb/cat #{:fun :img}}
   [_] (rand-nth no-gifs))
 
 (cmd-hook #"no"

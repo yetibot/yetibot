@@ -10,7 +10,8 @@
   (format "http://www.gif.tv/gifs/%s.gif" gif))
 
 (defn giftv-cmd
-  "giftv # fetch a random gif from gif.tv"
+  {:doc "giftv # fetch a random gif from gif.tv"
+   :yb/cat #{:fun}}
   [_]
   (-> (fetch endpoint)
     gif-uri))

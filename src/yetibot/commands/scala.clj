@@ -12,6 +12,7 @@
 
 (defn scala-cmd
   "scala <expression> # evaluate a scala expression"
+  {:yb/cat #{:repl :broken}}
   [{expr :match}]
   (try-scala expr))
 

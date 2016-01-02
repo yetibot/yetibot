@@ -7,7 +7,8 @@
 (def endpoint "http://api.icndb.com/jokes/random?limitTo=[nerdy]")
 
 (defn chuck-joke
-  "chuck # tell a random Chuck Norris joke"
+  {:doc "chuck # tell a random Chuck Norris joke"
+   :yb/cat #{:fun}}
   [_] (-> (get-json endpoint) :value :joke html-decode))
 
 (cmd-hook ["chuck" #"^chuck(norris)*$"]

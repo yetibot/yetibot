@@ -66,6 +66,7 @@
 
 (defn weather-cmd
   "weather <location> # look up current weather for <location>"
+  {:yb/cat #{:info}}
   [{:keys [match]}]
   (let [cs (conditions match)]
     (or
@@ -75,10 +76,12 @@
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
+  {:yb/cat #{:info}}
   [_] (weather-cmd {:match default-zip}))
 
 (defn cams-cmd
   "weather cams <location> # find web cams in <location>"
+  {:yb/cat #{:info :img}}
   [{[_ loc] :match}]
   (let [res (cams loc)]
     (or (error-response res)
@@ -86,7 +89,8 @@
         (format-webcams res))))
 
 (defn satellite-cmd
-  "weather satellite <location> # look up satellite image for <location>"
+  "weather sat <location> # look up satellite image for <location>"
+  {:yb/cat #{:info :gif :img}}
   [{[_ loc] :match}]
   ; TODO: validate the loc. Currently this will 500 if the loc is not valid.
   (satellite loc))
@@ -94,6 +98,7 @@
 (if (conf-valid?)
   (cmd-hook ["weather" #"^weather$"]
             #"cams\s+(.+)" cams-cmd
+            #"sat\s+(.+)" satellite-cmd
             #".+" weather-cmd
             _ default-weather-cmd)
   (info "Weather is not configured"))

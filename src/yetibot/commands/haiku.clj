@@ -7,8 +7,8 @@
 (def endpoint "http://www.randomhaiku.com/haiku.xml")
 
 (defn haiku
-  "haiku # fetch a random haiku"
-  {:test #(assert (seq? (haiku nil)))}
+  {:doc "haiku # fetch a random haiku"
+   :yb/cat #{:fun}}
   [_] (let [res (xml-seq (xml/parse endpoint))]
         (for [el res :when (= :line (:tag el))]
           (first (:content el)))))

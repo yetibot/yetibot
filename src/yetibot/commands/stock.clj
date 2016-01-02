@@ -29,6 +29,7 @@
 
 (defn stock-cmd
   "stock <symbol> # displays current value in market"
+  {:yb/cat #{:info}}
   [{:keys [args]}]
   (get-price args))
 

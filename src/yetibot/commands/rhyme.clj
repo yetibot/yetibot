@@ -9,6 +9,7 @@
 
 (defn rhyme-cmd
   "rhyme <query> # find words rhyming with <query>"
+  {:yb/cat #{:fun}}
   [{:keys [args]}]
   (->> (get-json (endpoint args))
     (map :word)

@@ -8,7 +8,11 @@
 
 (defn horse
   "horse # fetch wisdom from horse_ebooks"
-  [_] (-> endpoint fetch trim))
+  {:yb/cat #{:fun :broken}}
+  [_]
+  ;; (-> endpoint fetch trim)
+  "horsefortun.es is down 😭")
+
 
 (cmd-hook ["horse" #"^horse$"]
           _ horse)

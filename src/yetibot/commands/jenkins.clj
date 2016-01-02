@@ -12,6 +12,7 @@
 
 (defn build
   "jen build <job-name>"
+  {:yb/cat #{:ci}}
   [{[_ job-pattern] :match}]
   (find-job-and-do job-pattern model/build-job))
 
@@ -25,6 +26,7 @@
 
 (defn build-default-cmd
   "jen build # build default job if configured"
+  {:yb/cat #{:ci}}
   [_] (if-let [job-pair (model/default-job)]
         (model/build-job job-pair)
         "No default job configured"))
@@ -32,6 +34,7 @@
 (defn status-cmd
   "jen status <job-name> # show Jenkins status for <job-name>
    jen status # show Jenkins status for default job if configured"
+  {:yb/cat #{:ci}}
   [{args :match}]
   (if (coll? args)
     (find-job-and-do (second args) model/job-status)
@@ -42,6 +45,7 @@
 (defn list-cmd
   "jen list # lists all jenkins jobs
    jen list <pattern> # lists jenkins jobs containing <string>"
+  {:yb/cat #{:ci}}
   [{args :match}]
   (if (coll? args)
     (list-jobs-matching (second args))
@@ -49,6 +53,7 @@
 
 (defn instances-cmd
   "jen instances # show all configured instances"
+  {:yb/cat #{:ci}}
   [_]
   (into {} (for [[inst-name inst-info] (model/instances)]
              [(name inst-name) (:uri inst-info)])))
@@ -56,6 +61,7 @@
 (defn add-instance
   "jen add <name> <url> <user> <api-key> # add Jenkins instance with auth
    jen add <name> <url> # add Jenkinst instance without auth"
+  {:yb/cat #{:ci}}
   [{[_ inst-name url _ user api-key] :match}]
   (info "add jenkins instance" inst-name url user api-key)
   (let [user (or user nil)
@@ -66,6 +72,7 @@
 
 (defn remove-instance
   "jen remove <name> # remove a Jenkins instance"
+  {:yb/cat #{:ci}}
   [{[_ inst-name ] :match}]
   (if (model/remove-instance inst-name)
     (str "Removed Jenkins instance " inst-name)

@@ -6,6 +6,7 @@
 
 (defn that-with-cmd-cmd
   "that cmd # retrieve last command from history"
+  {:yb/cat #{:util}}
   [{:keys [chat-source]}]
   ; the cmd used to call this will be in history, so get the last two then get
   ; the first for it
@@ -16,6 +17,7 @@
 
 (defn that-cmd
   "that # retrieve last non-command chat from history"
+  {:yb/cat #{:util}}
   [{:keys [chat-source]}]
   (-> (h/last-chat-for-room chat-source false)
             h/touch-all

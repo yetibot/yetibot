@@ -18,39 +18,41 @@
 
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"
+  {:yb/cat #{:fun :img :meme}}
   [{[_ inst line1 line2] :match}]
   (instance-result
     (model/generate-meme-by-query inst line1 line2)))
 
 (defn rand-generate-cmd
   "meme <line1> / <line2> # generate random meme"
+  {:yb/cat #{:fun :img :meme}}
   [{[_ line1 line2] :match}]
   (generate-cmd {:match [nil (model/rand-meme) line1 line2]}))
 
 (defn generate-auto-split-cmd
   "meme <generator>: <text> # autosplit <text> in half and generate the instance"
+  {:yb/cat #{:fun :img :meme}}
   [{[_ inst text] :match}]
   (instance-result
     (model/generate-meme-by-query inst text)))
 
 (defn rand-generate-auto-split-cmd
   "meme <text> # when <text> is 4 words or more, autosplit <text> in half and generate the instance; otherwise it'll fallback to meme search"
+  {:yb/cat #{:fun :img :meme}}
   [{[text _] :match}]
   (generate-auto-split-cmd {:match [nil (model/rand-meme) text]}))
 
 (defn preview-cmd
   "meme preview <term> # preview an example of the first match for <term>"
+  {:yb/cat #{:fun :img :meme}}
   [{[_ term] :match}]
   (if-let [matches (model/search-memes term)]
     (urlify (-> matches first :url))
     (str "Couldn't find any memes for " term)))
 
-
-(re-find #"^(\S+?\s+?){3,}.*" "one four five")
-(re-find #"^(\S+\s+){3,}.*" "one  df h")
-
 (defn search-cmd
   "meme search <term> # query available meme generators"
+  {:yb/cat #{:fun :img :meme}}
   [{[_ term] :match}]
   (if-let [matches (model/search-memes term)]
     (map :name matches)

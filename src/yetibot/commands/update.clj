@@ -24,7 +24,8 @@
     (:out (sh log))))
 
 (defn update-cmd
-  "update # update YetiBot's local git repo"
+  "update # update Yetibot's local git repo"
+  {:yb/cat #{:util}}
   [_]
   (let [pull (sh gpr)
         err? (= 1 (:exit pull))]

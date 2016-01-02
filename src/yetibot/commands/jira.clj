@@ -11,6 +11,7 @@
 (defn projects-cmd
   [_]
   "jira projects # list configured projects (default project is marked with *)"
+  {:yb/cat #{:issue}}
   (for [pk (api/project-keys)]
     (str
       (when (= pk (api/default-project-key)) "* ")
@@ -18,11 +19,13 @@
 
 (defn users-cmd
   "jira users # list the users for the configured project(s)"
+  {:yb/cat #{:issue}}
   [_]
   (map :name (api/get-users)))
 
 (defn resolve-cmd
   "jira resolve <issue> <comment> # resolve an issue and set its resolution to fixed"
+  {:yb/cat #{:issue}}
   [{[_ iss comment] :match user :user}]
   (let [comment (format "%s: %s" (:name user) comment)]
     (if-let [issue-data (api/get-issue iss)]
@@ -34,6 +37,7 @@
 
 (defn priorities-cmd
   "jira pri # list the priorities for this JIRA instance"
+  {:yb/cat #{:issue}}
   [_]
   (->> (api/priorities)
        (map (juxt :name :description))
@@ -82,6 +86,7 @@
 
 (defn create-cmd
   "jira create <summary> -c <component> [-j project-key] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  {:yb/cat #{:issue}}
   [{[_ opts-str] :match}]
   (let [parsed (parse-issue-opts opts-str)
         summary (->> parsed :arguments (join " "))
@@ -103,6 +108,7 @@
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-r <remaining time estimated>]"
+  {:yb/cat #{:issue}}
   [{[_ issue-key opts-str] :match}]
   (let [parsed (parse-issue-opts opts-str)
         opts (:options parsed)]
@@ -133,6 +139,7 @@
 
 (defn assign-cmd
   "jira assign <issue> <assignee> # assign <issue> to <assignee>"
+  {:yb/cat #{:issue}}
   [{[_ iss-key assignee] :match}]
   (report-if-error
     (api/assign-issue iss-key assignee)
@@ -140,6 +147,7 @@
 
 (defn comment-cmd
   "jira comment <issue> <comment> # comment on <issue>"
+  {:yb/cat #{:issue}}
   [{[_ iss-key body] :match user :user}]
   (let [body (format "%s: %s" (:name user) body)]
     (report-if-error
@@ -148,21 +156,25 @@
 
 (defn recent-cmd
   "jira recent # show the 15 most recent issues"
+  {:yb/cat #{:issue}}
   [_]
   (short-jira-list (api/recent)))
 
 (defn search-cmd
   "jira search <query> # return up to 15 issues matching <query> across all configured projects"
+  {:yb/cat #{:issue}}
   [{[_ query] :match}]
   (short-jira-list (api/search-by-query query)))
 
 (defn jql-cmd
   "jira jql <jql> # return up to 15 issues matching <jql> query across all configured projects"
+  {:yb/cat #{:issue}}
   [{[_ jql] :match}]
   (short-jira-list (api/search jql)))
 
 (defn components-cmd
   "jira components # list components and their leads by project"
+  {:yb/cat #{:issue}}
   [_]
   (mapcat
     (fn [prj]
@@ -185,6 +197,7 @@
 
 (defn versions-cmd
   "jira versions [<project-key>] # list versions for <project-key>. Lists versions for all configured project-keys if not specified."
+  {:yb/cat #{:issue}}
   [{[_ project-key] :match}]
   (let [project-keys (if project-key [project-key] (api/project-keys))]
     (mapcat
@@ -195,16 +208,19 @@
 
 (defn parse-cmd
   "jira parse <text> # parse the issue key out of a jira issue URL"
+  {:yb/cat #{:issue}}
   [{[_ text] :match}]
   (second (re-find #"browse\/([^\/]+)" text)))
 
 (defn show-cmd
   "jira show <issue> # show the full details of an issue"
+  {:yb/cat #{:issue}}
   [{[_ issue-key] :match}]
   (-> issue-key api/get-issue api/format-issue-long))
 
 (defn delete-cmd
   "jira delete <issue> # delete the issue"
+  {:yb/cat #{:issue}}
   [{[_ issue-key] :match}]
   (report-if-error
     (api/delete-issue issue-key)

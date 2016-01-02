@@ -26,6 +26,7 @@
 
 (defn list-servers
   "ssh servers # list servers configured for ssh access"
+  {:yb/cat #{:infra}}
   [_]
   (->> (:groups config)
        (mapcat :servers)
@@ -35,6 +36,7 @@
 
 (defn run-command
   "ssh <server> <command> # run a command on <server>"
+  {:yb/cat #{:infra}}
   [{[_ server-name command] :match}]
   (if-let [config ((keyword server-name) servers-by-key)]
     (let [host (:host config)

@@ -15,7 +15,8 @@
   (+ (:min-dmg config) (rand-int (:max-dmg config))))
 
 (defn attack-cmd
-  "attack <name> # attacks a person in the room"
+  {:doc "attack <name> # attacks a person in the room"
+   :yb/cat #{:fun}}
   [{:keys [user args chat-source]}]
   (let [user-to-attack (users/find-user-like chat-source args)
         d (dmg)

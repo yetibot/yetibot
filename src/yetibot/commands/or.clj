@@ -6,6 +6,7 @@
 
 (defn or-cmd
   "or <text> # if piped args passed in "
+  {:yb/cat #{:util}}
   [{:keys [raw match]}]
   (info "or:" raw match)
   (if (or (nil? raw) (empty? raw))

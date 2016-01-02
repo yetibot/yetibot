@@ -24,6 +24,7 @@
 
 (defn define
   "wordnik define <word> # look up the definition for <word> on Wordnik"
+  {:yb/cat #{:info}}
   [{[_ w] :match}]
   (with-auth
     (let [ds (word/definitions (s/trim w))
@@ -34,10 +35,12 @@
 
 (defn random
   "wordnik random # look up a random word on Wordnik"
+  {:yb/cat #{:info}}
   [_] (with-auth (define (:word (words/random-word)))))
 
 (defn wotd
   "wordnik wotd # look up the Word of the Day on Wordnik"
+  {:yb/cat #{:info}}
   [_] (with-auth (format-defs (words/wotd))))
 
 (if (conf-valid?)

@@ -6,7 +6,8 @@
 (def endpoint "http://catfacts-api.appspot.com/api/facts")
 
 (defn catfact
-  "catfact # fetch a random cat fact"
+  {:doc "catfact # fetch a random cat fact"
+   :yb/cat #{:fun}}
   [_] (let [res (get-json endpoint)]
         (first (:facts res))))
 

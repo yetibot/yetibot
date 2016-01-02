@@ -5,6 +5,7 @@
 
 (defn nil-cmd
   "nil # eats all passed args; equivalent to writing to /dev/null"
+  {:yb/cat #{:util}}
   [_]
   "")
 

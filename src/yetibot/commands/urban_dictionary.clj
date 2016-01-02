@@ -20,10 +20,12 @@
 
 (defn random-cmd
   "urban random # fetch a random definition from Urban Dictionary"
+  {:yb/cat #{:fun :crude}}
   [_] (format-def (fetch-random)))
 
 (defn search-cmd
   "urban <query> # search for <query> on Urban Dictionary"
+  {:yb/cat #{:fun :crude}}
   [{q :match}] (format-def (search-urban-dictionary q)))
 
 (cmd-hook #"urban"

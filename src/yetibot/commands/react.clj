@@ -16,6 +16,7 @@
 
 (defn react-cmd
   "react # fetch a random gif from the first page of reactiongifs.com"
+  {:yb/cat #{:fun :img :gif}}
   [_] (-> (fetch-react)
         filter-images
         ensure-img-suffix))

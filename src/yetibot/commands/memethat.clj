@@ -24,6 +24,7 @@
    memethat # memeify the last thing said with random generator
    memethat angry picard # memeify the last thing said with a specific generator (allows spaces, unlike <gen>that)"
   [{:keys [cmd chat-source match]}]
+  {:yb/cat #{:fun :img :meme}}
   (let [[_ gen] (re-find genthat-pattern cmd)]
     (meme-it chat-source
              (if (= "meme" gen)

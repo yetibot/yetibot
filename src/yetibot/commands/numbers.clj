@@ -10,10 +10,12 @@
 
 (defn random-number
   "number # lookup trivia on a random number"
+  {:yb/cat #{:info}}
   [_] (fetch random-endpoint))
 
 (defn number
   "number <n> # lookup mathematical trivia about <n>"
+  {:yb/cat #{:info}}
   [{[_ n] :match}] (fetch (endpoint n)))
 
 (cmd-hook #"number"

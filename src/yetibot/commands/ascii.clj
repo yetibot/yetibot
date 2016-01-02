@@ -10,5 +10,6 @@
   [{text :match}]
   (fetch (str endpoint (encode text))))
 
-(cmd-hook ["ascii" #"^ascii$"]
-          #"^.+" ascii)
+;; disabled - api is gone
+;; (cmd-hook ["ascii" #"^ascii$"]
+;;           #"^.+" ascii)

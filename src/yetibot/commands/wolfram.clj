@@ -17,6 +17,7 @@
 
 (defn search-wolfram
   "wolfram <query> # search for <query> on Wolfram Alpha"
+  {:yb/cat #{:info :img}}
   [{q :match}]
   (flatten
     (map #(str (second %) "&t=.jpg")

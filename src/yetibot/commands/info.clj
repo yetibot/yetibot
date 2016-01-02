@@ -8,6 +8,7 @@
 (defn info
   "info <topic> # retrieve info about <topic> from DuckDuckGo"
   [{topic :match}]
+  {:yb/cat #{:info}}
   (let [json (get-json (str endpoint (encode topic)))]
     (if-let [resp (-> json :RelatedTopics first :Text)]
       resp

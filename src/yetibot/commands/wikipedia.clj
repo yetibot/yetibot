@@ -30,6 +30,7 @@
 
 (defn search-cmd
   "wiki search <term> # search Wikipedia for titles"
+  {:yb/cat #{:info}}
   [{[_ term] :match}]
   (let [res (:body (json-get (endpoint-search term)))]
     (if (has-match? res)
@@ -38,6 +39,7 @@
 
 (defn wiki-cmd
   "wiki <term> # look up Wikipedia summary for <term>"
+  {:yb/cat #{:info}}
   [{:keys [match]}]
   (let [search-res (:body (json-get (endpoint-search match)))]
     (if (has-match? search-res)

@@ -7,6 +7,7 @@
 
 (defn xkcd-cmd
   "xkcd # fetch current xkcd comic"
+  {:yb/cat #{:fun :img}}
   [_]
   ((juxt :title :img :alt) (get-json endpoint)))
 

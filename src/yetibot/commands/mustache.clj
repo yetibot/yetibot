@@ -47,6 +47,7 @@
 
 (defn mst-fact
   "mustachefact # show a random mustache fact"
+  {:yb/cat #{:fun}}
   [_] (rand-nth facts))
 
 (cmd-hook #"mustachefact"

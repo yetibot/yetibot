@@ -5,12 +5,14 @@
 
 (defn reload-all-cmd
   "reload # reload all of YetiBot's commands and observers"
+  {:yb/cat #{:util}}
   [_]
   (yetibot.core.loader/reload-all-yetibot)
   "Reload complete.")
 
 (defn reload-cmd
   "reload <namespace pattern> # reload a specific namespace"
+  {:yb/cat #{:util}}
   [{:keys [match]}]
   (let [re (re-pattern (format ".*%s.*" match))
         matched (yetibot.core.loader/find-and-load-namespaces [re])]
