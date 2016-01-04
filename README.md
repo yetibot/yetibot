@@ -134,11 +134,11 @@ indicate all arguments, or `$n` (where n is a 1-based index of which arg).
 => 33.6 F (0.9 C), Overcast
 ```
 
-### Multiple channel support
+### Adapter config
 
 **IRC**: yetibot can listen on any number of channels. You configure
 channels in
-[config.edn](https://github.com/devth/yetibot/blob/master/config/config-sample.edn#L24).
+[config.edn](https://github.com/devth/yetibot/blob/53cb4f01f6b6ad0be3f8061d9297a036453f3b9c/config/config-sample.edn#L33-L34).
 You can also invite yetibot to a channel at runtime using the IRC `/invite`
 command:
 
@@ -149,15 +149,16 @@ command:
 When you invite yetibot to a new channel, `config.edn` is overwritten, so next
 time you restart yetibot, it will re-join the same channels.
 
-You can also use the `!room` command to tell yetibot to join or leave a channel,
-and whether to broadcast Tweets to that channel.
+You can also use the `!room` command to tell yetibot to join or leave a channel.
 
 ```
 !help room
-room list # list rooms that yetibot is in and whether broadcast is enabled
-room broadcast <room> # toggle whether yetibot broadcasts to <room> (e.g.  incoming Tweets)
 room join <room> # join <room>
 room leave <room> # leave <room>
+room list # list rooms that yetibot is in
+room set <key> <value> # configure a setting for the current room
+room settings # show all chat settings for this room
+room settings <key> # show the value for a single setting
 ```
 
 **Slack**: bots can't join a channel on their own, they must be invited, so
@@ -165,10 +166,17 @@ room configuration doesn't apply. Instead, `/invite @yetibot` to any channel
 that you're in, and `/kick @yetibot` if you want it to leave. NB: you might need
 special privileges in order to kick.
 
-`broadcast` doesn't apply to Slack yet, but [it should](https://github.com/devth/yetibot/issues/494).
-
 **Campfire is no longer supported.** If you use Campfire, open an
 issue and we can add it back in!
+
+#### Broadcast
+
+If a room has `broadcast` set to `true`, Tweets will be published to that room.
+By default all rooms have it set to false. To enable:
+
+```
+!room set broadcast true
+```
 
 ### Help
 
