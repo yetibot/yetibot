@@ -18,7 +18,7 @@
 
 (defn translate-cmd
   "giphy <query> # find a gif for <query> on giphy.com"
-  {:yb/cat #{:fun}}
+  {:yb/cat #{:fun :gif :img}}
   [{[_ query] :match}]
   (info "translate" query)
   (report-if-error
@@ -29,7 +29,7 @@
 
 (defn random-cmd
   "giphy random # find a random gif"
-  {:yb/cat #{:fun}}
+  {:yb/cat #{:fun :gif :img}}
   [_]
   (report-if-error
     (api/random)
@@ -38,7 +38,7 @@
 
 (defn trending-cmd
   "giphy trending # returns a random trending gif from the top 25"
-  {:yb/cat #{:fun}}
+  {:yb/cat #{:fun :gif :img}}
   [_]
   (report-if-error
     (api/trending)

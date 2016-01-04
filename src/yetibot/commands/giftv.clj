@@ -11,7 +11,7 @@
 
 (defn giftv-cmd
   {:doc "giftv # fetch a random gif from gif.tv"
-   :yb/cat #{:fun}}
+  {:yb/cat #{:fun :gif :img}}
   [_]
   (-> (fetch endpoint)
     gif-uri))
