@@ -12,15 +12,15 @@
   :repl-options {:init-ns yetibot.core.repl
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server" "-Xmx2G"]
-  :dependencies [[org.clojure/clojure "1.6.0"],
-                 [yetibot.core "0.3.3"]
+  :dependencies [[org.clojure/clojure "1.7.0"],
+                 [yetibot.core "0.3.6"]
 
                  ; apis
                  [tentacles "0.4.0"]
                  [twitter-api "0.7.6"]
 
                  ; s3
-                 [clj-aws-s3 "0.3.2"]
+                 [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
 
                  ; utils
                  [useful "0.8.3-alpha8"]

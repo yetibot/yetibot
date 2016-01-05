@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.63
+
+- upgrade to Clojure 1.7
+
 ## 0.1.62
 
 - begin categorizing commands, especially `:fun` so that they can be optionally
