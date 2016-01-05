@@ -4,7 +4,6 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :lein-release {:deploy-via :clojars}
-  :signing {:gpg-key "C9764E34"}
   :deploy-repositories [["releases" :clojars]]
   :profiles {:dev {:source-paths ["dev"]}
              :test {}
