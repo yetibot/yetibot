@@ -2,4 +2,4 @@ language: clojure
 lein: lein2
 script: lein2 test
 jdk:
-  - openjdk8
+  - oraclejdk8
