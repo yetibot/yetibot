@@ -9,8 +9,27 @@ You can treat Yetibot as a communal command line. It works well for:
    yetibot plugins
  - **fun**: google image search, gif lookups, meme generation
 
-In addition to a wealth of commands (see `!help all` to view them), it supports
-unix-style piping and arbitrarily-nested sub expressions.
+Features that make Yetibot powerful and great, which is to say *fun*:
+
+- **Unix-style pipes** allow tremendous expressiveness in chaining
+  together complex and flexible commands.
+- **Sub-expressions** let you embed the output of one command into an outer
+  command. They can be nested as many levels deep as you can imagine (open a PR
+  to add to [EXAMPLES](doc/EXAMPLES.md) if you come up with something crazy!).
+- **Aliases** let you parameterize complex expressions and give them a name
+  allowing your team to quickly build up idiomatic team-specific Yetibot usages
+  (not just memes!).
+- **Per-channel settings** let you store arbitrary config at the channel level, which
+  can be used by commands or aliases to change the behavior of commands
+  depending on which channel you're in (e.g. the default JIRA project for a
+  channel).
+- **Feature category toggle** lets you disable or enable entire
+  [categories](https://github.com/devth/yetibot.core/blob/master/doc/CATEGORIES.md)
+  of commands per-channel; useful for disabling gifs in the work-only
+  channel 😁.
+
+Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
+ways it can be used.
 
 ![yeti](yeti.png)
 
@@ -85,7 +104,7 @@ does ie support ttf? No, it is sucky.
 
 ### Backticks
 
-Backticks provide a lighweight syntax for sub-expressions, but they can't be
+Backticks provide a lightweight syntax for sub-expressions, but they can't be
 nested.
 
 ```
