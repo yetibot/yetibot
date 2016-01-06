@@ -2,7 +2,7 @@
        already .gitignored. If you don't configure a specific node, it will not
        be enabled at runtime. All config is optional depending on what you want
        your yetibot to be able to do, except for at least one of the chat
-       adapters (Slack, IRC, or Campfire)."
+       adapters (Slack or IRC)."
  :yetibot
  {
 
@@ -15,8 +15,8 @@
        :datomic-url "datomic:mem://yetibot"}
 
   :adapters-doc
-  "yetibot can listen on multiple adapters. Current adapter types are: Slack,
-   Campfire and IRC.
+  "yetibot can listen on multiple adapters. Current adapter types are: Slack and
+   IRC.
 
    :name is used as a uuid so it must be unique to this Yetibot. The uuid is
    used by the API to post messages to the correct instance, and also used to
@@ -105,9 +105,9 @@
   :commands
   {
 
-   :eval {:doc "Set of Strings: Campfire IDs or IRC users (which have ~
+   :eval {:doc "Set of Strings: Slack IDs or IRC users (which have ~
                 prefixes) of users who can use the yetibot `eval` command."
-          :privs #{"123", "~awesomeperson"}}
+          :privs #{"U123123", "~awesomeperson"}}
 
    :features {:doc "Configure GitHub if you have your own fork of the yetibot
                     repo. This will allow opening feature requests on your
