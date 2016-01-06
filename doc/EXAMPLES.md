@@ -1,4 +1,4 @@
-# yetibot usage examples
+# Yetibot usage examples
 
 Fun or useful uses of Yetibot. Open a PR to add your own!
 
