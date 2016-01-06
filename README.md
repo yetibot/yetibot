@@ -28,7 +28,10 @@ contributions are very welcome!
       steriods. Done! Check out
       [yetibot-stackstorm](https://github.com/devth/yetibot-stackstorm).
 - [ ] Create a Heroku deploy button to make it easy to get started
+- [ ] Make adapters plugable
+- [ ] Create more examples of plugins (e.g. Travis)
 - [ ] Run a demo Yetibot instance
+- [ ] Design & build yetibot.com
 
 ## Installation
 
