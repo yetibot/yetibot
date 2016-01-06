@@ -22,8 +22,8 @@ Yetibot has been undergoing continuous improvement since its inception. These
 are the immediate priorities, in addition to any bugfixes. Feedback and
 contributions are very welcome!
 
-- [ ] Dockerize Yetibot and Datomic Pro Starter edition to simplify deployment.
-      <em>In progress!</em>
+- [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
+- [ ] Dockerize Datomic Pro Starter edition. <em>In progress!</em>
 - [x] Integrate with [StackStorm](https://stackstorm.com/) for automation on
       steriods. Done! Check out
       [yetibot-stackstorm](https://github.com/devth/yetibot-stackstorm).
@@ -44,9 +44,7 @@ There are three primary ways of installing Yetibot:
    your own commands in-project, and gives you control over where you store
    your config (manual management, commit to private git repo, etc...)
 
-   ```clojure
-   [yetibot "0.1.28"]
-   ```
+   [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 
 ## Configuration
 
@@ -141,18 +139,18 @@ indicate all arguments, or `$n` (where n is a 1-based index of which arg).
 
 ### Adapter config
 
-**IRC**: yetibot can listen on any number of channels. You configure
+**IRC**: Yetibot can listen on any number of channels. You configure
 channels in
 [config.edn](https://github.com/devth/yetibot/blob/53cb4f01f6b6ad0be3f8061d9297a036453f3b9c/config/config-sample.edn#L33-L34).
-You can also invite yetibot to a channel at runtime using the IRC `/invite`
+You can also invite Yetibot to a channel at runtime using the IRC `/invite`
 command:
 
 ```
 /invite yetibot #whoa
 ```
 
-When you invite yetibot to a new channel, `config.edn` is overwritten, so next
-time you restart yetibot, it will re-join the same channels.
+When you invite Yetibot to a new channel, `config.edn` is overwritten, so next
+time you restart Yetibot, it will re-join the same channels.
 
 You can also use the `!room` command to tell yetibot to join or leave a channel.
 
@@ -185,7 +183,7 @@ By default all rooms have it set to false. To enable:
 
 ### Help
 
-yetibot self-documents itself using the docstrings of its various commands. Ask it
+Yetibot self-documents itself using the docstrings of its various commands. Ask it
 for `!help` to get a list of help topics. `!help all` shows fully expanded command
 list for each topic.
 
@@ -206,13 +204,13 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 
 ## Plugins
 
-yetibot has a plugin-based architecture. Its core lives at:
+Yetibot has a plugin-based architecture. Its core lives at:
 https://github.com/devth/yetibot.core and can be depended on with:
 
-[<img src="http://clojars.org/yetibot.core/latest-version.svg" />](https://clojars.org/yetibot.core)
+[<img src="https://img.shields.io/clojars/v/yetibot.core.svg" />](https://clojars.org/yetibot.core)
 
 
-yetibot will load all commands and observers with namespaces on the classpath
+Yetibot will load all commands and observers with namespaces on the classpath
 matching the regexes at:
 https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L12-16
 
@@ -222,7 +220,7 @@ via standard leiningen dependencies.
 
 ## How it works
 
-Curious how the internals of yetibot works? At a high level:
+Curious how the internals of Yetibot works? At a high level:
 
 0. commands are run through a parser built on
    [InstaParse](https://github.com/Engelberg/instaparse):

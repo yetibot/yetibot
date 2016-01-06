@@ -1,7 +1,7 @@
 # Docker
 
 The official Yetibot image is
-[devth/yetibot](https://hub.docker.com/devth/yetibot). It's built on the
+[devth/yetibot](https://hub.docker.com/r/devth/yetibot/). It's built on the
 official [Clojure image](https://hub.docker.com/_/clojure/).
 
 ## Configuration
