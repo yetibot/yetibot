@@ -9,7 +9,7 @@ jdk:
 
 sudo: required
 
-serices:
+services:
   - docker
 
 before_install:
