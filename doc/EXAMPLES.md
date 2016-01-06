@@ -23,6 +23,66 @@ single-line description of current weather for a location.
 49.8 F (9.9 C), Overcast SOMA - Near Van Ness, San Francisco, California elevation 49 ft:
 ```
 
+## Yetibot should not have kids
+
+I'm pretty fond of this one. We ~~needed~~ *really wanted* a way to seed a meme
+alias with valid sentences like:
+
+> [user] should not [do something]
+
+Time for some Google Complete, JavaScript, and a few aliases!
+
+First, we need a random letter to seed Google Complete with, for ultimate
+variety of "shoulds":
+
+```
+!alias randletter = "range 65 91 | xargs echo | random | js String.fromCharCode(%s)"
+
+!repeat 5 randletter | unwords
+
+V L R U S
+```
+
+LGTM! ☝️
+
+Now pipe that to a well-crafted `complete` query:
+
+```
+!randletter | complete should i | random | sed s/should i/
+
+invest in bonds
+```
+
+Awesome, let's alias it:
+
+```
+!alias randshould = "randletter | complete should i | random | sed s/should i/"
+
+!repeat 10 randshould
+
+take creatine
+call her
+max out my 401k
+move to san francisco
+shave my beard
+have kids
+buy a house
+do it
+feed feral cats
+have a savings account
+```
+
+Finally:
+
+```
+!alias usershouldnot = user | random | echo %s should not `randshould`
+
+!usershouldnot | meme angry wolf:
+```
+
+![yetibot should not](http://i.imgflip.com/wx53f.jpg)
+
+👏
 
 ## Grids
 
