@@ -25,7 +25,7 @@ single-line description of current weather for a location.
 
 ## Yetibot should not have kids
 
-I'm pretty fond of this one. We ~~needed~~ *really wanted* a way to seed a meme
+I'm pretty fond of this one. I ~~needed~~ *really wanted* a way to seed a meme
 alias with valid sentences like:
 
 > [user] should not [do something]
@@ -75,7 +75,7 @@ have a savings account
 Finally:
 
 ```
-!alias usershouldnot = user | random | echo %s should not `randshould`
+!alias usershouldnot = "user | random | echo %s should not `randshould`"
 
 !usershouldnot | meme angry wolf:
 ```
