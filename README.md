@@ -15,6 +15,7 @@ unix-style piping and arbitrarily-nested sub expressions.
 ![yeti](yeti.png)
 
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
+[![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 
 ## Roadmap
 
@@ -207,8 +208,8 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 
 ## Plugins
 
-Yetibot has a plugin-based architecture. Its core lives at:
-https://github.com/devth/yetibot.core and can be depended on with:
+Yetibot has a plugin-based architecture. Its core which all plugins depend on
+lives at https://github.com/devth/yetibot.core.
 
 [<img src="https://img.shields.io/clojars/v/yetibot.core.svg" />](https://clojars.org/yetibot.core)
 
@@ -219,7 +220,6 @@ https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L1
 
 This lets you build any number of independent plugin projects and combine them
 via standard leiningen dependencies.
-
 
 ## How it works
 
