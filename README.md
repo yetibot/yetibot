@@ -1,6 +1,6 @@
-# yetibot
+# Yetibot
 
-You can treat yetibot as a communal command line. It works well for:
+You can treat Yetibot as a communal command line. It works well for:
 
  - **teaching**: how to run internal automation, language evaluation for JS,
    Scala, Clojure, and Haskell
@@ -22,26 +22,31 @@ Yetibot has been undergoing continuous improvement since its inception. These
 are the immediate priorities, in addition to any bugfixes. Feedback and
 contributions are very welcome!
 
-0. Dockerize yetibot and Datomic Pro Starter edition to simplify deployment
-0. Integrate with [StackStorm](https://stackstorm.com/) for automation on
-   steriods
-0. Create a Heroku deploy button to make it easy to get started
-0. Run a demo yetibot instance
+- [ ] Dockerize Yetibot and Datomic Pro Starter edition to simplify deployment.
+      <em>In progress!</em>
+- [x] Integrate with [StackStorm](https://stackstorm.com/) for automation on
+      steriods. Done! Check out
+      [yetibot-stackstorm](https://github.com/devth/yetibot-stackstorm).
+- [ ] Create a Heroku deploy button to make it easy to get started
+- [ ] Run a demo Yetibot instance
 
 ## Installation
 
-There are two primary ways of installing yetibot:
+There are three primary ways of installing Yetibot:
 
- 1. **Clone this repo**: this gives you a standard yetibot installation and
-    provides a git-ignored place to store configuration.
- 2. **Make your own repo and depend on yetibot**: this gives you ultimate
-    customizability, allowing you to depend on custom yetibot plugins or define
-    your own commands in-project, and gives you control over where you store
-    your config (manual management, commit to private git repo, etc...)
+0. Follow the [Docker instructions](doc/DOCKER.md): the fastest way if you're
+   already using Docker!
+0. **Clone this repo**: this gives you a standard Yetibot installation and
+   provides a git-ignored place to store configuration. Run from the root dir
+   with `lein run`.
+0. **Make your own repo and depend on Yetibot**: this gives you ultimate
+   customizability, allowing you to depend on custom Yetibot plugins or define
+   your own commands in-project, and gives you control over where you store
+   your config (manual management, commit to private git repo, etc...)
 
-    ```clojure
-    [yetibot "0.1.28"]
-    ```
+   ```clojure
+   [yetibot "0.1.28"]
+   ```
 
 ## Configuration
 

@@ -31,9 +31,12 @@
                  ; [incanter "1.4.0"]
 
                  ]
-  :plugins [[lein-ring "0.9.5"]]
+  :plugins [[lein-ring "0.9.5"]
+            [io.sarnowski/lein-docker "1.1.0"]]
 
   :pedantic :ignore
+
+  :docker {:image-name "devth/yetibot"}
 
   :ring {:handler yetibot.webapp.handler/app
          :init    yetibot.webapp.handler/init
