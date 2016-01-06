@@ -37,7 +37,7 @@ contributions are very welcome!
 
 There are three primary ways of installing Yetibot:
 
-0. Follow the [Docker instructions](doc/DOCKER.md): the fastest way if you're
+0. **Follow the [Docker instructions](doc/DOCKER.md)**: the fastest way if you're
    already using Docker!
 0. **Clone this repo**: this gives you a standard Yetibot installation and
    provides a git-ignored place to store configuration. Run from the root dir
