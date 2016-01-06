@@ -1,5 +1,11 @@
 # yetibot changelog
 
+## 0.1.64
+
+- auto-deploy to Docker Hub. See
+  [DOCKER](https://github.com/devth/yetibot/blob/master/doc/DOCKER.md) for usage
+  docs.
+
 ## 0.1.63
 
 - upgrade to Clojure 1.7
