@@ -31,9 +31,12 @@
                  ; [incanter "1.4.0"]
 
                  ]
-  :plugins [[lein-ring "0.9.5"]
+  :plugins [[lein-exec "0.3.5"]
+            [lein-ring "0.9.5"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
+  :aliases
+  {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]}
   :pedantic :ignore
 
   :docker {:image-name "devth/yetibot"}
