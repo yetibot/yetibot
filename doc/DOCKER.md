@@ -38,7 +38,7 @@ Tail its logs:
 docker logs -f yetibot
 ```
 
-## Troubleshoting
+## Troubleshooting
 
 To run an ephemeral interactive shell and poke around instead of running Yetibot:
 
