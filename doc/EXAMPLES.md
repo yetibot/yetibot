@@ -1,6 +1,27 @@
 # yetibot usage examples
 
-Fun use cases for yetibot. Open a PR to add your own!
+Fun or useful uses of Yetibot. Open a PR to add your own!
+
+## Alltemps
+
+We use an alias to store the list of zip codes for all members of our
+distributed team, which we then feed to another alias which outputs a short
+single-line description of current weather for a location.
+
+
+```
+!alias locs = list 59101 98101 94101
+
+!alias loctemp = "weather $s | xargs sed s/Current conditions for / | head 2 | reverse | unwords"
+
+!alias alltemps = "locs | xargs loctemp | sort"
+
+!alltemps
+
+25.4 F (-3.7 C), Mostly Cloudy Jupiter Sulphur, Billings, Montana elevation 3114 ft:
+43.2 F (6.2 C), Partly Cloudy Belltown, Seattle, Washington elevation 135 ft:
+49.8 F (9.9 C), Overcast SOMA - Near Van Ness, San Francisco, California elevation 49 ft:
+```
 
 
 ## Grids
@@ -68,6 +89,6 @@ I think you get the idea :ok_hand:
 !list wife, kids, husband too | xargs hide | unwords
 ```
 
-![hide yo wife](http://i.imgflip.com/9ovn9.jpg "hide yo wife")
-![hide yo kids](http://i.imgflip.com/9ovnb.jpg "hide yo kids")
-![hide yo husband too](http://i.imgflip.com/9ovna.jpg "hide yo husband too")
+![hide yo wife](http://i.imgflip.com/wx1cd.jpg "hide yo wife")
+![hide yo kids](http://i.imgflip.com/wx1cb.jpg "hide yo kids")
+![hide yo husband too](http://i.imgflip.com/wx1cc.jpg "hide yo husband too")
