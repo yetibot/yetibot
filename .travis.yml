@@ -1,5 +1,18 @@
 language: clojure
+
 lein: lein2
+
 script: lein2 test
+
 jdk:
   - oraclejdk8
+
+sudo: required
+
+serices:
+  - docker
+
+before_install:
+  - docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
+  - lein docker build
+  - lein docker push
