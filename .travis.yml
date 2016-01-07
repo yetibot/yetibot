@@ -11,4 +11,6 @@ services:
   - docker
 
 before_install:
+  - sudo apt-get update
+  - sudo apt-get install docker-engine
   - ./scripts/docker.sh
