@@ -8,6 +8,8 @@ RUN mkdir -p /usr/src/app
 
 COPY ./src /usr/src/app/src/
 
+COPY ./test /usr/test/app/test/
+
 COPY ./project.clj /usr/src/app/project.clj
 
 WORKDIR /usr/src/app
