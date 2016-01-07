@@ -15,6 +15,7 @@ if [[ "$version" =~ "SNAPSHOT" ]]; then
   echo "Snapshot"
 else
   echo "Release version, tagging docker latest and pushing..."
+  docker images
   docker tag devth/yetibot devth/yetibot:latest
   docker push devth/yetibot:latest
 fi
