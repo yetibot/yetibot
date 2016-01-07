@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.67
+
+- fix src copy in Dockerfile
+
 ## 0.1.66
 
 - add specific $version to Docker tag
