@@ -7,6 +7,9 @@ docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
 docker version
 lein docker build
 
+# push the version tag
+lein docker push
+
 # check to see if it's a release version
 version=`lein version`
 echo $version
@@ -20,5 +23,3 @@ else
   docker push devth/yetibot:latest
 fi
 
-# push the version tag
-lein docker push
