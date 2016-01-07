@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.66
+
+- add specific $version to Docker tag
+
 ## 0.1.65
 
 - upgrade Docker engine in Travis to attempt to fix docker.sh latest tagging
