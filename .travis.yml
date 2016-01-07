@@ -1,6 +1,6 @@
 language: clojure
 
-script: lein test
+script: docker run devth/yetibot lein test
 
 jdk:
   - oraclejdk8
