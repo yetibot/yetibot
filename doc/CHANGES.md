@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.68
+
+- upgrade to yetibot.core 0.3.8
+
 ## 0.1.67
 
 - fix src copy in Dockerfile
