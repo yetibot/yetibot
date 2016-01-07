@@ -6,7 +6,7 @@ EXPOSE 3000
 
 RUN mkdir -p /usr/src/app
 
-COPY ./src /usr/src/app/
+COPY ./src /usr/src/app/src/
 
 COPY ./project.clj /usr/src/app/project.clj
 
