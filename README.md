@@ -34,6 +34,9 @@ Features that make Yetibot powerful and great, which is to say *fun*:
 Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
 ways it can be used.
 
+To quickly try out Yetibot with minimal config,
+read the blog post [Yetibot on Docker in 𝓧 minutes or less](http://devth.com/2016/yetibot-on-docker/).
+
 ![yeti](yeti.png)
 
 
