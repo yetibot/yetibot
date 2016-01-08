@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.69
+
+- fix syntax error on giftv command
+
 ## 0.1.68
 
 - upgrade to yetibot.core 0.3.8
