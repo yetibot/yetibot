@@ -45,7 +45,7 @@ are the immediate priorities, in addition to any bugfixes. Feedback and
 contributions are very welcome!
 
 - [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
-- [ ] Dockerize Datomic Pro Starter edition. <em>In progress!</em>
+- [ ] Dockerize Datomic Pro Starter edition.
 - [x] Integrate with [StackStorm](https://stackstorm.com/) for automation on
       steriods. Done! Check out
       [yetibot-stackstorm](https://github.com/devth/yetibot-stackstorm).
@@ -53,7 +53,7 @@ contributions are very welcome!
 - [ ] Make adapters plugable
 - [ ] Create more examples of plugins (e.g. Travis)
 - [ ] Run a demo Yetibot instance
-- [ ] Design & build yetibot.com
+- [ ] Design & build yetibot.com. <em>In progress!</em>
 
 ## Installation
 
