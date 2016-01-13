@@ -10,6 +10,10 @@
 
 ;; config
 
+(def ^:dynamic *jira-project*
+  "Settings for the current channel, bound by yetibot.commands.jira"
+  nil)
+
 (defn config [] (get-config :yetibot :api :jira))
 
 (defn configured? [] (conf-valid? (config)))
@@ -24,7 +28,9 @@
 
 (defn default-version-id [project-key] (:default-version-id (project-for-key project-key)))
 
-(defn default-project-key [] (or (:default-project-key (config)) (first (project-keys))))
+(defn default-project-key [] (or *jira-project*
+                                 (:default-project-key (config))
+                                 (first (project-keys))))
 
 (defn default-project [] (project-for-key (default-project-key)))
 
@@ -220,7 +226,7 @@
 
 
 (defn create-issue
-  "This thing is a beast"
+  "This thing is a beast; thanks JIRA."
   [{:keys [summary component-ids assignee priority-key desc project-key
            fix-version timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
