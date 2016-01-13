@@ -7,6 +7,7 @@
 
 (defn chat-cmd
   "chat # ask a question from chatoms.com"
+  {:yb/cat #{:fun :broken}}
   [_] (:text (get-json endpoint)))
 
 (cmd-hook #"chat"
