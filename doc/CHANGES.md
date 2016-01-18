@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.70
+
+- fix mapping bug when using `gh repos`
+
 ## 0.1.69
 
 - fix syntax error on giftv command
