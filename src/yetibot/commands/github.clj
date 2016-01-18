@@ -20,7 +20,7 @@
       (map #(format "%s/%s" org-name (:name %)) (gh/repos org-name)))
     (mapcat
       (fn [[org-name repos]]
-        (map #(format "%s/%s" org-name (:name %))))
+        (map #(format "%s/%s" org-name (:name %)) repos))
       (gh/repos-by-org))))
 
 (defn repos-urls
