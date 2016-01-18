@@ -11,7 +11,7 @@
      [orgs :as o]]
     [clojure.string :as s]
     [clj-http.client :as client]
-    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [get-config conf-valid?]]
     [yetibot.core.util.http :refer [fetch]]))
 
 
@@ -21,11 +21,12 @@
 
 ;;; config
 
-(defn config [] (config-for-ns))
+(defn config [] (get-config :yetibot :api :github))
 (def configured? (conf-valid?))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
 ; propogate the configured endpoint to the tentacles library
+
 (alter-var-root #'tentacles.core/url (constantly endpoint))
 
 (def token (:token (config)))
@@ -84,7 +85,8 @@
   (remove empty? (r/org-repos org-name (merge auth {:per-page 100}))))
 
 (defn repos-by-org []
-  (into {} (for [org-name org-names] [org-name (repos org-name)])))
+  (into {} (for [org-name org-names]
+             [org-name (repos org-name)])))
 
 (defn branches [org-name repo]
   (r/branches org-name repo auth))
@@ -142,3 +144,4 @@
 
 (defn formatted-events [org-name]
   (fmt-events (events org-name)))
+

@@ -63,8 +63,22 @@
                 (s/join " "
                         [(format "[%s]" (-> pr :user :login))
                          (:title pr)
-                         (-> pr :pull_request :html_url)
-                         ]))))))
+                         (-> pr :pull_request :html_url)]))))))
+
+(defn notify-add-cmd
+  "gh notify add <org>/<repo-name> # sets up notifications to this channel on pushes to <repo-name>"
+  [{[_ repo] :match chat-source :chat-source}]
+  "Not yet implemented")
+
+(defn notify-list-cmd
+  "gh notify list # lists repos which are configured to post to this channel on push"
+  [{:keys [chat-source]}]
+  "Not yet implemented")
+
+(defn notify-remove-cmd
+  "gh notify remove <org>/<repo-name> # removes notifications to this channel for <repo-name>"
+  [{:keys [chat-source]}]
+  "Not yet implemented")
 
 (if gh/configured?
   (cmd-hook ["gh" #"^gh|github$"]
@@ -72,6 +86,9 @@
             #"repos urls" repos-urls
             #"repos\s+(\S+)" repos
             #"repos" repos
+            #"notify\s+list" notify-list-cmd
+            #"notify\s+add\s+(\S+)" notify-add-cmd
+            #"notify\s+remove\s+(\S+)" notify-remove-cmd
             #"orgs" orgs
             #"statuses" statuses
             #"status$" status
