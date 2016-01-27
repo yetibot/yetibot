@@ -34,7 +34,7 @@
                                         (fn [[_ msgs]] (map :message msgs))
                                         (:complilationInfos body))
       ;; success
-      :else (map (fn [[_ [_ {:keys [repr]}]]] repr)
+      :else (map (fn [[_ [_ {:keys [repr v]}]]] (or repr v))
                  (:instrumentation body)))))
 
 (defn scala-cmd

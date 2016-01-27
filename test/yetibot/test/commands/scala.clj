@@ -14,5 +14,8 @@
       "Compiler errors")
   (is (= '("java.lang.ArithmeticException: / by zero")
          (eval-and-extract "1 / 0"))
-      "Runtime errors"))
+      "Runtime errors")
+  (is (= '("version 2.11.7")
+         (eval-and-extract "scala.util.Properties.versionString"))
+      "scalakata.EString"))
 
