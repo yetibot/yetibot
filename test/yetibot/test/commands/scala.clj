@@ -1,6 +1,7 @@
 (ns yetibot.test.commands.scala
   (:require
     [clojure.test :refer :all]
+    [yetibot.core.parser :refer [parser parse-and-eval]]
     [yetibot.commands.scala :refer :all]))
 
 (def eval-and-extract (comp extract-result try-scala))
@@ -19,3 +20,6 @@
          (eval-and-extract "scala.util.Properties.versionString"))
       "scalakata.EString"))
 
+
+(deftest with-pipes
+  (parser "scala \"true || false\""))

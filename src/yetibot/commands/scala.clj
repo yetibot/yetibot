@@ -1,5 +1,6 @@
 (ns yetibot.commands.scala
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [clj-http.client :as client]
     [clojure.string :as s]
@@ -16,6 +17,7 @@
 
 (defn try-scala
   [expr]
+  (info "scala:" expr)
   (client/post
     endpoint
     {:body
