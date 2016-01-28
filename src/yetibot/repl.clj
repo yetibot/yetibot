@@ -22,6 +22,7 @@
 
 (find-namespaces yetibot-command-namespaces)
 
+
 (use 'yetibot.core.loader)
 
 
