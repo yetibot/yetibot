@@ -6,6 +6,10 @@
  :yetibot
  {
 
+  ;; by default Yetibot listens on port 3000 but this may be different for you
+  ;; if you (e.g. if you use a load balancer or map ports in Docker).
+  :url "http://your-yetibot-host.com:3000"
+
   :logging {:log-level :debug}
 
   :db {:doc "yetibot runs an in-memory Datomic database by default, which will
