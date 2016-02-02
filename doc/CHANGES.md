@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.74
+
+- upgrade yetibot.core to 0.3.14
+
 ## 0.1.73
 
 - remove tentacles dependency - put it in yetibot.core instead
