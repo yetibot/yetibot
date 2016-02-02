@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.1.73
+
+- remove tentacles dependency - put it in yetibot.core instead
+
 ## 0.1.70
 
 - fix mapping bug when using `gh repos`
