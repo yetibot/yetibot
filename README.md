@@ -47,6 +47,10 @@ Yetibot has been undergoing continuous improvement since its inception. These
 are the immediate priorities, in addition to any bugfixes. Feedback and
 contributions are very welcome!
 
+- [ ] Flatten the config and obtain it via
+  [environ](https://github.com/weavejester/environ) to follow [12 Factor
+  App](http://12factor.net/config) practices
+- [ ] Write docs on how to develop Yetibot
 - [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
 - [ ] Dockerize Datomic Pro Starter edition.
 - [x] Integrate with [StackStorm](https://stackstorm.com/) for automation on
