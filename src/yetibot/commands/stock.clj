@@ -7,7 +7,7 @@
 (defn endpoint
   "Creates a YQL query from stock symbol"
   [stock-symbol]
-  (str "http://dev.markitondemand.com/MODApis/Api/v2/Quote/json?symbol=" stock-symbol))
+  (str "http://www.google.com/finance/info?infotype=infoquoteall&q=" stock-symbol))
 
 (defn format-percent
   "Formats number in map as percent"
@@ -20,8 +20,8 @@
   (let [stock-info (get-json (endpoint stock-symbol))]
     (if (:Name stock-info)
       (->> stock-info
-           (format-percent :ChangePercent)
-           ((juxt :Name :LastPrice :High :Low :MarketCap :ChangePercent))
+           (format-percent :cp)
+           ((juxt :t :l :hi :lo :mc :cp))
            (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:"])
            (partition 2)
            (map #(s/join " " %)))
