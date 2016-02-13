@@ -1,6 +1,6 @@
 <p align="center">
   <img width="560"
-    src="https://github.com/devth/yetibot/raw/master/img/Yetibot_logotype.png?raw=true" />
+    src="https://github.com/devth/yetibot/raw/master/img/yetibot.png?raw=true" />
 </p>
 <p align="center">
   <i>A chat bot written in Clojure, at your service</i>
