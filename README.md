@@ -210,6 +210,9 @@ special privileges in order to kick.
 **Campfire is no longer supported.** If you use Campfire, open an
 issue and we can add it back in!
 
+**Other chat platforms**: If your chat platform of choice is not supported, open
+an issue. Adding adapters is quite easy.
+
 #### Broadcast
 
 If a room has `broadcast` set to `true`, Tweets will be published to that room.
