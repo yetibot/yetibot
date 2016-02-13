@@ -215,7 +215,7 @@ an issue. Adding adapters is quite easy.
 
 #### Broadcast
 
-If a room has `broadcast` set to `true`, Tweets will be published to that room.
+If a room has `broadcast` set to `true`, Tweets will be posted to that room.
 By default all rooms have it set to false. To enable:
 
 ```
