@@ -2,6 +2,10 @@
   <img width="560"
     src="https://github.com/devth/yetibot/raw/master/img/Yetibot_logotype.png?raw=true" />
 </p>
+<p align="center">
+  <i>A chat bot written in Clojure, at your service</i>
+</p>
+
 
 # Yetibot
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
