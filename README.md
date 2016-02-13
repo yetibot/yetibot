@@ -11,7 +11,7 @@
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 [![Yetibot on Docker Hub](https://img.shields.io/badge/Docker%20Hub-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
-[![CrossClj](https://crossclj.info/doc/yetibot/latest/index.html)](https://img.shields.io/badge/CrossClj%20Docs-yetibot-blue.svg?)
+[![CrossClj](https://img.shields.io/badge/CrossClj%20Docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
 
 You can treat Yetibot as a communal command line. It works well for:
 
