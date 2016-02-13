@@ -135,16 +135,16 @@ For arbitrarily-nested sub-expressions, use `$(expr)` syntax, which
 disambiguates the open and closing of an expressions.
 
 ```
-!meme chemistry: $(number $(js parseInt('$(weather 98105 | head 2 | tail)')))
+!meme philos: $(complete how does one $(users | random | letters | random) | random)
 ```
 
-<img src="http://i.imgflip.com/4xby8.jpg" />
+<img src="http://i.imgflip.com/z4d45.jpg" />
 
 
 ### Combo
 
 ```
-!echo `repeat 10 echo i don't always repeat myself but | join`…StackOverflowError | meme interesting:
+!echo `repeat 4 echo i don't always repeat myself but | unwords`…StackOverflowError | meme interesting:
 ```
 
 <img src="http://cdn.memegenerator.net/instances/500x/34461434.jpg" />
