@@ -147,7 +147,7 @@ disambiguates the open and closing of an expressions.
 !echo `repeat 4 echo i don't always repeat myself but | unwords`…StackOverflowError | meme interesting:
 ```
 
-<img src="http://cdn.memegenerator.net/instances/500x/34461434.jpg" />
+<img src="http://i.imgflip.com/z4d6f.jpg" />
 
 
 ### Aliases
