@@ -3,7 +3,7 @@
     src="https://github.com/devth/yetibot/raw/master/img/yetibot.png?raw=true" />
 </p>
 <p align="center">
-  <i>A chat bot written in Clojure, at your service</i>
+  <i>A chat bot written in Clojure, at your service.</i>
 </p>
 
 
