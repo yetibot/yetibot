@@ -1,3 +1,8 @@
+<p align="center">
+  <img style="max-width: 80%"
+    src="https://github.com/devth/yetibot/raw/master/img/Yetibot_logotype.png?raw=true" />
+</p>
+
 # Yetibot
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
