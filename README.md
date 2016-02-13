@@ -1,5 +1,5 @@
 <p align="center">
-  <img style="max-width: 80%"
+  <img width="560"
     src="https://github.com/devth/yetibot/raw/master/img/Yetibot_logotype.png?raw=true" />
 </p>
 
@@ -41,9 +41,6 @@ ways it can be used.
 
 To quickly try out Yetibot with minimal config,
 read the blog post [Yetibot on Docker in 𝓧 minutes or less](http://devth.com/2016/yetibot-on-docker/).
-
-![yeti](yeti.png)
-
 
 
 ## Roadmap
