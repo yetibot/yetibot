@@ -2,12 +2,18 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as s :refer [split join]]
+    [schema.core :as sch]
+    [yetibot.core.schema :refer [non-empty-str]]
     [clj-http.client :as client]
     [yetibot.core.config :refer [get-config conf-valid?]]
     [yetibot.core.util.http :refer [get-json map-to-query-string encode]]
     [clojure.core.memoize :as m]))
 
-(def config (get-config :yetibot :models :imgflip))
+(def imgflip-schema
+  {:username non-empty-str
+   :password non-empty-str})
+
+(def config (:value (get-config imgflip-schema [:yetibot :imgflip])))
 (def configured? (conf-valid? config))
 (def endpoint "http://api.imgflip.com")
 

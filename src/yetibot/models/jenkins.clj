@@ -2,16 +2,22 @@
   (:require
     [yetibot.core.chat]
     [yetibot.core.util.http :refer [get-json fetch]]
+    [schema.core :as sch]
+    [yetibot.core.schema :refer [non-empty-str]]
     [clojure.string :as s]
     [clj-time.coerce :as c]
     [clj-http.client :as client]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.core.config :refer [get-config conf-valid? update-config remove-config]]
+    [yetibot.core.config-mutable :refer [get-config conf-valid? update-config remove-config]]
     [clojure.core.memoize :as memo]))
 
 (defonce instance-root-data (atom {}))
 
-(def config (partial get-config :yetibot :models :jenkins))
+(def jenkins-schema
+  {
+   })
+
+(defn config [] (get-config :yetibot :models :jenkins))
 (defn configured? [] (conf-valid? (config)))
 (def cache-ttl (get-config :yetibot :models :jenkins :cache-ttl))
 
@@ -83,7 +89,7 @@
   (let [inst-key (keyword inst-name)
         exists? (inst-key @instance-root-data)]
     (when exists?
-      (remove-config :yetibot :models :jenkins :instances inst-key)
+      (remove-config [:yetibot :models :jenkins :instances inst-key])
       (swap! instance-root-data dissoc inst-key)
       true)))
 

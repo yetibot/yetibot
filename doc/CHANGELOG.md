@@ -4,21 +4,21 @@
 
 Yetibot 1.0 is here! 1.0 brings non-backward compatible changes.
 
-## Non-backward Compatible Changes
+### Non-backward Compatible Changes
 
 - *Config*: main config is now immutable, and can be provided in
   12-Factor-compatible methods, such as env-vars. As a result, is it also flat
   KV pairs now, which are exploded into nested maps by
   [dec](https://github.com/devth/dec).
 
-  See the new [profiles.sample.clj](profiles.sample.clj)
+  - new [profiles.sample.clj](https://github.com/devth/yetibot.core/blob/master/profiles.sample.clj)
+  - new [Configuration docs](https://github.com/devth/yetibot.core/blob/master/docs/CONFIGURATION.md)
 
 - *Mutable config*: mutable config, such as which IRC rooms to join and
   channel-specific settings has been extracted into a separate file that is
   managed by Yetibot.
 
 - Remove all uses of `config-for-ns` - this was never a good idea.
-
 
 ## 0.1.74
 
