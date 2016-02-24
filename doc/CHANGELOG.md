@@ -4,7 +4,7 @@
 
 Yetibot 1.0 is here! 1.0 brings non-backward compatible changes.
 
-## Non-backward Compatible Changes
+### Non-backward Compatible Changes
 
 - *Config*: main config is now immutable, and can be provided in
   12-Factor-compatible methods, such as env-vars. As a result, is it also flat
@@ -18,7 +18,6 @@ Yetibot 1.0 is here! 1.0 brings non-backward compatible changes.
   managed by Yetibot.
 
 - Remove all uses of `config-for-ns` - this was never a good idea.
-
 
 ## 0.1.74
 
