@@ -2,36 +2,42 @@
   (:require
     [clojure.string :as s]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.core.util.http :refer [get-json]]))
+    [clj-http.client :as client]
+    [cheshire.core :as json]
+    [clojure.walk :refer [keywordize-keys]]))
 
 (defn endpoint
-  "Creates a YQL query from stock symbol"
+  "Creates a Google Finance query from stock symbol"
   [stock-symbol]
   (str "http://www.google.com/finance/info?infotype=infoquoteall&q=" stock-symbol))
 
-(defn format-percent
-  "Formats number in map as percent"
-  [k m]
-  (update-in m [k] #(format "%.2f%%" (double %))))
-
-(defn get-price
-  "Gets the price from a stock symbol via Yahoo API"
+(defn get-quote
+  "Gets response from Google Finance and retrieves json"
   [stock-symbol]
-  (let [stock-info (get-json (endpoint stock-symbol))]
-    (if (:Name stock-info)
-      (->> stock-info
-           (format-percent :cp)
-           ((juxt :t :l :hi :lo :mc :cp))
-           (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:"])
-           (partition 2)
-           (map #(s/join " " %)))
-      (:Message stock-info))))
+  (let [resp (client/get (endpoint stock-symbol))]
+    (-> resp
+        :body
+        (s/replace-first "//" "")
+        json/parse-string)))
+
+(defn parse-quote
+  "Parses most relevant information from json"
+  [stock-symbol]
+  (let [quote (get-quote stock-symbol)]
+    (->> quote
+         first
+         keywordize-keys
+         ((juxt :name :l :hi :lo :mc :cp))
+         (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:"])
+         (partition 2)
+         (map #(s/join " " %)))))
+
 
 (defn stock-cmd
   "stock <symbol> # displays current value in market"
   {:yb/cat #{:info}}
   [{:keys [args]}]
-  (get-price args))
+  (parse-quote args))
 
 (cmd-hook ["stock" #"^stock$"]
           _ stock-cmd)
