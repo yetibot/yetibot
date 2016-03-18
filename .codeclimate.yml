@@ -1,7 +1,8 @@
+---
 engines:
   shellcheck:
     enabled: true
   markdownlint:
     enabled: true
- kibit:
+  kibit:
     enabled: true
