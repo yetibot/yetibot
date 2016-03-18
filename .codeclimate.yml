@@ -1,3 +1,5 @@
 engines:
+  markdownlint:
+    enabled: true
  kibit:
     enabled: true
