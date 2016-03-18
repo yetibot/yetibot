@@ -24,6 +24,12 @@
      (json/generate-string {:request (json/generate-string (make-body expr))})
      :as :json}))
 
+(defn extract-success [body]
+  (let [instrs (:instrumentation body)]
+    (map
+      (fn [[coords {:keys [className v]}]] (format "%s: %s" v className))
+      instrs)))
+
 (defn extract-result [resp]
   (let [body (:body resp)]
     (cond
@@ -36,8 +42,7 @@
                                         (fn [[_ msgs]] (map :message msgs))
                                         (:complilationInfos body))
       ;; success
-      :else (map (fn [[_ [_ {:keys [repr v]}]]] (or repr v))
-                 (:instrumentation body)))))
+      :else (extract-success body))))
 
 (defn scala-cmd
   "scala <expression> # evaluate a scala expression"

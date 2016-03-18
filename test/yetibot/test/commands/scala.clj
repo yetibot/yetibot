@@ -7,7 +7,7 @@
 (def eval-and-extract (comp extract-result try-scala))
 
 (deftest test-scala
-  (is (= '("2" "4")
+  (is (= '("2: Int" "4: Int")
          (eval-and-extract "1 + 1; 2 + 2"))
       "Valid expressions")
   (is (= '("not found: value a" "not found: value b")
@@ -16,7 +16,7 @@
   (is (= '("java.lang.ArithmeticException: / by zero")
          (eval-and-extract "1 / 0"))
       "Runtime errors")
-  (is (= '("version 2.11.7")
+  (is (= '("version 2.11.7: String")
          (eval-and-extract "scala.util.Properties.versionString"))
       "scalakata.EString"))
 
