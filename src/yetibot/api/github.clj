@@ -22,7 +22,7 @@
 ;;; config
 
 (defn config [] (get-config :yetibot :api :github))
-(def configured? (conf-valid?))
+(defn configured? [] (conf-valid? (config)))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
 ; propogate the configured endpoint to the tentacles library
@@ -36,7 +36,7 @@
   (def user-name (:login user)))
 
 ; ensure org-names is a sequence; config allows either
-(def org-names
+(defn org-names []
   (let [c (:org (config))]
     (if (sequential? c) c [c])))
 
@@ -85,7 +85,7 @@
   (remove empty? (r/org-repos org-name (merge auth {:per-page 100}))))
 
 (defn repos-by-org []
-  (into {} (for [org-name org-names]
+  (into {} (for [org-name (org-names)]
              [org-name (repos org-name)])))
 
 (defn branches [org-name repo]

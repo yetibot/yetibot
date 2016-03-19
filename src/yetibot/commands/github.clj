@@ -25,11 +25,18 @@
 
 (defn repos-urls
   "gh repos urls # list the ssh urls of all repos"
-  [_] (map :ssh_url (gh/repos)))
+  [{match :match}]
+  (if (sequential? match)
+    (let [[_ org-name] match]
+      (map :ssh_url (gh/repos org-name)))
+    (mapcat
+      (fn [[org-name repos]]
+        (map :ssh_url repos))
+      (gh/repos-by-org))))
 
 (defn orgs
   "gh orgs # show configured orgs"
-  [_] gh/org-names)
+  [_] (gh/org-names))
 
 (defn tags
   "gh tags <org-name>/<repo> # list the tags for <org-name>/<repo>"
@@ -37,9 +44,9 @@
   (map :name (gh/tags org-name repo)))
 
 (defn branches
-  "gh branches <repo> # list branches for <repo>"
-  [{[_ repo] :match}]
-  (map :name (gh/branches repo)))
+  "gh branches <org-name>/<repo> # list branches for <org-name>/<repo>"
+  [{[_ org-name repo] :match}]
+  (map :name (gh/branches org-name repo)))
 
 (defn- fmt-status [st] ((juxt :status :body :created_on) st))
 
@@ -61,9 +68,12 @@
          :items
          (map (fn [pr]
                 (s/join " "
-                        [(format "[%s]" (-> pr :user :login))
-                         (:title pr)
-                         (-> pr :pull_request :html_url)]))))))
+                        (remove nil?
+                                [(format "[%s]" (-> pr :user :login))
+                                 (when-let [a (:assignee pr)]
+                                   (format "[assignee: %s]" (:login a)))
+                                 (:title pr)
+                                 (-> pr :pull_request :html_url)])))))))
 
 (defn notify-add-cmd
   "gh notify add <org>/<repo-name> # sets up notifications to this channel on pushes to <repo-name>"
@@ -80,9 +90,10 @@
   [{:keys [chat-source]}]
   "Not yet implemented")
 
-(if gh/configured?
+(if (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
             #"feed\s+(\S+)" feed
+            #"repos urls\s+(\S+)" repos-urls
             #"repos urls" repos-urls
             #"repos\s+(\S+)" repos
             #"repos" repos
@@ -94,5 +105,5 @@
             #"status$" status
             #"pr\s+(\S+)" pull-requests
             #"tags\s+(\S+)\/(\S+)" tags
-            #"branches\s+(\S+)" branches)
+            #"branches\s+(\S+)\/(\S+)" branches)
   (info "GitHub is not configured"))
