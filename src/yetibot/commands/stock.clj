@@ -2,36 +2,43 @@
   (:require
     [clojure.string :as s]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.core.util.http :refer [get-json]]))
+    [clj-http.client :as client]
+    [cheshire.core :as json]
+    [clojure.walk :refer [keywordize-keys]]))
 
 (defn endpoint
-  "Creates a YQL query from stock symbol"
+  "Creates a Google Finance query from stock symbol"
   [stock-symbol]
-  (str "http://dev.markitondemand.com/MODApis/Api/v2/Quote/json?symbol=" stock-symbol))
+  (str "http://www.google.com/finance/info?infotype=infoquoteall&q=" stock-symbol))
 
-(defn format-percent
-  "Formats number in map as percent"
-  [k m]
-  (update-in m [k] #(format "%.2f%%" (double %))))
+(defn get-body
+  "Gets json body from response"
+  [json]
+  (-> json
+      :body
+      (s/replace-first "//" "")
+      json/parse-string))
 
-(defn get-price
-  "Gets the price from a stock symbol via Yahoo API"
+(defn parse-quote
+  "Parses most relevant information from json"
   [stock-symbol]
-  (let [stock-info (get-json (endpoint stock-symbol))]
-    (if (:Name stock-info)
-      (->> stock-info
-           (format-percent :ChangePercent)
-           ((juxt :Name :LastPrice :High :Low :MarketCap :ChangePercent))
-           (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:"])
-           (partition 2)
-           (map #(s/join " " %)))
-      (:Message stock-info))))
+  (let [response (client/get (endpoint stock-symbol){:throw-exceptions false})]
+    (if (= (:status response) 200)
+      (let [quote (get-body response)]
+        (->> quote
+             first
+             keywordize-keys
+             ((juxt :name :l :hi :lo :mc :cp :ecp))
+             (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:" "After Hours Change Percent:"])
+             (partition 2)
+             (map #(s/join " " %))))
+      (str "Unable to find symbol for " stock-symbol ". Try another symbol such as MSFT or AAPL."))))
 
 (defn stock-cmd
   "stock <symbol> # displays current value in market"
   {:yb/cat #{:info}}
   [{:keys [args]}]
-  (get-price args))
+  (parse-quote args))
 
 (cmd-hook ["stock" #"^stock$"]
           _ stock-cmd)
