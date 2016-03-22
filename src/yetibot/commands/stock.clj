@@ -11,11 +11,6 @@
   [stock-symbol]
   (str "http://www.google.com/finance/info?infotype=infoquoteall&q=" stock-symbol))
 
-(defn format-percent
-  "Formats number in map as percent"
-  [k m]
-  (update-in m [k] #(format "%.2f%%" (double %))))
-
 (defn get-body
   "Gets json body from response"
   [json]
