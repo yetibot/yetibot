@@ -11,6 +11,11 @@
   [stock-symbol]
   (str "http://www.google.com/finance/info?infotype=infoquoteall&q=" stock-symbol))
 
+(defn format-percent
+  "Formats number in map as percent"
+  [k m]
+  (update-in m [k] #(format "%.2f%%" (double %))))
+
 (defn get-body
   "Gets json body from response"
   [json]
@@ -24,14 +29,15 @@
   [stock-symbol]
   (let [response (client/get (endpoint stock-symbol){:throw-exceptions false})]
     (if (= (:status response) 200)
-      (let [quote (get-body response)]
-        (->> quote
-             first
-             keywordize-keys
-             ((juxt :name :l :hi :lo :mc :cp :ecp))
-             (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:" "After Hours Change Percent:"])
-             (partition 2)
-             (map #(s/join " " %))))
+      (let [{:keys [name l hi lo mc cp el ecp]}(->> (get-body response) first keywordize-keys)]
+        [(str "Name: " name)
+         (str "Last Price: " l)
+         (str "High: " hi)
+         (str "Low: " lo)
+         (str "Market Cap: " mc)
+         (str "Change Percent: " cp"%")
+         (str "After Hours Price: " (if (empty? el) l el))
+         (str "After Hours Change Percent: " (if (empty? ecp) 0.0 ecp)"%")])
       (str "Unable to find symbol for " stock-symbol ". Try another symbol such as MSFT or AAPL."))))
 
 (defn stock-cmd
