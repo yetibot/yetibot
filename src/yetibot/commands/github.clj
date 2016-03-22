@@ -90,6 +90,18 @@
   [{:keys [chat-source]}]
   "Not yet implemented")
 
+(defn stats-cmd
+  "gh stats <org>/<repo-name> # commits, additions, deletions"
+  [{[_ org-name repo] :match}]
+  ;; github might need to crunch the stats, in which case the result will simply
+  ;; be 202 accepted
+  (let [stats (gh/sum-stats org-name repo)]
+    (if (map? stats)
+      (let [{:keys [a d c con]} stats]
+        (format "%s/%s: %s commits, %s additions, %s deletions, %s contributors"
+                org-name repo c a d c con))
+      (format "Crunching the latest data for `%s/%s`, try again in a few moments 🐌" org-name repo))))
+
 (if (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
             #"feed\s+(\S+)" feed
@@ -104,6 +116,7 @@
             #"statuses" statuses
             #"status$" status
             #"pr\s+(\S+)" pull-requests
+            #"stats\s+(\S+)\/(\S+)" stats-cmd
             #"tags\s+(\S+)\/(\S+)" tags
             #"branches\s+(\S+)\/(\S+)" branches)
   (info "GitHub is not configured"))

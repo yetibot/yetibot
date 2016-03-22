@@ -1,5 +1,6 @@
 (ns yetibot.api.github
   (:require
+    [taoensso.timbre :refer [info warn error]]
     [tentacles
      [search :as search]
      [pulls :as pulls]
@@ -43,6 +44,7 @@
 ; (def org (first (filter
 ;                   #(= (:login %) org-name)
 ;                   (o/orgs auth))))
+
 
 ;;; data
 
@@ -96,6 +98,37 @@
 
 (defn pulls [org-name repo]
   (pulls/pulls org-name repo auth))
+
+(defn contributor-statistics [org-name repo]
+  (r/contributor-statistics org-name repo auth))
+
+(defn code-frequency [org-name repo]
+  (r/code-frequency org-name repo auth))
+
+(defn sum-weekly
+  "Takes the weekly stats for an author and sums them into:
+   {:a 0 :d 0 :c 0}
+   where:
+   a = additions
+   d = deletions
+   con = contributors
+   c = commits"
+  [weekly-for-author]
+  (select-keys (reduce
+                 (partial merge-with +)
+                 {:a 0 :d 0 :c 0 :con 1}
+                 weekly-for-author)
+               [:a :d :c :con 1]))
+
+(defn sum-stats [org-name repo]
+  (info "sum-stats" org-name repo)
+  (let [weekly-by-author (contributor-statistics org-name repo)]
+    (if (coll? weekly-by-author)
+      (reduce
+        (fn [acc {:keys [weeks]}] (merge-with + acc (sum-weekly weeks)))
+        {:a 0 :c 0 :d 0 :con 0}
+        weekly-by-author)
+      weekly-by-author)))
 
 ;;; (defn contents [repo path]
 ;;;   (r/contents org-name repo path auth))
