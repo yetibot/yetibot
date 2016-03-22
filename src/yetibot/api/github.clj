@@ -84,7 +84,7 @@
 ;;; repos
 
 (defn repos [org-name]
-  (remove empty? (r/org-repos org-name (merge auth {:per-page 100}))))
+  (remove :fork (remove empty? (r/org-repos org-name (merge auth {:per-page 100})))))
 
 (defn repos-by-org []
   (into {} (for [org-name (org-names)]
