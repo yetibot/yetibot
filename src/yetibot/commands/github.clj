@@ -99,7 +99,7 @@
     (if (map? stats)
       (let [{:keys [a d c con]} stats]
         (format "%s/%s: %s commits, %s additions, %s deletions, %s contributors"
-                org-name repo c a d c con))
+                org-name repo c a d con))
       (format "Crunching the latest data for `%s/%s`, try again in a few moments 🐌" org-name repo))))
 
 (if (gh/configured?)
