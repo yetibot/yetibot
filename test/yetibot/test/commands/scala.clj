@@ -16,10 +16,9 @@
   (is (= '("java.lang.ArithmeticException: / by zero")
          (eval-and-extract "1 / 0"))
       "Runtime errors")
-  (is (= '("version 2.11.7: String")
+  (is (= '("version 2.11.8: String")
          (eval-and-extract "scala.util.Properties.versionString"))
       "scalakata.EString"))
-
 
 (deftest with-pipes
   (parser "scala \"true || false\""))
