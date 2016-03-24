@@ -25,14 +25,16 @@
   (let [response (client/get (endpoint stock-symbol){:throw-exceptions false})]
     (if (= (:status response) 200)
       (let [{:keys [name l hi lo mc cp el ecp]}(->> (get-body response) first keywordize-keys)]
-        [(str "Name: " name)
-         (str "Last Price: " l)
-         (str "High: " hi)
-         (str "Low: " lo)
-         (str "Market Cap: " mc)
-         (str "Change Percent: " cp"%")
-         (str "After Hours Price: " (if (empty? el) l el))
-         (str "After Hours Change Percent: " (if (empty? ecp) 0.0 ecp)"%")])
+        (remove
+         nil?
+           [(str "Name: " name)
+            (str "Last Price: " l)
+            (str "High: " hi)
+            (str "Low: " lo)
+            (str "Market Cap: " mc)
+            (str "Change Percent: " cp"%")
+            (when (not (empty? el))(str "After Hours Price: " el))
+            (when (not (empty? ecp))(str "After Hours Change Percent: " ecp "%"))]))
       (str "Unable to find symbol for " stock-symbol ". Try another symbol such as MSFT or AAPL."))))
 
 (defn stock-cmd
