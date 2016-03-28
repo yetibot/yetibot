@@ -24,14 +24,17 @@
   [stock-symbol]
   (let [response (client/get (endpoint stock-symbol){:throw-exceptions false})]
     (if (= (:status response) 200)
-      (let [quote (get-body response)]
-        (->> quote
-             first
-             keywordize-keys
-             ((juxt :name :l :hi :lo :mc :cp :ecp))
-             (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:" "Change Percent:" "After Hours Change Percent:"])
-             (partition 2)
-             (map #(s/join " " %))))
+      (let [{:keys [name l hi lo mc cp el ecp]}(->> (get-body response) first keywordize-keys)]
+        (remove
+         nil?
+           [(str "Name: " name)
+            (str "Last Price: " l)
+            (str "High: " hi)
+            (str "Low: " lo)
+            (str "Market Cap: " mc)
+            (str "Change Percent: " cp"%")
+            (when (not (empty? el))(str "After Hours Price: " el))
+            (when (not (empty? ecp))(str "After Hours Change Percent: " ecp "%"))]))
       (str "Unable to find symbol for " stock-symbol ". Try another symbol such as MSFT or AAPL."))))
 
 (defn stock-cmd
