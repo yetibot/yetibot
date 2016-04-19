@@ -66,7 +66,9 @@
 (defn show
   "twitter show <screen-name> # show top 10 tweets from user <scree-name>"
   [{[_ screen-name] :match}]
-  (suppress (model/user-timeline screen-name 10)))
+  (let [tweets (:body (model/user-timeline screen-name 10))]
+    (into [] (map #(model/format-tweet-text %) tweets ))))
+
 
 (defn search
   "twitter search <query> # find most recent 20 tweets matching <query>"
