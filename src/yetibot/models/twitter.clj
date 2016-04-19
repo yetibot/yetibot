@@ -180,7 +180,9 @@
 
 ;;;; users
 
-(defn user-timeline [screen-name]
-  (statuses-user-timeline :oauth-creds creds
-                          :params {:screen-name screen-name
-                                   :count 3}))
+(defn user-timeline [screen-name & tweet-count]
+   (statuses-user-timeline :oauth-creds creds
+                           :params {:screen-name screen-name
+                                    :count (if-not (nil? tweet-count)
+                                             tweet-count
+                                             3)}))
