@@ -63,6 +63,11 @@
       (format "Stopped tracking %s" topic))
     (format "You're not tracking %s" topic)))
 
+(defn show
+  "twitter show <screen-name> # show top 10 tweets from user <scree-name>"
+  [{[_ screen-name] :match}]
+  (suppress (model/user-timeline screen-name 10)))
+
 (defn search
   "twitter search <query> # find most recent 20 tweets matching <query>"
   {:yb/cat #{:info}}
@@ -90,6 +95,7 @@
     #"^follow\s+(.+)" follow
     #"^unfollow\s+(.+)" unfollow
     #"^search\s+(.+)" search
+    #"^show\s+(\S+)" show
     #"^retweet\s+(\d+)" retweet
     #"^reply\s+(\d+)\s+(.+)" reply
     #"^tracking" tracking
