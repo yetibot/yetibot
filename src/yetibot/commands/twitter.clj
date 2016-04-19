@@ -67,7 +67,7 @@
   "twitter show <screen-name> # show top 10 tweets from user <scree-name>"
   [{[_ screen-name] :match}]
   (let [tweets (:body (model/user-timeline screen-name 10))]
-    (into [] (map #(model/format-tweet-text %) tweets ))))
+    (map model/format-tweet-text tweets)))
 
 
 (defn search
