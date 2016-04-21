@@ -56,7 +56,7 @@ contributions are very welcome!
 
 - [ ] Flatten the config and obtain it via
   [environ](https://github.com/weavejester/environ) to follow [12 Factor
-  App](http://12factor.net/config) practices #570 <em>In progress!</em>
+  App](http://12factor.net/config) practices devth#570 — <em>In progress!</em>
 - [ ] Write docs on how to develop Yetibot
 - [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
 - [ ] Dockerize Datomic Pro Starter edition.
@@ -67,7 +67,7 @@ contributions are very welcome!
 - [ ] Make adapters plugable
 - [ ] Create more examples of plugins (e.g. Travis)
 - [ ] Run a demo Yetibot instance
-- [ ] Design & build yetibot.com. <em>In progress!</em>
+- [ ] Design & build yetibot.com — <em>In progress!</em>
 
 ## Installation
 
