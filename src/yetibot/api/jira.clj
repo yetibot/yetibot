@@ -1,6 +1,8 @@
 (ns yetibot.api.jira
   (:require
     [taoensso.timbre :refer [info warn error]]
+    [schema.core :as sch]
+    [yetibot.core.schema :refer [non-empty-str]]
     [clojure.string :as s]
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
@@ -8,13 +10,24 @@
     [yetibot.core.util.http :refer [get-json fetch]]
     [clj-time [format :refer [formatter formatters show-formatters parse unparse]]]))
 
+(def jira-schema
+  {:domain non-empty-str
+   :user non-empty-str
+   :password non-empty-str
+   :projects [{:key non-empty-str
+               (sch/optional-key :default) {:version {:id non-empty-str}}}]
+   (sch/optional-key :default) {:issue {:type {:id non-empty-str}}
+                                :project {:key non-empty-str}}
+   :subtask {:issue {:type {:id non-empty-str}}}})
+
+
 ;; config
 
 (def ^:dynamic *jira-project*
   "Settings for the current channel, bound by yetibot.commands.jira"
   nil)
 
-(defn config [] (get-config :yetibot :api :jira))
+(defn config [] (:value (get-config jira-schema [:yetibot :jira])))
 
 (defn configured? [] (conf-valid? (config)))
 

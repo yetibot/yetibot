@@ -1,6 +1,8 @@
 (ns yetibot.api.github
   (:require
     [taoensso.timbre :refer [info warn error]]
+    [schema.core :as sch]
+    [yetibot.core.schema :refer [non-empty-str]]
     [tentacles
      [search :as search]
      [pulls :as pulls]
@@ -15,15 +17,19 @@
     [yetibot.core.config :refer [get-config conf-valid?]]
     [yetibot.core.util.http :refer [fetch]]))
 
-
 ;;; uses tentacles for most api calls, but falls back to raw REST calls when
 ;;; tentacles doesn't support something (like Accept headers for raw blob
 ;;; content).
 
 ;;; config
 
-(defn config [] (get-config :yetibot :api :github))
-(defn configured? [] (conf-valid? (config)))
+(def github-schema
+  {:token non-empty-str
+   :org [non-empty-str]
+   (sch/optional-key :endpoint) non-empty-str})
+
+(defn config [] (:value (get-config github-schema [:yetibot :github])))
+(defn configured? [] (:value (config)))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
 ; propogate the configured endpoint to the tentacles library
