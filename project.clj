@@ -31,6 +31,7 @@
 
                  ]
   :plugins [[lein-exec "0.3.5"]
+            [lein-cloverage "1.0.7-SNAPSHOT"]
             [lein-ring "0.9.5"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
