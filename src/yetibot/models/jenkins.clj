@@ -8,7 +8,7 @@
     [clj-time.coerce :as c]
     [clj-http.client :as client]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.core.config :refer [get-config conf-valid? update-config remove-config]]
+    [yetibot.core.config-mutable :refer [get-config conf-valid? update-config remove-config]]
     [clojure.core.memoize :as memo]))
 
 (defonce instance-root-data (atom {}))
