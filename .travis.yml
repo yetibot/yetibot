@@ -14,3 +14,6 @@ before_install:
   - sudo apt-get update
   # - sudo apt-get install -y docker-engine
   - ./scripts/docker.sh
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
