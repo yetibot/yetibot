@@ -18,7 +18,12 @@ Yetibot 1.0 is here! 1.0 brings non-backward compatible changes.
   channel-specific settings has been extracted into a separate file that is
   managed by Yetibot.
 
+### Removed
+
 - Remove all uses of `config-for-ns` - this was never a good idea.
+
+- Removed Jenkins `add` and `remove` commands in favor of immutable
+  configuration and simplified code
 
 ## 0.1.74
 
