@@ -55,32 +55,10 @@
   "jen instances # show all configured instances"
   {:yb/cat #{:ci}}
   [_]
-  (into {} (for [[inst-name inst-info] (model/instances)]
-             [(name inst-name) (:uri inst-info)])))
-
-(defn add-instance
-  "jen add <name> <url> <user> <api-key> # add Jenkins instance with auth
-   jen add <name> <url> # add Jenkinst instance without auth"
-  {:yb/cat #{:ci}}
-  [{[_ inst-name url _ user api-key] :match}]
-  (info "add jenkins instance" inst-name url user api-key)
-  (let [user (or user nil)
-        api-key (or api-key nil)]
-    (model/add-instance inst-name url user api-key)
-    (let [js (model/jobs-for-instance inst-name)]
-      (format "%s added, found %s jobs" inst-name (count js)))))
-
-(defn remove-instance
-  "jen remove <name> # remove a Jenkins instance"
-  {:yb/cat #{:ci}}
-  [{[_ inst-name ] :match}]
-  (if (model/remove-instance inst-name)
-    (str "Removed Jenkins instance " inst-name)
-    (str "Couldn't find an instanced named " inst-name)))
+  (into {} (for [{inst-name :name uri :uri} (model/instances)]
+             [(name inst-name) uri])))
 
 (cmd-hook #"jen"
-          #"^add\s+(\w+)\s+(\S+)(\s+(\w+)\s+(\w+))*" add-instance
-          #"^remove\s+(\w+)" remove-instance
           #"^instances$" instances-cmd
           #"^build$" build-default-cmd
           #"^build\s(\S+)\s*$" build
