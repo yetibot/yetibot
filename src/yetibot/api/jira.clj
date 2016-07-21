@@ -18,6 +18,7 @@
                (sch/optional-key :default) {:version {:id non-empty-str}}}]
    (sch/optional-key :default) {:issue {:type {:id non-empty-str}}
                                 :project {:key non-empty-str}}
+   (sch/optional-key :max) {:results non-empty-str}
    :subtask {:issue {:type {:id non-empty-str}}}})
 
 
@@ -33,25 +34,29 @@
 
 (defn projects [] (->> (config) :projects))
 
-(defn project-for-key [k] (get (projects) k))
+(defn project-for-key [k] (first (filter #(= (:key %) k) (projects))))
 
-(defn project-keys [] (keys (projects)))
+(defn project-keys [] (map :key (projects)))
 
 (defn project-keys-str [] (->> (project-keys) (s/join ",")))
 
-(defn default-version-id [project-key] (:default-version-id (project-for-key project-key)))
+(defn default-version-id [project-key] (-> (project-for-key project-key)
+                                           :default :version :id))
 
 (defn default-project-key [] (or *jira-project*
-                                 (:default-project-key (config))
+                                 (-> (config) :default :project :key)
                                  (first (project-keys))))
 
 (defn default-project [] (project-for-key (default-project-key)))
 
-(defn max-results [] (or (:max-results (config)) 10))
+(defn max-results []
+  (if-let [mr (-> (config) :max :results)]
+    (read-string mr)
+    10))
 
-(defn sub-task-issue-type-id [] (:sub-task-issue-type-id (config)))
+(defn sub-task-issue-type-id [] (-> (config) :subtask :issue :type :id ))
 
-(defn default-issue-type-id [] (:default-issue-type-id (config)))
+(defn default-issue-type-id [] (-> (config) :default :issue :type :id))
 
 (defn base-uri [] (str "https://" (:domain (config))))
 
