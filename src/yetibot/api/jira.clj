@@ -6,7 +6,7 @@
     [clojure.string :as s]
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
-    [yetibot.core.config :refer [get-config conf-valid?]]
+    [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json fetch]]
     [clj-time [format :refer [formatter formatters show-formatters parse unparse]]]))
 
@@ -30,7 +30,7 @@
 
 (defn config [] (:value (get-config jira-schema [:yetibot :jira])))
 
-(defn configured? [] (conf-valid? (config)))
+(defn configured? [] (config))
 
 (defn projects [] (->> (config) :projects))
 

@@ -23,8 +23,6 @@
 
 (defn config [] (:value (get-config jenkins-schema [:yetibot :jenkins])))
 
-;; (defn configured? [] (conf-valid? (config)))
-
 (defn cache-ttl [] (-> (config) :cache :ttl read-string))
 
 ; Helpers

@@ -21,9 +21,7 @@
     (map #(format "%s/%s" bucket %)
          (concat (:common-prefixes res) (map :key (:objects res))))))
 
-(if s3/configured?
-  (cmd-hook #"s3"
-            #"ls\s+(\S+)" ls
-            #"buckets" buckets
-            #"content\s+(\S+)" content-cmd)
-  (info "S3 is not configured"))
+(cmd-hook #"s3"
+  #"ls\s+(\S+)" ls
+  #"buckets" buckets
+  #"content\s+(\S+)" content-cmd)

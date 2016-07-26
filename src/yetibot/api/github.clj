@@ -14,7 +14,7 @@
      [orgs :as o]]
     [clojure.string :as s]
     [clj-http.client :as client]
-    [yetibot.core.config :refer [get-config conf-valid?]]
+    [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [fetch]]))
 
 ;;; uses tentacles for most api calls, but falls back to raw REST calls when
@@ -29,7 +29,7 @@
    (sch/optional-key :endpoint) non-empty-str})
 
 (defn config [] (:value (get-config github-schema [:yetibot :github])))
-(defn configured? [] (:value (config)))
+(defn configured? [] (config))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
 ; propogate the configured endpoint to the tentacles library

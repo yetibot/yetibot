@@ -25,7 +25,5 @@
          (parse-imgs-from-xml
            (xml/parse (str endpoint "&input=" (encode q)))))))
 
-(if (conf-valid?)
-  (cmd-hook #"wolfram"
-            #".*" search-wolfram)
-  (info "Wolfram is not configured"))
+(cmd-hook #"wolfram"
+  #".*" search-wolfram))

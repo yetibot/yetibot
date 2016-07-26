@@ -5,14 +5,14 @@
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
     [schema.core :as sch]
-    [yetibot.core.config :refer [get-config conf-valid?]]
+    [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json encode]]))
 
 (def base-url "http://api.giphy.com/v1")
 
 (defn config [] (get-config {:key String} [:yetibot :giphy]))
 
-(defn configured? [] (conf-valid? (config)))
+(defn configured? [] (nil? (:error (config))))
 
 (defn api-key [] (:key (:value (config))))
 
