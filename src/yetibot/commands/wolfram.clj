@@ -26,4 +26,4 @@
            (xml/parse (str endpoint "&input=" (encode q)))))))
 
 (cmd-hook #"wolfram"
-  #".*" search-wolfram))
+  #".*" search-wolfram)
