@@ -12,7 +12,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server" "-Xmx2G"]
   :dependencies [[org.clojure/clojure "1.7.0"],
-                 [yetibot.core "1.0.0-RC7"]
+                 [yetibot.core "1.0.0-RC8"]
 
                  ; apis
                  [twitter-api "0.7.6"]
@@ -25,7 +25,7 @@
                  [org.clojure/tools.cli "0.3.1"]
 
                  ; NLP
-                 [clojure-opennlp "0.3.2"]
+                 ;; [clojure-opennlp "0.3.2"]
 
                  ; [incanter "1.4.0"]
 
