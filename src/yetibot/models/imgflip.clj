@@ -14,7 +14,7 @@
    :password non-empty-str})
 
 (def config (:value (get-config imgflip-schema [:yetibot :imgflip])))
-(def configured? (config))
+(def configured? config)
 (def endpoint "http://api.imgflip.com")
 
 (defn fetch-memes [] (get-json (str endpoint "/get_memes")))
