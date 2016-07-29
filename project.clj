@@ -10,7 +10,7 @@
              :plugins [[lein-git-deps "0.0.1-SNAPSHOT"]]}
   :repl-options {:init-ns yetibot.core.repl
                  :welcome (println "Welcome to the yetibot development REPL!")}
-  :jvm-opts ["-server" "-Xmx2G"]
+  :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.7.0"],
                  [yetibot.core "1.0.0-RC9"]
 
