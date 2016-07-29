@@ -1,0 +1,12 @@
+version: '2'
+services:
+  yetibot:
+    image: devth/yetibot:1.0.0-RC8-SNAPSHOT
+    environment:
+      - YETIBOT_ADAPTERS_0_NAME=freenode_irc
+      - YETIBOT_ADAPTERS_0_TYPE=irc
+      - YETIBOT_ADAPTERS_0_HOST=irc.freenode.net
+      - YETIBOT_ADAPTERS_0_PORT=6667
+      - YETIBOT_ADAPTERS_0_USERNAME=yetibot
+    ports:
+      - "3000:3000"
