@@ -18,6 +18,8 @@ Yetibot 1.0 is here! 1.0 brings non-backward compatible changes.
   channel-specific settings has been extracted into a separate file that is
   managed by Yetibot.
 
+- Upgraded to Clojure 1.8.0
+
 ### Removed
 
 - Remove all uses of `config-for-ns` - this was never a good idea.

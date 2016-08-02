@@ -11,23 +11,16 @@
   :repl-options {:init-ns yetibot.core.repl
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
-  :dependencies [[org.clojure/clojure "1.7.0"],
-                 [yetibot.core "1.0.0-RC9"]
+  :dependencies [[org.clojure/clojure "1.8.0"]
+                 [yetibot.core "1.0.0-RC12"]
 
                  ; apis
                  [twitter-api "0.7.6"]
-
-                 ; s3
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
 
                  ; utils
                  [useful "0.8.3-alpha8"]
                  [org.clojure/tools.cli "0.3.1"]
-
-                 ; NLP
-                 ;; [clojure-opennlp "0.3.2"]
-
-                 ; [incanter "1.4.0"]
 
                  ;for polling
                  [robert/bruce "0.8.0"]
