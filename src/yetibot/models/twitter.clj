@@ -57,7 +57,7 @@
 (defn format-url [user id] (format "https://twitter.com/%s/status/%s" user id))
 
 (defn expand-url [url]
-  (let [resp (client/get url)]
+  (let [resp (client/get url {:follow-redirects true})]
     (if-let [redirs (:trace-redirects resp)]
       (last redirs)
       url)))
