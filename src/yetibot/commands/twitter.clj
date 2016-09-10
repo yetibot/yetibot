@@ -70,9 +70,12 @@
     (map model/format-tweet-text tweets)))
 
 (defn display
-  "twitter show <id> # display tweet with <id>"
+  "twitter display <id> # display tweet with <id>"
   [{[_ id] :match}]
-  (model/show id))
+  (-> id
+      (model/show)
+      (get :body)
+      (model/format-tweet-text)))
 
 (defn search
   "twitter search <query> # find most recent 20 tweets matching <query>"
