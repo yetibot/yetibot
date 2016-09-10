@@ -186,3 +186,8 @@
                                     :count (if-not (nil? tweet-count)
                                              tweet-count
                                              3)}))
+;;;; show tweet with id
+
+(defn show [id]
+  (statuses-show-id :oauth-creds creds
+                    :params {:id id}))
