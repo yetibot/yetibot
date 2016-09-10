@@ -75,7 +75,7 @@
   (-> id
       (model/show)
       (get :body)
-      (model/format-tweet-text)))
+      (model/format-tweet)))
 
 (defn search
   "twitter search <query> # find most recent 20 tweets matching <query>"
