@@ -69,6 +69,13 @@
   (let [tweets (:body (model/user-timeline screen-name 10))]
     (map model/format-tweet-text tweets)))
 
+(defn display
+  "twitter display <id> # display tweet with <id>"
+  [{[_ id] :match}]
+  (-> id
+      (model/show)
+      (get :body)
+      (model/format-tweet)))
 
 (defn search
   "twitter search <query> # find most recent 20 tweets matching <query>"
@@ -98,6 +105,7 @@
     #"^unfollow\s+(.+)" unfollow
     #"^search\s+(.+)" search
     #"^show\s+(\S+)" show
+    #"^display\s+(\d+)" display
     #"^retweet\s+(\d+)" retweet
     #"^reply\s+(\d+)\s+(.+)" reply
     #"^tracking" tracking
