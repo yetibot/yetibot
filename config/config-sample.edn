@@ -63,6 +63,10 @@
 
    :s3 {:access-key ""
         :secret-key ""}
+
+   ;; `google`
+   :google {:api-key ""
+            :custom-search-engine-id ""}
    }
 
   :models
