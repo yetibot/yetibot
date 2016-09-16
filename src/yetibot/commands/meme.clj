@@ -58,7 +58,7 @@
     (map :name matches)
     (str "Couldn't find any memes for " term)))
 
-(if model/configured?
+(when model/configured?
   (cmd-hook ["meme" #"^meme$"]
             ; #"^popular$" chat-instance-popular
             ; #"^popular\s(.+)" chat-instance-popular-for-gen
@@ -68,5 +68,4 @@
             #"^preview\s+(.+)" preview-cmd
             #"^(.+)\/(.*)$" rand-generate-cmd
             #"^(\S+\s+){3,}.*" rand-generate-auto-split-cmd ; at least 4 words
-            #"^(?:search\s)?(.+)" search-cmd)
-  (info "Imgflip is not configured for meme generation"))
+            #"^(?:search\s)?(.+)" search-cmd))

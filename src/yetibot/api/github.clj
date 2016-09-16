@@ -183,4 +183,3 @@
 
 (defn formatted-events [org-name]
   (fmt-events (events org-name)))
-

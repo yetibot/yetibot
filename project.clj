@@ -6,6 +6,8 @@
   :lein-release {:deploy-via :clojars}
   :deploy-repositories [["releases" :clojars]]
   :profiles {:dev {:source-paths ["dev"]}
+             :uberjar {:uberjar-name "yetibot.jar"
+                       :aot :all}
              :test {}
              :plugins [[lein-git-deps "0.0.1-SNAPSHOT"]]}
   :repl-options {:init-ns yetibot.core.repl
@@ -19,8 +21,6 @@
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
 
                  ; utils
-                 [useful "0.8.3-alpha8"]
-                 [org.clojure/tools.cli "0.3.1"]
 
                  ;for polling
                  [robert/bruce "0.8.0"]
@@ -36,9 +36,9 @@
 
   :docker {:image-name "devth/yetibot"}
 
-  :ring {:handler yetibot.webapp.handler/app
-         :init    yetibot.webapp.handler/init
-         :destroy yetibot.webapp.handler/destroy
-         :uberwar-name "yetibot.war"}
+  ;; :ring {:handler yetibot.webapp.handler/app
+  ;;        :init    yetibot.webapp.handler/init
+  ;;        :destroy yetibot.webapp.handler/destroy
+  ;;        :uberwar-name "yetibot.war"}
 
   :main yetibot.core.init)

@@ -1,4 +1,5 @@
 (ns yetibot.commands.wordnik
+  (:refer-clojure :exclude [read])
   (:require
     [schema.core :as sch]
     [wordnik.api.word :as word]

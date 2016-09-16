@@ -1,4 +1,5 @@
 (ns yetibot.models.twitter
+  (:refer-clojure :exclude [update])
   (:require
     [schema.core :as sch]
     [taoensso.timbre :refer [info warn error]]

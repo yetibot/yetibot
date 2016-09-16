@@ -366,5 +366,5 @@
 (defn recent [] (search (projects-jql)))
 
 ;; prime cache
-
-(future (all-components))
+;; todo: move into a start fn
+;; (future (all-components))
