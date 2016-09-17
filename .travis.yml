@@ -10,7 +10,7 @@ sudo: required
 services:
   - docker
 
-before_install:
+after_success:
   - sudo apt-get update
   # - sudo apt-get install -y docker-engine
   - ./scripts/docker.sh
