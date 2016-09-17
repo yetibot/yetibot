@@ -47,9 +47,8 @@
 ;; map a vector of results to a vector
 ;; of string representations of the results
 (defn format-results
-  [result-body & {:keys [order] :or {order :normal}}]
-    (let [result  (:items result-body)
-          indexed (map-indexed #(vector (inc %1) %2) result)
+  [results & {:keys [order] :or {order :normal}}]
+    (let [indexed (map-indexed #(vector (inc %1) %2) results)
           format  #(str (first %)
                         ". "
                         (format-result (second %) :order order)
@@ -76,7 +75,7 @@
       (catch Exception e
         (warn "Google search returned a failure http status")
         (warn "Google: caught " e)
-        "API Credentials are invalid || Google died"))))
+        nil))))
 
 (defn image-search [q]
   (let [param (select-keys accepted-keywords [:searchType])]
