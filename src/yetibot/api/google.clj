@@ -48,8 +48,8 @@
 ;; of string representations of the results
 (defn format-results
   [result-body & {:keys [order] :or {order :normal}}]
-    (let [result (result-body :items)
-          indexed (map vector (range 10) result)
+    (let [result  (:items result-body)
+          indexed (map-indexed #(vector (inc %1) %2) result)
           format  #(str (first %)
                         ". "
                         (format-result (second %) :order order)
@@ -63,10 +63,10 @@
   ;; at display-order var)
   [q & {:keys [extra order]
         :or {extra {} order :normal}}]
-  (info (str "Google search for: " q))
+  (info "Google search for: " q)
   (let [query-params  {:q q
-                       :key (config :api-key)
-                       :cx (config :custom-search-engine-id)}
+                       :key (:api-key config)
+                       :cx (:custom-search-engine-id config)}
         options {:query-params
                  (merge query-params extra)}]
     (try
@@ -75,7 +75,7 @@
         (json/read-json))
       (catch Exception e
         (warn "Google search returned a failure http status")
-        (warn (str "Google: caught " e))
+        (warn "Google: caught " e)
         "API Credentials are invalid || Google died"))))
 
 (defn image-search [q]

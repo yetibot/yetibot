@@ -9,7 +9,7 @@
   "google search <query> # plain google search"
   [{[_ query] :match}]
   (let [results (api/search query)]
-    (if (= (count (results :items)) 0)
+    (if (= (count (:items results)) 0)
       "Google returned no results!!"
       (api/format-results results))))
 
@@ -17,7 +17,7 @@
   "google image <query> # image search"
   [{[_ query] :match}]
   (let [results (api/image-search query)]
-    (if (= (count (results :items)) 0)
+    (if (= (count (:items results)) 0)
       (str "Google image search returned no results!! \n"
            ".. check your search engine settings")
       (api/format-results results :order :image))))
