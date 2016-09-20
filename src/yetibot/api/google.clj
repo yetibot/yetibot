@@ -44,7 +44,6 @@
          (remove nil?)
          (s/join "\n"))))
 
-
 (defn format-results
   "map a vector of results to a vector
   of string representations of the results"
