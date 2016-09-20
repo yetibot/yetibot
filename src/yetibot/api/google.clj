@@ -35,8 +35,8 @@
 (defonce display-order {:normal [:title :link :snippet]
                         :image  [:title :snippet :link]})
 
-;; format a single query result
 (defn format-result
+  "format a single query result"
   [result & {:keys [order] :or {order :normal}}]
   (let [values (display-order order)]
     (->> (select-keys result values)
@@ -44,9 +44,10 @@
          (remove nil?)
          (s/join "\n"))))
 
-;; map a vector of results to a vector
-;; of string representations of the results
+
 (defn format-results
+  "map a vector of results to a vector
+  of string representations of the results"
   [results & {:keys [order] :or {order :normal}}]
     (let [indexed (map-indexed #(vector (inc %1) %2) results)
           format  #(str (first %)
@@ -56,10 +57,10 @@
         (map format indexed)))
 
 (defn search
-  ;; main search function,
-  ;; extra refers to map of extra params to the search api
-  ;; order refers to the the way result is display (look
-  ;; at display-order var)
+  "main search function,
+  extra refers to map of extra params to the search api
+  order refers to the the way result is display (look
+  at display-order var)"
   [q & {:keys [extra order]
         :or {extra {} order :normal}}]
   (info "Google search for: " q)
