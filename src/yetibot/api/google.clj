@@ -17,7 +17,8 @@
 (defonce messages
   {:error-message "Values has to be one of the following: ",
    :no-options-in-config-file  "No google options set in config file."
-   :option-not-found "Option not found"})
+   :option-not-found "Option not found"
+   :extra-set "Can also be set via %s as an extra arg to search command"})
 
 (defonce display-order {:normal [:title :link :snippet]
                         :image  [:title :snippet :link]})
@@ -136,41 +137,217 @@
     {:validation #"^0|1$"
      :error-message (str (:error-message messages) "0,1")
      :info-message "Enables or Disables Simplified and Traditional Chinese Search"
+     :extra (format (:extra-set messages) "--c2c")
      :keyword "c2coff"},
 
    "imgcolortype"
     {:validation #"^mono|gray|color$",
      :error-message (str (:error-message messages) "mono, gray, color")
      :info-message "Returns mono, gray or color images for image-search"
+     :extra (format (:extra-set messages) "-c, --color")
      :keyword "imgColorType"},
 
    "cr"
     {:validation #"^country[A-Z]{2}(:?(:?\|\||&&)country[A-Z]{2})*$"
-     :error-message "Syntax Error: Syntax should be like `countryAB`
-                    or `countryAB&&countryZN`' "
-     :info-message "This paramater restrict dsearch to documents originating
-                   from a certain country"
+     :error-message
+     "Examples of valid input are `countryAB' or `countryAB&&countryZN'"
+     :info-message
+     "This parameter restricts search to documents originating from a certain country"
+     :extra (format (:extra-set messages) "-C, --cr")
      :keyword "cr"},
 
    "filter"
      {:validation #"^0|1$"
       :error-message (str (:error-message messages) "0,1")
       :info-message "Turns off or on duplicate content filter"
+      :extra (format (:extra-set messages) "-f, --filter")
       :keyword "filter"},
 
    "g1"
     {:validation #"^[a-z]{2}$"
-     :error-message "Invalid country code \n
-                     Example of correct code: uk"
-     :info-message "Specifies the geolocation of end-user \n
-                   which would ideally result in location specific results"
+     :error-message "Example of correct input: uk"
+     :info-message
+     (str "Specifies the geolocation of end-user \n"
+          "which would ideally result in location specific results")
+     :extra (format (:extra-set messages) "-g, --g1")
      :keyword "g1"},
-    })
 
-  ;; :g1 #"[a-z]{2}", :googlehost #"google\.(com|[a-z]{2})"
-  ;; :imgDominantColor #"yellow|green|teal|blue|purple|pink|white|gray|black|brown",
-  ;; :imgSize #"clipart|face|lineart|news|photo", :filter #"0|1"
-  ;; :num #"\d|10", :safe #"high|medium|off", :searchType "image"
-  ;; :sort #".*", :start #"\d{1,3}", :siteSearch #".*", :siteSearchFilter #"e|i",
-  ;; :h1 #"[a-z]{2}|zh-Han[s|t]", :hq #".*",
-  ;; })
+   "h1"
+    {:validation #"^[a-z]{2}|zh-Han[s|t]$"
+     :error-message "Valid example is 'fr' for french"
+     :info-message
+     "Specifies the language for the search interface and improves search results."
+     :extra (format (:extra-set messages) "--h1")
+     :keyword "h1"
+    },
+
+   "hq"
+    {:validation #".+"
+     :error-message "Valid input is a non empty string"
+     :info-message "Appends option value to query similar to an AND operator \n"
+     :extra (format (:extra-set messages) "-A,--and")
+     :keyword "hq"
+     },
+
+   "daterestrict"
+    {:validation #"^(?:d|w|m|y)\d+$"
+     :error-message
+     (str "Valid values are of format (d|w|m|y)<number>\n"
+          "d,w,m,y refers to days, weeks, months and years")
+     :info-message
+     "Restricts results to URLS based on date"
+     :extra (format (:extra-set messages) "-d, --date")
+     :keyword "dateRestrict"
+    },
+
+   "excludeterms"
+    {:validation #".+"
+     :error-message "Valid input is a non empty string"
+     :info-message "Identifies a word/phrase that should'nt appear in results\n"
+     :extra (format (:extra-set messages) "-x, --exclude")
+     :keyword "excludeTerms"
+    },
+
+   "exactterms"
+    {:validation #".+"
+     :error-message "Valid input is a non empty string"
+     :info-message "Identifies a word/phrase that should appear in results\n"
+     :extra (format (:extra-set messages) "-e, --exact")
+     :keyword "exactTerms"
+    },
+
+   "highrange"
+    {:validation #"^\d+$"
+     :error-message "Valid input is a number."
+     :info-message  "Specifies the ending valude for a search range"
+     :extra (format (:extra-set messages) "--hr")
+     :keyword "highRange"
+     },
+
+   "lowrange"
+    {:validation #"^\d+$"
+     :error-message "Valid input is a number."
+     :info-message "Specifies the ending valude for a search range"
+     :extra (format (:extra-set messages) "--lr")
+     :keyword "lowRange"
+    },
+
+   "googlehost"
+    {:validation #"^google\.(?:com|[a-z]{2})$"
+     :error-message "Valid values include 'google.de', 'google.fr'"
+     :info-message "Specifies local google domain to perform the search"
+     :extra (format (:extra-set messages) "--ghost")
+     :keyword "keyword"
+     },
+
+   "filetype"
+    {:validation #"^\.\S+$"
+     :error-message "Valid values include '.pdf', '.html', '.clj' etc"
+     :info-message "Restricts results to files of a specific extension"
+     :extra (format (:extra-set messages) "-F, --ft")
+     :keyword "fileType"
+     },
+
+   "imgdominantcolor"
+    {:validation #"^black|blue|brown|gray|green|pink|purple|teal|white|yellow$",
+     :error-message (str (:error-message messages)
+                         "black, blue, brown, gray, green, pink, purple, teal,"
+                         "white, yellow")
+     :info-message "Returns images of a specific dominant color"
+     :extra (format (:extra-set messages) "--dominantcolor")
+     :keyword "imgDominantColor"},
+
+   "imgtype"
+    {:validation ,#"^clipart|face|lineart|news|photo$"
+     :error-message (str (:error-message messages)
+                       "clipart, face, lineart, news, photo")
+     :info-message "Returns images of a specific type"
+     :extra (format (:extra-set messages) "-t, --type")
+     :keyword "imgType"},
+
+   "imgsize"
+    {:validation ,#"^huge|icon|large|medium|small|xlarge|xxlarge$"
+     :error-message (str (:error-message messages)
+                         "huge, icon, large, medium, small,"
+                         "xlarge, xxlarge")
+     :info-message "Returns images of a specific size"
+     :extra (format (:extra-set messages) "-z, --size")
+     :keyword "imgSize"},
+
+   "linksite"
+    {:validation ,#".*"
+     :error-message "Valid input is a website link"
+     :info-message
+     "Specifies all search results should contain a link to a specific site"
+     :extra (format (:extra-set messages) "-l, --link")
+     :keyword "linkSite"},
+
+   "safe"
+    {:validation ,#"^high|medium|off$"
+     :error-message (str (:error-message messages) "high, medium, off")
+     :info-message "Search Safety Level"
+     :extra (format (:extra-set messages) "-o, --safe")
+     :keyword "safe"},
+
+   "relatedsite"
+    {:validation #".*"
+     :error-message "Valid input is a website link"
+     :info-message
+     "Specifies all search results should be pages related to a url"
+     :extra (format (:extra-set messages) "-r, --relsite")
+     :keyword "relatedSite"},
+
+   "sitesearch"
+    {:validation #".*"
+     :error-message "Valid input is a website link"
+     :info-message
+     "Specifies all search results should be pages from a given site"
+     :extra (format (:extra-set messages) "-s, --site")
+     :keyword "siteSearch"},
+
+   "sitesearchfilter"
+    {:validation #"^e|i$"
+     :error-message  (str (:error-message messages) "e, i")
+     :info-message
+     "includes/excludes results from site in siteSearch param"
+     :extra (format (:extra-set messages) "-t, --sitefilter")
+     :keyword "siteSearchFilter"},
+
+   "rights"
+    {:validation #".*"
+     :error-message (str "Supported values include: "
+                         "cc_publicdomain, cc_attribute, cc_sharealike,"
+                         "cc_noncommercial, cc_nonderived"
+                         ", and combinations of these.")
+     :info-message "Filter based on licensing"
+     :extra (format (:extra-set messages) "-i, --license")
+     :keyword "rights"},
+
+   "sort"
+    {:validation #".*"
+     :error-message "Valid input is a nonempty string"
+     :info-message "The sort expression to apply to filters"
+     :extra (format (:extra-set messages) "-q, --sort")
+     :keyword "sort"},
+
+   "num"
+    {:validation #"^\d|10$"
+     :error-message "Valid input is a number between 1 to 10"
+     :info-message "Number of search results to return"
+     :extra (format (:extra-set messages) "-n, --num")
+     :keyword "num"},
+
+   "start"
+    {:validation #"^\d+$"
+     :error-message "Valid input is a number"
+     :info-message "The index of the first result to return"
+     :extra (format (:extra-set messages) "-y, --start")
+     :keyword "start"},
+
+   "orterms"
+    {:validation #".+"
+     :error-message "Valid input is a non empty string"
+     :info-message "Appends option value to query similar to an OR operator "
+     :extra (format (:extra-set messages) "-O,--or")
+     :keyword "orTerms"
+     }})
