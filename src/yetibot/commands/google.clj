@@ -9,21 +9,21 @@
 (defonce options (atom {}))
 
 (defonce cli-args
-  {:c2coff       [nil "--c2c"],     :imgcolortype ["-c" "--color"],
-   :cr           ["-C" "--cr"],     :filter       ["-f" "--filter"],
-   :g1           ["-g" "--g1"],     :h1           [nil "--h1"],
-   :hq           ["-A" "--and"],    :daterestrict ["-d" "--date"],
-   :excludeterms ["-x" "--exclude"],:exactterms   ["-e" "--exact"],
-   :highrange    [nil "--hr"],      :lowrange     [nil "--lr"],
-   :googlehost   [nil "--ghost"],   :filetype     ["-F" " --ft"],
-   :imgtype      ["-t" "--type"],   :imgsize      ["-z"  "--size"],
-   :linksite     ["-l"  "--link"],  :safe         ["-o" "--safe"],
-   :relatedsite  ["-r" "--relsite"],:sitesearch   ["-s" "--site"],
-   :rights       ["-i" "--license"],:sort         ["-q" "--sort"],
-   :num          ["-n" " --num"],   :start        ["-y" "--start"],
-   :imgdominantcolor [nil "--dominantcolor"],
-   :sitesearchfilter ["-t" "--sitefilter"],
-   :orterms          ["-O" "--or"],
+  {:c2coff       [nil "--c2c CO"],      :imgcolortype ["-c" "--color COL"],
+   :cr           ["-C" "--cr CR"],      :filter       ["-f" "--filter XF"],
+   :g1           ["-g" "--g1 G1"],      :h1           [nil "--h1 H1"],
+   :hq           ["-A" "--and AND"],    :daterestrict ["-d" "--date DA"],
+   :excludeterms ["-x" "--exclude EX"], :exactterms   ["-e" "--exact EXAC"],
+   :highrange    [nil "--hr HR"],       :lowrange     [nil "--lr LR"],
+   :googlehost   [nil "--ghost GHT"],   :filetype     ["-F" " --ft FT"],
+   :imgtype      ["-t" "--type TY"],    :imgsize      ["-z"  "--size SIZE"],
+   :linksite     ["-l"  "--link LK"],   :safe         ["-o" "--safe SAFE"],
+   :relatedsite  ["-r" "--relsite REL"],:sitesearch   ["-s" "--site SITE"],
+   :rights       ["-i" "--license LI"], :sort         ["-q" "--sort SORT"],
+   :num          ["-n" "--num NUM"],    :start        ["-y" "--start STA"],
+   :imgdominantcolor [nil "--dominantcolor DOM"],
+   :sitesearchfilter ["-v" "--sitefilter FIL"],
+   :orterms          ["-O" "--or OR"],
   })
 
 (defonce valid-keywords-list
@@ -51,10 +51,15 @@
    :com-not-found  (str "Command does not exist."
                         " Type in !help google for valid commands")
    :no-options-in-config-file  "No google options set in config file."
+   :additional-set-method "Can also be set via following flags: "
    })
 
 (defn command-not-found [_]
   (:com-not-found messages))
+
+(defn keyword->apikeyword
+  [option]
+  (get-in api/accepted-keywords [option :keyword]))
 
 (defn- state-of-set-options []
   "gives back contents of the options
@@ -82,23 +87,34 @@
     :option-does-not-exist nil
     nil (get-in api/accepted-keywords [option :error-message])
     (do (swap! options
-               assoc option value)
+               assoc (keyword->apikeyword option) value)
         (str option " successfully set to " value))))
 
+(defn get-option-cli-info
+  [option]
+  (if-let [cli-arg (get cli-args option)]
+    (->> (remove nil? cli-arg)
+         (join ", "))))
+
 (defn get-info
-  "Gets info about an option"
+  "Gets info about an option.
+  Also includes valid input info"
   [option]
   (if-let [value (fetch-option-if-exists option)]
-    (:info-message value)))
+    (join "\n"
+          [(:info-message value)
+           (:error-message value)
+           (str (:additional-set-method messages)
+                " "
+                (get-option-cli-info option))])))
 
 (defn convert-keys-into-google-keywords
   [obj]
   (reduce-kv (fn [m k v]
-               (assoc m
-                      (get-in api/accepted-keywords [k :keyword]) v)) {}))
+               (assoc m (keyword->apikeyword k) v)) {} obj))
 
 (defn options-processor [string]
-  (let [output (parse-opts string built-cli-options)]
+  (let [output (parse-opts (map trim (split string #" ")) built-cli-options)]
     (if-let [error-messages (:errors output)]
       {:errors error-messages}
       {:query (join " " (:arguments output))
@@ -109,8 +125,8 @@
    :or {order :normal sfunction api/search}}]
   (let [proc-query (options-processor query)]
     (cond
-      (empty? (:query proc-query)) (:empty-query messages)
       (:errors proc-query) (join "\n" (:errors proc-query))
+      (empty? (:query proc-query)) (:empty-query messages)
       :else
       (let [args (:args proc-query)
             results (sfunction (:query proc-query)
@@ -119,13 +135,13 @@
                                    :totalResults])]
         (condp = count
           nil (:google-died messages)
-          "0" (:search messages)
+          "0" (if (= order :image)
+                (:image messages) (:search messages))
           (api/format-results (:items results) :order order))))))
 
 (defn search
   "google search <query> # plain google search"
   [{[_ query] :match}]
-  ()
   (common-search-function query))
 
 (defn image-search
@@ -150,7 +166,6 @@
 (defonce copy-of-valid-file-options
   @options)
 
-;; stay
 (defn option-info
   "google option-info <query> #display info for option"
   [{[_ query] :match}]
@@ -189,7 +204,7 @@
 (defn restore-options
   "google restore options # restore from file config"
   [_]
-  (reset! options copy-of-valid-file-options))
+  (suppress (reset! options copy-of-valid-file-options)))
 
 (if (api/configured?)
   (cmd-hook #"google"

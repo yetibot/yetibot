@@ -18,36 +18,36 @@
 
 (deftest command-search-no-results-test
   (with-redefs-fn
-    {#'api/search (fn [_] no-results-response)}
+    {#'api/search (fn [_ & _] no-results-response)}
     #(is (= (command/search {:match ["" "something"]})
             (:search command/messages)))))
 
 (deftest command-image-search-no-results-test
   (with-redefs-fn
-    {#'api/image-search (fn [_] no-results-response)}
+    {#'api/image-search (fn [_ & _] no-results-response)}
     #(is (= (command/image-search {:match ["" "something"]})
             (:image command/messages)))))
 
 (deftest command-search-bad-response-test
   (with-redefs-fn
-    {#'api/search (fn [_] nil)}
+    {#'api/search (fn [_ & _] nil)}
     #(is (= (command/search {:match ["" "something"]})
             (:google-died command/messages)))))
 
 (deftest command-image-search-bad-response-test
   (with-redefs-fn
-    {#'api/image-search (fn [_] nil)}
+    {#'api/image-search (fn [_ & _] nil)}
     #(is (= (command/image-search {:match ["" "something"]})
             (:google-died command/messages)))))
 
 (deftest command-search-test
   (with-redefs-fn
-    {#'api/search (fn [_] test-call-response)}
+    {#'api/search (fn [_ & _] test-call-response)}
     #(is (= (command/search {:match ["" "something"]})
             (api/format-results (:items test-call-response))))))
 
 (deftest command-image-search-test
   (with-redefs-fn
-    {#'api/image-search (fn [_] test-call-response)}
+    {#'api/image-search (fn [_ & _] test-call-response)}
     #(is (= (command/image-search {:match ["" "something"]})
             (api/format-results (:items test-call-response) :order :image)))))
