@@ -61,24 +61,24 @@
   [option]
   (get-in api/accepted-keywords [option :keyword]))
 
-(defn- state-of-set-options []
+(defn state-of-set-options []
   "gives back contents of the options
   atom. If empty gives back nil"
   (if-not (seq @options)
     nil
     @options))
 
-(defn- fetch-option-if-exists
+(defn fetch-option-if-exists
   [option]
   (get api/accepted-keywords option))
 
-(defn- validate-option-value
+(defn validate-option-value
   [option value]
   (if-let [option_ (fetch-option-if-exists option)]
     (re-matches (:validation option_) value)
     :option-does-not-exist))
 
-(defn- set-option-value
+(defn set-option-value
   "This is responsible for checking if
   a key exists, if it does, it validates the
   value given"
@@ -120,38 +120,45 @@
       {:query (join " " (:arguments output))
        :args (convert-keys-into-google-keywords (:options output))})))
 
-(defn common-search-function
-  [query & {:keys [order sfunction]
-   :or {order :normal sfunction api/search}}]
-  (let [proc-query (options-processor query)]
+(defn common-messaging-interface
+  [status message & {:keys [results]
+                     :or {results nil}}]
+  {:status status
+   :message message
+   :results results})
+
+(defn search-function-input-validation
+  [query]
+  (let [proc-query (options-processor query)
+        messagef common-messaging-interface]
     (cond
-      (:errors proc-query) (join "\n" (:errors proc-query))
-      (empty? (:query proc-query)) (:empty-query messages)
+      (:errors proc-query) (messagef :failure (join "\n" (:errors proc-query)))
+      (empty? (:query proc-query))
+                           (messagef :failure (:empty-query messages))
       :else
-      (let [args (:args proc-query)
+      (messagef :success nil :results proc-query))))
+
+(defn common-search-function
+  [query & {:keys [sfunction type]
+   :or {sfunction api/search type :normal}}]
+  (let [validation-results (search-function-input-validation query)]
+    (condp = (:status validation-results)
+      :failure validation-results
+      (let [messagef common-messaging-interface
+            proc-query (:results validation-results)
+            args (:args proc-query)
             results (sfunction (:query proc-query)
                                :args (merge @options args))
             count (get-in results [:searchInformation
                                    :totalResults])]
         (condp = count
-          nil (:google-died messages)
-          "0" (if (= order :image)
-                (:image messages) (:search messages))
-          (api/format-results (:items results) :order order))))))
+          nil (messagef :failure (:google-died messages))
+          "0" (if (= type :image)
+                (messagef :failure (:image messages))
+                (messagef :failure (:search messages)))
+          (messagef :success nil :results results))))))
 
-(defn search
-  "google search <query> # plain google search"
-  [{[_ query] :match}]
-  (common-search-function query))
-
-(defn image-search
-  "google image <query> # image search"
-  [{[_ query] :match}]
-  (common-search-function query
-                          :sfunction api/image-search
-                          :order :image))
-
-(defn- load-options-from-file-into-atom
+(defn load-options-from-file-into-atom
   []
   (let [options  (api/populate-options-from-config)]
     (if (empty? options)
@@ -165,6 +172,24 @@
 (load-options-from-file-into-atom)
 (defonce copy-of-valid-file-options
   @options)
+
+(defn search
+  "google search <query> # plain google search"
+  [{[_ query] :match}]
+  (let [results (common-search-function query)]
+    (if (= :failure (:status results))
+      (:message results)
+      (api/format-results (get-in results [:results :items])))))
+
+(defn image-search
+  "google image <query> # image search"
+  [{[_ query] :match}]
+  (let [results (common-search-function query
+                                        :sfunction api/image-search
+                                        :type :image)]
+    (if (= :failure (:status results))
+      (:message results)
+      (api/format-results (get-in results [:results :items]) :order :image))))
 
 (defn option-info
   "google option-info <query> #display info for option"
