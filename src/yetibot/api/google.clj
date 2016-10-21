@@ -4,7 +4,7 @@
    [clojure.string :as s]
    [clojure.data.json :as json]
    [clj-http.client :as client]
-   [yetibot.core.config :refer [conf-valid? config-for-ns]]))
+   [yetibot.core.config :refer [conf-valid? get-config]]))
 
 (defonce api-url "https://www.googleapis.com/customsearch/v1?parameters")
 
@@ -14,7 +14,7 @@
 (defonce display-order {:normal [:title :link :snippet]
                         :image  [:title :snippet :link]})
 
-(def config (config-for-ns))
+(def config (get-config :yetibot :api :google))
 
 (defn configured? []
   (let [config-keys   [:api-key :custom-search-engine-id]
@@ -104,8 +104,8 @@
     {:validation #"^[a-z]{2}$"
      :error-message "Example of correct input: uk"
      :info-message
-     (str "Specifies the geolocation of end-user \n"
-          "which would ideally result in location specific results")
+     (str "Specifies the geolocation of end-user"
+          " which would ideally result in location specific results")
      :keyword "g1"},
 
    :h1
@@ -119,14 +119,14 @@
    :hq
     {:validation #".+"
      :error-message "Valid input is a non empty string"
-     :info-message "Appends option value to query similar to an AND operator \n"
+     :info-message "Appends option value to query similar to an AND operator"
      :keyword "hq"
      },
 
    :daterestrict
     {:validation #"^(?:d|w|m|y)\d+$"
      :error-message
-     (str "Valid values are of format (d|w|m|y)<number>\n"
+     (str "Valid values are of format (d|w|m|y)<number> "
           "d,w,m,y refers to days, weeks, months and years")
      :info-message
      "Restricts results to URLS based on date"
@@ -136,14 +136,14 @@
    :excludeterms
     {:validation #".+"
      :error-message "Valid input is a non empty string"
-     :info-message "Identifies a word/phrase that should'nt appear in results\n"
+     :info-message "Identifies a word/phrase that should'nt appear in results"
      :keyword "excludeTerms"
     },
 
    :exactterms
     {:validation #".+"
      :error-message "Valid input is a non empty string"
-     :info-message "Identifies a word/phrase that should appear in results\n"
+     :info-message "Identifies a word/phrase that should appear in results"
      :keyword "exactTerms"
     },
 
@@ -193,7 +193,7 @@
    :imgsize
     {:validation ,#"^huge|icon|large|medium|small|xlarge|xxlarge$"
      :error-message (str (:error-message messages)
-                         "huge, icon, large, medium, small,"
+                         "huge, icon, large, medium, small, "
                          "xlarge, xxlarge")
      :info-message "Returns images of a specific size"
      :keyword "imgSize"},
@@ -235,9 +235,9 @@
    :rights
     {:validation #".*"
      :error-message (str "Supported values include: "
-                         "cc_publicdomain, cc_attribute, cc_sharealike,"
-                         "cc_noncommercial, cc_nonderived"
-                         ", and combinations of these.")
+                         "cc_publicdomain, cc_attribute, cc_sharealike, "
+                         "cc_noncommercial, cc_nonderived, "
+                         "and combinations of these.")
      :info-message "Filter based on licensing"
      :keyword "rights"},
 

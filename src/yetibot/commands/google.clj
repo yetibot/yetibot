@@ -6,7 +6,7 @@
     [yetibot.api.google :as api]
     [yetibot.core.hooks :refer [cmd-hook suppress]]))
 
-(defonce options (atom {}))
+(defonce options-atom (atom {}))
 
 (defonce cli-args
   {:c2coff       [nil "--c2c CO"],      :imgcolortype ["-c" "--color COL"],
@@ -64,9 +64,9 @@
 (defn state-of-set-options []
   "gives back contents of the options
   atom. If empty gives back nil"
-  (if-not (seq @options)
+  (if-not (seq @options-atom)
     nil
-    @options))
+    @options-atom))
 
 (defn fetch-option-if-exists
   [option]
@@ -86,7 +86,7 @@
   (condp = (validate-option-value option value)
     :option-does-not-exist nil
     nil (get-in api/accepted-keywords [option :error-message])
-    (do (swap! options
+    (do (swap! options-atom
                assoc (keyword->apikeyword option) value)
         (str option " successfully set to " value))))
 
@@ -101,12 +101,18 @@
   Also includes valid input info"
   [option]
   (if-let [value (fetch-option-if-exists option)]
-    (join "\n"
-          [(:info-message value)
-           (:error-message value)
-           (str (:additional-set-method messages)
-                " "
-                (get-option-cli-info option))])))
+    [(:info-message value)
+    (:error-message value)
+    (str (:additional-set-method messages)
+         " "
+         (get-option-cli-info option))]))
+
+(defn render-option-info
+  [option info]
+  (if (string? info)
+    (str option " : " info)
+    (str option " : "
+         (apply str (interleave (repeat "\n\t") info)))))
 
 (defn convert-keys-into-google-keywords
   [obj]
@@ -148,7 +154,7 @@
             proc-query (:results validation-results)
             args (:args proc-query)
             results (sfunction (:query proc-query)
-                               :args (merge @options args))
+                               :args (merge @options-atom args))
             count (get-in results [:searchInformation
                                    :totalResults])]
         (condp = count
@@ -171,7 +177,7 @@
 
 (load-options-from-file-into-atom)
 (defonce copy-of-valid-file-options
-  @options)
+  @options-atom)
 
 (defn search
   "google search <query> # plain google search"
@@ -195,13 +201,13 @@
   "google option-info <query> #display info for option"
   [{[_ query] :match}]
   (if-let [info (get-info (keyword query))]
-    info
-    (:option-not-found messages)))
+    (render-option-info query info)
+    (render-option-info query (:option-not-found messages))))
 
-(defn show-custom-keywords-list
-  "google show options # show list of valid options"
+(defn options
+  "google options # show list of valid options"
   [_]
-  (join ", " (map name valid-keywords-list)))
+  (map name valid-keywords-list))
 
 (defn set-option
   "google set <option> <value>"
@@ -223,20 +229,20 @@
   "google reset options # current set options are vanquished"
   [_]
   (do
-    (reset! options {})
+    (reset! options-atom {})
     (:reset messages)))
 
 (defn restore-options
   "google restore options # restore from file config"
   [_]
-  (suppress (reset! options copy-of-valid-file-options)))
+  (suppress (reset! options-atom copy-of-valid-file-options)))
 
 (if (api/configured?)
   (cmd-hook #"google"
             #"^search\s+(.+)" search
             #"^image\s+(.+)" image-search
             #"^option-info\s+(.+)" option-info
-            #"^show\s+options$" show-custom-keywords-list
+            #"^options$" options
             #"^set\s+(\S+)\s+(\S+)" set-option
             #"^show\s+set\s+options$" show-set-options
             #"^reset\s+options$" reset-options

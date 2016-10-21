@@ -105,7 +105,7 @@
 
 (deftest state-of-set-options-test
   (with-redefs-fn
-    {#'command/options (atom {:wilfred "demigod"})}
+    {#'command/options-atom (atom {:wilfred "demigod"})}
     #(is (not (empty? (command/state-of-set-options))))))
 
 (deftest empty-state-of-set-options-test
@@ -116,7 +116,7 @@
         val "mono"
         keyword (get-in api/accepted-keywords [key :keyword])]
     (with-redefs-fn
-      {#'command/options (atom {})
+      {#'command/options-atom (atom {})
        #'api/populate-options-from-config (fn [] {key val})}
       #(is (= (do (command/load-options-from-file-into-atom)
-                  @command/options) {keyword val})))))
+                  @command/options-atom) {keyword val})))))
