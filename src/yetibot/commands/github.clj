@@ -5,7 +5,8 @@
     [clojure.string :as s]
     [yetibot.core.util.http :refer [get-json]]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [taoensso.timbre :refer [info]]))
+    [taoensso.timbre :refer [info]]
+    [robert.bruce :refer [try-try-again] :as rb]))
 
 (defn feed
   "gh feed <org-name> # list recent activity for <org-name>"
@@ -93,14 +94,22 @@
 (defn stats-cmd
   "gh stats <org>/<repo-name> # commits, additions, deletions"
   [{[_ org-name repo] :match}]
-  ;; github might need to crunch the stats, in which case the result will simply
-  ;; be 202 accepted
-  (let [stats (gh/sum-stats org-name repo)]
-    (if (map? stats)
-      (let [{:keys [a d c con]} stats]
-        (format "%s/%s: %s commits, %s additions, %s deletions, %s contributors"
+  ;; github might need some time to crunch the stats,
+  ;; in which case the result will simply be polled
+  (try-try-again
+   {:decay 1.5 :sleep 2000 :tries 4 :return? :truthy?}
+   (fn []
+     (let [stats (gh/sum-stats org-name repo)]
+       (cond (map? stats)
+             (let [{:keys [a d c con]} stats]
+               (format
+                "%s/%s: %s commits, %s additions, %s deletions, %s contributors"
                 org-name repo c a d con))
-      (format "Crunching the latest data for `%s/%s`, try again in a few moments 🐌" org-name repo))))
+
+             rb/*last-try*
+             (format
+              "Crunching the latest data for `%s/%s`, try again in a few moments 🐌"
+              org-name repo))))))
 
 (if (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
