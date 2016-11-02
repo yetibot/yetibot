@@ -20,30 +20,6 @@
 (defonce test-call-response-json
   {:body (json/write-str test-call-response)})
 
-(deftest empty-config-configured?-test
-  (with-redefs-fn
-    {#'api/config {}}
-    #(is (= (api/configured?)
-            false))))
-
-(deftest config-with-one-key-configured?-test
-  "should return false, as both
-   keys are required for the configuration
-   for the search engine"
-  (with-redefs-fn
-    {#'api/config {:api-key "something"}}
-    #(is (= (api/configured?)
-            false))))
-
-(deftest config-with-two-keys-configured?-test
-  "should return true, as both
-   keys (correct keys) are present"
-  (with-redefs-fn
-    {#'api/config {:api-key "something"
-                   :custom-search-engine-id "something"}}
-    #(is (= (api/configured?)
-            true))))
-
 (deftest format-result-normal-order-test
   (let [test-data (nth test-items 0)]
     (is (= (api/format-result test-data)
