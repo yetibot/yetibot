@@ -1,8 +1,9 @@
 # yetibot changelog
 
-## 1.0.0
+## 0.4.0
 
-Yetibot 1.0 is here! 1.0 brings non-backward compatible changes.
+0.4.0 brings non-backward compatible changes, particularly around configuration
+refactoring.
 
 ### Non-backward Compatible Changes
 
