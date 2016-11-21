@@ -22,6 +22,14 @@
 
 (find-namespaces yetibot-command-namespaces)
 
+
+(let [m1 {:a 1}]
+  (> a 0)
+  (-> m1 :a))
+
+
+
+
 (use 'yetibot.core.loader)
 
 
