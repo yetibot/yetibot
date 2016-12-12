@@ -96,19 +96,17 @@
   [{[_ id status] :match}]
   (suppress (model/reply id status)))
 
-(if (model/configured?)
-  (cmd-hook #"twitter"
-    #"^lookup\s+(.+)" lookup
-    #"^tweet:*\s+(.+)" tweet
-    #"^following" following
-    #"^follow\s+(.+)" follow
-    #"^unfollow\s+(.+)" unfollow
-    #"^search\s+(.+)" search
-    #"^show\s+(\S+)" show
-    #"^display\s+(\d+)" display
-    #"^retweet\s+(\d+)" retweet
-    #"^reply\s+(\d+)\s+(.+)" reply
-    #"^tracking" tracking
-    #"^untrack\s+(.+)" untrack
-    #"^track\s+(.+)" track)
-  (info "Twitter is not configured."))
+(cmd-hook #"twitter"
+  #"^lookup\s+(.+)" lookup
+  #"^tweet:*\s+(.+)" tweet
+  #"^following" following
+  #"^follow\s+(.+)" follow
+  #"^unfollow\s+(.+)" unfollow
+  #"^search\s+(.+)" search
+  #"^show\s+(\S+)" show
+  #"^display\s+(\d+)" display
+  #"^retweet\s+(\d+)" retweet
+  #"^reply\s+(\d+)\s+(.+)" reply
+  #"^tracking" tracking
+  #"^untrack\s+(.+)" untrack
+  #"^track\s+(.+)" track)

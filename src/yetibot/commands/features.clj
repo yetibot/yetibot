@@ -3,7 +3,7 @@
     [schema.core :as sch]
     [clojure.string :as s]
     [tentacles [issues :as is] [core :as tc]]
-    [useful.fn :as useful :refer [rate-limited]]
+    [flatland.useful.fn :as useful]
     [yetibot.api.github :as gh]
     [yetibot.core.chat :refer [chat-data-structure]]
     [yetibot.core.config :refer [get-config]]

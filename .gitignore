@@ -15,6 +15,7 @@ target/
 .ruby-version
 config/config.edn
 yetibot-config.edn
+config-mutable.edn
 profiles.clj
 /checkouts
 pom.xml.asc

@@ -14,7 +14,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "1.0.0-RC12"]
+                 [yetibot.core "0.4.0-SNAPSHOT"]
 
                  ; apis
                  [twitter-api "0.7.6"]
@@ -34,7 +34,7 @@
 
   :aliases
   {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]}
-  :pedantic :ignore
+  ;; :pedantic :ignore
 
   :docker {:image-name "devth/yetibot"}
 
