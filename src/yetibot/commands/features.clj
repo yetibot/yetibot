@@ -35,7 +35,7 @@
   (useful/rate-limited
     (fn [title]
       (binding [tc/url endpoint]
-        (is/create-issue (:user (config)) repo title auth)))
+        (is/create-issue (:user (config)) repo title (auth))))
     rate-limit-ms))
 
 (defn listen-for-add-feature
