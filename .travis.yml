@@ -1,5 +1,9 @@
 language: clojure
 
+cache:
+  directories:
+    - target
+
 script: lein test
 
 jdk:
