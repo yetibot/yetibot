@@ -2,7 +2,7 @@ language: clojure
 
 cache:
   directories:
-    - target
+    - $HOME/.m2
 
 script: lein test
 
