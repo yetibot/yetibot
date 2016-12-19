@@ -3,7 +3,7 @@
 
 set -ev
 
-if [ "$TRAVIS_BRANCH" -eq "master" ]; then
+# if [ "$TRAVIS_BRANCH" -eq "master" ]; then
 
   docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
   docker version
@@ -26,6 +26,6 @@ if [ "$TRAVIS_BRANCH" -eq "master" ]; then
     docker push devth/yetibot:latest
   fi
 
-else
-  echo "Not on master, skipping Docker build/push"
-fi
+# else
+#   echo "Not on master, skipping Docker build/push"
+# fi
