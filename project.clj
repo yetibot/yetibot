@@ -14,7 +14,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.0-alpha6"]
+                 [yetibot.core "0.4.0-alpha8"]
 
                  ; apis
                  [twitter-api "0.7.6"]
@@ -28,6 +28,7 @@
                  [robert/bruce "0.8.0"]
                  ]
   :plugins [[lein-exec "0.3.5"]
+            [lein-environ "1.0.3"]
             [lein-cloverage "1.0.7-SNAPSHOT"]
             [lein-ring "0.9.5"]
             [io.sarnowski/lein-docker "1.1.0"]]
