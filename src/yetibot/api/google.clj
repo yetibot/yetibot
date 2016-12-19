@@ -19,8 +19,7 @@
 (def google-schema
   {:api {:key non-empty-str}
    :custom {:search {:engine {:id non-empty-str}}}
-   ;; (sch/optional-key :options) map?
-   })
+   (sch/optional-key :options) {sch/Keyword sch/Str}})
 
 (defn config [] (get-config google-schema [:yetibot :google]))
 
