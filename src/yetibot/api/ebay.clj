@@ -4,7 +4,7 @@
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [encode get-json]]))
 
-(defn config [] (:value (get-config {:appid s/Str} [:yetibot :ebay])))
+(defn config [] (:value (get-config {:appid s/Str} [:ebay])))
 
 (def endpoint "http://svcs.ebay.com/services/search/FindingService/v1")
 

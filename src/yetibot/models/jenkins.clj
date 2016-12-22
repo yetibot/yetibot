@@ -21,7 +21,7 @@
 ;; periodically refreshed data about Jenkins instances
 (defonce instance-root-data (atom {}))
 
-(defn config [] (:value (get-config jenkins-schema [:yetibot :jenkins])))
+(defn config [] (:value (get-config jenkins-schema [:jenkins])))
 
 (defn cache-ttl [] (-> (config) :cache :ttl read-string))
 

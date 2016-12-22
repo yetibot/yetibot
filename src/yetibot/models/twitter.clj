@@ -40,13 +40,7 @@
    :secret sch/Str
    :search {:lang sch/Str}})
 
-(def config (:value (get-config twitter-schema [:yetibot :twitter])))
-
-{:search {:lang "en"},
- :consumer {:secret "Yf8TrL7vqBiZsaxcGv7srgi6YajSH3PspmSQg9BIp0"
-            :key "Lz13coe3t17UVho7rfxjKA"}
- :secret "hUr1NAlaLHA0OqZvg6syrzFpAkKpNxCqIqzFgD0euo"
- :token "917913440-H5MvyRCXNEF9Fmekiwfba9cPpic8JfVQ65jae6Bn"}
+(def config (:value (get-config twitter-schema [:twitter])))
 
 (def creds (apply make-oauth-creds
                   ((juxt (comp :key :consumer)

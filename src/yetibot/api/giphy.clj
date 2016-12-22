@@ -10,7 +10,7 @@
 
 (def base-url "http://api.giphy.com/v1")
 
-(defn config [] (get-config {:key String} [:yetibot :giphy]))
+(defn config [] (get-config {:key String} [:giphy]))
 
 (defn configured? [] (nil? (:error (config))))
 

@@ -9,7 +9,7 @@
   {:access {:key sch/Str}
    :secret {:key sch/Str}})
 
-(defn config [] (get-config s3-schema [:yetibot :s3]))
+(defn config [] (get-config s3-schema [:s3]))
 
 (defn transformed-config []
   (if-let [c (:value (config))]

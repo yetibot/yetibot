@@ -28,7 +28,7 @@
    :org [non-empty-str]
    (sch/optional-key :endpoint) non-empty-str})
 
-(defn config [] (:value (get-config github-schema [:yetibot :github])))
+(defn config [] (:value (get-config github-schema [:github])))
 (defn configured? [] (config))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 

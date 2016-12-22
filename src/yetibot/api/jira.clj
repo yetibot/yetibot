@@ -28,7 +28,7 @@
   "Settings for the current channel, bound by yetibot.commands.jira"
   nil)
 
-(defn config [] (:value (get-config jira-schema [:yetibot :jira])))
+(defn config [] (:value (get-config jira-schema [:jira])))
 
 (defn configured? [] (config))
 

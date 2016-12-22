@@ -7,7 +7,7 @@
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
-(def config (:value (get-config sch/Any [:yetibot :weather :wunderground])))
+(def config (:value (get-config sch/Any [:weather :wunderground])))
 
 (def api-key (:key config))
 (def default-zip (-> config :default :zip))

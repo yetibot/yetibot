@@ -16,7 +16,7 @@
 
 (def rate-limit-ms 5000)
 
-(defn config [] (:value (get-config schema [:yetibot :features :github])))
+(defn config [] (:value (get-config schema [:features :github])))
 
 (defn auth [] {:oauth-token (:token (config))})
 (defn repo [] (or (:repo (config)) "yetibot"))

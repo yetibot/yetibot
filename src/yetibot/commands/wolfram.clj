@@ -8,7 +8,7 @@
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
-(def config (:value (get-config {:appid sch/Str} [:yetibot :wolfram])))
+(def config (:value (get-config {:appid sch/Str} [:wolfram])))
 (def app-id (:appid config))
 (def endpoint (str "http://api.wolframalpha.com/v2/query?appid=" app-id))
 

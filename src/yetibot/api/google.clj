@@ -6,7 +6,7 @@
     [clojure.string :as s]
     [clojure.data.json :as json]
     [clj-http.client :as client]
-    [yetibot.core.config :refer [conf-valid? get-config]]))
+    [yetibot.core.config :refer [get-config]]))
 
 (defonce api-url "https://www.googleapis.com/customsearch/v1?parameters")
 
@@ -21,7 +21,7 @@
    :custom {:search {:engine {:id non-empty-str}}}
    (sch/optional-key :options) {sch/Keyword sch/Str}})
 
-(defn config [] (get-config google-schema [:yetibot :google]))
+(defn config [] (get-config google-schema [:google]))
 
 (defn configured? [] (contains? (config) :value))
 

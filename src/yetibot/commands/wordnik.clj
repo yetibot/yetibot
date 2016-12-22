@@ -10,7 +10,7 @@
     [clojure.string :as s]
     [wordnik.core :refer :all]))
 
-(def config (:value (get-config {:key sch/Str} [:yetibot :wordnik])))
+(def config (:value (get-config {:key sch/Str} [:wordnik])))
 
 (def ^:private api-key (:key config))
 

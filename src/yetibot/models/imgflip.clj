@@ -13,7 +13,7 @@
   {:username non-empty-str
    :password non-empty-str})
 
-(def config (:value (get-config imgflip-schema [:yetibot :imgflip])))
+(def config (:value (get-config imgflip-schema [:imgflip])))
 (def configured? config)
 (def endpoint "http://api.imgflip.com")
 
