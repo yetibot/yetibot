@@ -14,7 +14,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.0-alpha12"]
+                 [yetibot.core "0.4.0-alpha13"]
 
                  ; apis
                  [twitter-api "0.7.6"]
@@ -38,10 +38,5 @@
   ;; :pedantic :ignore
 
   :docker {:image-name "devth/yetibot"}
-
-  ;; :ring {:handler yetibot.webapp.handler/app
-  ;;        :init    yetibot.webapp.handler/init
-  ;;        :destroy yetibot.webapp.handler/destroy
-  ;;        :uberwar-name "yetibot.war"}
 
   :main yetibot.core.init)
