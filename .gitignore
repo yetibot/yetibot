@@ -14,8 +14,7 @@ target/
 .lein-repl-history
 .ruby-version
 config/config.edn
-yetibot-config.edn
-config-mutable.edn
+/config/mutable.edn
 profiles.clj
 /checkouts
 pom.xml.asc
