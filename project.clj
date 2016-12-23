@@ -14,7 +14,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.0-alpha14"]
+                 [yetibot.core "0.4.0-alpha15"]
 
                  ; apis
                  [twitter-api "0.7.6"]
