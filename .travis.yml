@@ -1,5 +1,9 @@
 language: clojure
 
+cache:
+  directories:
+    - $HOME/.m2
+
 script: lein test
 
 jdk:
@@ -11,10 +15,8 @@ services:
   - docker
 
 after_success:
-  - sudo apt-get update
-  # - sudo apt-get install -y docker-engine
-  - ./scripts/docker.sh
-
-after_success:
 - CLOVERAGE_VERSION=1.0.7-SNAPSHOT lein cloverage --codecov
 - bash <(curl -s https://codecov.io/bash) -f target/coverage/codecov.json
+# - sudo apt-get update
+# - sudo apt-get install -y docker-engine
+- ./scripts/docker.sh

@@ -1,36 +1,47 @@
 (ns yetibot.models.jenkins
   (:require
-    [yetibot.core.chat]
+    [yetibot.core.chat :refer [chat-data-structure]]
     [yetibot.core.util.http :refer [get-json fetch]]
+    [schema.core :as sch]
+    [yetibot.core.schema :refer [non-empty-str]]
     [clojure.string :as s]
     [clj-time.coerce :as c]
     [clj-http.client :as client]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.core.config :refer [get-config conf-valid? update-config remove-config]]
+    [yetibot.core.config :refer [get-config]]
     [clojure.core.memoize :as memo]))
 
+(def jenkins-schema {:cache {:ttl sch/Str}
+                     :instances [{:name sch/Str
+                                  :uri sch/Str
+                                  (sch/optional-key :default) {:job sch/Str}
+                                  (sch/optional-key :user) sch/Str
+                                  (sch/optional-key :apikey) sch/Str}]})
+
+;; periodically refreshed data about Jenkins instances
 (defonce instance-root-data (atom {}))
 
-(def config (partial get-config :yetibot :models :jenkins))
-(defn configured? [] (conf-valid? (config)))
-(def cache-ttl (get-config :yetibot :models :jenkins :cache-ttl))
+(defn config [] (:value (get-config jenkins-schema [:jenkins])))
+
+(defn cache-ttl [] (-> (config) :cache :ttl read-string))
 
 ; Helpers
 
-(defn instances [] (-> (config) :instances))
+(defn instances [] (:instances (config)))
 
 (defn- auth-for [instance]
-  (when (and (:user instance) (:api-key instance))
+  (when (and (:user instance) (:apikey instance))
     {:user (:user instance)
-     :password (:api-key instance)
+     :password (:apikey instance)
      :preemptive true}))
 
-(defn setup-instance-pairs
+(defn setup-instance-pairs!
   "If instance name key doesn't already exist, assoc it with its value set to
    a ttl-memoized function that fetches itself."
   []
-  (doseq [[inst-name inst] (instances)]
-    (when-not (inst-name @instance-root-data)
+  (doseq [{inst-name :name :as inst} (instances)]
+    (info "setu" inst-name inst)
+    (when-not (get @instance-root-data inst-name)
       (swap!
         instance-root-data
         assoc
@@ -42,50 +53,25 @@
                           (if auth
                             (get-json uri auth)
                             (get-json uri))))
-                      (memo/ttl :ttl/threshold cache-ttl))}))))
+                      (memo/ttl :ttl/threshold (cache-ttl)))}))))
 
-(let [inst {:uri "https://ebayci.qa.ebay.com/shfe-ci"
-            :user "X"
-            :api-key "X"}
-      uri (format "%s/api/json" (:uri inst))]
-  (println (auth-for inst))
-  (fetch uri))
-
-
-(defn prime-memos
+(defn prime-memos!
   "Executes all the fetcher functions in parallel in order to prime their memo
    caches."
   []
-  (setup-instance-pairs)
+  (setup-instance-pairs!)
   (doall
     (pmap
-      (fn [[inst-name inst]]
+      (fn [{inst-name :name}]
         (try
-          (when-let [instance-info (inst-name @instance-root-data)]
+          (info inst-name)
+          (when-let [instance-info (get @instance-root-data inst-name)]
             ((:fetcher instance-info)))
           (catch Exception e
             (warn "Unable to load info for Jenkins instance" inst-name e))))
       (instances))))
 
-(defonce load-caches (prime-memos))
-
-; Config writer
-
-(defn add-instance [inst-name uri user api-key]
-  (let [inst-key (keyword inst-name)]
-    (update-config :yetibot :models :jenkins :instances inst-key
-                   {:uri uri
-                    :user user
-                    :api-key api-key}))
-  (prime-memos))
-
-(defn remove-instance [inst-name]
-  (let [inst-key (keyword inst-name)
-        exists? (inst-key @instance-root-data)]
-    (when exists?
-      (remove-config :yetibot :models :jenkins :instances inst-key)
-      (swap! instance-root-data dissoc inst-key)
-      true)))
+(defonce load-caches (prime-memos!))
 
 ; Getters
 
@@ -171,7 +157,7 @@
   ; instead of the latest.
   (Thread/sleep 8000)
   (let [json (status [job-name job-info])]
-    (yetibot.core.chat/chat-data-structure (:url json))))
+    (chat-data-structure (:url json))))
 
 (defn build-job [[job-name job-info]]
   (let [base-uri (-> job-info :config :uri)

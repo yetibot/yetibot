@@ -1,9 +1,11 @@
 (ns yetibot.models.twitter
+  (:refer-clojure :exclude [update])
   (:require
+    [schema.core :as sch]
     [taoensso.timbre :refer [info warn error]]
     [clj-http.client :as client]
     [yetibot.core.util.http :refer [html-decode]]
-    [yetibot.core.config :refer [get-config config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [get-config]]
     [clojure.string :as s :refer [join]]
     [yetibot.core.chat :as chat]
     [clojure.data.json :as json]
@@ -31,19 +33,26 @@
 
 ;;;; config
 
-(defn config [] (get-config :yetibot :models :twitter))
+(def twitter-schema
+  {:consumer {:key sch/Str
+              :secret sch/Str}
+   :token sch/Str
+   :secret sch/Str
+   :search {:lang sch/Str}})
 
-(defn configured? [] (conf-valid? (config)))
+(def config (:value (get-config twitter-schema [:twitter])))
 
 (def creds (apply make-oauth-creds
-                  ((juxt :consumer-key :consumer-secret :token :secret) (config))))
+                  ((juxt (comp :key :consumer)
+                         (comp :secret :consumer)
+                         :token :secret) config)))
 
 ;;;; helper
 
 (defn format-url [user id] (format "https://twitter.com/%s/status/%s" user id))
 
 (defn expand-url [url]
-  (let [resp (client/get url)]
+  (let [resp (client/get url {:follow-redirects true})]
     (if-let [redirs (:trace-redirects resp)]
       (last redirs)
       url)))
@@ -110,7 +119,7 @@
   (info "twitter search for" query)
   (search-tweets
     :oauth-creds creds
-    :params {:count 20 :q query :lang (:search_lang (config))}))
+    :params {:count 20 :q query :lang (:lang (:search config))}))
 
 ;;;; topic tracking
 

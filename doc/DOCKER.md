@@ -6,9 +6,10 @@ official [Clojure image](https://hub.docker.com/_/clojure/).
 
 ## Configuration
 
-Configuration must be passed in using the volume at `/usr/src/app/config`. The
-mounted directory must contain a file `config.edn` as described by the [sample
-config](https://github.com/devth/yetibot/blob/master/config/config-sample.edn).
+Configuration can be specified as env vars or passed in via a mounted volume.
+See
+[CONFIGURATION](https://github.com/devth/yetibot.core/blob/flat-config/doc/CONFIGURATION.md)
+docs for more info.
 
 ## Ports
 
@@ -17,16 +18,19 @@ Yetibot runs a webapp on port `3000`. You may optionally expose it via `-P` or
 
 ## Running
 
-Start up Yetibot in detached mode with port 3000 mapped:
+Start up Yetibot in detached mode with port 3000 mapped and IRC configured via
+env:
 
 ```
-# path to your config directory containing config.edn
-YB_CONFIG_PATH=...
-
 docker run --name yetibot \
   -d -p 3000:3000 \
-  -v $YB_CONFIG_PATH:/usr/src/app/config \
-  devth/yetibot
+  -e YETIBOT_LOG_LEVEL="trace" \
+  -e YETIBOT_ADAPTERS_IRC_TYPE="irc" \
+  -e YETIBOT_ADAPTERS_IRC_HOST="chat.freenode.net" \
+  -e YETIBOT_ADAPTERS_IRC_PORT="7070" \
+  -e YETIBOT_ADAPTERS_IRC_SSL="true" \
+  -e YETIBOT_ADAPTERS_IRC_USERNAME="yetibot_`whoami`" \
+  devth/yetibot:snapshot
 ```
 
 <em>Note, if you're using Docker Machine, you can view the webapp at its IP
@@ -44,7 +48,12 @@ To run an ephemeral interactive shell and poke around instead of running Yetibot
 
 ```
 docker run --rm -it --name yetibot \
-  -v $YB_CONFIG_PATH:/usr/src/app/config \
+  -e YETIBOT_LOG_LEVEL="trace" \
+  -e YETIBOT_ADAPTERS_IRC_TYPE="irc" \
+  -e YETIBOT_ADAPTERS_IRC_HOST="chat.freenode.net" \
+  -e YETIBOT_ADAPTERS_IRC_PORT="7070" \
+  -e YETIBOT_ADAPTERS_IRC_SSL="true" \
+  -e YETIBOT_ADAPTERS_IRC_USERNAME="yetibot_`whoami`" \
   devth/yetibot \
   /bin/bash
 ```

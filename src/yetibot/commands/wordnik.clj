@@ -1,15 +1,18 @@
 (ns yetibot.commands.wordnik
+  (:refer-clojure :exclude [read])
   (:require
+    [schema.core :as sch]
     [wordnik.api.word :as word]
     [wordnik.api.words :as words]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [get-config]]
     [clojure.string :as s]
     [wordnik.core :refer :all]))
 
-(def config (config-for-ns))
-(def ^:private api-key (:api-key config))
+(def config (:value (get-config {:key sch/Str} [:wordnik])))
+
+(def ^:private api-key (:key config))
 
 (defmacro ^:private with-auth [& body]
   `(with-api-key api-key ~@body))
@@ -43,9 +46,7 @@
   {:yb/cat #{:info}}
   [_] (with-auth (format-defs (words/wotd))))
 
-(if (conf-valid?)
-  (cmd-hook #"wordnik"
-            #"define\s(\w+)" define
-            #"random" random
-            #"wotd" wotd)
-  (info "Wordnik is not configured"))
+(cmd-hook #"wordnik"
+          #"define\s(\w+)" define
+          #"random" random
+          #"wotd" wotd)

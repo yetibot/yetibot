@@ -1,7 +1,6 @@
 (ns yetibot.commands.poke
   (:require
     [yetibot.core.models.users :as u]
-    [yetibot.core.adapters.campfire :as cf]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def ^:private config
@@ -17,7 +16,6 @@
   (if-let [user (u/find-user-like chat-source name)]
     (let [obj (rand-nth (:objects config))
           loc (rand-nth (:locations config))]
-      ;; (cf/play-sound "tada")
       (format "Yetibot pokes %s in the %s with a %s"
               (:name user) loc obj))
     (format "Couldn't find anyone named %s." name)))

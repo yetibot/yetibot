@@ -47,6 +47,12 @@ ways it can be used.
 To quickly try out Yetibot with minimal config,
 read the blog post [Yetibot on Docker in 𝓧 minutes or less](http://devth.com/2016/yetibot-on-docker/).
 
+## Changes in 0.4.0
+
+0.4.0 decomplects mutable and immutable configuration in a
+non-backward-compatible way. Please see
+[CONFIGURATION](https://github.com/devth/yetibot.core/blob/flat-config/doc/CONFIGURATION.md)
+docs and port your existing config to the new structure.
 
 ## Roadmap
 

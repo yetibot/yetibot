@@ -79,9 +79,8 @@
     :option-does-not-exist))
 
 (defn set-option-value
-  "This is responsible for checking if
-  a key exists, if it does, it validates the
-  value given"
+  "This is responsible for checking if a key exists.
+   If it does, it validates the value given."
   [option value]
   (condp = (validate-option-value option value)
     :option-does-not-exist nil

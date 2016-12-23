@@ -1,10 +1,12 @@
 (ns yetibot.api.google
   (:require
-   [taoensso.timbre :refer [info warn]]
-   [clojure.string :as s]
-   [clojure.data.json :as json]
-   [clj-http.client :as client]
-   [yetibot.core.config :refer [conf-valid? get-config]]))
+    [yetibot.core.schema :refer [non-empty-str]]
+    [schema.core :as sch]
+    [taoensso.timbre :refer [info warn]]
+    [clojure.string :as s]
+    [clojure.data.json :as json]
+    [clj-http.client :as client]
+    [yetibot.core.config :refer [get-config]]))
 
 (defonce api-url "https://www.googleapis.com/customsearch/v1?parameters")
 
@@ -14,16 +16,16 @@
 (defonce display-order {:normal [:title :link :snippet]
                         :image  [:title :snippet :link]})
 
-(def config (get-config :yetibot :api :google))
+(def google-schema
+  {:api {:key non-empty-str}
+   :custom {:search {:engine {:id non-empty-str}}}
+   (sch/optional-key :options) {sch/Keyword sch/Str}})
 
-(defn configured? []
-  (let [config-keys   [:api-key :custom-search-engine-id]
-        config-values (select-keys config config-keys)]
-    (and (conf-valid? config)
-       (= (count config-values) 2))))
+(defn config [] (get-config google-schema [:google]))
 
-(defn populate-options-from-config []
-  (:options config))
+(defn configured? [] (contains? (config) :value))
+
+(defn populate-options-from-config [] (:options (:value (config))))
 
 (defn format-result
   "format a single query result"
@@ -53,8 +55,8 @@
   [q & {:keys [order args] :or {args {} order :normal}}]
   (info "Google search for: " q)
   (let [query-params  {:q q
-                       :key (:api-key config)
-                       :cx (:custom-search-engine-id config)}
+                       :key (-> (config) :value :api :key)
+                       :cx (-> (config) :value :custom :search :engine :id)}
         options {:query-params
                  (merge query-params args)}]
     (do

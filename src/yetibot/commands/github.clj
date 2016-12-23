@@ -111,7 +111,7 @@
               "Crunching the latest data for `%s/%s`, try again in a few moments 🐌"
               org-name repo))))))
 
-(if (gh/configured?)
+(when (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
             #"feed\s+(\S+)" feed
             #"repos urls\s+(\S+)" repos-urls
@@ -127,5 +127,4 @@
             #"pr\s+(\S+)" pull-requests
             #"stats\s+(\S+)\/(\S+)" stats-cmd
             #"tags\s+(\S+)\/(\S+)" tags
-            #"branches\s+(\S+)\/(\S+)" branches)
-  (info "GitHub is not configured"))
+            #"branches\s+(\S+)\/(\S+)" branches))

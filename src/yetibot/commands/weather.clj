@@ -1,22 +1,19 @@
 (ns yetibot.commands.weather
   (:require
+    [schema.core :as sch]
     [clojure.string :refer [join]]
     [yetibot.core.util.http :refer [get-json fetch encode map-to-query-string]]
     [taoensso.timbre :refer [info warn error]]
-    [yetibot.core.config :refer [config-for-ns conf-valid?]]
+    [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
-(def config (config-for-ns))
+(def config (:value (get-config sch/Any [:weather :wunderground])))
 
-(def api-key (:wunderground-api-key config))
-(def default-zip (:default-zip config))
-(defn tee [s]
-  (prn s)
-  s)
+(def api-key (:key config))
+(def default-zip (-> config :default :zip))
 
 (defn endpoint [url & args]
-  (tee (str "http://api.wunderground.com/api/" api-key
-            (apply format url args))))
+  (str "http://api.wunderground.com/api/" api-key (apply format url args)))
 
 (defn loc-endpoint [api loc]
   (endpoint "%s/q/%s.json" api (encode loc)))
@@ -95,10 +92,9 @@
   ; TODO: validate the loc. Currently this will 500 if the loc is not valid.
   (satellite loc))
 
-(if (conf-valid?)
-  (cmd-hook ["weather" #"^weather$"]
-            #"cams\s+(.+)" cams-cmd
-            #"sat\s+(.+)" satellite-cmd
-            #".+" weather-cmd
-            _ default-weather-cmd)
-  (info "Weather is not configured"))
+(cmd-hook ["weather" #"^weather$"]
+  #"cams\s+(.+)" cams-cmd
+  #"sat\s+(.+)" satellite-cmd
+  #".+" weather-cmd
+  _ default-weather-cmd)
+
