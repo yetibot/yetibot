@@ -3,7 +3,7 @@
 
 set -ev
 
-# if [ "$TRAVIS_BRANCH" -eq "master" ]; then
+# if [ "$TRAVIS_BRANCH" = "master" ]; then
 
   docker login -e="$DOCKER_EMAIL" -u="$DOCKER_USERNAME" -p="$DOCKER_PASSWORD"
   docker version
