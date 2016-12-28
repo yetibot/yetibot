@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.4.1
+
+- Added `scrape` command [#310](https://github.com/devth/yetibot/issues/310)
+
 ## 0.4.0
 
 0.4.0 brings non-backward compatible changes, particularly around configuration
@@ -7,17 +11,9 @@ refactoring.
 
 ### Non-backward Compatible Changes
 
-- *Config*: main config is now immutable, and can be provided in
-  12-Factor-compatible methods, such as env-vars. As a result, is it also flat
-  KV pairs now, which are exploded into nested maps by
-  [dec](https://github.com/devth/dec).
-
-  - new [profiles.sample.clj](https://github.com/devth/yetibot.core/blob/master/profiles.sample.clj)
-  - new [Configuration docs](https://github.com/devth/yetibot.core/blob/master/docs/CONFIGURATION.md)
-
-- *Mutable config*: mutable config, such as which IRC rooms to join and
-  channel-specific settings has been extracted into a separate file that is
-  managed by Yetibot.
+- See [yetibot.core
+  CHANGELOG](https://github.com/devth/yetibot.core/blob/master/doc/CHANGELOG.md#040)
+  for info on configuration changes.
 
 - Upgraded to Clojure 1.8.0
 
