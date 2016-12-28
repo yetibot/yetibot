@@ -60,6 +60,10 @@ docs and port your existing config to the new structure.
 Already using Yetibot? Please add yourself to the [list of Yetibot
 users](https://github.com/devth/yetibot/wiki/Yetibot-users)!
 
+## Contributing
+
+See [CONTRIBUTING](CONTRIBUTING.md).
+
 ## Roadmap
 
 Yetibot has been undergoing continuous improvement since its inception. These
