@@ -1,5 +1,12 @@
 # yetibot changelog
 
+## 0.4.2 (unreleased)
+
+### Added
+
+- `json` command to parse json from text or from a url
+  [#601](https://github.com/devth/yetibot/issues/601)
+
 ## 0.4.1
 
 ### Added
