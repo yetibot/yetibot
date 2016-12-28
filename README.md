@@ -52,7 +52,7 @@ read the blog post [Yetibot on Docker in 𝓧 minutes or less](http://devth.com/
 
 0.4.0 decomplects mutable and immutable configuration in a
 non-backward-compatible way. Please see
-[CONFIGURATION](https://github.com/devth/yetibot.core/blob/flat-config/doc/CONFIGURATION.md)
+[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs and port your existing config to the new structure.
 
 ## Roadmap
