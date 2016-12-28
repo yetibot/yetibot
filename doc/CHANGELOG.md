@@ -2,7 +2,10 @@
 
 ## 0.4.1
 
-- Added `scrape` command [#310](https://github.com/devth/yetibot/issues/310)
+### Added
+
+- `scrape` command [#310](https://github.com/devth/yetibot/issues/310)
+- `meme popular` in terms of `scrape`
 
 ## 0.4.0
 

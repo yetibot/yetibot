@@ -2,6 +2,7 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.commands.scrape :refer [scrape]]
     [yetibot.models.imgflip :as model]))
 
 (defn- urlify
@@ -58,9 +59,16 @@
     (map :name matches)
     (str "Couldn't find any memes for " term)))
 
+(defn chat-instance-popular
+  "meme popular # list popular memes from imgflip.com"
+  {:yb/cat #{:fun :img :meme}}
+  [_]
+  (map (partial str "http:")
+       (scrape "https://imgflip.com" ".base-img[src!='']" "src")))
+
 (when model/configured?
   (cmd-hook ["meme" #"^meme$"]
-            ; #"^popular$" chat-instance-popular
+            #"^popular$" chat-instance-popular
             ; #"^popular\s(.+)" chat-instance-popular-for-gen
             ; #"^trending" trending-cmd
             #"^(.+?)\s*:(.+)\/(.*)$" generate-cmd
