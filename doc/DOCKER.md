@@ -8,7 +8,7 @@ official [Clojure image](https://hub.docker.com/_/clojure/).
 
 Configuration can be specified as env vars or passed in via a mounted volume.
 See
-[CONFIGURATION](https://github.com/devth/yetibot.core/blob/flat-config/doc/CONFIGURATION.md)
+[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs for more info.
 
 ## Ports
@@ -53,6 +53,41 @@ Tail its logs:
 
 ```
 docker logs -f yetibot
+```
+
+### Mostly configured "oneliner"
+
+A more complete example (though some config is still omitted):
+
+```
+docker run -d -p 80:3000 \
+  --restart "always" \
+  -e YB_ADAPTERS_IRC_USERNAME "yetibot" \
+  -e YETIBOT_ADAPTERS_SLACK_TYPE "slack" \
+  -e YETIBOT_ADAPTERS_SLACK_TOKEN "xoxb-123123" \
+  -e YETIBOT_URL "http://..." \
+  -e YETIBOT_GIPHY_KEY "" \
+  -e YETIBOT_IMGFLIP_USERNAME "" \
+  -e YETIBOT_IMGFLIP_PASSWORD "" \
+  -e YETIBOT_EBAY_APPID "" \
+  -e YETIBOT_TWITTER_CONSUMER_KEY "" \
+  -e YETIBOT_TWITTER_CONSUMER_SECRET "" \
+  -e YETIBOT_TWITTER_TOKEN "" \
+  -e YETIBOT_TWITTER_SECRET "" \
+  -e YETIBOT_TWITTER_SEARCH_LANG "" \
+  -e YETIBOT_BING_SEARCH_KEY "" \
+  -e YETIBOT_GOOGLE_API_KEY "" \
+  -e YETIBOT_GOOGLE_CUSTOM_SEARCH_ENGINE_ID "" \
+  -e YETIBOT_GOOGLE_OPTIONS_SAFE "" \
+  -e YETIBOT_EVAL_PRIV_0 "" \
+  -e YETIBOT_FEATURES_GITHUB_REPO "" \
+  -e YETIBOT_FEATURES_GITHUB_TOKEN "" \
+  -e YETIBOT_FEATURES_GITHUB_USER "" \
+  -e YETIBOT_WEATHER_WUNDERGROUND_KEY "" \
+  -e YETIBOT_WEATHER_WUNDERGROUND_DEFAULT_ZIP "" \
+  -e YETIBOT_WOLFRAM_APPID "" \
+  -e YETIBOT_WORDNIK_KEY "" \
+  devth/yetibot
 ```
 
 ## Troubleshooting
