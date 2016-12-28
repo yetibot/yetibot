@@ -55,16 +55,17 @@ non-backward-compatible way. Please see
 [CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs and port your existing config to the new structure.
 
+## Yetibot users
+
+Already using Yetibot? Please add yourself to the [list of Yetibot
+users](https://github.com/devth/yetibot/wiki/Yetibot-users)!
+
 ## Roadmap
 
 Yetibot has been undergoing continuous improvement since its inception. These
 are the immediate priorities, in addition to any bugfixes. Feedback and
 contributions are very welcome!
 
-- [ ] Flatten the config and obtain it via
-  [environ](https://github.com/weavejester/environ) to follow [12 Factor
-  App](http://12factor.net/config) practices
-  [#570](https://github.com/devth/yetibot/issues/570) — <em>In progress!</em>
 - [ ] Write docs on how to develop Yetibot
 - [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
 - [ ] Dockerize Datomic Pro Starter edition.
@@ -74,15 +75,20 @@ contributions are very welcome!
 - [ ] Create a Heroku deploy button to make it easy to get started
 - [ ] Make adapters plugable
 - [ ] Create more examples of plugins (e.g. Travis)
-- [ ] Run a demo Yetibot instance
+- [x] Run a demo Yetibot instance — you can now talk to a Yetibot on Freenode in
+  the `#yetibot` channel!
 - [ ] Design & build yetibot.com — <em>In progress!</em>
+- [x] Flatten the config and obtain it via
+  [environ](https://github.com/weavejester/environ) to follow [12 Factor
+  App](http://12factor.net/config) practices
+  [#570](https://github.com/devth/yetibot/issues/570)
 
 ## Installation
 
 There are three primary ways of installing Yetibot:
 
 0. **Follow the [Docker instructions](doc/DOCKER.md)**: the fastest way if you're
-   already using Docker!
+   already using Docker.
 0. **Clone this repo**: this gives you a standard Yetibot installation and
    provides a git-ignored place to store configuration. Run from the root dir
    with `lein run`.
@@ -95,13 +101,9 @@ There are three primary ways of installing Yetibot:
 
 ## Configuration
 
-Configuration lives at `config/config.edn`, which is git-ignored. See
-[config/config-sample.edn](config/config-sample.edn) for a sample config.
-`cp config/config-sample.edn config/config.edn` and fill in the blanks to get started.
-
-## Running
-
-Once configuration is in place, simply `lein run` (requires [leiningen](https://github.com/technomancy/leiningen#installation)).
+See the
+[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
+docs.
 
 ## Usage
 
