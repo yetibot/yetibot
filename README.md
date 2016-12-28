@@ -13,6 +13,7 @@
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 [![Yetibot on Docker Hub](https://img.shields.io/badge/Docker%20Hub-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
 [![CrossClj](https://img.shields.io/badge/CrossClj%20Docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
+[![Stories in Ready](https://badge.waffle.io/devth/yetibot.png?label=ready&title=Ready)](https://waffle.io/devth/yetibot)
 
 You can treat Yetibot as a communal command line. It works well for:
 
