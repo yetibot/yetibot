@@ -1,8 +1,9 @@
 # yetibot changelog
 
-## 0.4.3 (unreleased)
+## 0.4.3
 
-- use Chrome user agent for scrape - [#604](https://github.com/devth/yetibot/issues/604)
+- Use Chrome user agent for scrape - [#604](https://github.com/devth/yetibot/issues/604)
+- Upgrade to `yetibot.core "0.4.3"`
 
 ## 0.4.2
 
