@@ -25,6 +25,7 @@
                  ; utils
                  [org.flatland/useful "0.11.5"]
                  [org.clojure/tools.cli "0.3.1"]
+                 [json-path "0.3.0"]
 
                  ; polling
                  [robert/bruce "0.8.0"]]

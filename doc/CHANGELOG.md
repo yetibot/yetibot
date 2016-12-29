@@ -6,6 +6,7 @@
 
 - `json` command to parse json from text or from a url
   [#601](https://github.com/devth/yetibot/issues/601)
+- `json path` subcommand to select from data structures via JsonPath
 
 ## 0.4.1
 
