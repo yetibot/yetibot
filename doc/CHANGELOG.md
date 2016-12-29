@@ -1,6 +1,8 @@
 # yetibot changelog
 
-## 0.4.2 (unreleased)
+## 0.4.3 (unreleased)
+
+## 0.4.2
 
 ### Added
 
