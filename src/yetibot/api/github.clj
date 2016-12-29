@@ -136,6 +136,32 @@
         weekly-by-author)
       weekly-by-author)))
 
+(defn filter-since-ts
+  "Stats is a collection of statistics with a :w timestamp key.
+   If ts is nil return the stats coll as-is"
+  [stats ts]
+  (if ts
+    (filter (fn [stat]
+              ;; gh timestamps are seconds and joda is milliseconds
+              ;; so we must multiply by 1000
+              (>= (* 1000 (:w stat)) ts))
+            stats)
+    stats))
+
+(defn contributors-since-ts
+  "If ts is nil it gets stats for max time (52 weeks)"
+  [org repo ts]
+  (let [stats (contributor-statistics org repo)]
+    (->> stats
+         (map (fn [contrib-stat]
+                (let [filtered (filter-since-ts (:weeks contrib-stat) ts)]
+                  (merge
+                    (select-keys (sum-weekly filtered) [:a :d :c])
+                    {:author (-> contrib-stat :author :login)}))))
+         (filter #(> (:c %) 0))
+         (sort-by :c)
+         reverse)))
+
 ;;; (defn contents [repo path]
 ;;;   (r/contents org-name repo path auth))
 

@@ -6,7 +6,13 @@
     [yetibot.core.util.http :refer [get-json]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [taoensso.timbre :refer [info]]
+    [inflections.core :refer [plural]]
+    [clj-time [core :refer [ago minutes hours days weeks years months]]]
+    [clj-time.coerce :as c]
+    [clj-time.format :as f]
     [robert.bruce :refer [try-try-again] :as rb]))
+
+(def date-formatter (f/formatters :date))
 
 (defn feed
   "gh feed <org-name> # list recent activity for <org-name>"
@@ -111,6 +117,26 @@
               "Crunching the latest data for `%s/%s`, try again in a few moments 🐌"
               org-name repo))))))
 
+(defn contributors-since-cmd
+  "gh contributors <org>/<repo-name> since <n> <minutes|hours|days|weeks|months> ago # list contributors in order of commits since a given time"
+  {:yb/cat #{:util :info}}
+  [{[_ org-name repo n unit] :match chat-source :chat-source}]
+  (let [unit (plural unit) ; pluralize if singular
+        unit-fn (ns-resolve 'clj-time.core (symbol unit))
+        n (read-string n)]
+    (if (number? n)
+      (let [datetime (-> n unit-fn ago)
+            ts (c/to-long datetime)
+            sorted-contribs (gh/contributors-since-ts org-name repo ts)]
+        (conj
+          (map #(format "%s: %s commits, %s additions, %s deletions"
+                        (:author %) (:c %) (:a %) (:d %))
+               sorted-contribs)
+          (format "Contributions on %s/%s since %s" org-name repo
+                  (f/unparse date-formatter datetime))))
+      (str n " is not a number"))))
+
+
 (when (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
             #"feed\s+(\S+)" feed
@@ -126,5 +152,6 @@
             #"status$" status
             #"pr\s+(\S+)" pull-requests
             #"stats\s+(\S+)\/(\S+)" stats-cmd
+            #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
             #"tags\s+(\S+)\/(\S+)" tags
             #"branches\s+(\S+)\/(\S+)" branches))
