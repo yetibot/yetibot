@@ -2,6 +2,8 @@
 
 ## 0.4.3 (unreleased)
 
+- use Chrome user agent for scrape - [#604](https://github.com/devth/yetibot/issues/604)
+
 ## 0.4.2
 
 ### Added
