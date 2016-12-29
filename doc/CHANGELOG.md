@@ -1,8 +1,10 @@
 # yetibot changelog
 
-## 0.4.4 (Unreleased)
+## 0.4.4
 
 - Upgrade to `yetibot.core "0.4.4"`
+- Add `gh contributors since` to show contribution stats on a repo since given
+  date/time - [#595](https://github.com/devth/yetibot/issues/595)
 
 ## 0.4.3
 
