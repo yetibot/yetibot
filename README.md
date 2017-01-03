@@ -10,8 +10,8 @@
 
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
-[![Yetibot on Docker Hub](https://img.shields.io/badge/Docker%20Hub-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
-[![CrossClj](https://img.shields.io/badge/CrossClj%20Docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
+[![Yetibot on Docker Hub](https://img.shields.io/badge/docker-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
+[![CrossClj](https://img.shields.io/badge/docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
 [![Ready for work](https://img.shields.io/waffle/label/devth/yetibot/ready.svg)](https://waffle.io/devth/yetibot)
 [![In Progress](https://img.shields.io/waffle/label/devth/yetibot/in%20progress.svg)](https://waffle.io/devth/yetibot)
 [![Issue Count](https://codeclimate.com/github/devth/yetibot/badges/issue_count.svg)](https://codeclimate.com/github/devth/yetibot)
