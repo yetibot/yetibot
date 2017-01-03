@@ -9,3 +9,5 @@ engines:
 ratings:
   paths:
     - "**.clj"
+    - "**.md"
+    - "**.sh"
