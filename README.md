@@ -6,14 +6,15 @@
   <i>A chat bot written in Clojure, at your service.</i>
 </p>
 
-
 # Yetibot
+
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 [![Yetibot on Docker Hub](https://img.shields.io/badge/Docker%20Hub-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
 [![CrossClj](https://img.shields.io/badge/CrossClj%20Docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
 [![Ready for work](https://img.shields.io/waffle/label/devth/yetibot/ready.svg)](https://waffle.io/devth/yetibot)
 [![In Progress](https://img.shields.io/waffle/label/devth/yetibot/in%20progress.svg)](https://waffle.io/devth/yetibot)
+[![Issue Count](https://codeclimate.com/github/devth/yetibot/badges/issue_count.svg)](https://codeclimate.com/github/devth/yetibot)
 
 You can treat Yetibot as a communal command line. It works well for:
 
@@ -34,14 +35,13 @@ Features that make Yetibot powerful and great, which is to say *fun*:
 - **Aliases** let you parameterize complex expressions and give them a name
   allowing your team to quickly build up idiomatic team-specific Yetibot usages
   (not just memes!).
-- **Per-channel settings** let you store arbitrary config at the channel level, which
-  can be used by commands or aliases to change the behavior of commands
+- **Per-channel settings** let you store arbitrary config at the channel level,
+  which can be used by commands or aliases to change the behavior of commands
   depending on which channel you're in (e.g. the default JIRA project for a
   channel).
 - **Feature category toggle** lets you disable or enable entire
   [categories](https://github.com/devth/yetibot.core/blob/master/doc/CATEGORIES.md)
-  of commands per-channel; useful for disabling gifs in the work-only
-  channel 😁.
+  of commands per-channel; useful for disabling gifs in the work-only channel 😁.
 
 Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
 ways it can be used.
