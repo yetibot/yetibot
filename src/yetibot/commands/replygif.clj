@@ -1,4 +1,4 @@
-(ns yetibot.commands.react
+(ns yetibot.commands.replygif
   (:require
     [clojure.string :as s]
     [yetibot.core.hooks :refer [cmd-hook]]
@@ -11,15 +11,15 @@
 (defn- filter-images [html]
   (second (re-find img-pattern html)))
 
-(defn- fetch-react []
+(defn- fetch-replygif []
   (fetch endpoint))
 
-(defn react-cmd
-  "react # fetch a random gif from the first page of reactiongifs.com"
+(defn replygif-cmd
+  "replygif # fetch a gif from replygif.net/random"
   {:yb/cat #{:fun :img :gif}}
-  [_] (-> (fetch-react)
+  [_] (-> (fetch-replygif)
         filter-images
         ensure-img-suffix))
 
-(cmd-hook #"react"
-          _ react-cmd)
+(cmd-hook #"replygif"
+          _ replygif-cmd)
