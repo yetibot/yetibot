@@ -13,7 +13,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.4"]
+                 [yetibot.core "0.4.5"]
 
                  ; apis
                  [twitter-api "0.7.6"]
@@ -24,7 +24,6 @@
 
                  ; utils
                  [org.flatland/useful "0.11.5"]
-                 [org.clojure/tools.cli "0.3.1"]
                  [json-path "0.3.0"]
 
                  ; polling
