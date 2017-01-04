@@ -14,7 +14,7 @@
 [![CrossClj](https://img.shields.io/badge/API%20docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
 [![Ready for work](https://img.shields.io/waffle/label/devth/yetibot/ready.svg)](https://waffle.io/devth/yetibot)
 [![In Progress](https://img.shields.io/waffle/label/devth/yetibot/in%20progress.svg)](https://waffle.io/devth/yetibot)
-[![Issue Count](https://codeclimate.com/github/devth/yetibot/badges/issue_count.svg)](https://codeclimate.com/github/devth/yetibot)
+[![Issue Count](https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate)](https://codeclimate.com/github/devth/yetibot)
 
 You can treat Yetibot as a communal command line. It works well for:
 
