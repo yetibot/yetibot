@@ -15,6 +15,7 @@
 [![Ready for work](https://img.shields.io/waffle/label/devth/yetibot/ready.svg?label=ready%20for%20work)](https://waffle.io/devth/yetibot)
 [![In Progress](https://img.shields.io/waffle/label/devth/yetibot/in%20progress.svg)](https://waffle.io/devth/yetibot)
 [![Issue Count](https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate)](https://codeclimate.com/github/devth/yetibot)
+[![Codecov](https://img.shields.io/codecov/c/github/devth/yetibot.svg)](https://codecov.io/gh/devth/yetibot)
 
 You can think of Yetibot as a **communal command line**. It excels at:
 
@@ -22,7 +23,7 @@ You can think of Yetibot as a **communal command line**. It excels at:
    Scala, Clojure, and Haskell
  - **productivity**: automating things around Jenkins, JIRA, running SSH
    commands on various servers, and interacting with internal APIs via private
-   yetibot plugins
+   Yetibot plugins
  - **fun**: Google image search, gif lookups, meme generation
 
 Features that make Yetibot powerful and great, which is to say *fun*:
