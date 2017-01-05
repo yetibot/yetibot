@@ -2,12 +2,10 @@
 
 ## 0.4.6
 
-### Added
-
-### Changed
-
 - Renamed `react` command to `replygif` to make way for Slack `react` command.
   This might be removed in the future since it's easily aliasable with `scrape`.
+- Moved `nil` to `yetibot.core`
+- Upgrade to `yetibot.core "0.4.6"`
 
 ## 0.4.5
 
