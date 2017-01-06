@@ -8,7 +8,6 @@ We use an alias to store the list of zip codes for all members of our
 distributed team, which we then feed to another alias which outputs a short
 single-line description of current weather for a location.
 
-
 ```
 !alias locs = list 59101 98101 94101
 

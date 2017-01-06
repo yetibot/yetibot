@@ -19,12 +19,12 @@
 
 You can think of Yetibot as a **communal command line**. It excels at:
 
- - **teaching**: how to run internal automation, language evaluation for JS,
-   Scala, Clojure, and Haskell
- - **productivity**: automating things around Jenkins, JIRA, running SSH
-   commands on various servers, and interacting with internal APIs via private
-   Yetibot plugins
- - **fun**: Google image search, gif lookups, meme generation
+- **teaching**: how to run internal automation, language evaluation for JS,
+  Scala, Clojure, and Haskell
+- **productivity**: automating things around Jenkins, JIRA, running SSH
+  commands on various servers, and interacting with internal APIs via private
+  Yetibot plugins
+- **fun**: Google image search, gif lookups, meme generation
 
 Features that make Yetibot powerful and great, which is to say *fun*:
 
@@ -93,12 +93,12 @@ contributions are very welcome!
 
 There are three primary ways of installing Yetibot:
 
-0. **Follow the [Docker instructions](doc/DOCKER.md)**: the fastest way if you're
+1. **Follow the [Docker instructions](doc/DOCKER.md)**: the fastest way if you're
    already using Docker.
-0. **Clone this repo**: this gives you a standard Yetibot installation and
+1. **Clone this repo**: this gives you a standard Yetibot installation and
    provides a git-ignored place to store configuration. Run from the root dir
    with `lein run`.
-0. **Make your own repo and depend on Yetibot**: this gives you ultimate
+1. **Make your own repo and depend on Yetibot**: this gives you ultimate
    customizability, allowing you to depend on custom Yetibot plugins or define
    your own commands in-project, and gives you control over where you store
    your config (manual management, commit to private git repo, etc...)
@@ -145,7 +145,6 @@ nested.
 
 <img src="http://cdn.memegenerator.net/instances/500x/33734863.jpg" />
 
-
 ### Nested sub-expressions
 
 For arbitrarily-nested sub-expressions, use `$(expr)` syntax, which
@@ -157,7 +156,6 @@ disambiguates the open and closing of an expressions.
 
 <img src="http://i.imgflip.com/z4d45.jpg" />
 
-
 ### Combo
 
 ```
@@ -165,7 +163,6 @@ disambiguates the open and closing of an expressions.
 ```
 
 <img src="http://i.imgflip.com/z4d6f.jpg" />
-
 
 ### Aliases
 
@@ -263,33 +260,34 @@ vals, weather, wiki, wolfram, wordnik, words, xargs, xkcd, zen
 ## Plugins
 
 Yetibot has a plugin-based architecture. Its core which all plugins depend on
-lives at https://github.com/devth/yetibot.core.
+is [yetibot.core](https://github.com/devth/yetibot.core).
 
-[<img src="https://img.shields.io/clojars/v/yetibot.core.svg" />](https://clojars.org/yetibot.core)
-
+[![yetibot.core](https://img.shields.io/clojars/v/yetibot.core.svg)](https://clojars.org/yetibot.core)
 
 Yetibot will load all commands and observers with namespaces on the classpath
-matching the regexes at:
-https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L12-16
+matching [these
+regexes](https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/loader.clj#L12-16).
 
 This lets you build any number of independent plugin projects and combine them
-via standard leiningen dependencies.
+via standard Leiningen dependencies.
 
 ## How it works
 
 Curious how the internals of Yetibot works? At a high level:
 
-0. commands are run through a parser built on
-   [InstaParse](https://github.com/Engelberg/instaparse):
-   https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/parser.clj
-0. an InstaParse transformer is configured to evaluate expressions through the
-   interpreter, which handles things like nested sub-expressions and piped
-   commands:
-   https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/interpreter.clj
-0. [command namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
-   are `hook`ed into the interpreter's `handle-cmd` function using a `cmd-hook`
-   macro and triggered via regex prefix matching:
-   https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/hooks.clj
+1. commands are run through a
+   [parser](https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/parser.clj)
+   built on [InstaParse](https://github.com/Engelberg/instaparse):
+1. an [InstaParse
+   transformer](https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/interpreter.clj)
+   is configured to evaluate expressions through the interpreter, which handles
+   things like nested sub-expressions and piped commands
+1. [command
+   namespaces](https://github.com/devth/yetibot/tree/master/src/yetibot/commands)
+   are
+   [`hook`ed](https://github.com/devth/yetibot.core/blob/master/src/yetibot/core/hooks.clj)
+   into the interpreter's `handle-cmd` function using a `cmd-hook` macro and
+   triggered via regex prefix matching
 
 ## Getting help
 
