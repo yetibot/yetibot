@@ -92,8 +92,7 @@
 (defn get-option-cli-info
   [option]
   (if-let [cli-arg (get cli-args option)]
-    (->> (remove nil? cli-arg)
-         (join ", "))))
+    (join ", " (remove nil? cli-arg))))
 
 (defn get-info
   "Gets info about an option.
@@ -111,7 +110,7 @@
   (if (string? info)
     (str option " : " info)
     (str option " : "
-         (apply str (interleave (repeat "\n\t") info)))))
+         (join (interleave (repeat "\n\t") info)))))
 
 (defn convert-keys-into-google-keywords
   [obj]

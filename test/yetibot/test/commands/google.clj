@@ -18,7 +18,7 @@
 
 (deftest options-processor-invalid-input
   (let [results (command/options-processor "jughead --nu 2")]
-    (is (not (empty? (:errors results))))))
+    (is (seq (:errors results)))))
 
 (deftest options-processor-valid-input
   (let [results (command/options-processor "jughead jones --num 2")]
@@ -106,7 +106,7 @@
 (deftest state-of-set-options-test
   (with-redefs-fn
     {#'command/options-atom (atom {:wilfred "demigod"})}
-    #(is (not (empty? (command/state-of-set-options))))))
+    #(is (seq (command/state-of-set-options)))))
 
 (deftest empty-state-of-set-options-test
   (is (empty? (command/state-of-set-options))))

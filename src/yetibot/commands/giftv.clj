@@ -13,9 +13,7 @@
   "giftv # fetch a random gif from gif.tv"
   {:yb/cat #{:fun :gif :img}}
   [_]
-  (-> (fetch endpoint)
-    gif-uri))
-
+  (gif-uri (fetch endpoint)))
 
 (cmd-hook #"giftv"
           _ giftv-cmd)

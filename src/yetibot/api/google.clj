@@ -49,26 +49,25 @@
 
 (defn search
   "main search function,
-  args refer to map of extra params to the search api
-  order refers to the the way result is display (look
-  at display-order var)"
+   args refer to map of extra params to the search api
+   order refers to the the way result is display (look
+   at display-order var)"
   [q & {:keys [order args] :or {args {} order :normal}}]
   (info "Google search for: " q)
-  (let [query-params  {:q q
-                       :key (-> (config) :value :api :key)
-                       :cx (-> (config) :value :custom :search :engine :id)}
+  (let [query-params {:q q
+                      :key (-> (config) :value :api :key)
+                      :cx (-> (config) :value :custom :search :engine :id)}
         options {:query-params
                  (merge query-params args)}]
-    (do
-      (info options)
+    (info options)
     (try
       (-> (client/get api-url options)
-        (get :body)
-        (json/read-json))
+          (get :body)
+          (json/read-json))
       (catch Exception e
         (warn "Google search returned a failure http status")
-        (warn "Google: caught " e)
-        nil)))))
+        (warn "Google: caught" e)
+        nil))))
 
 (defn image-search [q & {:keys [args] :or {args {}}}]
   (let [param {"searchType" "image"}]

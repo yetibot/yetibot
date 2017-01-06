@@ -33,8 +33,8 @@
             (str "Low: " lo)
             (str "Market Cap: " mc)
             (str "Change Percent: " cp"%")
-            (when (not (empty? el))(str "After Hours Price: " el))
-            (when (not (empty? ecp))(str "After Hours Change Percent: " ecp "%"))]))
+            (when (seq el) (str "After Hours Price: " el))
+            (when (seq ecp) (str "After Hours Change Percent: " ecp "%"))]))
       (str "Unable to find symbol for " stock-symbol ". Try another symbol such as MSFT or AAPL."))))
 
 (defn stock-cmd

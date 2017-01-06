@@ -17,8 +17,8 @@
 ; (:body (json-get (endpoint-summary "Sherlock")))
 
 (defn has-match? [res]
-  (and (not (empty? res))
-       (not (empty? (second res)))))
+  (and (seq res)
+       (seq (second res))))
 
 (defn- no-match [q] (str "No match for " q))
 

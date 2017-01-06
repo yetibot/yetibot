@@ -13,7 +13,7 @@
 
   (deftest memes-list
     (is (:success ms))
-    (is (> (-> ms :data :memes count) 0)))
+    (is (pos? (-> ms :data :memes count))))
 
   (deftest search-memes-test
     (is (= "Ancient Aliens" (:name (first (search-memes "alien"))))))
@@ -21,7 +21,7 @@
   (deftest generate-meme-test
     (let [m (generate-meme "61579" "foo" "bar")]
       (is (:success m))
-      (is (not-nil? (-> m :data)))))
+      (is (not-nil? (:data m)))))
 
   (deftest generate-meme-by-query-test
     (is (:success (generate-meme-by-query "simply" "foo" "bar")))

@@ -81,9 +81,8 @@
                (str "RT " (format-screen-name retweeted-status) ": "
                     (format-tweet-text retweeted-status))
                (format-tweet-text json))]
-    ; (info json)
     (format "%s — @%s %s"
-            (-> text html-decode)
+            (html-decode text)
             ; (-> (:text json) expand-twitter-urls html-decode)
             screen-name url)))
 
@@ -167,7 +166,7 @@
                                              :cursor cursor}))
           current-users (into users (:users body))
           next-cursor (:next_cursor body)]
-      (if (or (> iter 10) (= 0 next-cursor)) ; limit to 10 pages
+      (if (or (> iter 10) (zero? next-cursor)) ; limit to 10 pages
         current-users
         ; keep looping to fetch all pages until cursor is 0
         (recur next-cursor current-users (inc iter))))))

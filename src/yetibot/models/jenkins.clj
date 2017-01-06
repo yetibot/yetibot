@@ -80,7 +80,7 @@
 
 (defn jobs-for-instance [inst-name]
   (let [id ((:fetcher (instance-data inst-name)))]
-    (-> id :jobs)))
+    (:jobs id)))
 
 (defn jobs-to-info []
   (some->> (map (fn [[inst-key inst-info]]
@@ -101,9 +101,7 @@
   (let [p (re-pattern job-to-match)
         matches (filter (fn [[job-name inst-info]] (re-find p job-name))
                         (jobs-to-info))]
-    (if (empty? matches)
-      nil
-      (first matches))))
+    (first matches)))
 
 (defn default-job []
   (when-let [[_ inst-info] (first (filter (fn [[inst-k inst-info]]

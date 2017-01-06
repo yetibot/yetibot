@@ -12,10 +12,9 @@
 (defn config [] (get-config s3-schema [:s3]))
 
 (defn transformed-config []
-  (if-let [c (:value (config))]
+  (when-let [c (:value (config))]
     {:access-key (-> c :access :key)
-     :secret-key (-> c :secret :key)}
-    nil))
+     :secret-key (-> c :secret :key)}))
 
 (defn content [path]
   (let [[bucket key] (s/split path #"\/" 2)]

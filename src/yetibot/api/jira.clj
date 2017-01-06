@@ -32,13 +32,13 @@
 
 (defn configured? [] (config))
 
-(defn projects [] (->> (config) :projects))
+(defn projects [] (:projects (config)))
 
 (defn project-for-key [k] (first (filter #(= (:key %) k) (projects))))
 
 (defn project-keys [] (map :key (projects)))
 
-(defn project-keys-str [] (->> (project-keys) (s/join ",")))
+(defn project-keys-str [] (s/join "," (project-keys)))
 
 (defn default-version-id [project-key] (-> (project-for-key project-key)
                                            :default :version :id))
@@ -92,7 +92,7 @@
 
 (defn format-issue [issue-data]
   (let [fs (:fields issue-data)]
-    [(-> fs :summary)
+    [(:summary fs)
      (str "Assignee: " (-> fs :assignee :displayName))
      (str "Status: " (-> fs :status :name))
      (url-from-key (:key issue-data))]))
@@ -102,14 +102,14 @@
     (format "[%s] [%s] %s %s"
             (or (-> fs :assignee :name) "unassigned")
             (-> fs :status :name)
-            (-> fs :summary)
+            (:summary fs)
             (url-from-key (:key issue-data)))))
 
 (defn format-comment [c]
   (str "📞 "
        (-> c :author :name) " "
        (parse-and-format-date-string (:created c))
-       ": " (-> c :body)))
+       ": " (:body c)))
 
 (defn format-worklog-item [w]
   (str "🚧 " (-> w :author :name) " " (:timeSpent w) ": " (:comment w)
@@ -127,7 +127,7 @@
   (str "📎 "
        (-> a :author :name) " "
        (parse-and-format-date-string (:created a))
-       ": " (-> a :content)))
+       ": " (:content a)))
 
 (defn format-attachments [issue-data]
   (when-let [attachments (-> issue-data :fields :attachment)]
@@ -139,8 +139,8 @@
   (let [fs (:fields issue-data)]
     (flatten
       (keep identity
-            [(str (:key issue-data) " ↪︎ " (-> fs :status :name) " ↪︎ " (-> fs :summary))
-             (-> fs :description)
+            [(str (:key issue-data) " ↪︎ " (-> fs :status :name) " ↪︎ " (:summary fs))
+             (:description fs)
              (s/join
                "  "
                [(str "👷 " (-> fs :assignee :name))
@@ -148,7 +148,7 @@
              (s/join
                " "
                [(str "❗️ Priority: " (-> fs :priority :name))
-                (str " ✅ Fix version: " (s/join ", " (map :name (-> fs :fixVersions))))])
+                (str " ✅ Fix version: " (s/join ", " (map :name (:fixVersions fs))))])
              (str "🕐 Created: " (parse-and-format-date-string (:created fs))
                   "  🕗 Updated: " (parse-and-format-date-string (:updated fs)))
              (map format-comment (-> fs :comment :comments))

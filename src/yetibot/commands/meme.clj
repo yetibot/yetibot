@@ -15,7 +15,7 @@
 (defn- instance-result [json]
   (if (:success json)
     (urlify (-> json :data  :url))
-    (str "Failed to generate meme: " (-> json :error_message))))
+    (str "Failed to generate meme: " (:error_message json))))
 
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"

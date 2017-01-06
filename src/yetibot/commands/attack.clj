@@ -23,10 +23,10 @@
         c (crit)
         total (+ c d)]
     (str (:name user) " attacked " (:name user-to-attack)
-         (if (or (= 0 d) (not user-to-attack))
+         (if (or (zero? d) (not user-to-attack))
            " but missed"
            (str " for " d " damage"
-                (when (> c 0)
+                (when (pos? c)
                   (str " + " c " crit (" total " total)!")))))))
 
 (cmd-hook #"attack"

@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.4.7 (Unreleased)
+
+- Fixup linting issues for markdown, shell and Clojure
+
 ## 0.4.6
 
 - Renamed `react` command to `replygif` to make way for Slack `react` command.

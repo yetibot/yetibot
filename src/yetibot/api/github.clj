@@ -158,7 +158,7 @@
                   (merge
                     (select-keys (sum-weekly filtered) [:a :d :c])
                     {:author (-> contrib-stat :author :login)}))))
-         (filter #(> (:c %) 0))
+         (filter #(pos? (:c %)))
          (sort-by :c)
          reverse)))
 
@@ -188,7 +188,7 @@
               (-> e :repo :name))]
         (map (fn [{:keys [author sha message]}]
                (str "* "
-                    (apply str (take 7 sha))
+                    (s/join (take 7 sha))
                     " "
                     message
                     " [" (:name author) "]"))
