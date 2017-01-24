@@ -4,6 +4,7 @@
     [schema.core :as sch]
     [yetibot.core.schema :refer [non-empty-str]]
     [tentacles
+     [core :refer [with-url]]
      [search :as search]
      [pulls :as pulls]
      [issues :as issues]
@@ -32,14 +33,10 @@
 (defn configured? [] (config))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
-; propogate the configured endpoint to the tentacles library
-
-(alter-var-root #'tentacles.core/url (constantly endpoint))
-
 (def token (:token (config)))
 (def auth {:oauth-token token})
 (future
-  (def user (u/me auth))
+  (def user (with-url endpoint (u/me auth)))
   (def user-name (:login user)))
 
 ; ensure org-names is a sequence; config allows either
@@ -56,8 +53,9 @@
 
 (defn tree
   [org-name repo & [opts]]
-  (data/tree org-name repo (or (:branch opts) "master")
-          (merge auth {:recursive true} opts)))
+  (with-url endpoint
+    (data/tree org-name repo (or (:branch opts) "master")
+              (merge auth {:recursive true} opts))))
 
 (defn find-paths [tr pattern]
   (filter #(re-find pattern (:path %)) (:tree tr)))
@@ -90,26 +88,33 @@
 ;;; repos
 
 (defn repos [org-name]
-  (remove :fork (remove empty? (r/org-repos org-name (merge auth {:per-page 100})))))
+  (remove :fork (remove empty?
+                  (with-url endpoint
+                    (r/org-repos org-name (merge auth {:per-page 100}))))))
 
 (defn repos-by-org []
   (into {} (for [org-name (org-names)]
              [org-name (repos org-name)])))
 
 (defn branches [org-name repo]
-  (r/branches org-name repo auth))
+  (with-url endpoint
+    (r/branches org-name repo auth)))
 
 (defn tags [org-name repo]
-  (r/tags org-name repo auth))
+  (with-url endpoint
+    (r/tags org-name repo auth)))
 
 (defn pulls [org-name repo]
-  (pulls/pulls org-name repo auth))
+  (with-url endpoint
+    (pulls/pulls org-name repo auth)))
 
 (defn contributor-statistics [org-name repo]
-  (r/contributor-statistics org-name repo auth))
+  (with-url endpoint
+    (r/contributor-statistics org-name repo auth)))
 
 (defn code-frequency [org-name repo]
-  (r/code-frequency org-name repo auth))
+  (with-url endpoint
+    (r/code-frequency org-name repo auth)))
 
 (defn sum-weekly
   "Takes the weekly stats for an author and sums them into:
@@ -166,14 +171,16 @@
 ;;;   (r/contents org-name repo path auth))
 
 (defn org-issues [org-name]
-  (issues/org-issues org-name auth))
+  (with-url endpoint
+    (issues/org-issues org-name auth)))
 
 ;; search
 
 (defn search-pull-requests [org-name keywords & [opts]]
-  (search/search-issues keywords
-                        (merge {:state "open" :type "pr" :user org-name} opts)
-                        (merge {:sort "created"} auth)))
+  (with-url endpoint
+    (search/search-issues keywords
+                          (merge {:state "open" :type "pr" :user org-name} opts)
+                          (merge {:sort "created"} auth))))
 
 
 ;;; events / feed
@@ -205,7 +212,7 @@
   (map fmt-event evts))
 
 (defn events [org-name]
-  (e/org-events user-name org-name auth))
+  (with-url endpoint (e/org-events user-name org-name auth)))
 
 (defn formatted-events [org-name]
   (fmt-events (events org-name)))
