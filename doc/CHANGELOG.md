@@ -1,8 +1,10 @@
 # yetibot changelog
 
-## 0.4.7 (Unreleased)
+## 0.4.7
 
 - Fixup linting issues for markdown, shell and Clojure
+- Upgrade to yetibot.core 0.4.7 for fixes on creating mutable config when not
+  present
 
 ## 0.4.6
 
