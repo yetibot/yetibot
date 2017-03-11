@@ -49,9 +49,10 @@ ways it can be used.
 
 ## Getting started
 
-To quickly try out Yetibot with minimal config, read the [Yetibot on
-Docker](doc/DOCKER.md) docs or see the [Getting Started](doc/GETTING_STARTED.md)
-docs.
+To quickly try out Yetibot with minimal config:
+
+- read the [Yetibot on Docker](doc/DOCKER.md) docs
+- or see the [Getting Started](doc/GETTING_STARTED.md) docs
 
 ## Changes in 0.4.0
 
