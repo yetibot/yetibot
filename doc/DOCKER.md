@@ -1,4 +1,4 @@
-# Docker
+# Yetibot on Docker
 
 The official Yetibot image is
 [devth/yetibot](https://hub.docker.com/r/devth/yetibot/). It's built on the
