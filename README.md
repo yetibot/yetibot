@@ -12,7 +12,7 @@
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 [![Yetibot on Docker Hub](https://img.shields.io/badge/docker-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
-[![CrossClj](https://img.shields.io/badge/API%20docs-yetibot-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
+[![CrossClj](https://img.shields.io/badge/API%20docs-⚡️-blue.svg)](https://crossclj.info/doc/yetibot/latest/index.html)
 [![Ready for work](https://img.shields.io/waffle/label/devth/yetibot/ready.svg?label=ready%20for%20work)](https://waffle.io/devth/yetibot)
 [![In Progress](https://img.shields.io/waffle/label/devth/yetibot/in%20progress.svg)](https://waffle.io/devth/yetibot)
 [![Issue Count](https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate)](https://codeclimate.com/github/devth/yetibot)
@@ -59,8 +59,10 @@ you can play with in Slack.
 
 To quickly try out Yetibot with minimal config:
 
-- read the [Yetibot on Docker](doc/DOCKER.md) docs
-- or see the [Getting Started](doc/GETTING_STARTED.md) docs
+- read the [Yetibot on Docker](doc/DOCKER.md) docs if you want to run it with
+  Docker
+- or see the [Getting Started](doc/GETTING_STARTED.md) docs for other ways to
+  run
 
 ## Changes in 0.4.0
 
