@@ -21,7 +21,7 @@ Yetibot runs a webapp on port `3000`. You may optionally expose it via `-P` or
 The most minimal incantation to run a Yetibot is:
 
 ```
-docker run -e YB_ADAPTERS_IRC_TYPE="irc" devth/yetibot
+docker run -it --rm -e YB_ADAPTERS_IRC_TYPE="irc" devth/yetibot
 ```
 
 This will join Freenode with a username like `yetibot_$rand` where `$rand` is a
