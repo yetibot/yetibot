@@ -11,7 +11,7 @@ A very minimal config would be:
 
 ```clojure
 {:yetibot
-  :adapters {:freenode {:type "irc",
+  {:adapters {:freenode {:type "irc",
                         :username "my-yetibot",
                         :host "chat.freenode.net",
                         :port "7070",
