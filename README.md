@@ -8,7 +8,7 @@
 
 # Yetibot
 
-<div align="center">
+<p style="text-align: center">
   <a href="http://slack.yetibot.com"><img src="https://camo.githubusercontent.com/b0fefa1de2d54b711478191480d51437d3c38e1b/687474703a2f2f736c61636b2e79657469626f742e636f6d2f62616467652e737667" alt="Slack" data-canonical-src="http://slack.yetibot.com/badge.svg" style="max-width:100%;"></a>
   <a href="https://travis-ci.org/devth/yetibot"><img src="https://camo.githubusercontent.com/4fa6d7f226dc0fcbbb43d159905aec9a91faf72a/68747470733a2f2f7472617669732d63692e6f72672f64657674682f79657469626f742e7376673f6272616e63683d6d6173746572" alt="Build Status" data-canonical-src="https://travis-ci.org/devth/yetibot.svg?branch=master" style="max-width:100%;"></a>
   <a href="https://clojars.org/yetibot"><img src="https://camo.githubusercontent.com/53696f51aef423dacafd0d37e6af85a4f3ba2c52/68747470733a2f2f696d672e736869656c64732e696f2f636c6f6a6172732f762f79657469626f742e737667" alt="Yetibot" data-canonical-src="https://img.shields.io/clojars/v/yetibot.svg" style="max-width:100%;"></a>
@@ -18,7 +18,7 @@
   <a href="https://waffle.io/devth/yetibot"><img src="https://camo.githubusercontent.com/c3ca71fbc1acbef3d417c7aaf800c12d4c7219f9/68747470733a2f2f696d672e736869656c64732e696f2f776166666c652f6c6162656c2f64657674682f79657469626f742f696e25323070726f67726573732e737667" alt="In Progress" data-canonical-src="https://img.shields.io/waffle/label/devth/yetibot/in%20progress.svg" style="max-width:100%;"></a>
   <a href="https://codeclimate.com/github/devth/yetibot"><img src="https://camo.githubusercontent.com/eeca7af6907c327dca3f70cfc0180ca27c9ce4b1/68747470733a2f2f696d672e736869656c64732e696f2f636f6465636c696d6174652f6973737565732f6769746875622f64657674682f79657469626f742e7376673f6c6162656c3d636f6465253230636c696d617465" alt="Issue Count" data-canonical-src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate" style="max-width:100%;"></a>
   <a href="https://codecov.io/gh/devth/yetibot"><img src="https://camo.githubusercontent.com/ca5e729a958583b6220e014c5242eccac0f542bf/68747470733a2f2f696d672e736869656c64732e696f2f636f6465636f762f632f6769746875622f64657674682f79657469626f742e737667" alt="Codecov" data-canonical-src="https://img.shields.io/codecov/c/github/devth/yetibot.svg" style="max-width:100%;"></a>
-</div>
+</p>
 
 You can think of Yetibot as a **communal command line**. It excels at:
 
