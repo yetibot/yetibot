@@ -8,6 +8,7 @@
 
 # Yetibot
 
+[![Slack](http://slack.slack.com/badge.svg)](http://slack.yetibot.com)
 [![Build Status](https://travis-ci.org/devth/yetibot.svg?branch=master)](https://travis-ci.org/devth/yetibot)
 [![Yetibot](https://img.shields.io/clojars/v/yetibot.svg)](https://clojars.org/yetibot)
 [![Yetibot on Docker Hub](https://img.shields.io/badge/docker-%E2%86%92-blue.svg)](https://hub.docker.com/r/devth/yetibot/)
@@ -46,6 +47,13 @@ Features that make Yetibot powerful and great, which is to say *fun*:
 
 Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
 ways it can be used.
+
+## Use it right now
+
+Get an invite to the official Yetibot slack at
+[slack.yetibot.com](http://slack.yetibot.com). There's Yetibot running on a
+Droplet generously provided by [DigitalOcean](https://www.digitalocean.com) that
+you can play with in Slack.
 
 ## Getting started
 
