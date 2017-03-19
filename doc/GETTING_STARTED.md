@@ -11,11 +11,11 @@ A very minimal config would be:
 
 ```clojure
 {:yetibot
-  :adapters {:freenode {:type "irc",
+  {:adapters {:freenode {:type "irc",
                         :username "my-yetibot",
                         :host "chat.freenode.net",
                         :port "7070",
-                        :ssl "true"}}}
+                        :ssl "true"}}}}
 ```
 
 This instructs Yetibot to join freenode with the username `my-yetibot` (change
