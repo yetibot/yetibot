@@ -63,7 +63,7 @@
       (if-not (empty? matching-ms)
         matching-ms
         ; fallback to search-via-scrape if cached results don't contain a match
-        (search-via-scrape query)))))
+        (scrape-all-memes query 3)))))
 
 (defn generate-meme [id text0 text1]
   (get-json
