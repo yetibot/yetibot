@@ -32,9 +32,9 @@
     (re-find p (s/replace (:name meme) #"\s" ""))))
 
 ; todo: append results of search-via-scrape to cached (memes)
-(defn search-via-scrape [q]
+(defn search-via-scrape [q n]
   (info "search via scraping" q)
-  (let [res (client/get "https://imgflip.com/memesearch" {:query-params {:q q}})]
+  (let [res (client/get "https://imgflip.com/memesearch" {:query-params {:q q :page n}})]
     (->> res
          :body
          (re-seq #"alt\=\"([^\"]+)\"\s+src\=\'.+imgflip\.com\/([\w\d]+).jpg\'")
@@ -42,6 +42,18 @@
                 {:name (s/replace alt #"\sMeme Template( Thumbnail)*" "")
                  :url (str "http://i.imgflip.com/" id ".jpg")
                  :id (parse-base-36-int id)})))))
+
+(defn scrape-all-memes
+  "Fetch Pages of Memes Until Max Number of Pages is Reached"
+  ([q max-pages]
+   (let [initial-memes (into [] (search-via-scrape q 1))] 
+     (scrape-all-memes q initial-memes 2 max-pages)))
+  ([q merged-memes page-num max-pages]
+   (let [new-memes (apply merge
+                          merged-memes (search-via-scrape q page-num))]
+     (if (< page-num max-pages) ; Set Max Number of Pages to Fetch Here
+       (scrape-all-memes q new-memes (inc page-num) max-pages)
+       merged-memes))))
 
 (defn search-memes [query]
   (let [ms (-> (memes) :data :memes)
@@ -51,7 +63,7 @@
       (if-not (empty? matching-ms)
         matching-ms
         ; fallback to search-via-scrape if cached results don't contain a match
-        (search-via-scrape query)))))
+        (scrape-all-memes query 3)))))
 
 (defn generate-meme [id text0 text1]
   (get-json

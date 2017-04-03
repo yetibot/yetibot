@@ -17,7 +17,10 @@
   "json <url> # parse json from <url>"
   [{[url] :match}]
   (info "json" url)
-  (:body (client/get url {:as :json})))
+  (-> (client/get url)
+      :body
+      (clojure.string/replace  #"\uFEFF" "")
+      json/read-str))
 
 (defn json-parse-cmd
   "json parse <json>"

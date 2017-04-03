@@ -47,7 +47,7 @@
   "meme preview <term> # preview an example of the first match for <term>"
   {:yb/cat #{:fun :img :meme}}
   [{[_ term] :match}]
-  (if-let [matches (model/search-memes term)]
+  (if-let [matches (model/scrape-all-memes term 3)]
     (urlify (-> matches first :url))
     (str "Couldn't find any memes for " term)))
 
@@ -55,7 +55,7 @@
   "meme search <term> # query available meme generators"
   {:yb/cat #{:fun :img :meme}}
   [{[_ term] :match}]
-  (if-let [matches (model/search-memes term)]
+  (if-let [matches (model/scrape-all-memes term 3)]
     (map :name matches)
     (str "Couldn't find any memes for " term)))
 

@@ -83,4 +83,4 @@
 (cmd-hook ["emoji" #"^emoji$"]
           #"^tag\s(-i\s)?(.+)$" search-by-tag
           #"^description\s(-i\s)?(.+)$" search-by-description
-          #"^alias\s(.+)$" search-by-alias )
+          #"^alias\s(.+)$" search-by-alias)
