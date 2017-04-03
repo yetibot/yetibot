@@ -2,7 +2,6 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [clojure.data.json :as json]
     [clojure.core.memoize :as m])
   (:import
    [com.vdurmont.emoji EmojiManager]))
@@ -21,20 +20,20 @@
                     :tags (.getTags emoji)
                     }) (get-all-emojis)))
 
-(defonce emojis (m/ttl parse-all-emojis :ttl/threshold 3600000))
+(defonce emojis (parse-all-emojis))
 
 (defn filter-by-tag
-  "filter memes by tag"
+  "filter emojis by tag"
   [tag]
   (filter (fn [emoji] (some #{tag} (:tags emoji))) (emojis)))
 
 (defn filter-by-description
-  "filter memes by description"
+  "filter emojis by description"
   [description]
   (filter (fn [emoji] (re-find (re-pattern description) (:description emoji))) (emojis))) 
 
 (defn filter-by-alias                                                               
-  "filter memes by alias"                                                          
+  "filter emojis by alias"                                                          
   [alias]                                                                          
   (filter (fn [emoji]
             (->
@@ -50,7 +49,7 @@
 
    [-i (info)] is optional, if set will return the unicode as well as a vector of its
    aliases"
-  {:yb/cat #{:fun :img :meme}}
+  {:yb/cat #{:fun :img :emoji}}
   ([{[_ info-flag tag] :match}]
    (if-let [found-emojis (filter-by-tag tag)]
      (let [emoji-keys (filter identity [:unicode (if info-flag :aliases)])
@@ -64,7 +63,7 @@
    
    [-i (info)] is optional, if set will return the unicode as well as a vector of its
    aliases"
-  {:yb/cat #{:fun :img :meme}}
+  {:yb/cat #{:fun :img :emoji}}
   ([{[_ info-flag description] :match}]
    (if-let [found-emojis (filter-by-description description)]
      (let [emoji-keys (filter identity [:unicode (if info-flag :aliases)])
@@ -75,7 +74,7 @@
 
 (defn search-by-alias
   "emoji alias <query> # query an emoji by its alias (meant to return 1 emoji)"
-  {:yb/cat #{:fun :img :meme}}
+  {:yb/cat #{:fun :img :emoji}}
   ([{[_ alias] :match}]
    (if-let [found-emoji (first (filter-by-alias alias))]
      [(:unicode found-emoji)]

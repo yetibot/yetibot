@@ -27,7 +27,11 @@
                  [json-path "0.3.0"]
 
                  ; polling
-                 [robert/bruce "0.8.0"]]
+                 [robert/bruce "0.8.0"]
+                 
+                 ; emojis
+                 [com.vdurmont/emoji-java "3.2.0"]
+                 ]
   :plugins [[lein-exec "0.3.5"]
             [lein-environ "1.0.3"]
             [lein-cloverage "1.0.7-SNAPSHOT"]
