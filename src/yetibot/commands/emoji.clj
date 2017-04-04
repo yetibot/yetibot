@@ -23,8 +23,9 @@
 (defonce emojis (parse-all-emojis))
 
 (defn all-tags
-  "return all known tags"
-  [_]
+  "emoji tags # return all known tags"
+  {:yb/cat #{:fun :img :emoji}}
+  []
   (-> (reduce (fn [return-set emoji]
                 (let [tag-vector (:tags emoji)
                       tag-hash-set (set tag-vector)]
@@ -32,6 +33,32 @@
               #{}
               emojis)
       sort))
+
+(defn list-emojis
+  "emoji list [-i] # list all known emojis
+
+   [-i (info)] is optional, if set will return the unicode
+   as well as a vector of its aliases"
+  {:yb/cat #{:fun :img :emoji}}
+  [{[_ info-flag] :match}]
+  (let [emoji-keys (filter identity [:unicode (if info-flag :aliases)])
+        select-values (comp vals select-keys)
+        map-fn (fn [emoji]
+                    (clojure.string/join " " (select-values emoji emoji-keys)))]
+    (map map-fn emojis)))
+
+(defn random-emoji
+  "emoji rand [-i] # get a random emoji
+
+   [-i (info)] is optional, if set will return the unicode
+   as well as a vector of its aliases"
+  {:yb/cat #{:fun :img :emoji}}
+  [{[_ info-flag] :match}]
+  (let [emoji-keys (filter identity [:unicode (if info-flag :aliases)])
+        select-values (comp vals select-keys)
+        map-fn (fn [emoji]
+                    (clojure.string/join " " (select-values emoji emoji-keys)))]
+    (map-fn (rand-nth emojis))))
 
 (defn filter-by-tag
   "filter emojis by tag"
@@ -66,14 +93,14 @@
   ([{[_ info-flag tag] :match}]
    (if-let [found-emojis (filter-by-tag tag)]
      (let [emoji-keys (filter identity [:unicode (if info-flag :aliases)])
-           select-values (comp vals select-keys)
+           select-values (comp vals select-keys) 
            map-fn (fn [emoji]
                     (clojure.string/join " " (select-values emoji emoji-keys)))]
        (map map-fn found-emojis))
      (str "Couldn't find any emojis with: \"" tag "\" tag"))))
 
-(defn search-by-description
-  "emoji description [-i] <query> # query emojis by their description
+(defn search
+  "emoji search [-i] <query> # search emojis by their description
 
    [-i (info)] is optional, if set will return the unicode
    as well as a vector of its aliases"
@@ -84,7 +111,7 @@
            select-values (comp vals select-keys)
            map-fn (fn [emoji]
                     (clojure.string/join " " (select-values emoji emoji-keys)))]
-)
+       (map map-fn found-emojis))
      (str "Couldn't find any emojis with: \"" description "\" description"))))
 
 (defn search-by-alias
@@ -96,6 +123,9 @@
      (str "Couldn't find any emojis with: \"" alias "\" alias"))))
 
 (cmd-hook ["emoji" #"^emoji$"]
+          #"^tags$" all-tags
+          #"^list(\s-i)?$" list-emojis
+          #"^rand(\s-i)?$" random-emoji
           #"^tag\s(-i\s)?(.+)$" search-by-tag
-          #"^description\s(-i\s)?(.+)$" search-by-description
+          #"^search\s(-i\s)?(.+)$" search
           #"^alias\s(.+)$" search-by-alias)
