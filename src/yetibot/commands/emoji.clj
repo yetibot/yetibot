@@ -47,19 +47,6 @@
                     (clojure.string/join " " (select-values emoji emoji-keys)))]
     (map map-fn emojis)))
 
-(defn random-emoji
-  "emoji rand [-i] # get a random emoji
-
-   [-i (info)] is optional, if set will return the unicode
-   as well as a vector of its aliases"
-  {:yb/cat #{:fun :img :emoji}}
-  [{[_ info-flag] :match}]
-  (let [emoji-keys (filter identity [:unicode (if info-flag :aliases)])
-        select-values (comp vals select-keys)
-        map-fn (fn [emoji]
-                    (clojure.string/join " " (select-values emoji emoji-keys)))]
-    (map-fn (rand-nth emojis))))
-
 (defn filter-by-tag
   "filter emojis by tag"
   [tag]
@@ -125,7 +112,6 @@
 (cmd-hook ["emoji" #"^emoji$"]
           #"^tags$" all-tags
           #"^list(\s-i)?$" list-emojis
-          #"^rand(\s-i)?$" random-emoji
           #"^tag\s(-i\s)?(.+)$" search-by-tag
           #"^search\s(-i\s)?(.+)$" search
           #"^alias\s(.+)$" search-by-alias)
