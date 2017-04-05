@@ -25,7 +25,7 @@
 (defn all-tags
   "emoji tags # return all known tags"
   {:yb/cat #{:fun :img :emoji}}
-  []
+  [_]
   (-> (reduce (fn [return-set emoji]
                 (let [tag-vector (:tags emoji)
                       tag-hash-set (set tag-vector)]
