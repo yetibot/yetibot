@@ -1,5 +1,16 @@
 # yetibot changelog
 
+## 0.4.8
+
+- Upgrade to yetibot.core 0.4.8
+- Fix a json parsing error. [#620](https://github.com/devth/yetibot/pull/647) -
+  [@jkieberk](https://github.com/jkieberk)
+- Add `emoji` command. [#651](https://github.com/devth/yetibot/pull/651) -
+  [@jkieberk](https://github.com/jkieberk)
+- Improve meme searching by always scraping.
+  [#646](https://github.com/devth/yetibot/pull/646?F) -
+  [@jkieberk](https://github.com/jkieberk)
+
 ## 0.4.7
 
 - Fixup linting issues for markdown, shell and Clojure
