@@ -55,21 +55,33 @@
 (defn filter-by-description
   "filter emojis by description"
   [description]
-  (filter (fn [emoji]
-            (re-find (re-pattern description) (:description emoji)))
-          emojis))
+  (if-let [sanitized-desc (if (or (empty? description)
+                                  (coll? description))
+                            nil
+                            (str description))]
+    (filter (fn [emoji]
+              (re-find (re-pattern sanitized-desc)
+                       (:description emoji)))
+            emojis)
+    '()))
 
 (defn filter-by-alias
   "filter emojis by alias"
   [alias]
-  (filter (fn [emoji]
-            (->
-             (filter (fn [aliases]
-                       (re-find (re-pattern (str "^" alias "$")) aliases))
-                     (:aliases emoji))
-             empty?
-             not))
-          emojis))
+  (if-let [sanitized-alias (if (coll? alias)
+                             nil
+                             (str alias))]
+    (filter (fn [emoji]
+              (->
+               (filter (fn [aliases]
+                         (re-find (re-pattern
+                                   (str "^" sanitized-alias "$"))
+                                  aliases))
+                       (:aliases emoji))
+               empty?
+               not))
+            emojis)
+    '()))
 
 (defn search-by-tag
   "emoji tag <query> # query emojis by their tag

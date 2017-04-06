@@ -41,9 +41,18 @@
   (is (s/validate emoji-structure (first (filter-by-tag "smile")))))
 
 (deftest test-filter-by-description
+   (are [input] (empty? (filter-by-description input))
+       nil
+       []
+       '())
   (is (s/validate emoji-structure (first (filter-by-description "smile")))))
 
 (deftest test-filter-by-alias
+  (are [input] (empty? (filter-by-alias input))
+       nil
+       []
+       '()
+       1)
   (is (s/validate emoji-structure (first (filter-by-alias "smile")))))
 
 (def search-tag-ex (first (search-by-tag {:match [nil nil "smile"]})))
