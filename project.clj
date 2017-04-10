@@ -13,7 +13,7 @@
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.8"]
+                 [yetibot.core "0.4.9"]
 
                  ; apis
                  [twitter-api "0.7.6"]
@@ -28,7 +28,7 @@
 
                  ; polling
                  [robert/bruce "0.8.0"]
-                 
+
                  ; emojis
                  [com.vdurmont/emoji-java "3.2.0"]]
   :plugins [[lein-exec "0.3.5"]
