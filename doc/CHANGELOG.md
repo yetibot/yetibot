@@ -1,5 +1,9 @@
 # yetibot changelog
 
+## 0.4.9
+
+- Upgrade to yetibot.core 0.4.9
+
 ## 0.4.8
 
 - Fix a json parsing error. ([#620](https://github.com/devth/yetibot/pull/647),
