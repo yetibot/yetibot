@@ -19,7 +19,7 @@
    (sch/optional-key :default) {:issue {:type {:id non-empty-str}}
                                 :project {:key non-empty-str}}
    (sch/optional-key :max) {:results non-empty-str}
-   :subtask {:issue {:type {:id non-empty-str}}}})
+   (sch/optional-key :subtask) {:issue {:type {:id non-empty-str}}}})
 
 
 ;; config
