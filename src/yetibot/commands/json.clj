@@ -25,7 +25,7 @@
 (defn json-parse-cmd
   "json parse <json>"
   [{[_ text] :match}]
-  (json/read-str text))
+  (json/read-str text :key-fn keyword))
 
 (cmd-hook #"json"
   #"path\s+(.+)" json-path-cmd
