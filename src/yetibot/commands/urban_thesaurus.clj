@@ -13,4 +13,4 @@
     (map :word (json/read-str response :key-fn keyword))))
 
 (cmd-hook #"urbanthes"
-          _ urbanthes-cmd)
+          #".+" urbanthes-cmd)
