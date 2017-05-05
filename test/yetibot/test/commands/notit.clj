@@ -1,12 +1,11 @@
 (ns yetibot.test.commands.notit
   (:require
-    [yetibot.commands.notit :as notit]
-    [clojure.test :refer :all]))
+    [midje.sweet :refer [fact =>]]
+    [yetibot.commands.notit :as notit]))
 
 (def user {:name "TestBot"})
 
 ; !order reset
-(deftest reset-its
+(fact reset-its
   (notit/reset-its nil)
-  (is (= @notit/not-its #{})
-      "it should reset the its list"))
+  @notit/not-its => #{})
