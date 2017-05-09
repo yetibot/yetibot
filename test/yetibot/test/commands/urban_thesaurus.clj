@@ -1,16 +1,16 @@
 (ns yetibot.test.commands.urban-thesaurus
   (:require
     [yetibot.commands.urban-thesaurus :refer :all]
-    [clojure.test :refer :all]
+    [midje.sweet :refer [fact => anything just]]
     [yetibot.core.util.http :refer [fetch]]
     [clojure.data.json :as json]))
 
-(deftest return-all-words-from-api-response
-  (with-redefs-fn {#'fetch (fn [url] (json/write-str [{:word "test"} {:word "word"}]))}
-    #(is
-      (= (urbanthes-cmd {:match "programmer"}) ["test" "word"]))))
+(fact return-all-words-from-api-response
+  (urbanthes-cmd {:match "programmer"}) => (just "test" "word")
+  (provided
+    (fetch anything) => (json/write-str [{:word "test"} {:word "word"}])))
 
-(deftest return-empty-list-for-unknown-word
-  (with-redefs-fn {#'fetch (fn [url] (json/write-str []))}
-    #(is
-      (= (urbanthes-cmd {:match "abcdef"}) []))))
+(fact return-empty-list-for-unknown-word
+  (urbanthes-cmd {:match "abcdef"}) => empty?
+  (provided
+    (fetch anything) => (json/write-str [])))
