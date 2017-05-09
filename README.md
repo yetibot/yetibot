@@ -1,3 +1,4 @@
+[![Stories in Ready](https://badge.waffle.io/devth/yetibot.png?label=ready&title=Ready)](https://waffle.io/devth/yetibot)
 <p align="center">
   <img width="560"
     src="https://github.com/devth/yetibot/raw/master/img/yetibot_final.png?raw=true" />
