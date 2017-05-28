@@ -6,7 +6,7 @@
 
 (def eval-and-extract (comp extract-result try-scala))
 
-(deftest test-scala
+#_(deftest test-scala
   (is (= '("2: Int" "4: Int")
          (eval-and-extract "1 + 1; 2 + 2"))
       "Valid expressions")
