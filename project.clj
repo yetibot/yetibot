@@ -4,12 +4,15 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :deploy-repositories [["releases" :clojars]]
-  :profiles {:dev {:source-paths ["dev"]}
+  :profiles {:dev {:source-paths ["dev"]
+                   :exclusions [org.clojure/tools.trace]
+                   :dependencies [[org.clojure/tools.trace "0.7.9"]]}
              :uberjar {:uberjar-name "yetibot.jar"
                        :aot :all}
              :test {}
              :plugins [[lein-git-deps "0.0.1-SNAPSHOT"]]}
   :repl-options {:init-ns yetibot.core.repl
+                 :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :jvm-opts ["-server"]
   :dependencies [[org.clojure/clojure "1.8.0"]
