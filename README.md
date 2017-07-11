@@ -311,6 +311,11 @@ If the docs or implementation code don't serve you well, please open a pull
 request and explain why so we can improve the docs. Also feel free to open an
 issue for feature requests!
 
+## Yetibot in the wild
+
+- [ChatOps - Managing Operations in Group
+  Chat](http://www.oreilly.com/webops-perf/free/chatops.csp) by Jason Hand
+
 ## License
 
 Copyright &copy; 2012-2017 Trevor Hartman. Distributed under the [Eclipse Public
