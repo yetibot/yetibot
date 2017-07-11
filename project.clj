@@ -30,12 +30,16 @@
                  [robert/bruce "0.8.0"]
 
                  ; emojis
-                 [com.vdurmont/emoji-java "3.2.0"]]
+                 [com.vdurmont/emoji-java "3.2.0"]
+
+                 ;test
+                 [midje "1.8.3"]]
   :plugins [[lein-exec "0.3.5"]
             [lein-environ "1.0.3"]
             [lein-cloverage "1.0.7-SNAPSHOT"]
             [lein-ring "0.9.5"]
-            [io.sarnowski/lein-docker "1.1.0"]]
+            [io.sarnowski/lein-docker "1.1.0"]
+            [lein-midje "3.2.1"]]
 
   :aliases
   {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]}

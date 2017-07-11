@@ -1,8 +1,7 @@
 (ns yetibot.test.commands.scrape
   (:require
-    [clojure.test :refer :all]
+    [midje.sweet :refer [fact =>]]
     [yetibot.commands.scrape :refer :all]))
 
-(deftest test-scrape
-  (testing "Imgflip"
-    (is (not-empty (scrape "https://imgflip.com" ".base-img[src!='']" "src")))))
+(fact test-scrape
+    (scrape "https://imgflip.com" ".base-img[src!='']" "src") => not-empty)

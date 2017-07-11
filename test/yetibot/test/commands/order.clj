@@ -1,43 +1,25 @@
 (ns yetibot.test.commands.order
   (:require
-    [clojure.test :refer :all]
+    [midje.sweet :refer [fact =>]]
     [yetibot.commands.order :as order]))
 
 (def user {:name "TestBot"})
 
-; !order
-(deftest start-taking-orders
+(fact should-clear-orders-list
   (order/start-taking-orders nil)
-  (is
-    (= (order/get-orders) {})
-    "it should clear the orders list"))
+  (order/get-orders) => {})
 
-; !order panang beef / 3 stars / brown rice
-(deftest order-some-food
+(fact show-food-order
   (order/take-order {:match "panang beef" :user user})
-  (is
-    (=
-     (order/show-order nil)
-     {(:name user) "panang beef"})
-    "it should have the panang beef I ordered"))
+  (order/show-order nil) => {(:name user) "panang beef"})
 
-; order multiple items
-(deftest order-multiple-items
+(fact allow-order-of-multiple-items
   (order/start-taking-orders nil)
   (order/take-order {:user user :match "apple"})
   (order/take-order {:user user :match "orange"})
   (order/take-order {:user user :match "banana"})
-  (is
-    (=
-     1
-     (count (order/get-orders)))
-    "it should replace the order for current user each time"))
+  (count (order/get-orders)) => 1)
 
-; !order show
-(deftest show-empty-order
+(fact show-empty-order
   (order/start-taking-orders nil)
-  (is
-    (=
-     order/empty-order-message
-     (order/show-order nil))
-    "it should report the empty order message if empty"))
+  (order/show-order nil) => order/empty-order-message)

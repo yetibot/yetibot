@@ -1,6 +1,6 @@
 (ns yetibot.test.models.imgflip
   (:require
-    [clojure.test :refer :all]
+    [midje.sweet :refer [fact => =not=>]]
     [yetibot.models.imgflip :refer :all]))
 
 (def ms (memes))
@@ -8,26 +8,26 @@
 (def not-nil? (complement nil?))
 
 (when configured?
-  (deftest config-test
-    (is (not (nil? config))))
+  (fact config-test
+    config =not=> nil?)
 
-  (deftest memes-list
-    (is (:success ms))
-    (is (pos? (-> ms :data :memes count))))
+  (fact memes-list
+    (:success ms) => true
+    (-> ms :data :memes count) => pos?)
 
-  (deftest search-memes-test
-    (is (= "Ancient Aliens" (:name (first (search-memes "alien"))))))
+  (fact search-memes-test
+    (:name (first (search-memes "alien"))) => "Ancient Aliens")
 
-  (deftest generate-meme-test
+  (fact generate-meme-test
     (let [m (generate-meme "61579" "foo" "bar")]
-      (is (:success m))
-      (is (not-nil? (:data m)))))
+      (:success m) => true
+      (:data m)) =not=> nil?)
 
-  (deftest generate-meme-by-query-test
-    (is (:success (generate-meme-by-query "simply" "foo" "bar")))
-    (is (:success (generate-meme-by-query "simply" "foo bar"))))
+  (fact generate-meme-by-query-test
+    (:success (generate-meme-by-query "simply" "foo" "bar")) => true
+    (:success (generate-meme-by-query "simply" "foo bar")) => true)
 
-  (deftest generate-meme-notfound-handling
+  (fact generate-meme-notfound-handling
     (let [m (generate-meme-by-query "notfound" "foo")]
-      (is (not (:success m)) "it should not be successful")
-      (is (:error_message m) "it should have an error message"))))
+      (:success m) => false
+      (:error_message m) => false)))
