@@ -16,7 +16,7 @@
   <a href="https://crossclj.info/doc/yetibot/latest/index.html"><img src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg" alt="CrossClj" data-canonical-src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg" style="max-width:100%;"></a>
   <a href="https://waffle.io/yetibot/yetibot"><img src="https://img.shields.io/waffle/label/yetibot/yetibot/ready.svg" alt="Ready for work" data-canonical-src="https://img.shields.io/waffle/label/yetibot/yetibot/ready.svg" style="max-width:100%;"></a>
   <a href="https://waffle.io/yetibot/yetibot"><img src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg" alt="In Progress" data-canonical-src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg" style="max-width:100%;"></a>
-  <a href="https://codeclimate.com/github/yetibot/yetibot"><img src="https://img.shields.io/codeclimate/issues/github/yetibot/yetibot.svg?label=code%20climate" alt="Issue Count" data-canonical-src="https://img.shields.io/codeclimate/issues/github/yetibot/yetibot.svg?label=code%20climate" style="max-width:100%;"></a>
+  <a href="https://codeclimate.com/github/yetibot/yetibot"><img src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate" alt="Issue Count" data-canonical-src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate" style="max-width:100%;"></a>
   <a href="https://codecov.io/gh/yetibot/yetibot"><img src="https://codecov.io/gh/yetibot/yetibot/branch/master/graph/badge.svg" alt="Codecov" data-canonical-src="https://codecov.io/gh/yetibot/yetibot/branch/master/graph/badge.svg" style="max-width:100%;"></a>
 </p>
 
