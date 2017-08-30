@@ -3,7 +3,7 @@
 ## 0.4.10
 
 - Upgrade to `yetibot.core 0.4.10`
-- Fix catfact command ([#677](https://github.com/yetibot/yetibot/pull/677) by
+- Fix catfact command - [#677](https://github.com/yetibot/yetibot/pull/677) by
   [@brstf](https://github.com/brstf)
 - Upgrade all other deps to latest
 
@@ -13,13 +13,13 @@
 
 ## 0.4.8
 
-- Fix a json parsing error. ([#620](https://github.com/devth/yetibot/pull/647)
-  by [@jkieberk](https://github.com/jkieberk))
-- Add `emoji` command. ([#651](https://github.com/devth/yetibot/pull/651) by
-  [@jkieberk](https://github.com/jkieberk))
+- Fix a json parsing error - [#620](https://github.com/devth/yetibot/pull/647)
+  by [@jkieberk](https://github.com/jkieberk)
+- Add `emoji` command - [#651](https://github.com/devth/yetibot/pull/651) by
+  [@jkieberk](https://github.com/jkieberk)
 - Improve meme searching by always scraping.
-  ([#646](https://github.com/devth/yetibot/pull/646?F),
-  [@jkieberk](https://github.com/jkieberk))
+  [#646](https://github.com/devth/yetibot/pull/646?F) by
+  [@jkieberk](https://github.com/jkieberk)
 
 ## 0.4.7
 
