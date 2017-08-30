@@ -82,10 +82,10 @@ users](https://github.com/yetibot/yetibot/wiki/Yetibot-users)!
 
 See [CONTRIBUTING](CONTRIBUTING.md).
 
-## Roadmap
+## Road map
 
 Yetibot has been undergoing continuous improvement since its inception. These
-are the immediate priorities, in addition to any bugfixes. Feedback and
+are the immediate priorities, in addition to any bug fixes. Feedback and
 contributions are very welcome!
 
 - [ ] Write docs on how to develop Yetibot

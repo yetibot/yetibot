@@ -1,8 +1,12 @@
 (ns yetibot.test.commands.emoji
   (:require
     [midje.sweet :refer [fact => =not=> truthy]]
+    [midje.repl :refer [load-facts]]
     [yetibot.commands.emoji :refer :all]
     [schema.core :as s]))
+
+(defn run-tests []
+  (load-facts *ns*))
 
 (fact test-get-emojis
   (get-all-emojis) =not=> empty?
