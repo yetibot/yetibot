@@ -30,4 +30,4 @@
   (fact generate-meme-notfound-handling
     (let [m (generate-meme-by-query "notfound" "foo")]
       (:success m) => false
-      (:error_message m) => false)))
+      (:error_message m) => "Couldn't find any memes for notfound")))
