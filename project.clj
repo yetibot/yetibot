@@ -4,7 +4,10 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :deploy-repositories [["releases" :clojars]]
-  :profiles {:dev [:profiles/dev
+  :profiles {;; optionally override this profile in profiles.clj to be merged
+             ;; into dev profile
+             :profiles/dev {}
+             :dev [:profiles/dev
                    {:source-paths ["dev"]
                     :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]]
