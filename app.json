@@ -1,0 +1,15 @@
+{
+  "name": "Yetibot",
+  "description": "Extreme chatops, where chat ∈ {irc,slack}",
+  "repository": "https://github.com/yetibot/yetibot",
+  "logo": "https://raw.githubusercontent.com/yetibot/yetibot/master/img/yetibot_final.png",
+  "keywords": [
+    "chatbot",
+    "chatops",
+    "clojure",
+    "slack",
+    "irc",
+    "docker",
+    "unix-pipes"
+  ]
+}
