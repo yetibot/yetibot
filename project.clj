@@ -43,8 +43,9 @@
             [lein-ring "0.9.5"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
-  :aliases
-  {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]}
+  :aliases { "version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]
+             "test" ["midje"]}
+
   ;; :pedantic :ignore
 
   :docker {:image-name "devth/yetibot"}
