@@ -22,7 +22,7 @@
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.10"]
+                 [yetibot.core "0.4.11"]
 
                  ; apis
                  [twitter-api "1.8.0"]
@@ -33,7 +33,6 @@
 
                  ; utils
                  [org.flatland/useful "0.11.5"]
-                 [json-path "1.0.0"]
 
                  ; polling
                  [robert/bruce "0.8.0"]
