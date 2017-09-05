@@ -1,5 +1,9 @@
 # Yetibot changelog
 
+## 0.4.13 (unreleased)
+
+- Upgrade to `yetibot.core 0.4.13`
+
 ## 0.4.12
 
 - Upgrade to `yetibot.core 0.4.12`
