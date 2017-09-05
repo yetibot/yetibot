@@ -15,10 +15,11 @@
                     :dependencies [[org.clojure/tools.trace "0.7.9"]
                                    [midje "1.8.3"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
-             :uberjar {:uberjar-name "yetibot.jar"
-                       :jvm-opts ["-server"]
+             :heroku {:jvm-opts ^:replace ["-Xmx512m" "-server"]}
+             :uberjar {:jvm-opts ["-server"]
                        :aot :all}
              :test {}}
+  :uberjar-name "yetibot.jar"
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
