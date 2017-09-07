@@ -3,6 +3,8 @@
 ## 0.4.11 (Unreleased)
 
 - Upgrade to `yetibot.core 0.4.11`
+- Fix meme search scraper on imgflip -
+  [#684](https://github.com/yetibot/yetibot/issues/684)
 
 ## 0.4.10
 

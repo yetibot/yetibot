@@ -31,13 +31,16 @@
     (re-find p (:name meme))
     (re-find p (s/replace (:name meme) #"\s" ""))))
 
-; todo: append results of search-via-scrape to cached (memes)
+(def res (client/get "https://imgflip.com/memesearch"
+                     {:query-params {:q "icahn" :page 1}}))
+
+;; TODO: append results of search-via-scrape to cached (memes) or use a memo/ttl
 (defn search-via-scrape [q n]
-  (info "search via scraping" q)
+  (info "search via scraping" q n)
   (let [res (client/get "https://imgflip.com/memesearch" {:query-params {:q q :page n}})]
     (->> res
          :body
-         (re-seq #"alt\=\"([^\"]+)\"\s+src\=\'.+imgflip\.com\/([\w\d]+).jpg\'")
+         (re-seq #"alt\=\"([^\"]+)\"\s+src\=.+imgflip\.com\/([\w\d]+).jpg")
          (map (fn [[_ alt id]]
                 {:name (s/replace alt #"\sMeme Template( Thumbnail)*" "")
                  :url (str "http://i.imgflip.com/" id ".jpg")

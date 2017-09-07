@@ -6,7 +6,7 @@
     [yetibot.models.imgflip :as model]))
 
 (defn- urlify
-  "Imgflip likes to return urls missing the http: prefix for some reason."
+  "Imgflip likes to return urls missing the `http:` prefix"
   [weird-url]
   (if-not (re-find #"^http" weird-url)
     (str "http:" weird-url)
