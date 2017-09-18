@@ -26,7 +26,7 @@
 
 (defn start [] (obs-hook #{:message} #'jira-observer))
 
-(if (jira/configured?)
+(when (jira/configured?)
   (info "Starting jira observer")
   ;; ensure a single observer
   (defonce jira-observer-hook (start)))

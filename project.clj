@@ -15,9 +15,10 @@
                     :dependencies [[org.clojure/tools.trace "0.7.9"]
                                    [midje "1.8.3"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
+             ;; heroku free dynos only have 512mb mem
              :heroku {:jvm-opts ^:replace ["-Xmx512m" "-server"]}
              :uberjar {:jvm-opts ["-server"]
-                       :aot :all}
+                       :aot [yetibot.core.init]}
              :test {}}
   :uberjar-name "yetibot.jar"
   :repl-options {:init-ns yetibot.core.repl
