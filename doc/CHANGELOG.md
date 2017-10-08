@@ -3,6 +3,7 @@
 ## 0.4.13
 
 - Upgrade to `yetibot.core 0.4.13`
+- Fix the stock command
 
 ## 0.4.12
 

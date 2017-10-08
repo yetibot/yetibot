@@ -2,46 +2,40 @@
   (:require
     [clojure.string :as s]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [clj-http.client :as client]
-    [cheshire.core :as json]
-    [clojure.walk :refer [keywordize-keys]]))
+    [yetibot.core.util.http :refer [get-json]]))
 
 (defn endpoint
-  "Creates a Google Finance query from stock symbol"
+  "Creates a YQL query from stock symbol"
   [stock-symbol]
-  (str "http://www.google.com/finance/info?infotype=infoquoteall&q=" stock-symbol))
+  (str "http://dev.markitondemand.com/MODApis/Api/v2/Quote/json?symbol="
+       stock-symbol))
 
-(defn get-body
-  "Gets json body from response"
-  [json]
-  (-> json
-      :body
-      (s/replace-first "//" "")
-      json/parse-string))
+(defn format-percent
+  "Formats number in map as percent"
+  [k m]
+  (update-in m [k] #(format "%.2f%%" (double %))))
 
-(defn parse-quote
-  "Parses most relevant information from json"
+(defn get-price
+  "Gets the price from a stock symbol via Yahoo API"
   [stock-symbol]
-  (let [response (client/get (endpoint stock-symbol){:throw-exceptions false})]
-    (if (= (:status response) 200)
-      (let [{:keys [name l hi lo mc cp el ecp]}(->> (get-body response) first keywordize-keys)]
-        (remove
-         nil?
-           [(str "Name: " name)
-            (str "Last Price: " l)
-            (str "High: " hi)
-            (str "Low: " lo)
-            (str "Market Cap: " mc)
-            (str "Change Percent: " cp"%")
-            (when (seq el) (str "After Hours Price: " el))
-            (when (seq ecp) (str "After Hours Change Percent: " ecp "%"))]))
-      (str "Unable to find symbol for " stock-symbol ". Try another symbol such as MSFT or AAPL."))))
+  (let [stock-info (get-json (endpoint stock-symbol))]
+    (if (:Name stock-info)
+      {:result/data stock-info
+       :result/value
+       (->> stock-info
+            (format-percent :ChangePercent)
+            ((juxt :Name :LastPrice :High :Low :MarketCap :ChangePercent))
+            (interleave ["Name:" "Last Price:" "High:" "Low:" "Market Cap:"
+                         "Change Percent:"])
+            (partition 2)
+            (map #(s/join " " %)))}
+      (:Message stock-info))))
 
 (defn stock-cmd
   "stock <symbol> # displays current value in market"
   {:yb/cat #{:info}}
   [{:keys [args]}]
-  (parse-quote args))
+  (get-price args))
 
 (cmd-hook ["stock" #"^stock$"]
           _ stock-cmd)
