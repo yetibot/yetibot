@@ -3,7 +3,7 @@
 To get a Yetibot running you need two things:
 
 1. Some config
-2. A way to run it
+1. A way to run it
 
 ## Config
 
