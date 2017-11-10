@@ -3,6 +3,8 @@
 ## 0.4.15
 
 - Upgrade to `yetibot.core 0.4.15`
+- New `base64` command. [#688](https://github.com/yetibot/yetibot/pull/688) by
+  [@themistoklik](https://github.com/themistoklik)
 
 ## 0.4.14
 
