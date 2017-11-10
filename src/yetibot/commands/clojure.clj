@@ -12,11 +12,14 @@
 
 (defn clojure-cmd
   "clj <expression> # evaluate a clojure expression"
+  {:yb/cat #{:broken}}
   [{:keys [args]}]
-  (let [json (try-clojure args)]
-    (if (:error json)
-      (:message json)
-      (:result json))))
+  "tryclj.com is down :(")
+
+  ;; (let [json (try-clojure args)]
+  ;;   (if (:error json)
+  ;;     (:message json)
+  ;;     (:result json))))
 
 (cmd-hook #"clj"
           #"\S*" clojure-cmd)
