@@ -4,6 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :deploy-repositories [["releases" :clojars]]
+  :jvm-opts ["-Djava.net.preferIPv4Stack=true"] ;; fix for running in Docker
   :profiles {;; optionally override this profile in profiles.clj to be merged
              ;; into dev profile
              :profiles/dev {}
