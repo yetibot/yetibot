@@ -1,4 +1,4 @@
-FROM clojure:lein-2.5.3
+FROM clojure:lein-2.8.1
 
 MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
 
