@@ -107,10 +107,12 @@ contributions are very welcome!
 
 ## Installation
 
-There are three primary ways of installing Yetibot:
+There are a few ways to run Yetibot:
 
 1. **Follow the [Docker instructions](doc/DOCKER.md)**: the fastest way if you're
    already using Docker.
+1. [**yetibot-helm**](https://github.com/yetibot/yetibot-helm): the official
+   Helm Chart for quickly running Yetibot on Kubernetes.
 1. **Clone this repo**: this gives you a standard Yetibot installation and
    provides a git-ignored place to store configuration. Run from the root dir
    with `lein run`.
