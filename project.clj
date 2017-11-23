@@ -55,6 +55,6 @@
 
   ;; :pedantic :ignore
 
-  :docker {:image-name "devth/yetibot"}
+  :docker {:image-name "yetibot/yetibot"}
 
   :main yetibot.core.init)
