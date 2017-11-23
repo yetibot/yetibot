@@ -23,7 +23,7 @@
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.16-SNAPSHOT"]
+                 [yetibot.core "0.4.16"]
 
                  ; apis
                  [twitter-api "1.8.0"]
