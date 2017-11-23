@@ -18,12 +18,12 @@ set -ev
 
   if [[ "$version" =~ SNAPSHOT ]]; then
     echo "Snapshot version, tagging docker snapshot and pushing..."
-    docker tag devth/yetibot:"$version" devth/yetibot:snapshot
-    docker push devth/yetibot:snapshot
+    docker tag yetibot/yetibot:"$version" yetibot/yetibot:snapshot
+    docker push yetibot/yetibot:snapshot
   else
     echo "Release version, tagging docker latest and pushing..."
-    docker tag devth/yetibot:"$version" devth/yetibot:latest
-    docker push devth/yetibot:latest
+    docker tag yetibot/yetibot:"$version" yetibot/yetibot:latest
+    docker push yetibot/yetibot:latest
   fi
 
 # else
