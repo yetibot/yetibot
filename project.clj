@@ -1,10 +1,10 @@
-(defproject yetibot "0.4.17-SNAPSHOT"
+(defproject yetibot "0.4.17-alpha1-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :deploy-repositories [["releases" :clojars]]
-  :jvm-opts ["-Djava.net.preferIPv4Stack=true"] ;; fix for running in Docker
+  :jvm-opts []
   :profiles {;; optionally override this profile in profiles.clj to be merged
              ;; into dev profile
              :profiles/dev {}

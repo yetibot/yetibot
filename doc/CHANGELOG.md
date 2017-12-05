@@ -1,5 +1,10 @@
 # Yetibot changelog
 
+## 0.4.17
+
+- Upgrade to `yetibot.core 0.4.17`
+- Migrate from Datomic to Postgres
+
 ## 0.4.16
 
 - Upgrade to `yetibot.core 0.4.16`
