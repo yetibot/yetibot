@@ -1,35 +1,22 @@
 (ns yetibot.models.twitter
-  (:refer-clojure :exclude [update])
   (:require
+    [yetibot.db.twitter :as db]
+    [yetibot.core.util.http :refer [html-decode]]
+    [yetibot.core.config :refer [get-config]]
+    [yetibot.core.chat :as chat]
     [schema.core :as sch]
     [taoensso.timbre :refer [info warn error]]
     [clj-http.client :as client]
-    [yetibot.core.util.http :refer [html-decode]]
-    [yetibot.core.config :refer [get-config]]
     [clojure.string :as s :refer [join]]
-    [yetibot.core.chat :as chat]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
     [twitter.callbacks :refer :all]
     [twitter.callbacks.handlers :refer :all]
     [twitter.api.restful :refer :all]
-    [twitter.api.streaming :refer :all]
-    [datomico.core :as dc]
-    [datomico.db :refer [q]]
-    [datomico.action :refer [all where raw-where]])
+    [twitter.api.streaming :refer :all])
   (:import
     (twitter.callbacks.protocols SyncSingleCallback)
     (twitter.callbacks.protocols AsyncStreamingCallback)))
-
-;;;; schema for storing topics to track
-
-(def model-namespace :twitter)
-
-(def schema (dc/build-schema model-namespace
-                             [[:user :string]
-                              [:topic :string]]))
-
-(dc/create-model-fns model-namespace)
 
 ;;;; config
 
@@ -133,14 +120,14 @@
                            :oauth-creds creds
                            :callbacks streaming-callback)))
 
-(defn reload-topics [] (reset-streaming-topics (map :topic (find-all))))
+(defn reload-topics [] (reset-streaming-topics (map :topic (db/find-all))))
 
 (defn add-topic [user-id topic]
-  (create {:user user-id :topic topic})
+  (db/create {:user-id user-id :topic topic})
   (reload-topics))
 
 (defn remove-topic [topic-id]
-  (dc/delete topic-id)
+  (db/delete topic-id)
   (reload-topics))
 
 ;; on startup, load the existing topics
@@ -199,3 +186,11 @@
 (defn show [id]
   (statuses-show-id :oauth-creds creds
                     :params {:id id}))
+
+;; db helpers
+
+(defn find-by-topic [topic]
+  (db/query {:where/map {:topic topic}}))
+
+(defn find-all []
+  (db/find-all))

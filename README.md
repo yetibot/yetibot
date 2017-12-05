@@ -90,7 +90,6 @@ contributions are very welcome!
 
 - [ ] Write docs on how to develop Yetibot
 - [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
-- [ ] Dockerize Datomic Pro Starter edition.
 - [x] Integrate with [StackStorm](https://stackstorm.com/) for automation on
       steriods. Done! Check out
       [yetibot-stackstorm](https://github.com/yetibot/yetibot-stackstorm).

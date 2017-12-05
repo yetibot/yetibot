@@ -48,7 +48,7 @@
 (defn track
   "twitter track <topic> # track a <topic> on the Twitter stream"
   [{[_ topic] :match user :user}]
-  (if (model/find-first {:topic topic})
+  (if (model/find-by-topic topic)
     (format "You're already tracking %s." topic)
     (do
       (model/add-topic (:id user) topic)
@@ -57,9 +57,9 @@
 (defn untrack
   "twitter untrack <topic> # stop tracking <topic>"
   [{[_ topic] :match}]
-  (if-let [topic-entity (model/find-first {:topic topic})]
+  (if-let [{topic-id :id} (first (model/find-by-topic topic))]
     (do
-      (model/remove-topic (:id topic-entity))
+      (model/remove-topic topic-id)
       (format "Stopped tracking %s" topic))
     (format "You're not tracking %s" topic)))
 
