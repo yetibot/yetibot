@@ -62,8 +62,7 @@
   (get-in api/accepted-keywords [option :keyword]))
 
 (defn state-of-set-options []
-  "gives back contents of the options
-  atom. If empty gives back nil"
+  "Gives back contents of the options atom. If empty gives back nil."
   (if-not (seq @options-atom)
     nil
     @options-atom))
