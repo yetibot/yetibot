@@ -13,12 +13,12 @@
                     :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]]
                     :dependencies [[org.clojure/tools.trace "0.7.9"]
-                                   ]}]
+                                   [midje "1.8.3"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
                        :aot :all}
-             :test {:dependencies [[midje "1.8.3"]]}}
+             :test {:dependencies []}}
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
