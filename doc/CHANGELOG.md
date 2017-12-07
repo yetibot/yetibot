@@ -4,6 +4,8 @@
 
 - Upgrade to `yetibot.core 0.4.17`
 - Migrate from Datomic to Postgres
+- Update stock command to use the very nice [IEX
+  API](https://iextrading.com/developer/docs)
 
 ## 0.4.16
 
