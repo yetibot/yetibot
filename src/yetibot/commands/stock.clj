@@ -7,7 +7,8 @@
 (defn endpoint
   "Returns an API endpoint to query a stock symbol"
   [stock-symbol]
-  (format "https://api.iextrading.com/1.0/stock/%s/quote" stock-symbol))
+  (format "https://api.iextrading.com/1.0/stock/%s/quote?displayPercent=true"
+          stock-symbol))
 
 (defn format-percent
   "Formats number in map as percent"
@@ -37,7 +38,8 @@
              ["Market Cap" (comp format-number :marketCap)]
              ["Change Percent" (comp format-percent :changePercent)]
              ["Week 52 High" :week52High]
-             ["Week 52 Low" :week52Low]])})
+             ["Week 52 Low" :week52Low]
+             ["Latest time" :latestTime]])})
     (catch Exception _
       (str "An error occurred trying to find stock " stock-symbol " 🧐"))))
 
