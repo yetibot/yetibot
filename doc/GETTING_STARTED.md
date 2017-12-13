@@ -46,6 +46,19 @@ For full config see the
 [CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs.
 
+## Postgres
+
+There are many ways to install Postgres, readily Googlable, but here's one such
+method, taken from [DigitalOcean's
+docs](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-postgresql-on-ubuntu-16-04):
+
+```bash
+sudo apt-get update
+sudo apt-get install -y postgresql postgresql-contrib
+sudo -u postgres psql
+createdb yetibot
+```
+
 ## Run it
 
 There are a few ways to quickly run a Yetibot:
