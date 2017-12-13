@@ -1,5 +1,9 @@
 # Yetibot changelog
 
+## 0.4.18
+
+- Fix docker script in CI
+
 ## 0.4.17
 
 - Upgrade to `yetibot.core 0.4.17`
