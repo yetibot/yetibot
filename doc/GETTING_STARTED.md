@@ -48,8 +48,51 @@ docs.
 
 ## Postgres
 
-There are many ways to install Postgres, readily Googlable, but here's one such
-method, taken from [DigitalOcean's
+There are many ways to install Postgres. Here we demonstrate two common
+approaches:
+
+### Docker
+
+As usual, Docker makes things easier when it comes to infra:
+
+```bash
+
+docker run -d -p 5432:5432 --name postgres \
+  --restart="always" \
+  -v /pgdata:/var/lib/postgresql/data \
+  -e POSTGRES_USER="yetibot" \
+  -e POSTGRES_PASSWORD="yetibot" \
+  -e POSTGRES_DB="yetibot" \
+  postgres:latest
+
+docker logs -f postgres
+
+# to remove postgres docker container
+
+docker rm -f postgres
+```
+
+Assuming you use a Docker link from another container to this container, the
+connection string is then:
+
+```bash
+postgresql://yetibot:yetibot@postgres:5432/yetibot
+```
+
+As an example of Docker linking, you could use `psql` from another container
+like:
+
+```bash
+docker run --rm -it --link postgres postgres bash
+psql -h postgres -U yetibot
+\l
+\q
+exit
+```
+
+### Ubuntu VM
+
+Much of this is borrowed from [DigitalOcean's
 docs](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-postgresql-on-ubuntu-16-04):
 
 ```bash
