@@ -1,11 +1,5 @@
 language: clojure
 
-cache:
-  directories:
-    - $HOME/.m2
-
-script: lein test
-
 jdk:
   - oraclejdk8
 
@@ -13,6 +7,19 @@ sudo: required
 
 services:
   - docker
+  - postgresql
+
+cache:
+  directories:
+    - $HOME/.m2
+
+env:
+  - YETIBOT_DB_URL="postgresql://postgres@localhost:5432/yetibot"
+
+before_script:
+  - psql -c 'create database yetibot;' -U postgres
+
+script: lein test
 
 after_success:
 - CLOVERAGE_VERSION=1.0.7-SNAPSHOT lein cloverage --codecov

@@ -1,10 +1,10 @@
-(defproject yetibot "0.4.17-SNAPSHOT"
+(defproject yetibot "0.4.17-alpha6-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :deploy-repositories [["releases" :clojars]]
-  :jvm-opts ["-Djava.net.preferIPv4Stack=true"] ;; fix for running in Docker
+  :jvm-opts []
   :profiles {;; optionally override this profile in profiles.clj to be merged
              ;; into dev profile
              :profiles/dev {}
@@ -18,12 +18,12 @@
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
                        :aot :all}
-             :test {}}
+             :test {:dependencies []}}
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :dependencies [[org.clojure/clojure "1.8.0"]
-                 [yetibot.core "0.4.16"]
+                 [yetibot.core "0.4.17"]
 
                  ; apis
                  [twitter-api "1.8.0"]

@@ -32,10 +32,10 @@ it's connected, join freenode and:
 /msg yetibot_$rand !echo i'm alive!
 ```
 
-To start up Yetibot in detached mode with port 3000 mapped and IRC with SSL
-fully configured via env:
+To start up Yetibot in detached mode with port 3000 mapped, IRC with SSL, and a
+PostgreSQL connection string, you could use:
 
-```
+```bash
 docker run --name yetibot \
   -d -p 3000:3000 \
   -e YB_ADAPTERS_IRC_TYPE="irc" \
@@ -43,6 +43,7 @@ docker run --name yetibot \
   -e YB_ADAPTERS_IRC_PORT="7070" \
   -e YB_ADAPTERS_IRC_SSL="true" \
   -e YB_ADAPTERS_IRC_USERNAME="yetibot_`whoami`" \
+  -e YB_DB_URL="postgresql://localhost:5432/yetibot" \
   devth/yetibot
 ```
 
@@ -59,12 +60,13 @@ docker logs -f yetibot
 
 A more complete example (though some config is still omitted):
 
-```
+```bash
 docker run -d -p 80:3000 \
   --restart "always" \
   -e YB_ADAPTERS_IRC_USERNAME "yetibot" \
   -e YETIBOT_ADAPTERS_SLACK_TYPE "slack" \
   -e YETIBOT_ADAPTERS_SLACK_TOKEN "xoxb-123123" \
+  -e YB_DB_URL="postgresql://localhost:5432/yetibot" \
   -e YETIBOT_URL "http://..." \
   -e YETIBOT_GIPHY_KEY "" \
   -e YETIBOT_IMGFLIP_USERNAME "" \
@@ -90,11 +92,16 @@ docker run -d -p 80:3000 \
   devth/yetibot
 ```
 
+Yetibot can also be configured via an EDN config file instead of env. For full
+config options see the
+[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
+docs.
+
 ## Troubleshooting
 
 To run an ephemeral interactive shell and poke around instead of running Yetibot:
 
-```
+```bash
 docker run --rm -it --name yetibot \
   -e YETIBOT_LOG_LEVEL="trace" \
   -e YETIBOT_ADAPTERS_IRC_TYPE="irc" \

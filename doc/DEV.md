@@ -1,5 +1,16 @@
 # Yetibot development
 
+## Setup
+
+### Postgres
+
+Yetibot needs a postgres database. It defaults to `yetibot` but this is
+configurable. Ensure you have Postgres installed, then create the database:
+
+```bash
+createdb yetibot
+```
+
 ## Build a Docker image
 
 ```bash
