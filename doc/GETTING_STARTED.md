@@ -1,8 +1,9 @@
 # Yetibot Getting Started
 
-To get a Yetibot running you need two things:
+To get a Yetibot running you need:
 
 1. Some config
+1. A Postgres database
 1. A way to run it
 
 ## Config
@@ -20,6 +21,26 @@ A very minimal config would be:
 
 This instructs Yetibot to join freenode with the username `my-yetibot` (change
 it to whatever you like).
+
+If you don't configure a Postgres database, it defaults to:
+
+```bash
+postgresql://localhost:5432/yetibot
+```
+
+It expects the database to already exist, but any tables will be created
+idempotently on startup. To override the default connection string along with
+the above config, it'd look like:
+
+```clojure
+{:yetibot
+ {:adapters {:freenode {:type "irc",
+                        :username "my-yetibot",
+                        :host "chat.freenode.net",
+                        :port "7070",
+                        :ssl "true"}}
+  :db {:url "postgresql://user:pass@mydb:5432/yetibot"}}}
+```
 
 For full config see the
 [CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
