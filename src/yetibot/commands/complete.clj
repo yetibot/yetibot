@@ -1,8 +1,8 @@
 (ns yetibot.commands.complete
   (:require
-    [clojure.xml :as xml]
+    [clojure.data.xml :refer [parse]]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.core.util.http :refer [encode]]))
+    [yetibot.core.util.http :refer [fetch encode]]))
 
 (def endpoint "http://google.com/complete/search?output=toolbar&q=")
 
@@ -15,7 +15,12 @@
   "complete <phrase> # complete phrase from Google Complete"
   {:test #(complete {:args "why does"})}
   [{phrase :args}]
-  (parse-suggestions (xml/parse (str endpoint (encode phrase)))))
+  (->> (encode phrase)
+       (str endpoint)
+       fetch
+       java.io.StringReader.
+       parse
+       parse-suggestions))
 
 (cmd-hook #"complete"
           #".+" complete)

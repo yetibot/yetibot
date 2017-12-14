@@ -1,5 +1,9 @@
 # Yetibot changelog
 
+## 0.4.19
+
+- Fix XML parsing issue in `complete` by switching to `clojure.data.xml`
+
 ## 0.4.18
 
 - Fix docker script in CI
