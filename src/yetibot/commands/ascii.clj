@@ -3,13 +3,12 @@
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.core.util.http :refer [fetch encode]]))
 
-(def endpoint "http://asciime.heroku.com/generate_ascii?s=")
+(def endpoint "http://artii.herokuapp.com/make?text=")
 
 (defn ascii
   "ascii <text> # generates ascii art representation of <text>"
   [{text :match}]
   (fetch (str endpoint (encode text))))
 
-;; disabled - api is gone
-;; (cmd-hook ["ascii" #"^ascii$"]
-;;           #"^.+" ascii)
+(cmd-hook ["ascii" #"^ascii$"]
+          #"^.+" ascii)
