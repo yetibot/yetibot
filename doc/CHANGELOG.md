@@ -2,7 +2,8 @@
 
 ## 0.4.20
 
-- Upgrade to Yetibot 0.4.18
+- Upgrade to Clojure 1.9!
+- Upgrade to Yetibot 0.4.19
 - Fix ascii command - [#518](https://github.com/yetibot/yetibot/issues/518)
 
 ## 0.4.19
