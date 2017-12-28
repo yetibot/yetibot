@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :deploy-repositories [["releases" :clojars]]
-  :jvm-opts []
+  :jvm-opts ["-Djava.security.policy=.java.policy"]
   :profiles {;; optionally override this profile in profiles.clj to be merged
              ;; into dev profile
              :profiles/dev {}
@@ -40,6 +40,18 @@
 
                  ; emojis
                  [com.vdurmont/emoji-java "3.3.0"]
+
+                 ; repls
+                 [clojail "1.0.6"
+                  ;; clojail hasn't been updated in a long time, so exclude its
+                  ;; deps
+                  :exclusions [org.clojure/clojure
+                               org.flatland/useful
+                               ;; Note: excluding bultitude disables clojail's
+                               ;; `blanket` feature
+                               bultitude
+                               ]]
+                 [bultitude "0.2.8"]
 
                  ;encoding
                  [org.clojure/data.codec "0.1.0"]]

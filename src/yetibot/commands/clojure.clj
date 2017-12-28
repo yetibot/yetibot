@@ -1,25 +1,18 @@
 (ns yetibot.commands.clojure
   (:require
     [clojure.string :as s]
+    [clojail.core :refer [sandbox]]
+    [clojail.testers :refer [secure-tester]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.core.util.http :refer [get-json map-to-query-string]]))
 
-(def endpoint "http://www.tryclj.com/eval.json")
-
-(defn try-clojure [expr]
-  (let [uri (str endpoint "?" (map-to-query-string {:expr expr}))]
-    (get-json uri)))
+(def sb (sandbox secure-tester :timeout 5000))
 
 (defn clojure-cmd
   "clj <expression> # evaluate a clojure expression"
-  {:yb/cat #{:broken}}
+  {:yb/cat #{:util}}
   [{:keys [args]}]
-  "tryclj.com is down :(")
-
-  ;; (let [json (try-clojure args)]
-  ;;   (if (:error json)
-  ;;     (:message json)
-  ;;     (:result json))))
+  (pr-str (sb (read-string args))))
 
 (cmd-hook #"clj"
           #"\S*" clojure-cmd)

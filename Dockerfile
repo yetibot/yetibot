@@ -12,6 +12,8 @@ COPY ./test /usr/src/app/test/
 
 COPY ./project.clj /usr/src/app/project.clj
 
+COPY .java.policy $HOME/
+
 WORKDIR /usr/src/app
 
 RUN lein deps
