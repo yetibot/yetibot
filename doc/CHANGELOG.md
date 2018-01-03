@@ -1,5 +1,9 @@
 # Yetibot changelog
 
+## 0.4.21
+
+- Upgrade to Yetibot 0.4.20
+
 ## 0.4.20
 
 - Upgrade to Clojure 1.9!
