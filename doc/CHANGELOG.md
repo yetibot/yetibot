@@ -1,5 +1,11 @@
 # Yetibot changelog
 
+Note: yetibot depends on [yetibot.core](https://github.com/yetibot/yetibot.core)
+which contains Yetibot's core functionality along with a few commands. See
+[yetibot.core's
+changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
+as well.
+
 ## 0.4.21
 
 - Upgrade to Yetibot 0.4.20
