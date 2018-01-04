@@ -4,7 +4,7 @@ MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
 
 EXPOSE 3000
 
-RUN mkdir -p /usr/src/app
+RUN mkdir -p /usr/src/app && mkdir -p /var/log/yetibot/
 
 COPY ./src /usr/src/app/src/
 
@@ -19,5 +19,7 @@ WORKDIR /usr/src/app
 RUN lein deps
 
 VOLUME /usr/src/app/config/
+
+VOLUME /var/log/yetibot/
 
 CMD ["lein", "run"]
