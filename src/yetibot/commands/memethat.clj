@@ -7,7 +7,7 @@
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn- find-chat-to-memeify [chat-source]
-  (last (h/last-chat-for-room chat-source false 2)))
+  (last (h/last-chat-for-room chat-source false)))
 
 (defn- format-chat [i] (:body i))
 

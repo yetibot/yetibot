@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.25
+
+- Fix bug where `memethat` used the wrong history item
+
 ## 0.4.24
 
 - Fix bug in `!memethat` command
