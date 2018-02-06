@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.26
+
+- Upgrade to yetibot.core 0.4.24
+
 ## 0.4.25
 
 - Fix bug where `memethat` used the wrong history item
@@ -16,7 +20,7 @@ as well.
 
 ## 0.4.23
 
-- Upgrade to Yetibot 0.4.23
+- Upgrade to yetibot.core 0.4.23
 
 ## 0.4.22
 
@@ -24,12 +28,12 @@ as well.
 
 ## 0.4.21
 
-- Upgrade to Yetibot 0.4.20
+- Upgrade to yetibot.core0.4.20
 
 ## 0.4.20
 
 - Upgrade to Clojure 1.9!
-- Upgrade to Yetibot 0.4.19
+- Upgrade to yetibot.core 0.4.19
 - Fix ascii command - [#518](https://github.com/yetibot/yetibot/issues/518)
 
 ## 0.4.19
