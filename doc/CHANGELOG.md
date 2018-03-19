@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.30
+
+- Upgrade to yetibot.core 0.4.27
+
 ## 0.4.29
 
 - Fix broken `clj` command when running inside Docker container -
