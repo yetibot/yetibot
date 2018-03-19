@@ -4,22 +4,26 @@ MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
 
 EXPOSE 3000
 
-RUN mkdir -p /usr/src/app && mkdir -p /var/log/yetibot/
+ENV WORKDIR /usr/src/app
+ENV LOGDIR /var/log/yetibot
 
-COPY ./src /usr/src/app/src/
+RUN mkdir -p $WORKDIR && mkdir -p $LOGDIR
 
-COPY ./test /usr/src/app/test/
+COPY ./src $WORKDIR/src/
 
-COPY ./project.clj /usr/src/app/project.clj
+COPY ./test $WORKDIR/test/
+
+COPY ./project.clj $WORKDIR/project.clj
 
 COPY .java.policy $HOME/
+COPY .java.policy $WORKDIR/.java.policy
 
-WORKDIR /usr/src/app
+WORKDIR $WORKDIR
 
 RUN lein deps
 
-VOLUME /usr/src/app/config/
+VOLUME $WORKDIR/config/
 
-VOLUME /var/log/yetibot/
+VOLUME $LOGDIR
 
 CMD ["lein", "run"]
