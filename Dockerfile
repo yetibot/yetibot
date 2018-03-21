@@ -17,6 +17,9 @@ COPY ./project.clj $WORKDIR/project.clj
 
 COPY .java.policy $HOME/
 COPY .java.policy $WORKDIR/.java.policy
+# overwrite the default location for linux
+COPY .java.policy /docker-java-home/jre/lib/security/java.policy
+
 
 WORKDIR $WORKDIR
 
