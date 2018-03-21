@@ -6,6 +6,14 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.31
+
+- Apply a new fix to actually fix `clj` when running inside Docker on Linux. For
+  some reason it worked inside Docker on Docker for Mac. 🤔
+
+  Fix is in
+  [9c36f75](https://github.com/yetibot/yetibot/commit/9c36f756becd2bebcf6923c4f6fc428e40163f8f)
+
 ## 0.4.30
 
 - Upgrade to yetibot.core 0.4.27
