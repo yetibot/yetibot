@@ -319,7 +319,7 @@ issue for feature requests!
 
 ## License
 
-Copyright &copy; 2012-2017 Trevor Hartman. Distributed under the [Eclipse Public
+Copyright &copy; 2012-2018 Trevor Hartman. Distributed under the [Eclipse Public
 License 1.0](http://opensource.org/licenses/eclipse-1.0.php), the same as
 Clojure.
 
