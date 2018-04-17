@@ -34,6 +34,8 @@
 
                  ; utils
                  [org.flatland/useful "0.11.5"]
+                 ; << string interpolation macro
+                 [org.clojure/core.incubator "0.1.4"] 
 
                  ; polling
                  [robert/bruce "0.8.0"]
