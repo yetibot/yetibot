@@ -14,7 +14,7 @@
   <a href="https://clojars.org/yetibot"><img src="https://img.shields.io/clojars/v/yetibot.svg?style=for-the-badge" alt="Yetibot" data-canonical-src="https://img.shields.io/clojars/v/yetibot.svg?style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://hub.docker.com/r/yetibot/yetibot/"><img src="https://img.shields.io/badge/docker-%E2%86%92-blue.svg?style=for-the-badge" alt="Yetibot on Docker Hub" data-canonical-src="https://img.shields.io/badge/docker-%E2%86%92-blue.svg?style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://crossclj.info/doc/yetibot/latest/index.html"><img src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg?style=for-the-badge" alt="CrossClj" data-canonical-src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg?style=for-the-badge" style="max-width:100%;"></a>
-  <a href="https://waffle.io/yetibot/yetibot"><img src="https://badge.waffle.io/yetibot/yetibot.svg?columns=all&style=for-the-badge" alt="Issues on Waffle" data-canonical-src="https://badge.waffle.io/yetibot/yetibot.svg?columns=all&style=for-the-badge" style="max-width:100%;"></a>
+  <a href="https://waffle.io/yetibot/yetibot"><img src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg?style=for-the-badge&colorB=55C4D4" alt="Issues on Waffle" data-canonical-src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg?style=for-the-badge&colorB=55C4D4" style="max-width:100%;"></a>
   <a href="https://codecov.io/gh/yetibot/yetibot"><img src="https://img.shields.io/codecov/c/github/yetibot/yetibot.svg?style=for-the-badge" alt="Codecov" data-canonical-src="https://img.shields.io/codecov/c/github/yetibot/yetibot.svg?style=for-the-badge" style="max-width:100%;"></a>
 </p>
 
