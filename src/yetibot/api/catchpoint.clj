@@ -39,7 +39,7 @@
     (:body response)))
 
 ;; token expires every 30 minutes. refresh it on every API call for now.
-(def token (atom nil))
+(defonce token (atom nil))
 
 (defn refresh-token! []
   (reset! token (:access_token (fetch-token))))
@@ -134,9 +134,49 @@
       perf)
     (<< "Couldn't find a test matching ~{id-or-test-match}")))
 
+(defn metric-by-index-or-pattern
+  [metric-index-or-pattern metrics]
+  (let [mni (if (number? metric-index-or-pattern)
+              metric-index-or-pattern
+              (read-string metric-index-or-pattern))]
+    (if (number? mni)
+      ;; look up by provided index
+      (nth metrics mni)
+      ;; look up by regex matching
+      (let [pattern (re-pattern (<< "(?i)~{metric-index-or-pattern}"))]
+        (first
+          (filter
+            (fn [{metric-name :name}] (re-find pattern metric-name))
+            metrics))))))
+
 (comment
 
-  (raw-performance-for-matched-test "item page")
+  (raw-performance-for-matched-test "haitao.*item")
+
+  (def perf
+    (raw-performance-for-matched-test "haitao.*item"))
+
+  ;; this drills into the chart legend, essentially
+  (->> perf
+       :body
+       :detail
+       :fields
+       :synthetic_metrics
+       (map :name))
+
+  ;; actual perf data by ISP
+  (let [items (-> perf
+                  :body
+                  :detail
+                  :items)]
+    (map (fn [{{breakdown-name :name} :breakdown_2
+               metrics :synthetic_metrics}]
+            ;; Webpage response
+           [breakdown-name (nth metrics 17) ])
+         items))
+
+
+  (resolve-test-id "item page")
 
   ;; get details of a random test
   (->
