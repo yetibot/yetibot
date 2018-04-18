@@ -9,15 +9,14 @@
 # Yetibot
 
 <p align="center">
-  <a href="http://slack.yetibot.com"><img src="http://slack.yetibot.com/badge.svg" alt="Slack" data-canonical-src="http://slack.yetibot.com/badge.svg" style="max-width:100%;"></a>
-  <a href="https://travis-ci.org/yetibot/yetibot"><img src="https://img.shields.io/travis/yetibot/yetibot.svg" alt="Build Status" data-canonical-src="https://travis-ci.org/yetibot/yetibot.svg?branch=master" style="max-width:100%;"></a>
-  <a href="https://clojars.org/yetibot"><img src="https://img.shields.io/clojars/v/yetibot.svg" alt="Yetibot" data-canonical-src="https://img.shields.io/clojars/v/yetibot.svg" style="max-width:100%;"></a>
-  <a href="https://hub.docker.com/r/yetibot/yetibot/"><img src="https://img.shields.io/badge/docker-%E2%86%92-blue.svg" alt="Yetibot on Docker Hub" data-canonical-src="https://img.shields.io/badge/docker-%E2%86%92-blue.svg" style="max-width:100%;"></a>
-  <a href="https://crossclj.info/doc/yetibot/latest/index.html"><img src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg" alt="CrossClj" data-canonical-src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg" style="max-width:100%;"></a>
-  <a href="https://waffle.io/yetibot/yetibot"><img src="https://img.shields.io/waffle/label/yetibot/yetibot/ready.svg" alt="Ready for work" data-canonical-src="https://img.shields.io/waffle/label/yetibot/yetibot/ready.svg" style="max-width:100%;"></a>
-  <a href="https://waffle.io/yetibot/yetibot"><img src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg" alt="In Progress" data-canonical-src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg" style="max-width:100%;"></a>
-  <a href="https://codeclimate.com/github/devth/yetibot"><img src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate" alt="Issue Count" data-canonical-src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate" style="max-width:100%;"></a>
-  <a href="https://codecov.io/gh/yetibot/yetibot"><img src="https://codecov.io/gh/yetibot/yetibot/branch/master/graph/badge.svg" alt="Codecov" data-canonical-src="https://codecov.io/gh/yetibot/yetibot/branch/master/graph/badge.svg" style="max-width:100%;"></a>
+  <a href="http://slack.yetibot.com"><img src="http://slack.yetibot.com/badge.svg?style=flat-square" alt="Slack" data-canonical-src="http://slack.yetibot.com/badge.svg?style=flat-square" style="max-width:100%;"></a>
+  <a href="https://travis-ci.org/yetibot/yetibot"><img src="https://img.shields.io/travis/yetibot/yetibot.svg?style=flat-square" alt="Build Status" data-canonical-src="https://travis-ci.org/yetibot/yetibot.svg?branch=master&style=flat-square" style="max-width:100%;"></a>
+  <a href="https://clojars.org/yetibot"><img src="https://img.shields.io/clojars/v/yetibot.svg?style=flat-square" alt="Yetibot" data-canonical-src="https://img.shields.io/clojars/v/yetibot.svg?style=flat-square" style="max-width:100%;"></a>
+  <a href="https://hub.docker.com/r/yetibot/yetibot/"><img src="https://img.shields.io/badge/docker-%E2%86%92-blue.svg?style=flat-square" alt="Yetibot on Docker Hub" data-canonical-src="https://img.shields.io/badge/docker-%E2%86%92-blue.svg?style=flat-square" style="max-width:100%;"></a>
+  <a href="https://crossclj.info/doc/yetibot/latest/index.html"><img src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg?style=flat-square" alt="CrossClj" data-canonical-src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-blue.svg?style=flat-square" style="max-width:100%;"></a>
+  <a href="https://waffle.io/yetibot/yetibot"><img src="https://badge.waffle.io/yetibot/yetibot.svg?columns=all&style=flat-square" alt="Issues on Waffle" data-canonical-src="https://badge.waffle.io/yetibot/yetibot.svg?columns=all&style=flat-square" style="max-width:100%;"></a>
+  <a href="https://codeclimate.com/github/devth/yetibot"><img src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate&style=flat-square" alt="Issue Count" data-canonical-src="https://img.shields.io/codeclimate/issues/github/devth/yetibot.svg?label=code%20climate&style=flat-square" style="max-width:100%;"></a>
+  <a href="https://codecov.io/gh/yetibot/yetibot"><img src="https://codecov.io/gh/yetibot/yetibot/branch/master/graph/badge.svg?style=flat-square" alt="Codecov" data-canonical-src="https://codecov.io/gh/yetibot/yetibot/branch/master/graph/badge.svg?style=flat-square" style="max-width:100%;"></a>
 </p>
 
 You can think of Yetibot as a **communal command line**. It excels at:
