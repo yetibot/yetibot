@@ -49,11 +49,12 @@
 ;; token refresh poller
 
 (defonce refresh-loop
-  (go-loop [refresh-count 1]
-     (refresh-token!)
-     (info "Refreshing Catchpoint token:" refresh-count)
-     (<! (timeout refresh-interval-ms))
-     (recur (inc refresh-count))))
+  (when (config)
+    (go-loop [refresh-count 1]
+             (refresh-token!)
+             (info "Refreshing Catchpoint token:" refresh-count)
+             (<! (timeout refresh-interval-ms))
+             (recur (inc refresh-count)))))
 
 (defn headers []
   (let [encoded-token (-> @token utf8-bytes base64-encode)]
