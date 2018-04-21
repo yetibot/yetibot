@@ -44,9 +44,10 @@
 (defn refresh-token! []
   (reset! token (:access_token (fetch-token))))
 
-(def refresh-interval-ms (* 10 60000))
+(def refresh-interval-ms (* 10 60000)) ;; 10 minutes
 
 ;; token refresh poller
+
 (defonce refresh-loop
   (go-loop [refresh-count 1]
      (refresh-token!)
@@ -151,10 +152,8 @@
 
 (comment
 
-  (raw-performance-for-matched-test "haitao.*item")
-
   (def perf
-    (raw-performance-for-matched-test "haitao.*item"))
+    (raw-performance-for-matched-test "item"))
 
   ;; this drills into the chart legend, essentially
   (->> perf
@@ -201,19 +200,5 @@
     :items
     (map (juxt :id :name))
     sort)
-
-  (fetch "performance/raw" {:query-params {:tests [254301]}})
-
-
-  (clojure.pprint/pprint
-    (->>
-      (fetch "performance/favoriteCharts")
-      :body
-      :items
-      (map :id)
-      )
-    )
-
-  (fetch-token)
 
   )
