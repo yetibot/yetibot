@@ -1,28 +1,20 @@
 (ns yetibot.commands.catfacts
   (:require
     [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.core.util.http :refer [get-json]]))
+    [clj-http.client :as client]))
 
-(def endpoint-ptrn "http://www.catfact.info/api/v1/facts.json?page=%d&per_page=1")
-
-(defonce total-facts (atom nil))
+(def endpoint "https://catfact.ninja/fact")
 
 (defn- fetch-catfact
-  "Fetches the catfact with the given id (>0) and returns its json map"
-  [id]
-  (get-json (format endpoint-ptrn id)))
-
-(defn- get-total-facts
-  "Gets the total number of facts, if not known fetch the total and return it"
+  "Fetches a random catfact"
   []
-  (or @total-facts (:total (fetch-catfact 0))))
+  (client/get endpoint {:as :json}))
 
 (defn catfact
   "catfact # fetch a random cat fact"
   {:yb/cat #{:fun}}
-  [_] (let [catmap (fetch-catfact (inc (rand-int (get-total-facts))))]
-        (reset! total-facts (:total catmap))
-        (:details (first (:facts catmap)))))
+  [_]
+  (-> (fetch-catfact) :body :fact))
 
 (cmd-hook #"catfact"
-          _ catfact)
+  _ catfact)
