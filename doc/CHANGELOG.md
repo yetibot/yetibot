@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.35 - 4/26/18
+
+- Upgrade to yetibot.core 0.4.30
+
 ## 0.4.34 - 4/20/18
 
 - Add initial [Catchpoint](http://www.catchpoint.com/) support
