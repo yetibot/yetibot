@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.37 - 5/9/2018
+
+- Upgrade to yetibot.core 0.4.32
+
 ## 0.4.36 - 4/26/18
 
 - Fix catfact (again) by switching to catfact.ninja
