@@ -1,4 +1,4 @@
-(defproject yetibot "0.4.39"
+(defproject yetibot "0.4.40-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
