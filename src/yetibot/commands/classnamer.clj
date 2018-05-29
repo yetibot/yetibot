@@ -4,7 +4,7 @@
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.core.util.http :refer [fetch]]))
 
-(def endpoint "http://www.classnamer.com/index.txt")
+(def endpoint "https://www.classnamer.org/type/plain")
 
 (defn classnamer-cmd
   "classnamer # retrieves a legit OO class name"
