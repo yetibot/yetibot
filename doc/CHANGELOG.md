@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.40 - 6/23/2018
+
+- Upgrade to yetibot.core 0.4.34 for improved GraphQL coverage and dashboard
+
 ## 0.4.39 - 5/29/2018
 
 - Upgrade to yetibot.core 0.4.34
