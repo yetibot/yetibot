@@ -1,14 +1,14 @@
 # Yetibot on Docker
 
 The official Yetibot image is
-[devth/yetibot](https://hub.docker.com/r/devth/yetibot/). It's built on the
+[yetibot/yetibot](https://hub.docker.com/r/yetibot/yetibot/). It's built on the
 official [Clojure image](https://hub.docker.com/_/clojure/).
 
 ## Configuration
 
 Configuration can be specified as env vars or passed in via a mounted volume.
 See
-[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
+[CONFIGURATION](https://github.com/yetibot/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs for more info.
 
 ## Ports
@@ -21,7 +21,7 @@ Yetibot runs a webapp on port `3000`. You may optionally expose it via `-P` or
 The most minimal incantation to run a Yetibot is:
 
 ```
-docker run -it --rm -e YB_ADAPTERS_IRC_TYPE="irc" devth/yetibot
+docker run -it --rm -e YB_ADAPTERS_IRC_TYPE="irc" yetibot/yetibot
 ```
 
 This will join Freenode with a username like `yetibot_$rand` where `$rand` is a
@@ -44,7 +44,7 @@ docker run --name yetibot \
   -e YB_ADAPTERS_IRC_SSL="true" \
   -e YB_ADAPTERS_IRC_USERNAME="yetibot_`whoami`" \
   -e YB_DB_URL="postgresql://localhost:5432/yetibot" \
-  devth/yetibot
+  yetibot/yetibot
 ```
 
 <em>Note, if you're using Docker Machine, you can view the webapp at its IP
@@ -89,12 +89,12 @@ docker run -d -p 80:3000 \
   -e YETIBOT_WEATHER_WUNDERGROUND_DEFAULT_ZIP "" \
   -e YETIBOT_WOLFRAM_APPID "" \
   -e YETIBOT_WORDNIK_KEY "" \
-  devth/yetibot
+  yetibot/yetibot
 ```
 
 Yetibot can also be configured via an EDN config file instead of env. For full
 config options see the
-[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
+[CONFIGURATION](https://github.com/yetibot/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs.
 
 ## Troubleshooting
@@ -109,7 +109,7 @@ docker run --rm -it --name yetibot \
   -e YETIBOT_ADAPTERS_IRC_PORT="7070" \
   -e YETIBOT_ADAPTERS_IRC_SSL="true" \
   -e YETIBOT_ADAPTERS_IRC_USERNAME="yetibot_`whoami`" \
-  devth/yetibot \
+  yetibot/yetibot \
   /bin/bash
 ```
 
