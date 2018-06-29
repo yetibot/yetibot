@@ -8,7 +8,8 @@ To get a Yetibot running you need:
 
 ## Docker Compose
 
-Docker Compose satisfies these requirements very quickly:
+Docker Compose satisfies these requirements very quickly. Run from the root of
+this repo:
 
 ```bash
 docker-compose up
