@@ -12,7 +12,7 @@ services:
       - YB_ADAPTERS_FREENODE_PORT=6667
       - YB_ADAPTERS_FREENODE_USERNAME=yetibot_demo
       - YB_DB_URL=postgresql://yetibot:yetibot@postgres:5432/yetibot
-      - YB_URL "http://localhost:3456"
+      - YB_URL=http://localhost:3456
     ports:
       - "3456:3003"
 
