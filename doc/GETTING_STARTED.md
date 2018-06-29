@@ -66,7 +66,7 @@ the above config, it'd look like:
 ```
 
 For full config see the
-[CONFIGURATION](https://github.com/devth/yetibot.core/blob/master/doc/CONFIGURATION.md)
+[CONFIGURATION](https://github.com/yetibot/yetibot.core/blob/master/doc/CONFIGURATION.md)
 docs.
 
 ## Postgres
@@ -131,7 +131,7 @@ There are a few ways to quickly run a Yetibot:
 
 1. Docker - [read the Yetibot on Docker docs](doc/DOCKER.md)
 1. Grab an archive of the source from the [Yetibot
-   releases](https://github.com/devth/yetibot/releases), unzip, put the config
+   releases](https://github.com/yetibot/yetibot/releases), unzip, put the config
    in place and `lein run`
 1. Clone the source of this repo, put the config in place and `lein run`
 
@@ -141,7 +141,7 @@ put config in place, and run it (assumes you already have
 
 ```bash
 cd /tmp
-curl https://codeload.github.com/devth/yetibot/tar.gz/master | tar xvz
+curl https://codeload.github.com/yetibot/yetibot/tar.gz/master | tar xvz
 cd yetibot-master
 cat << EOF > config.edn
 {:yetibot
@@ -181,6 +181,6 @@ mode :zap: #628 :zap:
 ## Questions
 
 If these docs don't work for you please [open an
-issue](https://github.com/devth/yetibot/issues/new)!
+issue](https://github.com/yetibot/yetibot/issues/new)!
 
 You can also try setting an env var `YB_LOG_LEVEL=debug` when running.

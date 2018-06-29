@@ -59,10 +59,9 @@ you can play with in Slack.
 
 To quickly try out Yetibot with minimal config:
 
-- read the [Yetibot on Docker](doc/DOCKER.md) docs if you want to run it with
-  Docker
-- or see the [Getting Started](doc/GETTING_STARTED.md) docs for other ways to
-  run
+- See the [Getting Started](doc/GETTING_STARTED.md) docs including a Docker
+  Compose example
+- [Yetibot on Docker](doc/DOCKER.md) docs if you want to run it with Docker
 
 ## Changes in 0.4.0
 
