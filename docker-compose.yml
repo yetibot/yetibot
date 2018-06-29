@@ -1,12 +1,25 @@
-version: '2'
+version: '3'
+
 services:
+
   yetibot:
-    image: devth/yetibot:1.0.0-RC8-SNAPSHOT
+    image: yetibot/yetibot
+    depends_on:
+      - postgres
     environment:
-      - YETIBOT_ADAPTERS_0_NAME=freenode_irc
-      - YETIBOT_ADAPTERS_0_TYPE=irc
-      - YETIBOT_ADAPTERS_0_HOST=irc.freenode.net
-      - YETIBOT_ADAPTERS_0_PORT=6667
-      - YETIBOT_ADAPTERS_0_USERNAME=yetibot
+      - YETIBOT_ADAPTERS_FREENODE_TYPE=irc
+      - YETIBOT_ADAPTERS_FREENODE_HOST=irc.freenode.net
+      - YETIBOT_ADAPTERS_FREENODE_PORT=6667
+      - YETIBOT_ADAPTERS_FREENODE_USERNAME=yetibot_demo
+      - YB_DB_URL=postgresql://yetibot:yetibot@postgres:5432/yetibot
     ports:
-      - "3000:3000"
+      - "3456:3003"
+
+  postgres:
+    image: postgres
+    environment:
+      - POSTGRES_USER=yetibot
+      - POSTGRES_PASSWORD=yetibot
+    ports:
+      - 5432
+

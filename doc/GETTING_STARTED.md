@@ -4,7 +4,30 @@ To get a Yetibot running you need:
 
 1. Some config
 1. A Postgres database
-1. A way to run it
+1. A way to run it (i.e. `docker` or `lein`)
+
+## Docker Compose
+
+Docker Compose satisfies these requirements very quickly:
+
+```bash
+docker-compose up
+```
+
+This starts up a Postgres container and a Yetibot container, configured to
+connect to IRC as user name `yetibot_demo`. Once it's up check out
+[http://localhost:3456](http://localhost:3456) to view the dashboard.
+
+See the [docker-compose.yml] file to look at exactly how these containers are
+configured. This demonstrates a very minimal default config that you can modify.
+For example, you could use Slack instead by switching to a config like:
+
+```yaml
+    environment:
+      - YETIBOT_ADAPTERS_MYSLACK_NAME=Slack
+      - YB_ADAPTERS_SLACK_TOKEN=xoxb-my-token
+      - YB_DB_URL=postgresql://yetibot:yetibot@postgres:5432/yetibot
+```
 
 ## Config
 
