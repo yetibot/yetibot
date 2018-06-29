@@ -19,9 +19,10 @@ This starts up a Postgres container and a Yetibot container, configured to
 connect to IRC as user name `yetibot_demo`. Once it's up check out
 [http://localhost:3456](http://localhost:3456) to view the dashboard.
 
-See the [docker-compose.yml] file to look at exactly how these containers are
-configured. This demonstrates a very minimal default config that you can modify.
-For example, you could use Slack instead by switching to a config like:
+See the [docker-compose.yml](docker-compose.yml) file to look at exactly how
+these containers are configured. This demonstrates a very minimal default config
+that you can modify. For example, you could use Slack instead by switching to a
+config like:
 
 ```yaml
     environment:
