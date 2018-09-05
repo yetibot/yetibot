@@ -28,6 +28,7 @@
                  ; apis
                  [twitter-api "1.8.0"]
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
+                 [com.google.cloud/google-cloud-storage "1.40.0"]
 
                  ; scraping
                  [org.jsoup/jsoup "1.10.3"]
