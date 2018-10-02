@@ -58,7 +58,7 @@ Welcome Hacktoberfest Clojurists!
 - Issues [labeled
   Hacktoberfest](https://github.com/yetibot/yetibot/labels/Hacktoberfest) are
   good for first time Yetibot contributors
-- Ask `@devth` for help on [Slack](http://slack.yetibot.com/), GitHub or
+- Ask `@devth` for help on [Slack](https://slack.yetibot.com/), GitHub or
   anywhere else you can find him
 
 ## Use it right now
