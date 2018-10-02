@@ -48,6 +48,19 @@ Features that make Yetibot powerful and great, which is to say *fun*:
 Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
 ways it can be used.
 
+## Hacktoberfest
+
+Welcome Hacktoberfest Clojurists!
+
+<img src="https://hacktoberfest.digitalocean.com/assets/logo-hacktoberfest-658b5aa2bd34e782d29c40bf6afbdff00f20fe1328efa6da17743878ba8db66f.png" />
+
+- Feel free to tackle [any issue](https://github.com/yetibot/yetibot)
+- Issues [labeled
+  Hacktoberfest](https://github.com/yetibot/yetibot/labels/Hacktoberfest) are
+  good for first time Yetibot contributors
+- Ask `@devth` for help on [Slack](http://slack.yetibot.com/), GitHub or
+  anywhere else you can find him
+
 ## Use it right now
 
 Get an invite to the official Yetibot slack at
@@ -62,13 +75,6 @@ To quickly try out Yetibot with minimal config:
 - See the [Getting Started](doc/GETTING_STARTED.md) docs including a Docker
   Compose example
 - [Yetibot on Docker](doc/DOCKER.md) docs if you want to run it with Docker
-
-## Changes in 0.4.0
-
-0.4.0 decomplects mutable and immutable configuration in a
-non-backward-compatible way. Please see
-[CONFIGURATION](https://github.com/yetibot/yetibot.core/blob/master/doc/CONFIGURATION.md)
-docs and port your existing config to the new structure.
 
 ## Yetibot users
 
