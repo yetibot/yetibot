@@ -26,8 +26,8 @@ config like:
 
 ```yaml
     environment:
-      - YB_ADAPTERS_MYSLACK_TYPE=Slack
-      - YB_ADAPTERS_MYSLACK_TOKEN=xoxb-my-token
+      - YB_ADAPTERS_SLACK_TYPE=slack
+      - YB_ADAPTERS_SLACK_TOKEN=xoxb-my-token
       - YB_DB_URL=postgresql://yetibot:yetibot@postgres:5432/yetibot
 ```
 
