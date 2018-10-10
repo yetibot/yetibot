@@ -10,8 +10,8 @@ looked at, as it was suggested by @devth in #740.
 The most basic set of endpoints provided are those for [Current Weather
 Data](https://openweathermap.org/current).  The problem I see here is
 that the API doesn't surfaces any notion of states, provinces, counties,
-prefectures, etc., returning only the city name, in {name}, and the
-country code in {sys.country}.
+prefectures, etc., returning only the city name, in `name`, and the
+country code in `sys.country`.
 
 For the below examples I'm using "York", a city in Pennsylvania, US, and
 England, UK (country code: GB).  "York" is also token in many city
@@ -195,7 +195,7 @@ Rough notes so far (please pardon the org-mode formatting)
 
 #+END_SRC
 
-*** Show version for analysis
+*** Short version for analysis
 #+BEGIN_SRC
 ❯ curl -s "https://api.weatherbit.io/v2.0/current?key=$wb_key&city=york%2C%20pa" | jq -c '.data[] | [.city_name,.state_code,.country_code]'
 ["York","PA","US"]
