@@ -244,7 +244,7 @@ eg: "york, pa" as "york%2C%20pa" works fine.
 ### Complications In Disambiguation Of Multiple Location Matches
 
 Unfortunately, Weatherbit.io's doesn't seem to provide any sort of
-search functionality, so users would have to specify enough detail, to
+search functionality so users would have to specify enough detail to
 disambiguate, without guidance from YB.
 
 Currently, YB will offer suggestions on which "york" you might want.
@@ -285,7 +285,7 @@ that seems inefficient to me, and overly complicated.
 I wound up liking this API for its qualified locations and simple
 request formatting requirements.  Unfortunately, unless we want to build
 our own search, users will not be offered suggestions to help further
-qualify locations.  That might not be a problems... it's just notably
+qualify locations.  That might not be a problem... it's just notably
 different than the current interface.
 
 
