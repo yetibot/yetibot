@@ -68,7 +68,8 @@ the API's search functionality.
 
 ### Complications When Trying To Qualify Locations
 
-*We'll use trimmed down version, for discussion going forward.*
+*We'll use a trimmed down version for API responses, for discussion
+going forward.*
 
 ```
 ❯ curl -s "https://api.openweathermap.org/data/2.5/weather?APPID=$owm_key&q=york" | jq -c '[.id,.name,.sys.country]'
@@ -118,7 +119,7 @@ my tests.
 > city name. To make the result more accurate just put the city name and
 > country divided by comma.
 
-I was expecting the above query (*"find&q=york&type=like"*) to return
+I was expecting the above query (*"find?q=york&type=like"*) to return
 "New York" but it doesn't.  I also tried "New", "Yor", and "ork",
 without success.
 
@@ -140,6 +141,7 @@ TODO: have to help with the baby and then get to work :)
 
 Rough notes so far (please pardon the org-mode formatting)
 
+```
 ** Weatherbit.io
 
 *** Basic response reference
@@ -212,4 +214,6 @@ Rough notes so far (please pardon the org-mode formatting)
 ["York","ENG","GB"]
 
 #+END_SRC
+
+```
 
