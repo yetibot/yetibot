@@ -28,10 +28,10 @@
                  ; apis
                  [twitter-api "1.8.0"]
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
-                 [com.google.cloud/google-cloud-storage "1.40.0"]
+                 [com.google.cloud/google-cloud-storage "1.49.0"]
 
                  ; scraping
-                 [org.jsoup/jsoup "1.10.3"]
+                 [org.jsoup/jsoup "1.11.3"]
 
                  ; utils
                  [org.flatland/useful "0.11.5"]
@@ -42,7 +42,7 @@
                  [robert/bruce "0.8.0"]
 
                  ; emojis
-                 [com.vdurmont/emoji-java "3.3.0"]
+                 [com.vdurmont/emoji-java "4.0.0"]
 
                  ; repls
                  [clojail "1.0.6"
@@ -57,7 +57,7 @@
                  [bultitude "0.2.8"]
 
                  ;encoding
-                 [org.clojure/data.codec "0.1.0"]]
+                 [org.clojure/data.codec "0.1.1"]]
 
   :plugins [[lein-exec "0.3.5"]
             [lein-environ "1.0.3"]

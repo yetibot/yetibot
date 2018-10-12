@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.46 - Unreleased
+
+- Fix Docker Compose env var Slack example
+  [#738](https://github.com/yetibot/yetibot/pull/738) by @jcorrado
+
 ## 0.4.45 - 9/28/2018
 
 - Upgrade to yetibot.core 0.4.41
