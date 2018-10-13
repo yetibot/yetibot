@@ -29,7 +29,7 @@
   the return of f."
   [f]
   (fn [s]
-    (let [[_ text punc] (re-matches #"^(.*?)?([\.!?,:]+)?$" s)]
+    (let [[_ text punc] (re-matches #"^(.*?)?([.!?,:]+)?$" s)]
       (str (f text) punc))))
 
 (defn wrap-capitalization
@@ -44,10 +44,7 @@
 
 (defn sub-word
   [s]
-  (let [s-lc (str/lower-case s)]
-    (if (contains? dict s-lc)
-      (get dict s-lc)
-      s)))
+  (get dict (str/lower-case s) s))
 
 (defn to-pirate
   [s]
@@ -75,9 +72,9 @@
   "Possibly suffix random pirate flavor, for given probability."
   [s prob]
   (if (< (rand) prob)
-    (let [flavor (get flavor (-> (count flavor) rand int))]
+    (let [flavor (get flavor (rand-nth flavor))]
       (str/replace-first s
-                         #"[\.!?]*$"
+                         #"[.!?]*$"
                          #(format ", %s%s" flavor %)))
     s))
 

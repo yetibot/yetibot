@@ -23,8 +23,9 @@
       (to-pirate "HeLlO WoRlD admin!!")    => "Ahoy WoRlD helm!!")
 
 (fact "suffix-flavor respects supplied probability constant"
-      (suffix-flavor "foo" 0) => "foo"
-      (suffix-flavor "foo" 1) => #"foo,\s+[^\s]+")
+      (suffix-flavor "foo" 0)  => "foo"
+      (suffix-flavor "foo" 1)  => #"^foo,\s+[^\s]+"
+      (suffix-flavor "foo." 1) => #"^foo,\s+[^\s]+?\.$")
 
 (def test-str "the quick brown fox jumps over the lazy dog")
 
