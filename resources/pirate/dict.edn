@@ -1,4 +1,5 @@
-;; Dictionary lifted from: https://github.com/stevehodges/talk_like_a_pirate
+;; Dictionary initially lifted from
+;; https://github.com/stevehodges/talk_like_a_pirate
 
 {"address" "port 'o call"
  "admin" "helm"
