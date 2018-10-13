@@ -6,7 +6,7 @@
 
 (facts "about lower-level wrapper fns"
        (fact "wrap-punctuation preserves punctuation even when wrapped fn alters str"
-             ((wrap-punctuation (fn [_] str "foo")) "bar!") => "foo!")
+             ((wrap-punctuation (fn [_] "foo")) "bar!") => "foo!")
        (fact "wrap-capitalization preserves captilization when when wrapped fn lower-cases str"
              ((wrap-capitalization str/lower-case) "Foo") => "Foo"))
 
