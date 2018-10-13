@@ -12,6 +12,7 @@ as well.
   [#738](https://github.com/yetibot/yetibot/pull/738) by [@jcorrado](https://github.com/jcorrado)
 - Upgrade dependencies [#746](https://github.com/yetibot/yetibot/pull/746) by
   [@linuxsoares](https://github.com/linuxsoares)
+- Upgrade to yetibot.core 0.4.42
 
 ## 0.4.45 - 9/28/2018
 
