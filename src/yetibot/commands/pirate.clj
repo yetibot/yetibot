@@ -76,18 +76,18 @@
                        #"[.!?]*$"
                        #(format ", %s%s" flavor %))))
 
-(def slurr-re #"[alr]")
+(def slur-re #"[alr]")
 
-(defn- mk-slurr-map
+(defn- mk-slur-map
   "Return randomly ordered v of true and nil.  The number of trues is a
   configurable percentage of n, plus some fuzz.  The balance of n are
   nils."
   [n]
   (let [perc 0.7
         fuzz (rand 0.3)
-        min-t (-> (* perc n) Math/round int)
+        min-t (* perc n)
         max-f (- n min-t)
-        t (+ min-t (-> (* fuzz max-f) Math/round int))
+        t (-> (* fuzz max-f) (+ min-t) Math/round)
         f (- n t)]
     (shuffle (concat (repeat t true)
                      (repeat f nil)))))
@@ -95,12 +95,12 @@
 (defn- slurrable?
   "Return s if it's slurrable, nil if not."
   [s]
-  (if (re-find slurr-re s) s nil))
+  (if (re-find slur-re s) s nil))
 
-(defn- slurr-word
+(defn- slur-word
   [s]
   (str/replace s
-               slurr-re
+               slur-re
                (fn [c]
                  (apply str (repeat (rand-nth [2 3]) c)))))
 
@@ -109,15 +109,15 @@
   [s]
   (let [words (str/split s #"\b")
         cnt (count (filter slurrable? words))
-        sm (mk-slurr-map cnt)]
-    (loop [word (first words), tail (rest words), sm sm, accum []]
+        sm (mk-slur-map cnt)]
+    (loop [[word & tail] words, sm sm, accum []]
       (if (nil? word)
         (apply str accum)
         (if (slurrable? word)
           (if (nil? (first sm))
-            (recur (first tail) (rest tail) (rest sm) (conj accum word))
-            (recur (first tail) (rest tail) (rest sm) (conj accum (slurr-word word))))
-          (recur (first tail) (rest tail) sm (conj accum word)))))))
+            (recur tail (rest sm) (conj accum word))
+            (recur tail (rest sm) (conj accum (slur-word word))))
+          (recur tail sm (conj accum word)))))))
 
 (defn if-prob
   "Optionally apply fn f to string s, based on probability prob"
