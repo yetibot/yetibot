@@ -20,7 +20,8 @@
       (to-pirate "Hello world admin")      => "Ahoy world helm"
       (to-pirate "Hello World Admin")      => "Ahoy World Helm"
       (to-pirate "HeLlO WoRlD admin")      => "Ahoy WoRlD helm"
-      (to-pirate "HeLlO WoRlD admin!!")    => "Ahoy WoRlD helm!!")
+      (to-pirate "HeLlO WoRlD admin!!")    => "Ahoy WoRlD helm!!"
+      (to-pirate "hello world   admin")    => "ahoy world   helm")
 
 (fact "suffix-flavor suffixes something"
       (suffix-flavor "foo")  => #"^foo,\s+[^\s]+"
