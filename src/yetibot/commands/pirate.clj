@@ -29,7 +29,7 @@
   the return of f."
   [f]
   (fn [s]
-    (let [[_ text punc] (re-matches #"^(.*?)?([.!?,:]+)?$" s)]
+    (let [[_ text punc] (re-matches #"(.*?)?([.!?,:]+)?" s)]
       (str (f text) punc))))
 
 (defn wrap-capitalization
