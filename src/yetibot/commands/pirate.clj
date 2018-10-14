@@ -108,8 +108,7 @@
   "I'm not drunk, you're drunk."
   [s]
   (let [words (str/split s #"\b")
-        cnt (count (filter slurrable? words))
-        sm (mk-slur-map cnt)]
+        sm (mk-slur-map (count (filter slurrable? words)))]
     (loop [[word & tail] words, sm sm, accum []]
       (if (nil? word)
         (apply str accum)
@@ -120,7 +119,7 @@
           (recur tail sm (conj accum word)))))))
 
 (defn if-prob
-  "Optionally apply fn f to string s, based on probability prob"
+  "Optionally apply fn f to string s, based on probability prob."
   [s f prob]
   (if (< (rand) prob)
     (f s)
