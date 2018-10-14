@@ -69,27 +69,30 @@
          hour)))
 
 (defn suffix-flavor
-  "Possibly suffix random pirate flavor, for given probability."
-  [s prob]
-  (if (< (rand) prob)
-    (let [flavor (get flavor (rand-nth flavor))]
-      (str/replace-first s
-                         #"[.!?]*$"
-                         #(format ", %s%s" flavor %)))
-    s))
+  "Suffix random pirate flavor."
+  [s]
+  (let [flavor (rand-nth flavor)]
+    (str/replace-first s
+                       #"[.!?]*$"
+                       #(format ", %s%s" flavor %))))
 
 (defn slurrr
   "I'm not drunk, you're drunk."
-  [s prob]
+  [s]
   (let [max-repeat 2]
-    (if (< (rand) prob)
-      (str/replace s
-                   #"[alr]"
-                   (fn [c]
-                     (apply str (repeat (-> (rand max-repeat)
-                                            int
-                                            inc) c))))
-      s)))
+    (str/replace s
+                 #"[alr]"
+                 (fn [c]
+                   (apply str (repeat (-> (rand max-repeat)
+                                          int
+                                          inc) c))))))
+
+(defn if-prob
+  "Optionally apply fn f to string s, based on probability prob"
+  [s f prob]
+  (if (< (rand) prob)
+    (f s)
+    s))
 
 (defn pirate-cmd
   "pirate <string> # translate string into proper pirate, yar <string>"
@@ -97,8 +100,8 @@
   [{:keys [match]}]
   (let [prob (probability)]
     (-> (to-pirate match)
-        (suffix-flavor prob)
-        (slurrr prob))))
+        (if-prob suffix-flavor prob)
+        (if-prob slurrr prob))))
 
 (cmd-hook #"pirate"
   #".+" pirate-cmd)

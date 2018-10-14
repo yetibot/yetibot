@@ -22,13 +22,15 @@
       (to-pirate "HeLlO WoRlD admin")      => "Ahoy WoRlD helm"
       (to-pirate "HeLlO WoRlD admin!!")    => "Ahoy WoRlD helm!!")
 
-(fact "suffix-flavor respects supplied probability constant"
-      (suffix-flavor "foo" 0)  => "foo"
-      (suffix-flavor "foo" 1)  => #"^foo,\s+[^\s]+"
-      (suffix-flavor "foo." 1) => #"^foo,\s+[^\s]+?\.$")
+(fact "suffix-flavor suffixes something"
+      (suffix-flavor "foo")  => #"^foo,\s+[^\s]+"
+      (suffix-flavor "foo.") => #"^foo,\s+.+\.$")
 
 (def test-str "the quick brown fox jumps over the lazy dog")
 
-(fact "slurrr respects supplied probability constant"
-      (slurrr test-str 0) => test-str
-      (slurrr test-str 1) => #"([alr])\1")
+(fact "slurrr permutes text"
+      (slurrr test-str) => #"([alr])\1")
+
+(fact "if-prob respects probability constant"
+      (if-prob 0 inc 0) => 0
+      (if-prob 0 inc 1) => 1)
