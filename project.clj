@@ -19,6 +19,7 @@
                        :jvm-opts ["-server"]
                        :aot :all}
              :test {:dependencies []}}
+  :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
