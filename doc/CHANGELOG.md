@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.50 - 10/15/2018
+
+- Add `./resources/` to the Dockerfile
+
 ## 0.4.49 - 10/15/2018
 
 - Add `:resource-paths ["resources"]` config to fix
