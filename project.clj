@@ -1,4 +1,4 @@
-(defproject yetibot "0.4.47-SNAPSHOT"
+(defproject yetibot "0.4.52-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
@@ -19,11 +19,12 @@
                        :jvm-opts ["-server"]
                        :aot :all}
              :test {:dependencies []}}
+  :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [yetibot.core "0.4.41"]
+                 [yetibot.core "0.4.44"]
 
                  ; apis
                  [twitter-api "1.8.0"]
