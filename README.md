@@ -12,6 +12,7 @@
   <a href="http://slack.yetibot.com"><img src="https://img.shields.io/badge/Yetibot%20Slack-%E2%9C%8C%EF%B8%8F-55C4D4.svg?style=for-the-badge" alt="Slack" data-canonical-src="https://img.shields.io/badge/Yetibot%20Slack-%E2%9C%8C%EF%B8%8F-55C4D4.svg?style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://travis-ci.org/yetibot/yetibot"><img src="https://img.shields.io/travis/yetibot/yetibot.svg?style=for-the-badge" alt="Build Status" data-canonical-src="https://travis-ci.org/yetibot/yetibot.svg?branch=master&style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://clojars.org/yetibot"><img src="https://img.shields.io/clojars/v/yetibot.svg?style=for-the-badge" alt="Yetibot" data-canonical-src="https://img.shields.io/clojars/v/yetibot.svg?style=for-the-badge" style="max-width:100%;"></a>
+  <a href="https://versions.deps.co/yetibot/yetibot"><img src="https://img.shields.io/badge/dynamic/json.svg?label=deps&url=https%3A%2F%2Fversions.deps.co%2Fyetibot%2Fyetibot%2Fstatus.json&query=%24.stats..[%22out-of-date%22]&suffix=%20out%20of%20date&style=for-the-badge&colorB=lightgrey" alt="Outdated dependencies"></a>
   <a href="https://hub.docker.com/r/yetibot/yetibot/"><img src="https://img.shields.io/badge/Docker-%F0%9F%90%B3-FDDE68.svg?style=for-the-badge" alt="Yetibot on Docker Hub" data-canonical-src="https://img.shields.io/badge/Docker-%F0%9F%90%B3-FDDE68.svg?style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://crossclj.info/doc/yetibot/latest/index.html"><img src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-55C4D4.svg?style=for-the-badge" alt="CrossClj" data-canonical-src="https://img.shields.io/badge/API%20docs-%E2%9A%A1%EF%B8%8F-55C4D4.svg?style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://waffle.io/yetibot/yetibot"><img src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg?style=for-the-badge&colorB=55C4D4" alt="Issues on Waffle" data-canonical-src="https://img.shields.io/waffle/label/yetibot/yetibot/in%20progress.svg?style=for-the-badge&colorB=55C4D4" style="max-width:100%;"></a>
@@ -54,7 +55,7 @@ Welcome Hacktoberfest Clojurists!
 
 <img src="https://hacktoberfest.digitalocean.com/assets/logo-hacktoberfest-658b5aa2bd34e782d29c40bf6afbdff00f20fe1328efa6da17743878ba8db66f.png" />
 
-- Feel free to tackle [any issue](https://github.com/yetibot/yetibot)
+- Feel free to tackle [any issue](https://github.com/yetibot/yetibot/issues)
 - Issues [labeled
   Hacktoberfest](https://github.com/yetibot/yetibot/labels/Hacktoberfest) are
   good for first time Yetibot contributors

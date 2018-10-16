@@ -11,6 +11,8 @@ RUN mkdir -p $WORKDIR && mkdir -p $LOGDIR
 
 COPY ./src $WORKDIR/src/
 
+COPY ./resources $WORKDIR/resources/
+
 COPY ./test $WORKDIR/test/
 
 COPY ./project.clj $WORKDIR/project.clj

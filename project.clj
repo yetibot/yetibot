@@ -1,4 +1,4 @@
-(defproject yetibot "0.4.47-SNAPSHOT"
+(defproject yetibot "0.4.52-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
@@ -19,19 +19,20 @@
                        :jvm-opts ["-server"]
                        :aot :all}
              :test {:dependencies []}}
+  :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [yetibot.core "0.4.41"]
+                 [yetibot.core "0.4.44"]
 
                  ; apis
                  [twitter-api "1.8.0"]
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
-                 [com.google.cloud/google-cloud-storage "1.40.0"]
+                 [com.google.cloud/google-cloud-storage "1.49.0"]
 
                  ; scraping
-                 [org.jsoup/jsoup "1.10.3"]
+                 [org.jsoup/jsoup "1.11.3"]
 
                  ; utils
                  [org.flatland/useful "0.11.5"]
@@ -42,7 +43,7 @@
                  [robert/bruce "0.8.0"]
 
                  ; emojis
-                 [com.vdurmont/emoji-java "3.3.0"]
+                 [com.vdurmont/emoji-java "4.0.0"]
 
                  ; repls
                  [clojail "1.0.6"
@@ -57,7 +58,7 @@
                  [bultitude "0.2.8"]
 
                  ;encoding
-                 [org.clojure/data.codec "0.1.0"]]
+                 [org.clojure/data.codec "0.1.1"]]
 
   :plugins [[lein-exec "0.3.5"]
             [lein-environ "1.0.3"]
