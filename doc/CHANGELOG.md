@@ -23,6 +23,10 @@ as well.
 
 - `pirate` command [#747](https://github.com/yetibot/yetibot/pull/747/)
    by [@jcorrado](https://github.com/jcorrado)
+   <img src="http://i.imgflip.com/2k64lz.jpg" />
+
+   :100:
+
 - Upgrade to yetibot.core 0.4.43
 
 ## 0.4.47 - 10/13/2018
