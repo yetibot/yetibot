@@ -6,8 +6,8 @@
 (facts "about postal code parsing"
        (fact "postal codes in the US - New York City"
              (chk-postal-code "10016")      => ["US" "10016"]
-             (chk-postal-code "10016-0001") => ["US" "10016-0001"]
-             (chk-postal-code "10016+0001") => ["US" "10016-0001"])
+             (chk-postal-code "10016-0001") => ["US" "10016"]
+             (chk-postal-code "10016+0001") => ["US" "10016"])
        (fact "postal codes in Romania - Bucharest"
              (chk-postal-code "020891")     => ["RO" "020891"])
        (fact "postal codes in Brazil - Brasília"

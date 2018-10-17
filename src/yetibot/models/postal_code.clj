@@ -6,12 +6,6 @@
 ;; Postal Code validation, qualification, and cleanup
 ;;
 
-(defn- us-cleanup
-  [zip plus4]
-  (if (nil? plus4)
-    zip
-    (str zip "-" plus4)))
-
 (defn- nl-cleanup
   [d s]
   (str d " " (str/upper-case s)))
@@ -23,8 +17,7 @@
        str/upper-case))
 
 (def postal-codes
-  {"US" {:re #"(?x) (\d{5}) (?: [-+] (\d{4}) )?"
-         :cleanup us-cleanup}
+  {"US" {:re #"(?x) (\d{5}) (?: [-+] \d{4} )?"}
 
    "RO" {:re #"(\d{6})"}
 
