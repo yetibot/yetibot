@@ -36,14 +36,18 @@
 
    "PH" {:re #"(\d{4})"}})
 
+(defn find-postal-code
+  [s postal-codes]
+  (first (filter (fn [[_ {re :re}]]
+                   (re-matches re s))
+                 postal-codes)))
+
 (defn- pc-chk-clean
   [s postal-codes]
-  (reduce-kv (fn [_ cc {:keys [:re :cleanup]}]
-            (when-let [[_ & groups] (re-matches re s)]
-              (let [cleanup (or cleanup (partial str))]
-                (reduced [cc (apply cleanup groups)]))))
-          nil
-          postal-codes))
+  (when-let [[cc {:keys [re cleanup]}] (find-postal-code s postal-codes)]
+    (let [[_ & groups] (re-matches re s)
+          cleanup (or cleanup (partial str))]
+      [cc (apply cleanup groups)])))
 
 (defn chk-postal-code
   "Check postal codes, optionally qualified by CC.  Returns a vector of
