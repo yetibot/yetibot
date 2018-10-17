@@ -14,8 +14,8 @@
              (chk-postal-code "70000-000")  => ["BR" "70000-000"])
        (fact "postal codes in The Netherlands - Amsterdam"
              (chk-postal-code "1000 BB")    => ["NL" "1000 BB"]
-             (chk-postal-code "1000BB")    => ["NL" "1000 BB"]
-             (chk-postal-code "1000bb")    => ["NL" "1000 BB"]
+             (chk-postal-code "1000BB")     => ["NL" "1000 BB"]
+             (chk-postal-code "1000bb")     => ["NL" "1000 BB"]
              (chk-postal-code "1000 SA")    => nil)
        (fact "postal codes in The UK"
              (chk-postal-code "EC1A 1BB")   => ["GB" "EC1A 1BB"]
