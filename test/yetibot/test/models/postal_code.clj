@@ -40,7 +40,11 @@
              (chk-postal-code "GIR0AA")     => ["GB" "GIR 0AA"]
              (chk-postal-code "gir 0aa")    => ["GB" "GIR 0AA"])
        (fact "postal codes in Australia - Canberra"
-             (chk-postal-code "2600")       => ["AU" "2600"]))
+             (chk-postal-code "2600")       => ["AU" "2600"])
+       (fact "postal codes in Canada"
+             (chk-postal-code "K1A 0B1")    => ["CA" "K1A 0B1"]
+             (chk-postal-code "K1A0B1")     => ["CA" "K1A 0B1"]
+             (chk-postal-code "k1a0b1")     => ["CA" "K1A 0B1"]))
 
 (facts "about test lookup ordering"
        (fact "AU matches before PH"

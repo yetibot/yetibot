@@ -16,6 +16,10 @@
        (str/join " ")
        str/upper-case))
 
+(defn- ca-cleanup
+  [a b]
+  (str/upper-case (str a " " b)))
+
 (def postal-codes
   {"US" {:re #"(?x) (\d{5}) (?: [-+] \d{4} )?"}
 
@@ -31,6 +35,9 @@
    "GB" {:re #"(?ix) (?: ([a-z][a-hj-y]?[0-9][a-z0-9]?) \s* ([0-9][a-z]{2}) |
                          (gir) \s* (0a{2}) )"
          :cleanup gb-cleanup}
+
+   "CA" {:re #"(?ix) ([a-ceghj-npr-tvxy]\d[a-ceghj-npr-tv-z]) \s* (\d[a-ceghj-npr-tv-z]\d)"
+         :cleanup ca-cleanup}
    
    "AU" {:re #"(\d{4})"}
 
