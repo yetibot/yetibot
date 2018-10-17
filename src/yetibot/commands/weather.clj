@@ -57,21 +57,46 @@
 ;; Perhaps this should live elsewhere?
 ;;
 
-;; Which Postal Codes to start with:
-;; USA, Romania, Brazil, The Netherlands, Hong Kong
-;; https://en.wikipedia.org/wiki/List_of_countries_by_English-speaking_population
+(defn- us-cleanup
+  [zip plus4]
+  (if (nil? plus4)
+    zip
+    (str zip "-" plus4)))
+
+(defn- nl-cleanup
+  [d s]
+  (str d " " (str/upper-case s)))
 
 (def postal-codes
-  (vector
-   {:cc "US" :re #"(?x) (\d{5}) (?:[-+]\d{4})?" :cleanup identity}
-   {:cc "RO" :re #"(\d{6})" :cleanup str/upper-case}))
+  {"US" {:re #"(?x) (\d{5}) (?: [-+] (\d{4}) )?"
+         :cleanup us-cleanup}
 
-(defn chk-postal-code
-  [s]
-  (reduce (fn [match {:keys [:cc :re :cleanup]}]
+   "RO" {:re #"(\d{6})"}
+
+   "BR" {:re #"(\d{5}-\d{3})"}
+
+   ;; https://en.wikipedia.org/wiki/Postal_codes_in_the_Netherlands
+   "NL" {:re #"(?ix) (\d{4}) \s* ([a-rt-z][a-z] | s[bce-rt-z])"
+         :cleanup nl-cleanup}
+
+   ;; Hong Kong doesn't use postal codes
+   
+   ;; GB: https://en.wikipedia.org/wiki/Postcodes_in_the_United_Kingdom
+
+   "AU" {:re #"(\d{4})"}
+
+   "PH" {:re #"(\d{4})"}})
+
+(defn- pc-chk-clean
+  [s postal-codes]
+  (reduce-kv (fn [_ cc {:keys [:re :cleanup]}]
             (when-let [[_ & groups] (re-matches re s)]
-              (let [cleanup (or cleanup identity)]
-                (reduced [cc (apply str groups)]))))
-          {}
+              (let [cleanup (or cleanup (partial str))]
+                (reduced [cc (apply cleanup groups)]))))
+          nil
           postal-codes))
 
+(defn chk-postal-code
+  "Check postal codes, optionally qualified by CC, return cleaned vec."
+  ([s]    (pc-chk-clean s postal-codes))
+  ([s cc] (pc-chk-clean s {cc (get postal-codes cc)})))
