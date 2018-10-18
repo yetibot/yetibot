@@ -76,15 +76,15 @@
                        #"[.!?]*$"
                        #(format ", %s%s" flavor %))))
 
-(def slur-re #"[alr]")
+(def slur-re #"[alr](?![alr])")
 
 (defn- mk-slur-map
   "Return randomly ordered v of true and nil.  The number of trues is a
   configurable percentage of n, plus some fuzz.  The balance of n are
   nils."
   [n]
-  (let [perc 0.7
-        fuzz (rand 0.3)
+  (let [perc 0.45
+        fuzz (rand 0.5)
         min-t (* perc n)
         max-f (- n min-t)
         t (-> (* fuzz max-f) (+ min-t) Math/round)

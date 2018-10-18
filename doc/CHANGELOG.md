@@ -6,6 +6,15 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.52 - 10/17/2018
+
+- Add postal code model for parsing postal codes with support for AU, BR, GB,
+  NL, PH, RO, and US [#755](https://github.com/yetibot/yetibot/pull/755) by
+  [@jcorrado](https://github.com/jcorrado)
+- Dry out pirate slightly: reduces the chance it'll slur and only slurs 1
+  letter per word [#758](https://github.com/yetibot/yetibot/pull/758) by
+  [@jcorrado](https://github.com/jcorrado)
+
 ## 0.4.51 - 10/16/2018
 
 - Upgrade to yetibot.core 0.4.44
