@@ -6,6 +6,29 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.51 - 10/16/2018
+
+- Upgrade to yetibot.core 0.4.44
+
+## 0.4.50 - 10/15/2018
+
+- Add `./resources/` to the Dockerfile
+
+## 0.4.49 - 10/15/2018
+
+- Add `:resource-paths ["resources"]` config to fix
+  [#752](https://github.com/yetibot/yetibot/issues/752)
+
+## 0.4.48 - 10/15/2018
+
+- `pirate` command [#747](https://github.com/yetibot/yetibot/pull/747/)
+   by [@jcorrado](https://github.com/jcorrado)
+   <img src="http://i.imgflip.com/2k64lz.jpg" />
+
+   :100:
+
+- Upgrade to yetibot.core 0.4.43
+
 ## 0.4.47 - 10/13/2018
 
 - Fix Docker Compose env var Slack example
