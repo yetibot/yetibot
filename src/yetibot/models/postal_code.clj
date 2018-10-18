@@ -3,14 +3,8 @@
    [clojure.string :as str]))
 
 ;;
-;; Postal Code validation and cleanup
+;; Postal Code validation, qualification, and cleanup
 ;;
-
-(defn- us-cleanup
-  [zip plus4]
-  (if (nil? plus4)
-    zip
-    (str zip "-" plus4)))
 
 (defn- nl-cleanup
   [d s]
@@ -22,9 +16,12 @@
        (str/join " ")
        str/upper-case))
 
+(defn- ca-cleanup
+  [a b]
+  (str/upper-case (str a " " b)))
+
 (def postal-codes
-  {"US" {:re #"(?x) (\d{5}) (?: [-+] (\d{4}) )?"
-         :cleanup us-cleanup}
+  {"US" {:re #"(?x) (\d{5}) (?: [-+] \d{4} )?"}
 
    "RO" {:re #"(\d{6})"}
 
@@ -38,21 +35,29 @@
    "GB" {:re #"(?ix) (?: ([a-z][a-hj-y]?[0-9][a-z0-9]?) \s* ([0-9][a-z]{2}) |
                          (gir) \s* (0a{2}) )"
          :cleanup gb-cleanup}
+
+   "CA" {:re #"(?ix) ([a-ceghj-npr-tvxy]\d[a-ceghj-npr-tv-z]) \s* (\d[a-ceghj-npr-tv-z]\d)"
+         :cleanup ca-cleanup}
    
    "AU" {:re #"(\d{4})"}
 
    "PH" {:re #"(\d{4})"}})
 
+(defn find-postal-code
+  [s postal-codes]
+  (first (filter (fn [[_ {re :re}]]
+                   (re-matches re s))
+                 postal-codes)))
+
 (defn- pc-chk-clean
   [s postal-codes]
-  (reduce-kv (fn [_ cc {:keys [:re :cleanup]}]
-            (when-let [[_ & groups] (re-matches re s)]
-              (let [cleanup (or cleanup (partial str))]
-                (reduced [cc (apply cleanup groups)]))))
-          nil
-          postal-codes))
+  (when-let [[cc {:keys [re cleanup]}] (find-postal-code s postal-codes)]
+    (let [[_ & groups] (re-matches re s)
+          cleanup (or cleanup (partial str))]
+      [cc (apply cleanup groups)])))
 
 (defn chk-postal-code
-  "Check postal codes, optionally qualified by CC.  Return cleaned vec."
+  "Check postal codes, optionally qualified by CC.  Returns a vector of
+  ISO country code and the canonical format of the postal code."
   ([s]    (pc-chk-clean s postal-codes))
   ([s cc] (pc-chk-clean s {cc (get postal-codes cc)})))
