@@ -2,7 +2,8 @@
   (:require
     [schema.core :as sch]
     [clojure.string :as str]
-    [yetibot.core.util.http :refer [get-json fetch encode map-to-query-string]]
+    [clj-http.client :as client]
+    [yetibot.core.util.http :refer [encode]]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]
@@ -13,18 +14,29 @@
 (def api-key (:key config))
 (def default-zip (-> config :default :zip))
 
+(defn get-json [uri]
+  (try
+    (let [{:keys [status body]} (client/get uri {:as :json :coerce :always})]
+      (condp = status
+        200 (first (:data body))
+        204 {:error "Location not found."}))
+    (catch Exception e
+      (let [{:keys [status body]} (ex-data e)]
+        (error "Request failed with status:" status)
+        body))))
+
 (defn- endpoint-base [repr q]
   (format "https://api.weatherbit.io/v2.0/%s?key=%s&%s" repr api-key q))
 
 (defn- current-by-name
   "Get current conditions by location name str"
   [name]
-  (get-json (endpoint "current" (format "city=%s" (encode name)))))
+  (get-json (endpoint-base "current" (format "city=%s" (encode name)))))
 
 (defn- current-by-pc
   "Get current conditions by post code and country code"
   [pc cc]
-  (get-json (endpoint "current" (apply format "postal_code=%s&country=%s" (map encode [pc cc])))))
+  (get-json (endpoint-base "current" (apply format "postal_code=%s&country=%s" (map encode [pc cc])))))
 
 (defn- error-response [c] (:error c))
 
