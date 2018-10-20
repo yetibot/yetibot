@@ -14,7 +14,17 @@
 (def api-key (:key config))
 (def default-zip (-> config :default :zip))
 
-(defn get-json [uri]
+(defn get-units
+  [cc]
+  (let [cc (-> cc str/lower-case keyword)]
+    (condp = cc
+      :lbr {:temp "F" :speed "mph"}  ;; Liberia
+      :mm  {:temp "F" :speed "mph"}  ;; Myanmar
+      :us  {:temp "F" :speed "mph"}  ;; US (come on already)
+      {:temp "C" :speed "km/h"})))
+
+(defn get-json
+  [uri]
   (try
     (let [{:keys [status body]} (client/get uri {:as :json :coerce :always})]
       (condp = status
@@ -40,15 +50,34 @@
 
 (defn- error-response [c] (:error c))
 
-(defn- format-current [c]
-  (when (contains? c :data)
-    (let [loc (-> c :data (get 0))]
-      [(format "Current conditions for %s:" (:city_name loc))
-       (format "%s, %s" (:temp loc) (-> loc :weather :description))
-       (format "Feels like %s" (:app_temp loc))
-       (format "Wind: %s from the %s" (:wind_spd loc) (:wind_cdir_full loc))
-       (format "Precip: %s" (or (:precip loc) "none"))
-       ])))
+(defn- fmt-location-title
+  [_ {:keys [city_name state_code country_code]}]
+  (format "Current conditions for %s (%s):" city_name country_code))
+
+(defn- fmt-description
+  [units {temp :temp {:keys [icon code description]} :weather}]
+  (format "%.1f° %s - %s"
+          (float temp) (:temp units)
+          (str/join "" (map str/capitalize (str/split description #"\b")))))
+
+(defn- fmt-feels-like
+  [units {app_temp :app_temp}]
+  (format "Feels like %d° %s"
+          (-> app_temp float Math/round) (:temp units)))
+
+(defn- fmt-wind
+  [units {:keys [wind_spd wind_cdir]}]
+  (format "Winds %.1f %s from %s"
+          (float wind_spd) (:speed units) wind_cdir))
+
+(defn- format-current
+  [c]
+  (let [units (get-units (:country_code c))]
+    (map (fn [f] (f units c))
+         [fmt-location-title
+          fmt-description
+          fmt-feels-like
+          fmt-wind])))
 
 (defn current
   [s]
