@@ -14,15 +14,6 @@
 (def api-key (:key config))
 (def default-zip (-> config :default :zip))
 
-(defn get-units
-  [cc]
-  (let [cc (-> cc str/lower-case keyword)]
-    (condp = cc
-      :lbr {:temp "F" :speed "mph"}  ;; Liberia
-      :mm  {:temp "F" :speed "mph"}  ;; Myanmar
-      :us  {:temp "F" :speed "mph"}  ;; US (come on already)
-      {:temp "C" :speed "km/h"})))
-
 (defn get-json
   [uri]
   (try
@@ -35,49 +26,87 @@
         (error "Request failed with status:" status)
         body))))
 
-(defn- endpoint-base [repr q]
-  (format "https://api.weatherbit.io/v2.0/%s?key=%s&%s" repr api-key q))
+(defn- endpoint [repr q]
+  (format "https://api.weatherbit.io/v2.0/%s?key=%s&units=M&%s" repr api-key q))
 
 (defn- current-by-name
   "Get current conditions by location name str"
   [name]
-  (get-json (endpoint-base "current" (format "city=%s" (encode name)))))
+  (get-json (endpoint "current" (format "city=%s" (encode name)))))
 
 (defn- current-by-pc
   "Get current conditions by post code and country code"
   [pc cc]
-  (get-json (endpoint-base "current" (apply format "postal_code=%s&country=%s" (map encode [pc cc])))))
+  (get-json (endpoint "current" (apply format "postal_code=%s&country=%s"
+                                       (map encode [pc cc])))))
 
 (defn- error-response [c] (:error c))
 
+(defn c-to-f [c] (-> (* c 9/5) (+ 32) float))
+(defn km-to-mi [km] (-> (/ km 1.609) float))
+
+(defn get-units
+  [cc]
+  (let [cc (-> cc str/lower-case keyword)]
+    (condp = cc
+      ;; Liberia
+      :lbr {:temp  {:sym "F"   :conv c-to-f}
+            :speed {:sym "mph" :conv km-to-mi}}
+
+      ;; Myanmar
+      :mm  {:temp  {:sym "F"   :conv c-to-f}
+            :speed {:sym "mph" :conv km-to-mi}}
+
+      ;; The United States of America
+      :us  {:temp  {:sym "F"   :conv c-to-f}
+            :speed {:sym "mph" :conv km-to-mi}}
+
+      ;; THE ENTIRE REST OF THE WORLD
+      {:temp  {:sym "C"    :conv float}
+       :speed {:sym "km/h" :conv float}})))
+
+(defn- l10n-value
+  [v u cc]
+  (let [{:keys [sym conv]} (get (get-units cc) u)]
+    [(conv v) sym]))
+
+(defn- l10n-temp [temp cc] (l10n-value temp :temp cc))
+
+(defn- l10n-speed [speed cc] (l10n-value speed :speed cc))
+
 (defn- fmt-location-title
-  [_ {:keys [city_name state_code country_code]}]
-  (format "Current conditions for %s (%s):" city_name country_code))
+  [{:keys [city_name state_code country_code]}]
+  (let [loc (if (re-matches #"\d+" state_code)
+              city_name
+              (str city_name ", " state_code))]
+    (format "Current conditions for %s (%s):" loc country_code)))
 
 (defn- fmt-description
-  [units {temp :temp {:keys [icon code description]} :weather}]
-  (format "%.1f° %s - %s"
-          (float temp) (:temp units)
-          (str/join "" (map str/capitalize (str/split description #"\b")))))
+  [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
+  (let [[temp unit] (l10n-temp temp cc)]
+    (format "%.1f°%s - %s"
+            temp unit
+            (str/join (map str/capitalize (str/split description #"\b"))))))
 
 (defn- fmt-feels-like
-  [units {app_temp :app_temp}]
-  (format "Feels like %d° %s"
-          (-> app_temp float Math/round) (:temp units)))
+  [{cc :country_code app_temp :app_temp}]
+  (let [[app_temp unit] (l10n-temp app_temp cc)]
+    (format "Feels like %d°%s"
+            (-> app_temp float Math/round)
+            unit)))
 
 (defn- fmt-wind
-  [units {:keys [wind_spd wind_cdir]}]
-  (format "Winds %.1f %s from %s"
-          (float wind_spd) (:speed units) wind_cdir))
+  [{cc :country_code :keys [wind_spd wind_cdir]}]
+  (let [[wind_spd unit] (l10n-speed wind_spd cc)]
+    (format "Winds %.1f %s from %s"
+            wind_spd unit wind_cdir)))
 
 (defn- format-current
   [c]
-  (let [units (get-units (:country_code c))]
-    (map (fn [f] (f units c))
-         [fmt-location-title
-          fmt-description
-          fmt-feels-like
-          fmt-wind])))
+  (map #(% c) [fmt-location-title
+               fmt-description
+               fmt-feels-like
+               fmt-wind]))
 
 (defn current
   [s]
