@@ -74,28 +74,28 @@
 
 (defn- l10n-speed [speed cc] (l10n-value speed :speed cc))
 
-(defn- fmt-location-title
+(defn fmt-location-title
   [{:keys [city_name state_code country_code]}]
   (let [loc (if (re-matches #"\d+" state_code)
               city_name
               (str city_name ", " state_code))]
     (format "Current conditions for %s (%s):" loc country_code)))
 
-(defn- fmt-description
+(defn fmt-description
   [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
   (let [[temp unit] (l10n-temp temp cc)]
     (format "%.1f°%s - %s"
             temp unit
             (str/join (map str/capitalize (str/split description #"\b"))))))
 
-(defn- fmt-feels-like
+(defn fmt-feels-like
   [{cc :country_code app_temp :app_temp}]
   (let [[app_temp unit] (l10n-temp app_temp cc)]
     (format "Feels like %d°%s"
             (-> app_temp float Math/round)
             unit)))
 
-(defn- fmt-wind
+(defn fmt-wind
   [{cc :country_code :keys [wind_spd wind_cdir]}]
   (let [[wind_spd unit] (l10n-speed wind_spd cc)]
     (format "Winds %.1f %s from %s"
