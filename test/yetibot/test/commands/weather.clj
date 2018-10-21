@@ -34,5 +34,5 @@
              (fmt-feels-like loc-nyc) => "Feels like 77°F"
              (fmt-feels-like loc-bcr) => "Feels like 100°C")
        (fact fmt-wind
-             (fmt-wind loc-nyc) => "Winds 6.2 mph from N"
-             (fmt-wind loc-bcr) => "Winds 10.0 km/h from SSE"))
+             (fmt-wind loc-nyc) => "Winds 6.2 mph N"
+             (fmt-wind loc-bcr) => "Winds 10.0 km/h SSE"))
