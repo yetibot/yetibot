@@ -98,7 +98,7 @@
 (defn fmt-wind
   [{cc :country_code :keys [wind_spd wind_cdir]}]
   (let [[wind_spd unit] (l10n-speed wind_spd cc)]
-    (format "Winds %.1f %s from %s"
+    (format "Winds %.1f %s %s"
             wind_spd unit wind_cdir)))
 
 (defn- format-current
