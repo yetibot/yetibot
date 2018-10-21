@@ -115,7 +115,7 @@
     (current-by-name s)))
 
 (defn weather-cmd
-  "weather <location> # look up current weather for <location>"
+  "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
   [{:keys [match]}]
   (let [cs (current match)]
