@@ -54,10 +54,12 @@
   (when-let [[cc {:keys [re cleanup]}] (find-postal-code s postal-codes)]
     (let [[_ & groups] (re-matches re s)
           cleanup (or cleanup (partial str))]
-      [cc (apply cleanup groups)])))
+      [(apply cleanup groups) cc])))
 
 (defn chk-postal-code
   "Check postal codes, optionally qualified by CC.  Returns a vector of
   ISO country code and the canonical format of the postal code."
   ([s]    (pc-chk-clean s postal-codes))
-  ([s cc] (pc-chk-clean s {cc (get postal-codes cc)})))
+  ([s cc]
+   (if-let [postal-codes (get postal-codes (str/upper-case cc))]
+     (pc-chk-clean s {cc postal-codes }))))
