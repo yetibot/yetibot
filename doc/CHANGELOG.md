@@ -6,7 +6,13 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-## 0.4.52 - 10/20/2018
+## 0.4.54 - Unreleased
+
+- Migrate `weather` from Weather Underground to Weatherbit.io -
+  [#763](https://github.com/yetibot/yetibot/pull/763) by
+  [@jcorrado](https://github.com/jcorrado)
+
+## 0.4.53 - 10/20/2018
 
 - Upgrade to yetibot.core 0.4.45
 
