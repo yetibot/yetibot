@@ -8,7 +8,7 @@
 
 (defn haiku
   {:doc "haiku # fetch a random haiku"
-   :yb/cat #{:fun}}
+   :yb/cat #{:broken :fun}}
   [_] (let [res (xml-seq (xml/parse endpoint))]
         (for [el res :when (= :line (:tag el))]
           (first (:content el)))))
