@@ -73,8 +73,9 @@
   [s]
   (let [flavor (rand-nth flavor)]
     (str/replace-first s
-                       #"[.!?]*$"
-                       #(format ", %s%s" flavor %))))
+                       #"([.!?]*)\s*$"
+                       (fn [[_ punc]]
+                         (format ", %s%s" flavor punc)))))
 
 (def slur-re #"[alr](?![alr])")
 
