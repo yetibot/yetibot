@@ -136,6 +136,22 @@
                   (f/unparse date-formatter datetime))))
       (str n " is not a number"))))
 
+(defn releases-cmd
+  "gh releases <org>/<repo-name> # retrieve info about the latest release on a github repository"
+  {:yb/cat #{:util :info}}
+  [{[_ org-name repo] :match chat-source :chat-source}]
+  (let [latest-release (gh/latest-releases org-name repo)
+        status (:status latest-release)]
+    (if (nil? status)
+      (let [tagname (:tag_name latest-release)
+            author (get-in latest-release [:author :login])
+            published-at (:published_at (-> "YYYY-MM-dd'T'HH:mm:ssZ"
+                                            (f/formatter)
+                                            (f/parse (:published_at latest-release))))]
+        (format "%s/%s latest version tagged: %s, was published on %s by %s " org-name repo tagname
+                (f/unparse (f/formatter "MMM d, yyyy 'at' hh:mm") published-at) author))
+      (format "No release version info found for %s/%s" org-name repo))))
+
 
 (when (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
@@ -154,4 +170,5 @@
             #"stats\s+(\S+)\/(\S+)" stats-cmd
             #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
             #"tags\s+(\S+)\/(\S+)" tags
-            #"branches\s+(\S+)\/(\S+)" branches))
+            #"branches\s+(\S+)\/(\S+)" branches
+            #"releases\s+(\S+)\/(\S+)" releases-cmd))
