@@ -24,8 +24,10 @@
       (to-pirate "hello world   admin")    => "ahoy world   helm")
 
 (fact "suffix-flavor suffixes something"
-      (suffix-flavor "foo")  => #"^foo,\s+[^\s]+"
-      (suffix-flavor "foo.") => #"^foo,\s+.+\.$")
+      (suffix-flavor "foo bar")    => #"^foo bar,\s+[^\s]+"
+      (suffix-flavor "foo bar.")   => #"^foo bar,\s+.+\.$"
+      (suffix-flavor "foo bar. ")  => #"^foo bar,\s+.+\.$"
+      (suffix-flavor "foo bar.. ") => #"^foo bar,\s+.+\.\.$")
 
 (def test-str "the quick brown fox jumps over the lazy dog")
 
