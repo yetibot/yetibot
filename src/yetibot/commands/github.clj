@@ -13,6 +13,7 @@
     [robert.bruce :refer [try-try-again] :as rb]))
 
 (def date-formatter (f/formatters :date))
+(def date-hour-formatter (f/formatter "MMM d, yyyy 'at' hh:mm"))
 
 (defn feed
   "gh feed <org-name> # list recent activity for <org-name>"
@@ -136,22 +137,50 @@
                   (f/unparse date-formatter datetime))))
       (str n " is not a number"))))
 
-(defn releases-cmd
-  "gh releases <org>/<repo-name> # retrieve info about the latest release on a github repository"
+(defn show-latest-release-info-cmd
+  "gh releases show <org>/<repo-name> # retrieve info about the latest release on a Github repository"
   {:yb/cat #{:util :info}}
-  [{[_ org-name repo] :match chat-source :chat-source}]
+  [{[_ org-name repo] :match}]
   (let [latest-release (gh/latest-releases org-name repo)
         status (:status latest-release)]
     (if (nil? status)
-      (let [tagname (:tag_name latest-release)
+      (let [tag (:tag_name latest-release)
             author (get-in latest-release [:author :login])
             published-at (:published_at (-> "YYYY-MM-dd'T'HH:mm:ssZ"
                                             (f/formatter)
                                             (f/parse (:published_at latest-release))))]
-        (format "%s/%s latest version tagged: %s, was published on %s by %s " org-name repo tagname
-                (f/unparse (f/formatter "MMM d, yyyy 'at' hh:mm") published-at) author))
+        (format "%s/%s latest version, tagged: %s, was published on %s by %s" org-name repo tag
+                (f/unparse date-hour-formatter published-at) author))
       (format "No release version info found for %s/%s" org-name repo))))
 
+(defn show-release-info-by-tag-cmd
+  "gh releases show <org>/<repo-name> <tag> # retrieve info about a specific release tag on a Github repository"
+  {:yb/cat #{:util :info}}
+  [{[_ org-name repo tag] :match}]
+  (let [tagged-release (gh/release-by-tag org-name repo tag)
+        status (:status tagged-release)]
+    (if (nil? status)
+      (let [author (get-in tagged-release [:author :login])
+            published-at (:published_at (-> "YYYY-MM-dd'T'HH:mm:ssZ"
+                                            (f/formatter)
+                                            (f/parse (:published_at tagged-release))))]
+        (format "Release tag: %s from %s/%s, was published on %s by %s" tag org-name repo
+                (f/unparse date-hour-formatter published-at) author))
+      (format "No release version info found for tag %s on %s/%s" tag org-name repo))))
+
+(defn list-releases-info-cmd
+  "gh releases <org>/<repo-name> # list releases for a Github repository"
+  {:yb/cat #{:util :info}}
+  [{[_ org-name repo] :match}]
+  (let [releases (gh/releases org-name repo)]
+    (for [release releases]
+      (let [tag (:tag_name release)
+            author (get-in release [:author :login])
+            published-at (:published_at (-> "YYYY-MM-dd'T'HH:mm:ssZ"
+                                            (f/formatter)
+                                            (f/parse (:published_at release))))]
+        (format "Release version tagged: %s, from %s/%s, was published on %s by %s" tag org-name repo
+                (f/unparse date-hour-formatter published-at) author)))))
 
 (when (gh/configured?)
   (cmd-hook ["gh" #"^gh|github$"]
@@ -171,4 +200,6 @@
             #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
             #"tags\s+(\S+)\/(\S+)" tags
             #"branches\s+(\S+)\/(\S+)" branches
-            #"releases\s+(\S+)\/(\S+)" releases-cmd))
+            #"releases\s+show\s+(\S+)\/(\S+)\s+(\S+)" show-release-info-by-tag-cmd
+            #"releases\s+show\s+(\S+)\/(\S+)" show-latest-release-info-cmd
+            #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd))
