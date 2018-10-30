@@ -6,9 +6,13 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-## 0.4.54 - Unreleased
+## 0.4.55 - 10/29/2018
 
 - Upgrade to yetibot.core 0.4.47
+- Fixup pirate punctuation -
+  [#770](https://github.com/yetibot/yetibot/pull/770) by
+  [@jcorrado](https://github.com/jcorrado)
+- Add optional `<name>` parameter to `chuck` command
 
 ## 0.4.54 - 10/23/2018
 
