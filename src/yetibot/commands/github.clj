@@ -145,9 +145,10 @@
           author (get-in release [:author :login])
           published-at (-> "YYYY-MM-dd'T'HH:mm:ssZ"
                            (f/formatter)
-                           (f/parse (:published_at release)))]
-      (format "Release version, tagged: %s from %s/%s, was published on %s by %s" tag org-name repo
-              (f/unparse date-hour-formatter published-at) author))
+                           (f/parse (:published_at release)))
+          body (:body release)]
+      (format "Release version, tagged: %s from %s/%s, was published on %s by %s\n %s" tag org-name repo
+              (f/unparse date-hour-formatter published-at) author body))
     (format "No release version info found for %s/%s" org-name repo)))
 
 (defn show-latest-release-info-cmd
