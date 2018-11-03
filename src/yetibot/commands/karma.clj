@@ -1,42 +1,46 @@
-(ns yetibot.core.commands.karma
+(ns yetibot.commands.karma
   (:require
-   [yetibot.core.models.karma :as model]
-   [clojure.string :as str]))
+   [yetibot.core.hooks :refer [cmd-hook]]
+   [yetibot.models.karma :as model]
+   [clojure.string :as str]
+   [clj-time.format :as fmt]))
 
-(defn get-user-status
+(defn get-score
   "karma <user> # get score and recent notes for <user>"
   {:yb/cat #{:fun}}
-  [{{:name user-id} :user}]
-  (str
-   (format "%s: %s\n" user-id (model/get-score-for-user user-id))
-   (str/join "\n" (map (fn [{:keys [note voter-id created-at]}]
-                         (format "_\"%s\"_ --%s _(%s)_" note voter-id created-at))
-                       (model/get-notes-for-user user-id)))))
+  [{user-id :match}]
+  (str (format "%s: %s\n" user-id (model/get-score user-id))
+       (str/join "\n" (map #(format "_\"%s\"_ --%s _(%s)_"
+                                    (:note %)
+                                    (:voter-id %)
+                                    (fmt/unparse (fmt/formatters :mysql) (:created-at %)))
+                           (model/get-notes user-id)))))
 
 (defn get-high-scores
   "karma # get leaderboard"
   {:yb/cat #{:fun}}
-  []
-  (str/join "\n" (map (fn [{:keys [user-id score]}]
-                        (format "%s: %s" user-id score))
+  [_]
+  (str/join "\n" (map #(format "%s: %s" (:user-id %) (:score %))
                       (model/get-high-scores))))
 
-(defn adust-user
-  "karma <user>(++|--) <note> # give or take karma for <user> with optional <note>"
+(defn adjust-score
+  "karma <user>(++|--) <note> # adjust karma for <user> with optional <note>"
   {:yb/cat #{:fun}}
-  [{{:name voter-id} :user, args :args}]
-  (let [[_ user-id action note] (re-matches #"(?:i) ([-\w])+ (--|\+\+) \s+ (.*)" args)]
-    (if (= action "++")
-      (if (= user-id voter-id)
-        "Sorry, that's not how Karma works. :thinking_face:"
-        (do 
-          (model/add-score-delta user-id voter-id 1 note)
-          ":purple_heart:"))
-      (do
-        (model/add-score-delta user-id voter-id -1 note)
-        ":broken_heart:")))
+  [{[_ user-id action note] :match, {voter-id :name} :user}]
+  (if (= action "++")
+    (if (= user-id voter-id)
+      ;; :thinking_face:
+      "Sorry, that's not how Karma works. 🤔"
+      (do 
+        (model/add-score-delta user-id voter-id 1 note)
+        ;; :purple_heart:
+        "💜"))
+    (do
+      (model/add-score-delta user-id voter-id -1 note)
+      ;; :broken_heart:
+      "💔")))
 
 (cmd-hook ["karma" #"^karma$"]
-          #".+(--|\+\+)" adjust-user
-          #".+" get-user-status
+          #"(?x) (\w+) (--|\+\+) (?: \s+ (.+) )?" adjust-score
+          #"\w+" get-score
           _ get-high-scores)

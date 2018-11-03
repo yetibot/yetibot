@@ -1,6 +1,7 @@
-(ns yetibot.core.models.karma
+(ns yetibot.models.karma
   (:require
-   [yetibot.db.karma :as db]))
+   [yetibot.db.karma :as db]
+   [clj-time.coerce :as coerce]))
 
 (defn add-score-delta
   [user-id voter-id points note]
@@ -9,18 +10,21 @@
               :points points
               :note note}))
 
-(defn get-score-for-user
+(defn get-score
   [user-id]
-  (-> (db/query {:select/clause "SUM(points) as score"
-                 :where/map {:user-id user-id}})
-      first :score))
+  (let [score (-> (db/query {:select/clause "SUM(points) as score"
+                             :where/map {:user-id user-id}})
+                  first :score)]
+    (if (nil? score) 0 score)))
 
-(defn get-notes-for-user
+(defn get-notes
   [user-id]
-  (db/query {:where/map {:user-id user-id}
-             :where/clause "note IS NOT NULL AND points > 0"
-             :order/clause "created_at DESC"
-             :limit/clause 3}))
+  (map #(update % :created-at coerce/from-date)
+       (db/query {:select/clause "note, voter_id, created_at"
+                  :where/map {:user-id user-id}
+                  :where/clause "note IS NOT NULL AND points > 0"
+                  :order/clause "created_at DESC"
+                  :limit/clause 3})))
 
 (defn get-high-scores
   []

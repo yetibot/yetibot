@@ -1,6 +1,6 @@
 (ns yetibot.db.karma
   (:require
-    [yetibot.core.db.util :as db.util]))
+   [yetibot.core.db.util :as db.util]))
 
 (def schema {:schema/table "karma"
              :schema/specs (into [[:user-id :text "NOT NULL"]
@@ -12,7 +12,3 @@
 (def create (partial db.util/create (:schema/table schema)))
 
 (def query (partial db.util/query (:schema/table schema)))
-
-;; (def find-all (partial db.util/find-all (:schema/table schema)))
-
-;; (def update-where (partial db.util/update-where (:schema/table schema)))
