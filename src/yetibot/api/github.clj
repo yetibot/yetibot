@@ -116,6 +116,18 @@
   (with-url endpoint
     (r/code-frequency org-name repo auth)))
 
+(defn latest-releases [org-name repo]
+  (with-url endpoint
+    (r/specific-release org-name repo "latest")))
+
+(defn release-by-tag [org-name repo tag]
+  (with-url endpoint
+    (r/specific-release-by-tag org-name repo tag)))
+
+(defn releases [org-name repo]
+  (with-url endpoint
+    (r/releases org-name repo)))
+
 (defn sum-weekly
   "Takes the weekly stats for an author and sums them into:
    {:a 0 :d 0 :c 0}
