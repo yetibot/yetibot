@@ -13,7 +13,7 @@
                     :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]]
                     :dependencies [[org.clojure/tools.trace "0.7.9"]
-                                   [midje "1.9.0"]]}]
+                                   [midje "1.9.4"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
