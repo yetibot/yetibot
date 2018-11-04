@@ -42,4 +42,9 @@
 
   (fact "get-high-scores returns at least one item"
         (add-score-delta! test-user test-voter 1 nil)
-        (-> (get-high-scores) count (>= 1)) => truthy))
+        (-> (get-high-scores) count (>= 1)) => truthy)
+
+  (fact "get-high-scores should not includes scores of 0 or less"
+        (add-score-delta! test-user test-voter 1 nil)
+        (add-score-delta! test-user test-voter -1 nil)
+        (->> (get-high-scores) (filter #(= (:user-id %) test-user)) count) => 0))

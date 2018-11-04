@@ -30,6 +30,7 @@
   []
   (db/query {:select/clause "user_id, SUM(points) as score"
              :group/clause "user_id"
+             :having/clause "SUM(points) > 0"
              :order/clause "score DESC"
              :limit/clause 10}))
 
