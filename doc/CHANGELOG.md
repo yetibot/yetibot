@@ -6,6 +6,16 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.57 - 11/4/2018
+
+- Upgrade to yetibot.core 0.4.52
+- Add `github release` subcommands to for listing releases and fetching the
+  release info for a given repo -
+  [#772](https://github.com/yetibot/yetibot/pull/772) by
+  [kaffein](https://github.com/kaffein)
+- `karma` command - [#774](https://github.com/yetibot/yetibot/pull/774) by
+  [@jcorrado](https://github.com/jcorrado)
+
 ## 0.4.56 - 10/29/2018
 
 - Upgrade to yetibot.core 0.4.48 for xargs bugfix
