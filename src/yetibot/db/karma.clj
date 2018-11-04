@@ -12,3 +12,5 @@
 (def create (partial db.util/create (:schema/table schema)))
 
 (def query (partial db.util/query (:schema/table schema)))
+
+(def delete (partial db.util/delete (:schema/table schema)))

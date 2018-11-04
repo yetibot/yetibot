@@ -32,11 +32,11 @@
       ;; :thinking_face:
       "Sorry, that's not how Karma works. 🤔"
       (do 
-        (model/add-score-delta user-id voter-id 1 note)
+        (model/add-score-delta! user-id voter-id 1 note)
         ;; :purple_heart:
         "💜"))
     (do
-      (model/add-score-delta user-id voter-id -1 note)
+      (model/add-score-delta! user-id voter-id -1 note)
       ;; :broken_heart:
       "💔")))
 
