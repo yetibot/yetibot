@@ -1,7 +1,8 @@
 (ns yetibot.test.models.karma
   (:require
-   [midje.sweet :refer [with-state-changes fact => truthy]]
+   [midje.sweet :refer [namespace-state-changes with-state-changes fact => truthy]]
    [yetibot.models.karma :refer :all]
+   [yetibot.core.db :as db]
    [clj-time.core :as t]
    [clj-time.coerce :as coerce]))
 
@@ -9,6 +10,8 @@
 (def test-user (str "test-user-" epoch))
 (def test-voter (str "test-voter-" epoch))
 (def test-note (str "test-note-" epoch))
+
+(namespace-state-changes (before :contents (db/start)))
 
 (with-state-changes [(after :facts (delete-user! test-user))]
 
