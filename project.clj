@@ -1,4 +1,4 @@
-(defproject yetibot "0.4.57-SNAPSHOT"
+(defproject yetibot "0.4.58-SNAPSHOT"
   :description "A command line in your chat, where chat ∈ {irc,slack}."
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
@@ -13,7 +13,7 @@
                     :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]]
                     :dependencies [[org.clojure/tools.trace "0.7.9"]
-                                   [midje "1.9.0"]]}]
+                                   [midje "1.9.4"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
@@ -24,7 +24,7 @@
                  :timeout 120000
                  :welcome (println "Welcome to the yetibot development REPL!")}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [yetibot.core "0.4.50"]
+                 [yetibot.core "0.4.52"]
 
                  ; apis
                  [twitter-api "1.8.0"]
