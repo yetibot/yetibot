@@ -37,19 +37,20 @@
 (defn adjust-score
   "karma <user>(++|--) <note> # adjust karma for <user> with optional <note>"
   {:yb/cat #{:fun}}
-  [{[_ user-id action note] :match, {voter-id :name} :user}]
-  (if (= action "++")
-    (if (= user-id voter-id)
-      ;; :thinking_face:
-      "Sorry, that's not how Karma works. 🤔"
-      (do 
-        (model/add-score-delta! user-id voter-id 1 note)
-        ;; :purple_heart:
-        "💜"))
-    (do
-      (model/add-score-delta! user-id voter-id -1 note)
-      ;; :broken_heart:
-      "💔")))
+  [{[_ user-id action note] :match, {voter-id :id} :user}]
+  (let [voter-id (str "@" voter-id)]
+    (if (= action "++")
+      (if (= user-id voter-id)
+        ;; :thinking_face:
+        "Sorry, that's not how Karma works. 🤔"
+        (do
+          (model/add-score-delta! user-id voter-id 1 note)
+          ;; :purple_heart:
+          "💜"))
+      (do
+        (model/add-score-delta! user-id voter-id -1 note)
+        ;; :broken_heart:
+        "💔"))))
 
 (cmd-hook ["karma" #"^karma$"]
           #"(?x) (@?\w+) \s{0,2} (--|\+\+) (?: \s+(.+) )?" adjust-score
