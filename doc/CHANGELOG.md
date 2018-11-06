@@ -6,6 +6,12 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.59 - 11/5/2018
+
+- Karma `@username` support POC: manifest as output formatter -
+  [#781](https://github.com/yetibot/yetibot/pull/781) by
+  [@jcorrado](https://github.com/jcorrado)
+
 ## 0.4.58 - 11/4/2018
 
 - Karma leaderboard should not including scores of 0 or less -
