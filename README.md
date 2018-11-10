@@ -49,16 +49,13 @@ Features that make Yetibot powerful and great, which is to say *fun*:
 Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
 ways it can be used.
 
-## Hacktoberfest
+## New contributors
 
-Welcome Hacktoberfest Clojurists!
-
-<img src="https://hacktoberfest.digitalocean.com/assets/logo-hacktoberfest-658b5aa2bd34e782d29c40bf6afbdff00f20fe1328efa6da17743878ba8db66f.png" />
+Welcome new contributors!
 
 - Feel free to tackle [any issue](https://github.com/yetibot/yetibot/issues)
-- Issues [labeled
-  Hacktoberfest](https://github.com/yetibot/yetibot/labels/Hacktoberfest) are
-  good for first time Yetibot contributors
+- Issues labeled [`good first issue`](https://github.com/yetibot/yetibot/labels/good%20first%20issue)
+  are good for first time Yetibot contributors
 - Ask `@devth` for help on [Slack](https://slack.yetibot.com/), GitHub or
   anywhere else you can find him
 
