@@ -16,23 +16,30 @@
   "karma <user> # get score and recent notes for <user>"
   {:yb/cat #{:fun}}
   [{user-id :match :as ctx}]
-  (format-output
-   ctx
-   (str (format "%s: %s\n" user-id (model/get-score user-id))
-        (str/join "\n" (map #(format "_\"%s\"_ --%s _(%s)_"
-                                     (:note %)
-                                     (:voter-id %)
-                                     (fmt/unparse (fmt/formatters :mysql) (:created-at %)))
-                            (model/get-notes user-id))))))
+  (let [score (model/get-score user-id)
+        notes (model/get-notes user-id)]
+    {:result/data {:user-id user-id, :score score, :notes notes}
+     :result/value (format-output
+                    ctx
+                    (str (format "%s: %s\n" user-id score)
+                         (str/join "\n"
+                                   (map #(format "_\"%s\"_ --%s _(%s)_"
+                                                 (:note %)
+                                                 (:voter-id %)
+                                                 (fmt/unparse (fmt/formatters :mysql) (:created-at %)))
+                                        notes))))}))
 
 (defn get-high-scores
   "karma # get leaderboard"
   {:yb/cat #{:fun}}
   [ctx]
-  (format-output
-   ctx
-   (str/join "\n" (map #(format "%s: %s" (:user-id %) (:score %))
-                       (model/get-high-scores)))))
+  (let [scores (model/get-high-scores)]
+    {:result/data scores
+     :result/value (format-output
+                    ctx
+                    (str/join "\n"
+                              (map #(format "%s: %s" (:user-id %) (:score %))
+                                   scores)))}))
 
 (defn adjust-score
   "karma <user>(++|--) <note> # adjust karma for <user> with optional <note>"
