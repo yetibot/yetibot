@@ -93,7 +93,4 @@
         (adjust-score (assoc slack-context :match (format "--%s--" test-user))) => #(contains? % :result/error)
         (adjust-score (assoc slack-context :match (format "--%s++" test-user))) => #(contains? % :result/error)
         (adjust-score (assoc slack-context :match (format "%s++--" test-user))) => #(contains? % :result/error)
-        (adjust-score (assoc slack-context :match (format "%s--++" test-user))) => #(contains? % :result/error))
-
-
-  )
+        (adjust-score (assoc slack-context :match (format "%s--++" test-user))) => #(contains? % :result/error)))
