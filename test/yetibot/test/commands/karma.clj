@@ -19,21 +19,20 @@
 
 (namespace-state-changes (before :contents (db/start)))
 
-(with-state-changes [(after :contents (model/delete-user! test-user))]
-
-  ;; Setup test user
-  (model/add-score-delta! test-user test-voter test-score test-note)
+(with-state-changes [(after :facts (model/delete-user! test-user))]
 
   ;; Our DB could have other users' scores so we make the assumption
   ;; that a high enough `test-score' will keep our `test-user' in the
   ;; leaderboard.
   (fact "high score data includes our test-user and test-score"
+        (model/add-score-delta! test-user test-voter test-score test-note)
         (->> (get-high-scores slack-context)
              :result/data
              (filter #(= (:user-id %) test-user)))
         => [{:user-id test-user :score test-score}])
 
   (fact "user score includes note from voter"
+        (model/add-score-delta! test-user test-voter test-score test-note)
         (->> (get-score slack-context)
              :result/data
              ((fn [m] (update m :notes #(-> % first (dissoc :created-at) vector)))))
