@@ -14,8 +14,7 @@
 (def test-score 1000000)
 
 ;; Simulate the context passed to our command handlers
-(def slack-context {:chat-source {:adapter :slack}
-                    :match test-user})
+(def slack-context {:chat-source {:adapter :slack}, :user {:id test-voter}})
 
 (namespace-state-changes (before :contents (db/start)))
 
@@ -33,9 +32,68 @@
 
   (fact "user score includes note from voter"
         (model/add-score-delta! test-user test-voter test-score test-note)
-        (->> (get-score slack-context)
+        (->> (get-score (assoc slack-context :match test-user))
              :result/data
              ((fn [m] (update m :notes #(-> % first (dissoc :created-at) vector)))))
         => {:user-id test-user
             :score test-score
-            :notes [{:note test-note :voter-id test-voter}]}))
+            :notes [{:note test-note :voter-id test-voter}]})
+
+  (fact cmp-user-ids
+        (cmp-user-ids "@foo" "@foo")     => truthy
+        (cmp-user-ids "foo" "foo")       => truthy
+        (cmp-user-ids "@foo" "foo")      => truthy
+        (cmp-user-ids "@foo" "@bar") =not=> truthy
+        (cmp-user-ids "foo" "bar")   =not=> truthy
+        (cmp-user-ids "@foo" "bar")  =not=> truthy)
+
+  (fact "adjust-score can increase another users karma"
+        (let [r (adjust-score (assoc slack-context :match (format "%s++" test-user)))]
+          (-> r :result/data :user-id) => test-user
+          (-> r :result/data :score)   => 1))
+
+  (fact "adjust-score can increase another users karma and include a note"
+        (let [r (adjust-score (assoc slack-context :match (format "%s++ %s" test-user test-note)))]
+          (-> r :result/data :user-id)               => test-user
+          (-> r :result/data :score)                 => 1
+          (-> r :result/data :notes first :note)     => test-note
+          (-> r :result/data :notes first :voter-id) => test-voter))
+
+  (fact "adjust-score can decrease another users karma"
+        (let [r (adjust-score (assoc slack-context :match (format "%s--" test-user)))]
+          (-> r :result/data :user-id) => test-user
+          (-> r :result/data :score)   => -1))
+
+  (fact "adjust-score can decrease another users karma and include a note"
+        (let [r (adjust-score (assoc slack-context :match (format "%s-- %s" test-user test-note)))]
+          ;; We don't return notes for negative karma votes
+          (-> r :result/data :user-id) => test-user
+          (-> r :result/data :score)   => -1))
+
+  (fact "adjust-score allows a user to decrease their own karma"
+        (let [r (adjust-score (-> slack-context
+                                  (assoc :match (format "%s--" test-user))
+                                  (assoc-in [:user :id] test-user)))]
+          (-> r :result/data :user-id) => test-user
+          (-> r :result/data :score)   => -1))
+
+  (fact "adjust-score precludes a user from increasing their own karma"
+        (let [r (adjust-score (-> slack-context
+                                  (assoc :match (format "%s++" test-user))
+                                  (assoc-in [:user :id] test-user)))]
+          (:result/error r) => truthy))
+
+  (fact "adjust-score tightly parses invocations"
+        (adjust-score (assoc slack-context :match (format "%s+-" test-user)))   => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "+-%s" test-user)))   => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "++%s" test-user)))   => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "--%s" test-user)))   => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "++%s++" test-user))) => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "++%s--" test-user))) => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "--%s--" test-user))) => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "--%s++" test-user))) => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "%s++--" test-user))) => #(contains? % :result/error)
+        (adjust-score (assoc slack-context :match (format "%s--++" test-user))) => #(contains? % :result/error))
+
+
+  )
