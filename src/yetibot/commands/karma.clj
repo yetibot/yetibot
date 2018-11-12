@@ -41,25 +41,31 @@
                               (map #(format "%s: %s" (:user-id %) (:score %))
                                    scores)))}))
 
+(defn cmp-user-ids
+  [a b]
+  (let [[a b] (map #(str/replace-first % #"^@" "") [a b])]
+    (= a b)))
+
 (defn adjust-score
   "karma <user>(++|--) <note> # adjust karma for <user> with optional <note>"
   {:yb/cat #{:fun}}
-  [{[_ user-id action note] :match, {voter-id :id} :user}]
-  (let [voter-id (str "@" voter-id)]
-    (if (= action "++")
-      (if (= user-id voter-id)
-        ;; :thinking_face:
-        "Sorry, that's not how Karma works. 🤔"
-        (do
-          (model/add-score-delta! user-id voter-id 1 note)
-          ;; :purple_heart:
-          "💜"))
-      (do
-        (model/add-score-delta! user-id voter-id -1 note)
-        ;; :broken_heart:
-        "💔"))))
+  [{match :match, {voter-id :id voter-name :name} :user}]
+  (let [[_ user-id action note] (re-matches #"^(?x) (@?\w[-\w]*\w) \s{0,2} (--|\+\+) (?: \s+(.+) )?$" match)]
+    (if-not (and user-id action)
+      {:result/error "Sorry, I wasn't able to parse that."}
+      (let [positive-karma (not= action "--")
+            score-delta    (if positive-karma 1 -1)
+            reply-emoji    (if positive-karma "💜" "💔")]
+        (if (and positive-karma (cmp-user-ids user-id voter-id))
+          {:result/error "Sorry, that's not how Karma works. 🤔"}
+          (do
+            (model/add-score-delta! user-id voter-name score-delta note)
+            {:result/data {:user-id user-id
+                           :score (model/get-score user-id)
+                           :notes (model/get-notes user-id)}
+             :result/value reply-emoji}))))))
 
 (cmd-hook ["karma" #"^karma$"]
-          #"(?x) (@?\w+) \s{0,2} (--|\+\+) (?: \s+(.+) )?" adjust-score
-          #"@?\w+" get-score
+          #"^@?\w[-\w]*\w$" get-score
+          #"^@?\w[-\w]*\w.+$" adjust-score
           _ get-high-scores)
