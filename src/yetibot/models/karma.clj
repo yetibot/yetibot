@@ -1,7 +1,7 @@
 (ns yetibot.models.karma
   (:require
    [yetibot.db.karma :as db]
-   [clj-time.coerce :as coerce]))
+   [clj-time.coerce :as time.coerce]))
 
 (defn add-score-delta!
   [user-id voter-id points note]
@@ -19,7 +19,7 @@
 
 (defn get-notes
   [user-id]
-  (map #(update % :created-at coerce/from-date)
+  (map #(update % :created-at time.coerce/from-date)
        (db/query {:select/clause "note, voter_id, created_at"
                   :where/map {:user-id user-id}
                   :where/clause "note IS NOT NULL AND points > 0"
