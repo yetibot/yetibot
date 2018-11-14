@@ -2,16 +2,13 @@
   (:require
    [yetibot.core.hooks :refer [cmd-hook]]
    [yetibot.models.karma :as model]
+   [yetibot.commands.karma.specs :as karma-spec]
    [clojure.string :as str]
-   [clj-time.format :as fmt]))
+   [clj-time.format :as fmt]
+   [clojure.spec.alpha :as s]))
 
-(s/def ::user-id (s/and string? #(re-matches #"@?\w[-\w]*\w" %)))
-(s/def ::action (s/and string? (s/or :positive #(= "++" %)
-                                     :negative #(= "--" %))))
-(s/def ::note string?)
-
-(def parse-error {:result/error "Sorry, I wasn't able to parse that."})
-(def karma-error {:result/error "Sorry, that's not how Karma works. 🤔"})
+(def error {:parse {:result/error "Sorry, I wasn't able to parse that."}
+            :karma {:result/error "Sorry, that's not how Karma works. 🤔"}})
 
 (defn- format-output
   [{{adapter :adapter} :chat-source} str]
@@ -20,61 +17,59 @@
                     identity)]
     (formatter str)))
 
+(defn- cmp-user-ids
+  [a b]
+  (let [[a b] (map #(str/replace-first % #"^@" "") [a b])]
+    (= a b)))
+
 (defn get-score
   "karma <user> # get score and recent notes for <user>"
   {:yb/cat #{:fun}}
-  [{match :match :as ctx}]
-  (let [user-id (s/conform ::user-id match)]
-    (if (= user-id ::s/invalid)
-      parse-error
-      (let [score (model/get-score user-id)
-            notes (model/get-notes user-id)]
-        {:result/data {:user-id user-id, :score score, :notes notes}
-         :result/value (format-output
-                        ctx
-                        (str (format "%s: %s\n" user-id score)
-                             (str/join "\n"
-                                       (map #(format "_\"%s\"_ --%s _(%s)_"
-                                                     (:note %)
-                                                     (:voter-id %)
-                                                     (fmt/unparse (fmt/formatters :mysql) (:created-at %)))
-                                            notes))))}))))
+  [ctx]
+  (if-not (s/valid? ::karma-spec/get-score-ctx ctx)
+    (:parse error)
+    (let [{user-id :match} ctx
+          score (model/get-score user-id)
+          notes (model/get-notes user-id)]
+      {:result/data {:user-id user-id, :score score, :notes notes}
+       :result/value (format-output
+                      ctx
+                      (str (format "%s: %s\n" user-id score)
+                           (str/join "\n"
+                                     (map #(format "_\"%s\"_ --%s _(%s)_"
+                                                   (:note %)
+                                                   (:voter-id %)
+                                                   (fmt/unparse (fmt/formatters :mysql) (:created-at %)))
+                                          notes))))})))
 
 (defn get-high-scores
   "karma # get leaderboard"
   {:yb/cat #{:fun}}
   [ctx]
-  (let [scores (model/get-high-scores)]
-    {:result/data scores
-     :result/value (format-output
-                    ctx
-                    (str/join "\n"
-                              (map #(format "%s: %s" (:user-id %) (:score %))
-                                   scores)))}))
-
-(defn cmp-user-ids
-  [a b]
-  (let [[a b] (map #(str/replace-first % #"^@" "") [a b])]
-    (= a b)))
-
-(s/def ::adjust-score (s/cat :user-id ::user-id
-                             :action ::action
-                             :note (s/? ::note)))
+  (if-not (s/valid? ::karma-spec/ctx ctx)
+    (:parse error)
+    (let [scores (model/get-high-scores)]
+      {:result/data scores
+       :result/value (format-output
+                      ctx
+                      (str/join "\n"
+                                (map #(format "%s: %s" (:user-id %) (:score %))
+                                     scores)))})))
 
 (defn adjust-score
   "karma <user>(++|--) <note> # adjust karma for <user> with optional <note>"
   {:yb/cat #{:fun}}
-  [{match :match, {voter-id :id voter-name :name} :user}]
-  (let [parsed (s/conform ::adjust-score match)]
+  [ctx]
+  (let [parsed (s/conform ::karma-spec/adjust-score-ctx ctx)]
     (if (= parsed ::s/invalid)
-      parse-error
-      (let [{user-id :user-id [action _] :action note :note} parsed
-            positive-karma? (= action :positive)
-            score-delta (if positive-karma? 1 -1)
-            reply-emoji (if positive-karma? "💜" "💔")]
+      (:parse error)
+      (let [{{voter-id :id voter-name :name} :user} parsed
+            {{user-id :user-id [action _] :action note :note} :match} parsed
+            positive-karma? (= action :positive)]
         (if (and positive-karma? (cmp-user-ids user-id voter-id))
-          karma-error
-          (do
+          (:karma error)
+          (let [score-delta (if positive-karma? 1 -1)
+                reply-emoji (if positive-karma? "💜" "💔")]
             (model/add-score-delta! user-id voter-name score-delta note)
             {:result/data {:user-id user-id
                            :score (model/get-score user-id)
