@@ -4,7 +4,7 @@
    [clojure.java.io :as io]
    [clojure.edn :as edn]
    [clojure.string :as str]
-   [clj-time.core :as t]))
+   [clj-time.core :as time]))
 
 ;; TODO - Let's derive this from properties of the requesting user.  I
 ;; think this is pretty straightforward with Slack but I have to give
@@ -61,8 +61,8 @@
 (defn probability
   "Return probability, by hour, for configured TZ."
   []
-  (let [hour (-> (t/to-time-zone (t/now) (t/time-zone-for-id local-tz))
-                 t/hour)]
+  (let [hour (-> (time/to-time-zone (time/now) (time/time-zone-for-id local-tz))
+                 time/hour)]
     (nth (concat (repeat 8 0.95)
                  (repeat 8 0.25)
                  (repeat 8 0.75))
