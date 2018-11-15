@@ -1,12 +1,7 @@
 (ns yetibot.commands.karma.specs
   (:require [clojure.spec.alpha :as s]))
 
-;; testing an idea
-(defn mk-subns-alias!
-  [sym]
-  (alias sym (-> (ns-name *ns*) (str "." sym) symbol create-ns)))
-
-;; Common specs we could relocatexo
+;; Common specs we could relocate
 (s/def ::name string?)
 (s/def ::id string?)
 (s/def ::user (s/keys :req-un [::name ::id]))
@@ -25,17 +20,15 @@
 ;; run-time fn data validators
 
 ;; get-score
-(mk-subns-alias! 'get-score)
-(s/def ::get-score/match string?)
+(s/def :karma.get-score/match string?)
 (s/def ::get-score-ctx
-  (s/merge ::ctx (s/keys :req-un [::get-score/match])))
+  (s/merge ::ctx (s/keys :req-un [:karma.get-score/match])))
 
 
 ;; adjust-score
-(mk-subns-alias! 'adjust-score)
-(s/def ::adjust-score/match (s/and vector?
-                                   (s/cat :user-id ::user-id
-                                          :action ::action
-                                          :note (s/? ::note))))
+(s/def :karma.adjust-score/match (s/and vector?
+                                        (s/cat :user-id ::user-id
+                                               :action ::action
+                                               :note (s/? ::note))))
 (s/def ::adjust-score-ctx
-  (s/merge ::ctx (s/keys :req-un [::adjust-score/match])))
+  (s/merge ::ctx (s/keys :req-un [:karma.adjust-score/match])))

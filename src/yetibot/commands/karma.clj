@@ -2,7 +2,7 @@
   (:require
    [yetibot.core.hooks :refer [cmd-hook]]
    [yetibot.models.karma :as model]
-   [yetibot.commands.karma.specs :as karma-spec]
+   [yetibot.commands.karma.specs :as karma.spec]
    [clojure.string :as str]
    [clj-time.format :as fmt]
    [clojure.spec.alpha :as s]))
@@ -26,7 +26,7 @@
   "karma <user> # get score and recent notes for <user>"
   {:yb/cat #{:fun}}
   [ctx]
-  (if-not (s/valid? ::karma-spec/get-score-ctx ctx)
+  (if-not (s/valid? ::karma.spec/get-score-ctx ctx)
     (:parse error)
     (let [{user-id :match} ctx
           score (model/get-score user-id)
@@ -46,7 +46,7 @@
   "karma # get leaderboard"
   {:yb/cat #{:fun}}
   [ctx]
-  (if-not (s/valid? ::karma-spec/ctx ctx)
+  (if-not (s/valid? ::karma.spec/ctx ctx)
     (:parse error)
     (let [scores (model/get-high-scores)]
       {:result/data scores
@@ -60,7 +60,7 @@
   "karma <user>(++|--) <note> # adjust karma for <user> with optional <note>"
   {:yb/cat #{:fun}}
   [ctx]
-  (let [parsed (s/conform ::karma-spec/adjust-score-ctx ctx)]
+  (let [parsed (s/conform ::karma.spec/adjust-score-ctx ctx)]
     (if (= parsed ::s/invalid)
       (:parse error)
       (let [{{voter-id :id voter-name :name} :user} parsed

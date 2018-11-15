@@ -1,13 +1,13 @@
 (ns yetibot.test.commands.karma
   (:require
-   [midje.sweet :refer [namespace-state-changes with-state-changes facts fact => truthy]]
-   [yetibot.commands.karma :refer :all :as k]
+   [midje.sweet :refer [namespace-state-changes with-state-changes fact => truthy]]
+   [yetibot.commands.karma :refer :all]
    [yetibot.models.karma :as model]
    [yetibot.core.db :as db]
-   [clj-time.core :as t]
-   [clj-time.coerce :as coerce]))
+   [clj-time.core :as time]
+   [clj-time.coerce :as time.coerce]))
 
-(def epoch (coerce/to-long (t/now)))
+(def epoch (time.coerce/to-long (time/now)))
 (def test-user (str "test-user-" epoch))
 (def test-voter (str "test-voter-" epoch))
 (def test-note (str "test-note-" epoch))
