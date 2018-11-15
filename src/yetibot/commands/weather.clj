@@ -2,7 +2,7 @@
   (:require
     [schema.core :as sch]
     [clojure.string :as str]
-    [clj-http.client :as client]
+    [clj-http.client :as http.client]
     [yetibot.core.util.http :refer [encode]]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
@@ -17,7 +17,7 @@
 (defn get-json
   [uri]
   (try
-    (let [{:keys [status body]} (client/get uri {:as :json :coerce :always})]
+    (let [{:keys [status body]} (http.client/get uri {:as :json :coerce :always})]
       (condp = status
         200 (first (:data body))
         204 {:error "Location not found."}))
