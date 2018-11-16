@@ -3,10 +3,10 @@
    [midje.sweet :refer [namespace-state-changes with-state-changes fact => truthy]]
    [yetibot.models.karma :refer :all]
    [yetibot.core.db :as db]
-   [clj-time.core :as t]
-   [clj-time.coerce :as coerce]))
+   [clj-time.core :as time]
+   [clj-time.coerce :as time.coerce]))
 
-(def epoch (coerce/to-long (t/now)))
+(def epoch (time.coerce/to-long (time/now)))
 (def test-user (str "test-user-" epoch))
 (def test-voter (str "test-voter-" epoch))
 (def test-note (str "test-note-" epoch))
@@ -36,8 +36,8 @@
 
   (fact "created-at timestamp seems reasonable"
         (add-score-delta! test-user test-voter 1 test-note)
-        (let [created-at (-> (get-notes test-user) first :created-at coerce/to-long)
-              now        (-> (t/now) coerce/to-long)]
+        (let [created-at (-> (get-notes test-user) first :created-at time.coerce/to-long)
+              now        (-> (time/now) time.coerce/to-long)]
           (-> (- now created-at) (< 60)) => truthy))
 
   (fact "get-high-scores returns at least one item"
