@@ -6,6 +6,13 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.59 - 11/16/2018
+
+- Tighter parsing on `karma` -
+  [#793](https://github.com/yetibot/yetibot/pull/793) by
+  [@jcorrado](https://github.com/jcorrado)
+- Upgrade to yetibot.core 0.4.54
+
 ## 0.4.59 - 11/5/2018
 
 - Karma `@username` support POC: manifest as output formatter -
