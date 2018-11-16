@@ -15,7 +15,7 @@
 (s/def ::user-id (s/and string? #(re-matches #"@?\w[-\w]*\w" %)))
 (s/def ::action (s/and string? (s/or :positive #(= "++" %)
                                      :negative #(= "--" %))))
-(s/def ::note string?)
+(s/def ::note (s/nilable string?))
 
 ;; run-time fn data validators
 
@@ -27,7 +27,8 @@
 
 ;; adjust-score
 (s/def :karma.adjust-score/match (s/and vector?
-                                        (s/cat :user-id ::user-id
+                                        (s/cat :full-match string?
+                                               :user-id ::user-id
                                                :action ::action
                                                :note (s/? ::note))))
 (s/def ::adjust-score-ctx
