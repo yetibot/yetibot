@@ -26,10 +26,12 @@
   :dependencies [[org.clojure/clojure "1.9.0"]
                  [yetibot.core "0.4.54"]
 
+
                  ; apis
                  [twitter-api "1.8.0"]
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
                  [com.google.cloud/google-cloud-storage "1.49.0"]
+                 [pager-duty-api "2.0"]
 
                  ; scraping
                  [org.jsoup/jsoup "1.11.3"]
