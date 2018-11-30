@@ -8,6 +8,7 @@ as well.
 
 ## 0.4.60 - 11/30/2018
 
+- Pagerduty support - [#795](https://github.com/yetibot/yetibot/pull/795)
 - Upgrade to yetibot.core 0.4.55
 
 ## 0.4.59 - 11/16/2018
