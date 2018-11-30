@@ -9,7 +9,12 @@ as well.
 ## 0.4.60 - 11/30/2018
 
 - Pagerduty support - [#795](https://github.com/yetibot/yetibot/pull/795)
-- Upgrade to yetibot.core 0.4.55
+- Upgrade to yetibot.core 0.4.56: this fixes an issue where Yetibot would
+  double-record anything that Slack unfurls, because it was firing a
+  message-changed event. Now we ignore message-change events from the Yetibot
+  user.
+- Properly record history from !memethat and fix multiple !memethat invocations
+  as a side effect of the above fix (not double recording anymore)
 
 ## 0.4.59 - 11/16/2018
 

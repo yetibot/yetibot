@@ -1,6 +1,7 @@
 (ns yetibot.commands.memethat
   (:require
-    [yetibot.core.handler :refer [handle-unparsed-expr]]
+    [taoensso.timbre :refer [info warn error]]
+    [yetibot.core.handler :refer [record-and-run-raw]]
     [yetibot.core.models.history :as h]
     [yetibot.models.imgflip :as meme :refer [rand-meme]]
     [yetibot.commands.meme]
@@ -9,12 +10,14 @@
 (defn- find-chat-to-memeify [chat-source]
   (last (h/last-chat-for-room chat-source false)))
 
-(defn- format-chat [i] (:body i))
-
-(defn- meme-it [chat-source meme-query]
-  (if-let [chat (find-chat-to-memeify chat-source)]
-    (handle-unparsed-expr (format "meme %s: %s" meme-query (format-chat chat)))
-    (format "No history to meme :(")))
+(defn- meme-it [chat-source user yetibot-user meme-query]
+  (if-let [{:keys [body]} (find-chat-to-memeify chat-source)]
+    (let [[{:keys [timeout? embedded? error? result]}]
+          (record-and-run-raw (format "!meme %s: %s" meme-query body)
+                              user yetibot-user
+                              {:record-yetibot-response? false})]
+      result))
+  (format "No history to meme :("))
 
 ; <gen>that
 (def genthat-pattern #"^(\w+)that$")
@@ -23,10 +26,11 @@
   "<gen>that # use <foo> generator to memify the last thing said
    memethat # memeify the last thing said with random generator
    memethat angry picard # memeify the last thing said with a specific generator (allows spaces, unlike <gen>that)"
-  [{:keys [cmd chat-source match]}]
+  [{:keys [cmd user yetibot-user chat-source match]}]
   {:yb/cat #{:fun :img :meme}}
   (let [[_ gen] (re-find genthat-pattern cmd)]
     (meme-it chat-source
+             user yetibot-user
              (if (= "meme" gen)
                (if (empty? match) (rand-meme) match)
                gen))))
