@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.60 - 11/30/2018
+
+- Upgrade to yetibot.core 0.4.55
+
 ## 0.4.59 - 11/16/2018
 
 - Tighter parsing on `karma` -
