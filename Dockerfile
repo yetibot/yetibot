@@ -1,4 +1,4 @@
-FROM clojure:lein-2.8.1
+FROM clojure:lein-alpine
 
 MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
 
