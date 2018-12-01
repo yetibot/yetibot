@@ -31,6 +31,7 @@
    memethat angry picard # memeify the last thing said with a specific generator (allows spaces, unlike <gen>that)"
   [{:keys [cmd user yetibot-user chat-source match]}]
   {:yb/cat #{:fun :img :meme}}
+  (info "memethat chat-source" (pr-str chat-source))
   (let [[_ gen] (re-find genthat-pattern cmd)]
     (meme-it chat-source
              user yetibot-user
