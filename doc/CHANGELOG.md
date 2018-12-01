@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.61 - 11/30/2018
+
+- Switch to `clojure:lein-alpine` base image
+
 ## 0.4.60 - 11/30/2018
 
 - Pagerduty support - [#795](https://github.com/yetibot/yetibot/pull/795)
