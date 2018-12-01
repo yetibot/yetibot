@@ -6,11 +6,17 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-## 0.4.61 - 11/30/2018
+## 0.4.63 - 12/1/2018
+
+- Fix bug in `memethat` where it would always return a `No history to meme`
+  error
+- Add `result/data`, `result/value` and `result/error` to `memethat`
+
+## 0.4.62 - 11/30/2018
 
 - Switch to `clojure:lein-alpine` base image
 
-## 0.4.60 - 11/30/2018
+## 0.4.61 - 11/30/2018
 
 - Pagerduty support - [#795](https://github.com/yetibot/yetibot/pull/795)
 - Upgrade to yetibot.core 0.4.56: this fixes an issue where Yetibot would
@@ -20,7 +26,7 @@ as well.
 - Properly record history from !memethat and fix multiple !memethat invocations
   as a side effect of the above fix (not double recording anymore)
 
-## 0.4.59 - 11/16/2018
+## 0.4.60 - 11/16/2018
 
 - Tighter parsing on `karma` -
   [#793](https://github.com/yetibot/yetibot/pull/793) by

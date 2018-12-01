@@ -11,13 +11,16 @@
   (last (h/last-chat-for-room chat-source false)))
 
 (defn- meme-it [chat-source user yetibot-user meme-query]
-  (if-let [{:keys [body]} (find-chat-to-memeify chat-source)]
+  (if-let [{:keys [body] :as chat} (find-chat-to-memeify chat-source)]
     (let [[{:keys [timeout? embedded? error? result]}]
           (record-and-run-raw (format "!meme %s: %s" meme-query body)
                               user yetibot-user
                               {:record-yetibot-response? false})]
-      result))
-  (format "No history to meme :("))
+      {:result/data {:meme meme-query
+                     :history-item chat
+                     :meme-result result}
+       :result/value result})
+    {:result/error "No history to meme"}))
 
 ; <gen>that
 (def genthat-pattern #"^(\w+)that$")
