@@ -81,7 +81,7 @@
   (let [loc (if (re-matches #"\d+" state_code)
               city_name
               (str city_name ", " state_code))]
-    (format "%s (%s):" loc country_code)))
+    (format "%s (%s)" loc country_code)))
 
 (defn fmt-description
   [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
