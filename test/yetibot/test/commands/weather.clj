@@ -25,8 +25,8 @@
 
 (facts "about fomatting fns"
        (fact fmt-location-title
-             (fmt-location-title loc-nyc) => "Current conditions for New York, NY (US):"
-             (fmt-location-title loc-bcr) => "Current conditions for Bucharest (RO):")
+             (fmt-location-title loc-nyc) => "New York, NY (US):"
+             (fmt-location-title loc-bcr) => "Bucharest (RO):")
        (fact fmt-description
              (fmt-description loc-nyc) => "32.0°F - Titlecase Me"
              (fmt-description loc-bcr) => "50.0°C - Titlecase Me")
