@@ -40,7 +40,9 @@
   (get-json (endpoint "current" (apply format "postal_code=%s&country=%s"
                                        (map encode [pc cc])))))
 
-(defn- error-response [c] (:error c))
+(defn- error-response [{:keys [error]}]
+  (when error
+    {:result/error error}))
 
 (defn c-to-f [c] (-> (* c 9/5) (+ 32) float))
 (defn km-to-mi [km] (-> (/ km 1.609) float))
@@ -79,7 +81,7 @@
   (let [loc (if (re-matches #"\d+" state_code)
               city_name
               (str city_name ", " state_code))]
-    (format "Current conditions for %s (%s):" loc country_code)))
+    (format "%s (%s):" loc country_code)))
 
 (defn fmt-description
   [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
@@ -121,12 +123,17 @@
   (let [cs (current match)]
     (or
       (error-response cs)
-      (format-current cs))))
+      {:result/value (format-current cs)
+       :result/data cs})))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
   {:yb/cat #{:info}}
-  [_] (weather-cmd {:match default-zip}))
+  [_]
+  (if default-zip
+    (weather-cmd {:match default-zip})
+    {:result/error "A default zip code is not configured.
+                    Configure it at path weather.weatherbitio.default.zip"}))
 
 (cmd-hook ["weather" #"^weather$"]
           #".+" weather-cmd
