@@ -9,6 +9,8 @@ as well.
 ## 0.4.67 - 12/4/2018
 
 - Upgrade to yetibot.core 0.4.58
+- Populate data for weather commands -
+  [#708](https://github.com/yetibot/yetibot/issues/708)
 
 ## 0.4.66 - 12/4/2018
 
