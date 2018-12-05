@@ -1,4 +1,6 @@
-FROM clojure:lein-alpine
+FROM clojure:lein-2.8.1
+
+# Yetibot needs curl. If we ever switch to alpine, make sure to install it.
 
 MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
 
