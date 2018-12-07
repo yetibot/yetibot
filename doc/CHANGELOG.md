@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.70 - 12/6/2018
+
+- Upgrade to yetibot.core 0.4.59
+
 ## 0.4.69 - 12/5/2018
 
 - Switch back to `clojure:lein-2.8.1` Docker image to support curl
