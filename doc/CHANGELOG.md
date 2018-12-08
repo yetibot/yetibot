@@ -9,6 +9,7 @@ as well.
 ## 0.4.71 - 12/8/2018
 
 - Upgrade to yetibot.core 0.4.60
+- Add proper data and error handling to meme command
 
 ## 0.4.70 - 12/6/2018
 

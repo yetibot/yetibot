@@ -14,8 +14,9 @@
 
 (defn- instance-result [json]
   (if (:success json)
-    (urlify (-> json :data  :url))
-    (str "Failed to generate meme: " (:error_message json))))
+    {:result/value (urlify (-> json :data  :url))
+     :result/data json}
+    {:result/error (str (:error_message json))}))
 
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"
@@ -47,17 +48,19 @@
   "meme preview <term> # preview an example of the first match for <term>"
   {:yb/cat #{:fun :img :meme}}
   [{[_ term] :match}]
-  (if-let [matches (model/scrape-all-memes term 3)]
-    (urlify (-> matches first :url))
-    (str "Couldn't find any memes for " term)))
+  (if-let [matches (seq (model/scrape-all-memes term 3))]
+    {:result/value (urlify (-> matches first :url))
+     :result/data matches}
+    {:result/error (str "Couldn't find any memes for " term)}))
 
 (defn search-cmd
   "meme search <term> # query available meme generators"
   {:yb/cat #{:fun :img :meme}}
   [{[_ term] :match}]
-  (if-let [matches (model/scrape-all-memes term 3)]
-    (map :name matches)
-    (str "Couldn't find any memes for " term)))
+  (if-let [matches (seq (model/scrape-all-memes term 3))]
+    {:result/value (map :name matches)
+     :result/data matches}
+    {:result/error (str "Couldn't find any memes for `" term "`")}))
 
 (defn chat-instance-popular
   "meme popular # list popular memes from imgflip.com"
@@ -69,8 +72,6 @@
 (when model/configured?
   (cmd-hook ["meme" #"^meme$"]
             #"^popular$" chat-instance-popular
-            ; #"^popular\s(.+)" chat-instance-popular-for-gen
-            ; #"^trending" trending-cmd
             #"^(.+?)\s*:(.+)\/(.*)$" generate-cmd
             #"^(.+?)\s*:(.+)$" generate-auto-split-cmd
             #"^preview\s+(.+)" preview-cmd
