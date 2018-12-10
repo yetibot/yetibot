@@ -39,9 +39,13 @@
                  [org.flatland/useful "0.11.5"]
                  ; << string interpolation macro
                  [org.clojure/core.incubator "0.1.4"] 
+                 ; graphql
+                 [district0x/graphql-query "1.0.5"]
 
                  ; polling
                  [robert/bruce "0.8.0"]
+
+                 [org.clojure/data.csv "0.1.4"]
 
                  ; emojis
                  [com.vdurmont/emoji-java "4.0.0"]

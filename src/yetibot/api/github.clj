@@ -3,6 +3,8 @@
     [taoensso.timbre :refer [info warn error]]
     [schema.core :as sch]
     [yetibot.core.schema :refer [non-empty-str]]
+    [clojure.data.csv :as csv]
+    [clojure.java.io :as io]
     [tentacles
      [core :refer [with-url]]
      [search :as search]
@@ -15,8 +17,9 @@
      [orgs :as o]]
     [clojure.string :as s]
     [clj-http.client :as client]
+    [graphql-query.core :refer [graphql-query]]
     [yetibot.core.config :refer [get-config]]
-    [yetibot.core.util.http :refer [fetch]]))
+    [yetibot.core.util.http :refer [encode]]))
 
 ;;; uses tentacles for most api calls, but falls back to raw REST calls when
 ;;; tentacles doesn't support something (like Accept headers for raw blob
@@ -27,6 +30,7 @@
 (def github-schema
   {:token non-empty-str
    :org [non-empty-str]
+   (sch/optional-key :graphql) {:endpoint non-empty-str}
    (sch/optional-key :endpoint) non-empty-str})
 
 (defn config [] (:value (get-config github-schema [:github])))
@@ -48,6 +52,38 @@
 ;                   #(= (:login %) org-name)
 ;                   (o/orgs auth))))
 
+
+;; graphql examples
+
+(defn contrib-query [username]
+  (str "query {
+      user(login: \\\"" username "\\\") {
+        login
+        repositoriesContributedTo(first: 100,
+                                  includeUserRepositories: false,
+                                  contributionTypes: [COMMIT, PULL_REQUEST]) {
+          totalCount
+          nodes {
+            nameWithOwner
+            owner {
+              ... on Organization {
+                name
+              }
+            }
+          }
+        }
+      }
+    }"))
+
+(defn graphql [query]
+  (client/post
+    (-> (config) :graphql :endpoint)
+    {:headers {"Authorization" (str "bearer " (:token (config)))}
+     :body (str "{\"query\": \"" (s/replace query #"\n" "") "\"}")
+     :as :json}))
+
+(defn email->username [email]
+  (first (s/split email #"\@")))
 
 ;;; data
 
