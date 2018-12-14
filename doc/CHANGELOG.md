@@ -6,6 +6,14 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.74 - Unreleased
+
+- Fix up the `scala` command -
+  [#802](https://github.com/yetibot/yetibot/pull/802) by
+  [kaffein](https://github.com/kaffein)
+  This hits a new endpoint at `https://scastie.scala-lang.org/api` and uses
+  Server-Sent Events with `core.async` to obtain the evaluation result!
+
 ## 0.4.73 - 12/12/2018
 
 - Upgrade to yetibot.core 0.4.62
