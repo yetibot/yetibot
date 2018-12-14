@@ -38,7 +38,7 @@
                  ; utils
                  [org.flatland/useful "0.11.5"]
                  ; << string interpolation macro
-                 [org.clojure/core.incubator "0.1.4"] 
+                 [org.clojure/core.incubator "0.1.4"]
                  ; graphql
                  [district0x/graphql-query "1.0.5"]
 
@@ -63,7 +63,12 @@
                  [bultitude "0.2.8"]
 
                  ;encoding
-                 [org.clojure/data.codec "0.1.1"]]
+                 [org.clojure/data.codec "0.1.1"]
+
+                 ;sse
+                 [io.nervous/kvlt "0.1.4"]
+                 ;; overwrite kvlt's outdated version of aleph
+                 [aleph "0.4.6"]]
 
   :plugins [[lein-exec "0.3.5"]
             [lein-environ "1.0.3"]
