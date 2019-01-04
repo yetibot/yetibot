@@ -1,32 +1,13 @@
+;; "Reference:
+;;  https://github.com/urbandictionary/gcs-pow/blob/5f5b55bbc2d60419938ea44c88491fa1bf032217/src/gcs/core.clj"
 (ns yetibot.api.google.gcs
-  "Reference:
-   https://github.com/urbandictionary/gcs-pow/blob/5f5b55bbc2d60419938ea44c88491fa1bf032217/src/gcs/core.clj"
-  (:require
-    [clojure.pprint :refer [print-table]]
-    [clojure.reflect :as r]
-    [clojure.java.io :as io]
-    [clojure.string :as s]
-    [schema.core :as sch]
-    [yetibot.core.config :refer [get-config]])
-  (:import [com.google.cloud.storage
-            StorageOptions
-            BucketInfo
-            BlobInfo
-            BlobId
-            Blob$BlobSourceOption
-            StorageImpl
-            Storage$BucketTargetOption
-            Storage$BucketGetOption
-            Storage$BucketSourceOption
-            Storage$BucketListOption
-            Storage$BlobListOption
-            Storage$BlobGetOption
-            Storage$BlobListOption
-            Storage$BlobTargetOption
-            Storage$BlobSourceOption
-            Storage$BlobWriteOption]
-           [java.util.ArrayList]
-           [com.google.auth.oauth2 ServiceAccountCredentials]))
+  (:require [clojure.java.io :as io]
+            [clojure.string :as s]
+            [schema.core :as sch]
+            [yetibot.core.config :refer [get-config]])
+  (:import com.google.auth.oauth2.ServiceAccountCredentials
+           [com.google.cloud.storage Blob$BlobSourceOption BlobId
+            Storage$BlobListOption Storage$BucketListOption StorageOptions]))
 
 (defn config [] (get-config sch/Any [:google]))
 

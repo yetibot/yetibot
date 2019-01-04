@@ -8,7 +8,7 @@
     [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn- find-chat-to-memeify [chat-source]
-  (last (h/last-chat-for-room chat-source false)))
+  (last (h/last-chat-for-channel chat-source false)))
 
 (defn- meme-it [chat-source user yetibot-user meme-query]
   (if-let [{:keys [body] :as chat} (find-chat-to-memeify chat-source)]
