@@ -22,21 +22,38 @@
   :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
-                 :welcome (println "Welcome to the yetibot development REPL!")}
-  :dependencies [[org.clojure/clojure "1.9.0"]
-                 [yetibot.core "0.4.62"]
+                 :prompt (fn [ns] (str "\u001B[35m[\u001B[34m" ns
+                                       "\u001B[35m] \u001B[37mλ:\u001B[m "))
+                 :welcome
+                 (do
+                   (println)
+                   (println
+                     (str
+                       "\u001B[37m"
+                       "  Welcome to the Yetibot dev REPL!"
+                       \newline
+                       "  Use \u001B[35m(\u001B[34mhelp\u001B[35m) "
+                       "\u001B[37mto see available commands."
+                       \newline
+                       \newline
+                       "\u001B[35m    λλλ"
+                       "\u001B[m"))
+                   (println))}
+
+  :dependencies [[org.clojure/clojure "1.10.0"]
+                 [yetibot.core "0.4.63"]
 
                  ; apis
                  [twitter-api "1.8.0"]
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
-                 [com.google.cloud/google-cloud-storage "1.49.0"]
+                 [com.google.cloud/google-cloud-storage "1.57.0"]
                  [pager-duty-api "2.0"]
 
                  ; scraping
                  [org.jsoup/jsoup "1.11.3"]
 
                  ; utils
-                 [org.flatland/useful "0.11.5"]
+                 [org.flatland/useful "0.11.6"]
                  ; << string interpolation macro
                  [org.clojure/core.incubator "0.1.4"]
                  ; graphql
@@ -70,10 +87,10 @@
                  ;; overwrite kvlt's outdated version of aleph
                  [aleph "0.4.6"]]
 
-  :plugins [[lein-exec "0.3.5"]
-            [lein-environ "1.0.3"]
+  :plugins [[lein-exec "0.3.7"]
+            [lein-environ "1.1.0"]
             [lein-cloverage "1.0.13"]
-            [lein-ring "0.9.5"]
+            [lein-ring "0.12.4"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
   :aliases { "version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]
