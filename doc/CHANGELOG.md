@@ -1,13 +1,15 @@
 # Yetibot changelog
 
-Note: yetibot depends on [yetibot.core](https://github.com/yetibot/yetibot.core)
+Note: `yetibot` depends on [yetibot.core](https://github.com/yetibot/yetibot.core)
 which contains Yetibot's core functionality along with a few commands. See
 [yetibot.core's
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-## 0.4.74 - Unreleased
+## 0.4.74 - 1/7/2019
 
+- Upgrade to Clojure 1.10 -
+  [#809](https://github.com/yetibot/yetibot/pull/809)
 - Fix up the `scala` command -
   [#802](https://github.com/yetibot/yetibot/pull/802) by
   [kaffein](https://github.com/kaffein)
