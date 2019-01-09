@@ -85,7 +85,13 @@
                  ;sse
                  [io.nervous/kvlt "0.1.4"]
                  ;; overwrite kvlt's outdated version of aleph
-                 [aleph "0.4.6"]]
+                 [aleph "0.4.6"]
+
+                 ;aws
+                 [com.cognitect.aws/endpoints "1.1.11.457"]
+                 [com.cognitect.aws/iam "668.2.357.0"]
+                 [com.cognitect.aws/ec2 "675.2.366.0"]
+                 [com.cognitect.aws/s3 "675.2.368.0"]]
 
   :plugins [[lein-exec "0.3.7"]
             [lein-environ "1.1.0"]
