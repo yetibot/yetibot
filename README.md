@@ -89,7 +89,8 @@ Yetibot has been undergoing continuous improvement since its inception. These
 are the immediate priorities, in addition to any bug fixes. Feedback and
 contributions are very welcome!
 
-- [ ] Write docs on how to develop Yetibot
+- [x] Write docs on how to develop Yetibot - See the [Dev
+  Guide](https://yetibot.com/dev-guide)
 - [x] Dockerize Yetibot. Done! Check out [the instructions](doc/DOCKER.md).
 - [x] Integrate with [StackStorm](https://stackstorm.com/) for automation on
       steriods. Done! Check out
@@ -98,8 +99,8 @@ contributions are very welcome!
 - [ ] Make adapters plugable
 - [ ] Create more examples of plugins (e.g. Travis)
 - [x] Run a demo Yetibot instance — you can now talk to a Yetibot on Freenode in
-  the `#yetibot` channel!
-- [ ] Design & build yetibot.com — <em>In progress!</em>
+  the `#yetibot` channel or join [Yetibot Slack](https://slack.yetibot.com)!
+- [x] Design & build [yetibot.com](https://yetibot.com) — <em>Done!</em>
 - [x] Flatten the config and obtain it via
   [environ](https://github.com/weavejester/environ) to follow [12 Factor
   App](http://12factor.net/config) practices
@@ -125,11 +126,11 @@ There are a few ways to run Yetibot:
 
 ## Configuration
 
-See the
-[CONFIGURATION](https://github.com/yetibot/yetibot.core/blob/master/doc/CONFIGURATION.md)
-docs.
+See [Configuration docs](https://yetibot.com/ops-guide#configuration).
 
 ## Usage
+
+For more docs see the [User Guide](https://yetibot.com/user-guide).
 
 All commands are prefixed by `!`.
 
