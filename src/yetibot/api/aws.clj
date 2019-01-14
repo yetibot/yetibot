@@ -3,8 +3,7 @@
     [yetibot.core.schema :refer [non-empty-str]]
     [schema.core :as sch]
     [yetibot.core.config :refer [get-config]]
-    [yetibot.api.aws :as aws]
-    [yetibot.core.hooks :refer [cmd-hook]]))
+    [yetibot.api.aws :as aws]))
 
 (def aws-schema
   {:aws-access-key-id non-empty-str
@@ -17,12 +16,3 @@
   (:value (get-config aws-schema [:aws])))
 
 (defn configured? [] (config))
-
-(defn echo-test
-  "Returns an echo for testing purpose"
-  []
-  (format "hey dude what's up!"))
-
-(when (aws/configured?)
-  (cmd-hook ["aws" #"aws"]
-            #"echo" echo-test))
