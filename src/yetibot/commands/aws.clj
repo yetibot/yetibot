@@ -6,8 +6,8 @@
 
 (defn echo-test
       "Returns an echo for testing purpose"
-      []
-      (format "hey dude what's up!"))
+      [{expr :match}]
+      (format "hey dude what's up!" expr))
 
 (when (aws/configured?)
       (cmd-hook ["aws" #"aws"]
