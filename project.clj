@@ -88,6 +88,7 @@
                  [aleph "0.4.6"]
 
                  ;aws
+                 [com.cognitect.aws/api "0.8.198"]
                  [com.cognitect.aws/endpoints "1.1.11.457"]
                  [com.cognitect.aws/iam "668.2.357.0"]
                  [com.cognitect.aws/ec2 "675.2.366.0"]
