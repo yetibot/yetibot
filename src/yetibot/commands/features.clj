@@ -1,5 +1,6 @@
 (ns yetibot.commands.features
   (:require
+    [clj-http.client :as client]
     [schema.core :as sch]
     [clojure.string :as s]
     [tentacles [issues :as is] [core :as tc]]
@@ -30,7 +31,7 @@
              [#"(?i)^feature request:(.+)"
               #"(?i)^yetibot feature:(.+)"])))
 
-; rate limited - can only accept 1 feature per 10 seconds
+; rate limited - can only accept 1 feature per 5 seconds
 (def post-issue
   (useful/rate-limited
     (fn [title]
@@ -38,26 +39,36 @@
         (is/create-issue (:user (config)) (repo) title (auth))))
     rate-limit-ms))
 
+(defn format-issue-response
+  [{:keys [html_url status body] :as issue}]
+  (if html_url
+    (format "Opened issue: %s" html_url)
+    ;; error
+    (:message body)))
+
 (defn listen-for-add-feature
   [event-json]
-  (if-let [match (should-add-feature? (:body event-json))]
+  (when-let [match (should-add-feature? (:body event-json))]
     (let [title (s/trim (second match))]
-      (chat-data-structure
-        (if-let [issue (post-issue title)]
-          (format "Opened issue: %s" (:html_url issue)))))
-    "I feel like you're trying to spam me; ignored"))
+      (-> (post-issue title)
+          format-issue-response
+          chat-data-structure))))
 
 (defn- issues-in-yetibot-repo
-  [] (apply is/issues (map (config) [:user :repo :auth])))
+  [] (apply is/issues (map (config) [:user :repo])))
 
 (defn lookup-features
-  "features # look up YetiBot's current list of features requests"
+  "features # look up Yetibot's current list of feature requests"
   [_]
-  (map :title (issues-in-yetibot-repo)))
+  (map (juxt :title :html_url) (issues-in-yetibot-repo)))
+
+(defn request-feature-cmd
+  "features request <text> # request a feature"
+  [{[_ body] :match}]
+  (format-issue-response (post-issue body)))
 
 (when (every? identity (config))
-  (cmd-hook #"features"
-            _ lookup-features)
-  (obs-hook
-    #{:message}
-    listen-for-add-feature))
+  (cmd-hook ["features" #"features?"]
+    #"request\s+(.+)" request-feature-cmd
+    _ lookup-features)
+  (obs-hook #{:message} #'listen-for-add-feature))
