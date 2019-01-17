@@ -6,10 +6,15 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.75 - 1/17/2019
+
+- Upgrade to yetibot.core 0.4.64
+
 ## 0.4.74 - 1/7/2019
 
 - Upgrade to Clojure 1.10 -
   [#809](https://github.com/yetibot/yetibot/pull/809)
+- Upgrade to yetibot.core 0.4.63
 - Fix up the `scala` command -
   [#802](https://github.com/yetibot/yetibot/pull/802) by
   [kaffein](https://github.com/kaffein)
