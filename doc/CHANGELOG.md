@@ -8,6 +8,10 @@ as well.
 
 ## 0.4.75 - 1/17/2019
 
+- Upgrade to yetibot.core 0.4.65
+
+## 0.4.75 - 1/17/2019
+
 - Upgrade to yetibot.core 0.4.64
 
 ## 0.4.74 - 1/7/2019
