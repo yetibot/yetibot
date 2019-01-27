@@ -2,9 +2,11 @@
   (:require
     [yetibot.core.schema :refer [non-empty-str]]
     [schema.core :as sch]
-    [yetibot.core.config :refer [get-config]]))
+    [yetibot.core.config :refer [get-config]]
+    [cognitect.aws.client.api :as aws]))
 
-(def iam-client)
+; AWS clients
+(def iam (aws/client {:api :iam}))
 
 (def aws-schema
   {:aws-access-key-id non-empty-str
