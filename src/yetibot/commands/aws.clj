@@ -4,12 +4,13 @@
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.aws :as aws]))
 
-(defn echo-test
-      "Returns an echo for testing purpose"
-      [{expr :match}]
-      (format "hey dude what's up!" expr))
+(defn iam-create-group-cmd
+  "aws iam create-group <group-name> # Creates an aws IAM group named"
+  {:yb/cat #{:util :info}}
+  [{[_ group-name] :match}]
+  "Implementation in progress")
 
 (when (aws/configured?)
-      (cmd-hook ["aws" #"aws"]
-                #"echo" echo-test))
+  (cmd-hook #"aws"
+            #"iam create-group\s+(\S+)" iam-create-group-cmd))
 

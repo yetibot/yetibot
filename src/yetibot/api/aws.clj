@@ -4,6 +4,8 @@
     [schema.core :as sch]
     [yetibot.core.config :refer [get-config]]))
 
+(def iam-client)
+
 (def aws-schema
   {:aws-access-key-id non-empty-str
    :aws-secret-access-key non-empty-str
