@@ -2,8 +2,7 @@
   (:require
     [yetibot.core.schema :refer [non-empty-str]]
     [schema.core :as sch]
-    [yetibot.core.config :refer [get-config]]
-    [yetibot.api.aws :as aws]))
+    [yetibot.core.config :refer [get-config]]))
 
 (def aws-schema
   {:aws-access-key-id non-empty-str
