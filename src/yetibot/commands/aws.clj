@@ -8,7 +8,7 @@
   "aws iam create-group <group-name> # Creates an aws IAM group named"
   {:yb/cat #{:util :info}}
   [{[_ group-name] :match}]
-  "Implementation in progress")
+  (aws/iam-create-group group-name))
 
 (when (aws/configured?)
   (cmd-hook #"aws"
