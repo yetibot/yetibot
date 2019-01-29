@@ -43,7 +43,7 @@
   {:result/error (get-in result [:ErrorResponse :Error :Message])})
 
 (defmethod format-result :success
-  [{{:keys [Path GroupName GroupId Arn CreateDate]} :Group} result]
+  [{{:keys [Path GroupName GroupId Arn CreateDate]} :Group}]
   (format "Group %s/%s with Id %s and Arn %s has been created successfully on %s"
           Path GroupName GroupId Arn CreateDate))
 
