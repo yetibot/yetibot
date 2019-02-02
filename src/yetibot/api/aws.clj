@@ -53,3 +53,10 @@
   (let [response (aws/invoke iam {:op      :CreateGroup
                                   :request {:GroupName group-name}})]
     (format-result response)))
+
+(defn iam-create-user
+  "Creates an aws IAM user"
+  [user-name]
+  (let [response (aws/invoke iam {:op :CreateUser
+                                  :request {:UserName user-name}})]
+    (format-result response)))

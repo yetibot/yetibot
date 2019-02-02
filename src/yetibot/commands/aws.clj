@@ -5,12 +5,18 @@
     [yetibot.api.aws :as aws]))
 
 (defn iam-create-group-cmd
-  "aws iam create-group <group-name> # Creates an aws IAM group named"
+  "aws iam create-group <group-name> # Creates an aws IAM group named <group-name>"
   {:yb/cat #{:util :info}}
   [{[_ group-name] :match}]
   (aws/iam-create-group group-name))
 
+(defn iam-create-user-cmd
+  "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
+  [{[_ user-name] :match}]
+  (aws/iam-create-user user-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
-            #"iam create-group\s+(\S+)" iam-create-group-cmd))
+            #"iam create-group\s+(\S+)" iam-create-group-cmd
+            #"iam create-user\s+(\S+)" iam-create-user-cmd))
 
