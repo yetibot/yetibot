@@ -38,18 +38,30 @@
 (s/def ::Arn string?)
 (s/def ::CreateDate inst?)
 
+; AWS User-related specs
 (s/def ::UserName string?)
 (s/def ::UserId string?)
 (s/def ::User (s/keys :req-un [::Path ::UserName ::UserId ::Arn ::CreateDate]))
 
+; AWS Group-related specs
 (s/def ::GroupName string?)
 (s/def ::GroupId string?)
 (s/def ::Group (s/keys :req-un [::Path ::GroupName ::GroupId ::Arn ::CreateDate]))
+
+; AWS add-user-to-group-related specs
+(s/def ::RequestId string?)
+(s/def ::xmlns string?)
+(s/def ::ResponseMetadata (s/keys :req-un [::RequestId]))
+(s/def ::AddUserToGroupResponse (s/keys :req-un [::ResponseMetadata]))
+(s/def ::AddUserToGroupResponseAttrs (s/keys :req-un [::xmlns]))
 
 ; AWS iam create-user response
 (s/def ::CreatedUser (s/keys :req-un [::User]))
 ; AWS iam create-group response
 (s/def ::CreatedGroup (s/keys :req-un [::Group]))
+; AWS iam add-user-to-group response
+(s/def ::UserAddedToGroup (s/keys :req-un [::AddUserToGroupResponse
+                                           ::AddUserToGroupResponseAttrs]))
 
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
@@ -59,6 +71,7 @@
             (cond
               (s/valid? ::CreatedUser response) ::IAMUserCreated
               (s/valid? ::CreatedGroup response) ::IAMGroupCreated
+              (s/valid? ::UserAddedToGroup response) ::IAMUserAddedToGroup
               :else ::error)))
 
 (defmethod format-response ::error
@@ -75,6 +88,11 @@
   (format "User %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
           Path UserName UserId Arn CreateDate))
 
+(defmethod format-response ::IAMUserAddedToGroup
+  [response]
+  (format "User successfully added to group [RequestId=%s]"
+          (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])))
+
 (defn iam-create-group
   "Creates an aws IAM group"
   [group-name]
@@ -87,4 +105,12 @@
   [user-name]
   (let [response (aws/invoke iam {:op      :CreateUser
                                   :request {:UserName user-name}})]
+    (format-response response)))
+
+(defn iam-add-user-to-group
+  "Adds an IAM user to a group"
+  [user-name group-name]
+  (let [response (aws/invoke iam {:op      :AddUserToGroup
+                                  :request {:UserName  user-name
+                                            :GroupName group-name}})]
     (format-response response)))

@@ -15,8 +15,14 @@
   [{[_ user-name] :match}]
   (aws/iam-create-user user-name))
 
+(defn iam-add-user-to-group-cmd
+  "aws iam add-user-to-group <user-name> <group-name> # Adds an aws IAM user named <user-name> to an IAM group named <group-name>"
+  [{[_ user-name group-name] :match}]
+  (aws/iam-add-user-to-group user-name group-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)" iam-create-group-cmd
-            #"iam create-user\s+(\S+)" iam-create-user-cmd))
+            #"iam create-user\s+(\S+)" iam-create-user-cmd
+            #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd))
 
