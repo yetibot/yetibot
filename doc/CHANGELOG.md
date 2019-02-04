@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.78 - 2/4/2019
+
+- Fix bug in `json <url>` command where parsing a URL did not parse into Clojure
+  keywords the same way that `json parse` does
+
 ## 0.4.77 - 1/18/2019
 
 - Upgrade to yetibot.core 0.4.66

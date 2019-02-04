@@ -16,11 +16,11 @@
 (defn json-cmd
   "json <url> # parse json from <url>"
   [{[url] :match}]
-  (info "json" url)
+  (info "json" (pr-str url))
   (-> (client/get url)
       :body
       (clojure.string/replace  #"\uFEFF" "")
-      json/read-str))
+      (json/read-str :key-fn keyword)))
 
 (defn json-parse-cmd
   "json parse <json>"
