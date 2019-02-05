@@ -20,9 +20,15 @@
   [{[_ user-name group-name] :match}]
   (aws/iam-add-user-to-group user-name group-name))
 
+(defn iam-get-group-cmd
+  "aws iam get-group <group-name> # Gets IAM user info associated with the <group-name> group"
+  [{[_ group-name] :match}]
+  (aws/iam-get-group group-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)" iam-create-group-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
-            #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd))
+            #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
+            #"iam get-group\s+(\S+)" iam-get-group-cmd))
 
