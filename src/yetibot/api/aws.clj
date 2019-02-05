@@ -42,6 +42,7 @@
 (s/def ::UserName string?)
 (s/def ::UserId string?)
 (s/def ::User (s/keys :req-un [::Path ::UserName ::UserId ::Arn ::CreateDate]))
+(s/def ::Users (s/* ::User))
 
 ; AWS Group-related specs
 (s/def ::GroupName string?)
@@ -62,6 +63,11 @@
 ; AWS iam add-user-to-group response
 (s/def ::UserAddedToGroup (s/keys :req-un [::AddUserToGroupResponse
                                            ::AddUserToGroupResponseAttrs]))
+; AWS get-group related specs
+(s/def ::IsTruncated boolean?)
+(s/def ::Marker string?)
+(s/def ::GetGroupResponse (s/keys :req-un [::Group ::Users ::IsTruncated]
+                                  :opt [::Marker]))
 
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
@@ -69,9 +75,16 @@
           or has failed"
           (fn [response]
             (cond
+              ; order matters when stacking up the specs in the `cond` here. Broad scope specs must come first here.
+              ; In fact, ::IAMGroupCreated is a `subset` of ::IAMGetGroupResponseReceived : both contain the `::Group`-related
+              ; spec for one of their attribute and hence it is sufficient for a data whose shape contains a :Group to be matched
+              ; by both.
+              ; As a general rule of thumb, the more specific the spec (the more attributes, and hence specs, there is to be
+              ; matched/conformed), the higher it should be put in the `cond` stack...
+              (s/valid? ::GetGroupResponse response) ::IAMGetGroupResponseReceived
+              (s/valid? ::UserAddedToGroup response) ::IAMUserAddedToGroup
               (s/valid? ::CreatedUser response) ::IAMUserCreated
               (s/valid? ::CreatedGroup response) ::IAMGroupCreated
-              (s/valid? ::UserAddedToGroup response) ::IAMUserAddedToGroup
               :else ::error)))
 
 (defmethod format-response ::error
@@ -93,6 +106,15 @@
   (format "User successfully added to group [RequestId=%s]"
           (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])))
 
+(defmethod format-response ::IAMGetGroupResponseReceived
+  [{:keys [Group Users]}]
+  (let [{:keys [Path GroupName GroupId Arn CreateDate]} Group]
+    (conj (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+                        (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
+               Users)
+          (format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
+                  Path GroupName GroupId Arn CreateDate))))
+
 (defn iam-create-group
   "Creates an aws IAM group"
   [group-name]
@@ -113,4 +135,11 @@
   (let [response (aws/invoke iam {:op      :AddUserToGroup
                                   :request {:UserName  user-name
                                             :GroupName group-name}})]
+    (format-response response)))
+
+(defn iam-get-group
+  "Returns the list of IAM user associated with this group"
+  [groupe-name]
+  (let [response (aws/invoke iam {:op :GetGroup
+                                  :request {:GroupName groupe-name}})]
     (format-response response)))
