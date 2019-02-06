@@ -4,8 +4,7 @@
     [schema.core :as sch]
     [yetibot.core.config :refer [get-config]]
     [cognitect.aws.client.api :as aws]
-    [clojure.spec.alpha :as s]
-    [clojure.string :as str]))
+    [clojure.spec.alpha :as s]))
 
 (def aws-schema
   {:aws-access-key-id         non-empty-str
@@ -74,18 +73,17 @@
           "Returns a dispatch-value matching the operation that has been successfully invoked
           or has failed"
           (fn [response]
-            (cond
-              ; order matters when stacking up the specs in the `cond` here. Broad scope specs must come first here.
-              ; In fact, ::IAMGroupCreated is a `subset` of ::IAMGetGroupResponseReceived : both contain the `::Group`-related
-              ; spec for one of their attribute and hence it is sufficient for a data whose shape contains a :Group to be matched
-              ; by both.
-              ; As a general rule of thumb, the more specific the spec (the more attributes, and hence specs, there is to be
-              ; matched/conformed), the higher it should be put in the `cond` stack...
-              (s/valid? ::GetGroupResponse response) ::IAMGetGroupResponseReceived
-              (s/valid? ::UserAddedToGroup response) ::IAMUserAddedToGroup
-              (s/valid? ::CreatedUser response) ::IAMUserCreated
-              (s/valid? ::CreatedGroup response) ::IAMGroupCreated
-              :else ::error)))
+            (let [aws-type (:aws/type (meta response))]
+              (cond
+                (and (s/valid? ::CreatedGroup response)
+                     (= aws-type :aws.type/CreatedGroup)) ::IAMGroupCreated
+                (and (s/valid? ::CreatedUser response)
+                     (= aws-type :aws.type/CreatedUser)) ::IAMUserCreated
+                (and (s/valid? ::GetGroupResponse response)
+                     (= aws-type :aws.type/GetGroupResponse)) ::IAMGetGroupResponseReceived
+                (and (s/valid? ::UserAddedToGroup response)
+                     (= aws-type :aws.type/UserAddedToGroup)) ::IAMUserAddedToGroup
+                :else ::error))))
 
 (defmethod format-response ::error
   [response]
@@ -120,14 +118,18 @@
   [group-name]
   (let [response (aws/invoke iam {:op      :CreateGroup
                                   :request {:GroupName group-name}})]
-    (format-response response)))
+    (-> response
+        (with-meta {:aws/type :aws.type/CreatedGroup})
+        format-response)))
 
 (defn iam-create-user
   "Creates an aws IAM user"
   [user-name]
   (let [response (aws/invoke iam {:op      :CreateUser
                                   :request {:UserName user-name}})]
-    (format-response response)))
+    (-> response
+        (with-meta {:aws/type :aws.type/CreatedUser})
+        format-response)))
 
 (defn iam-add-user-to-group
   "Adds an IAM user to a group"
@@ -135,11 +137,15 @@
   (let [response (aws/invoke iam {:op      :AddUserToGroup
                                   :request {:UserName  user-name
                                             :GroupName group-name}})]
-    (format-response response)))
+    (-> response
+        (with-meta {:aws/type :aws.type/UserAddedToGroup})
+        format-response)))
 
 (defn iam-get-group
   "Returns the list of IAM user associated with this group"
   [groupe-name]
   (let [response (aws/invoke iam {:op :GetGroup
                                   :request {:GroupName groupe-name}})]
-    (format-response response)))
+    (-> response
+        (with-meta {:aws/type :aws.type/GetGroupResponse})
+        format-response)))
