@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.4.79 - Unreleased
+
+- Ensure `json <path>` always return a string for individual values.
+  [#829](https://github.com/yetibot/yetibot/issues/829).
+
 ## 0.4.78 - 2/4/2019
 
 - Fix bug in `json <url>` command where parsing a URL did not parse into Clojure
