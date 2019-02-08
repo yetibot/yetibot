@@ -10,7 +10,11 @@
   "json path <path> # select <path> against piped data structure; see https://github.com/gga/json-path for supported syntax"
   [{[_ path] :match json :opts}]
   (if (coll? json)
-    (jp/at-path path json)
+    (let [res (jp/at-path path json)]
+      (if (coll? res)
+        res
+        ;; always return individual values as strings
+        (str res)))
     (str "Not a valid json data structure:" (pr-str json))))
 
 (defn json-cmd

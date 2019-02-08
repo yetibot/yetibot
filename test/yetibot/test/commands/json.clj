@@ -12,6 +12,14 @@
   (let [args {:match ["" "$.key"] :opts (json/read-str "{\"key\": \"value\"}" :key-fn keyword)}]
     (json-path-cmd args) => "value"))
 
+(fact json-path-individual-result-is-always-a-string
+  (let [args {:match ["" "$.key"] :opts (json/read-str "{\"key\": 1}" :key-fn keyword)}]
+    (json-path-cmd args) => "1"))
+
+(fact json-path-collection-result-is-never-converted-to-string
+  (let [args {:match ["" "$.key"] :opts (json/read-str "{\"key\": [1]}" :key-fn keyword)}]
+    (json-path-cmd args) => [1]))
+
 (fact return-error-when-json-is-invalid
   (let [args {:match ["" "$.key"] :opts "{}"}]
     (json-path-cmd args) => "Not a valid json data structure:\"{}\""))
