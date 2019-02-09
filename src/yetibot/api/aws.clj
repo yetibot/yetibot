@@ -36,12 +36,16 @@
 (s/def ::Path string?)
 (s/def ::Arn string?)
 (s/def ::CreateDate inst?)
+(s/def ::ResponseMetadata (s/keys :req-un [::RequestId]))
+(s/def ::xmlns string?)
 
 ; AWS User-related specs
 (s/def ::UserName string?)
 (s/def ::UserId string?)
 (s/def ::User (s/keys :req-un [::Path ::UserName ::UserId ::Arn ::CreateDate]))
 (s/def ::Users (s/* ::User))
+(s/def ::DeleteUserResponse (s/keys :req-un [::ResponseMetadata]))
+(s/def ::DeleteUserResponseAttrs (s/keys :req-un [::xmlns]))
 
 ; AWS Group-related specs
 (s/def ::GroupName string?)
@@ -51,8 +55,7 @@
 
 ; AWS add-user-to-group-related specs
 (s/def ::RequestId string?)
-(s/def ::xmlns string?)
-(s/def ::ResponseMetadata (s/keys :req-un [::RequestId]))
+
 (s/def ::AddUserToGroupResponse (s/keys :req-un [::ResponseMetadata]))
 (s/def ::AddUserToGroupResponseAttrs (s/keys :req-un [::xmlns]))
 
@@ -63,6 +66,9 @@
 ; AWS iam add-user-to-group response
 (s/def ::UserAddedToGroup (s/keys :req-un [::AddUserToGroupResponse
                                            ::AddUserToGroupResponseAttrs]))
+; AWS iam delete-user response
+(s/def ::UserDeleted (s/keys :req-un [::DeleteUserResponse
+                                      ::DeleteUserResponseAttrs]))
 ; AWS get-group related specs
 (s/def ::IsTruncated boolean?)
 (s/def ::Marker string?)
@@ -88,6 +94,8 @@
                      (= aws-type :aws.type/UserAddedToGroup)) ::IAMUserAddedToGroup
                 (and (s/valid? ::ListGroupsResponse response)
                      (= aws-type :aws.type/ListGroupsResponse)) ::IAMListGroupsResponseReceived
+                (and (s/valid? ::UserDeleted response)
+                     (= aws-type :aws.type/UserDeleted)) ::IAMUserDeleted
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -108,6 +116,11 @@
   [response]
   (format "User successfully added to group [RequestId=%s]"
           (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])))
+
+(defmethod format-response ::IAMUserDeleted
+  [response]
+  (format "User successfully deleted [RequestId=%s]"
+          (get-in response [:DeleteUserResponse :ResponseMetadata :RequestId])))
 
 (defmethod format-response ::IAMGetGroupResponseReceived
   [{:keys [Group Users]}]
@@ -168,4 +181,13 @@
                                   :request {:PathPrefix path}})]
     (-> response
         (with-meta {:aws/type :aws.type/ListGroupsResponse})
+        format-response)))
+
+(defn iam-delete-user
+  "Deletes the specified IAM user"
+  [user-name]
+  (let [response (aws/invoke iam {:op :DeleteUser
+                                  :request {:UserName user-name}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/UserDeleted})
         format-response)))
