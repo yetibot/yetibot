@@ -47,6 +47,7 @@
 (s/def ::GroupName string?)
 (s/def ::GroupId string?)
 (s/def ::Group (s/keys :req-un [::Path ::GroupName ::GroupId ::Arn ::CreateDate]))
+(s/def ::Groups (s/* ::Group))
 
 ; AWS add-user-to-group-related specs
 (s/def ::RequestId string?)
@@ -67,6 +68,8 @@
 (s/def ::Marker string?)
 (s/def ::GetGroupResponse (s/keys :req-un [::Group ::Users ::IsTruncated]
                                   :opt [::Marker]))
+(s/def ::ListGroupsResponse (s/keys :req-un [::Groups ::IsTruncated]
+                                    :opt [::Marker]))
 
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
@@ -83,6 +86,8 @@
                      (= aws-type :aws.type/GetGroupResponse)) ::IAMGetGroupResponseReceived
                 (and (s/valid? ::UserAddedToGroup response)
                      (= aws-type :aws.type/UserAddedToGroup)) ::IAMUserAddedToGroup
+                (and (s/valid? ::ListGroupsResponse response)
+                     (= aws-type :aws.type/ListGroupsResponse)) ::IAMListGroupsResponseReceived
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -112,6 +117,12 @@
                Users)
           (format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
                   Path GroupName GroupId Arn CreateDate))))
+
+(defmethod format-response ::IAMListGroupsResponseReceived
+  [{:keys [Groups]}]
+  (map #(format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
+                (:Path %) (:GroupName %) (:GroupId %) (:Arn %) (:CreateDate %))
+       Groups))
 
 (defn iam-create-group
   "Creates an aws IAM group"
@@ -148,4 +159,13 @@
                                   :request {:GroupName groupe-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/GetGroupResponse})
+        format-response)))
+
+(defn iam-list-groups
+  "Returns the list of IAM groups that have the specified path prefix"
+  [path]
+  (let [response (aws/invoke iam {:op :ListGroups
+                                  :request {:PathPrefix path}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/ListGroupsResponse})
         format-response)))
