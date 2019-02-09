@@ -25,9 +25,15 @@
   [{[_ group-name] :match}]
   (aws/iam-get-group group-name))
 
+(defn iam-list-groups-cmd
+  "aws iam list-groups <path-prefix># Lists the IAM groups that have the specified path prefix <path-prefix>"
+  [{[_ path] :match}]
+  (aws/iam-list-groups path))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)" iam-create-group-cmd
+            #"iam list-groups\s+(\S+)" iam-list-groups-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
             #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
             #"iam get-group\s+(\S+)" iam-get-group-cmd))
