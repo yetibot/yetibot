@@ -69,6 +69,10 @@
 ; AWS iam delete-user response
 (s/def ::UserDeleted (s/keys :req-un [::DeleteUserResponse
                                       ::DeleteUserResponseAttrs]))
+; aws iam list-users response
+(s/def ::ListUsersResponse (s/keys :req-un [::Users ::IsTruncated]
+                                    :opt [::Marker]))
+
 ; AWS get-group related specs
 (s/def ::IsTruncated boolean?)
 (s/def ::Marker string?)
@@ -101,6 +105,8 @@
                      (= aws-type :aws.type/UserDeleted)) ::IAMUserDeleted
                 (and (s/valid? ::GetUserResponse response)
                      (= aws-type :aws.type/GetUserResponse)) ::IAMGetUserResponseReceived
+                (and (s/valid? ::ListUsersResponse response)
+                     (= aws-type :aws.type/ListUsersResponse)) ::IAMListUsersResponseReceived
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -147,6 +153,12 @@
   (let [{:keys [Path UserName UserId Arn CreateDate]} User]
     (format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
             Path UserName UserId Arn CreateDate)))
+
+(defmethod format-response ::IAMListUsersResponseReceived
+  [{:keys [Users]}]
+  (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+                (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
+       Users))
 
 (defn iam-create-group
   "Creates an aws IAM group"
@@ -210,4 +222,13 @@
                                   :request {:UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/GetUserResponse})
+        format-response)))
+
+(defn iam-list-users
+  "Returns the list of IAM users that have the specified path prefix"
+  [path]
+  (let [response (aws/invoke iam {:op :ListUsers
+                                  :request {:PathPrefix path}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/ListUsersResponse})
         format-response)))
