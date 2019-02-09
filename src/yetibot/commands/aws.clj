@@ -40,11 +40,17 @@
   [{[_ user-name] :match}]
   (aws/iam-get-user user-name))
 
+(defn iam-list-users-cmd
+  "aws iam list-users <prefix> # Lists the IAM users that have the specified path prefix"
+  [{[_ path] :match}]
+  (aws/iam-list-users path))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)" iam-create-group-cmd
             #"iam list-groups\s+(\S+)" iam-list-groups-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
+            #"iam list-users\s+(\S+)" iam-list-users-cmd
             #"iam get-user\s+(\S+)" iam-get-user-cmd
             #"iam delete-user\s+(\S+)" iam-delete-user-cmd
             #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
