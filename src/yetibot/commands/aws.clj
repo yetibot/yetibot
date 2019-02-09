@@ -35,11 +35,17 @@
   [{[_ user-name] :match}]
   (aws/iam-delete-user user-name))
 
+(defn iam-get-user-cmd
+  "aws iam get-user <user-name> # Retrieves information about the specified IAM user"
+  [{[_ user-name] :match}]
+  (aws/iam-get-user user-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)" iam-create-group-cmd
             #"iam list-groups\s+(\S+)" iam-list-groups-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
+            #"iam get-user\s+(\S+)" iam-get-user-cmd
             #"iam delete-user\s+(\S+)" iam-delete-user-cmd
             #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
             #"iam get-group\s+(\S+)" iam-get-group-cmd))

@@ -77,6 +77,9 @@
 (s/def ::ListGroupsResponse (s/keys :req-un [::Groups ::IsTruncated]
                                     :opt [::Marker]))
 
+; AWS get-user related spec
+(s/def ::GetUserResponse (s/keys :req-un [::User]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -96,6 +99,8 @@
                      (= aws-type :aws.type/ListGroupsResponse)) ::IAMListGroupsResponseReceived
                 (and (s/valid? ::UserDeleted response)
                      (= aws-type :aws.type/UserDeleted)) ::IAMUserDeleted
+                (and (s/valid? ::GetUserResponse response)
+                     (= aws-type :aws.type/GetUserResponse)) ::IAMGetUserResponseReceived
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -136,6 +141,12 @@
   (map #(format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
                 (:Path %) (:GroupName %) (:GroupId %) (:Arn %) (:CreateDate %))
        Groups))
+
+(defmethod format-response ::IAMGetUserResponseReceived
+  [{:keys [User]}]
+  (let [{:keys [Path UserName UserId Arn CreateDate]} User]
+    (format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+            Path UserName UserId Arn CreateDate)))
 
 (defn iam-create-group
   "Creates an aws IAM group"
@@ -190,4 +201,13 @@
                                   :request {:UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/UserDeleted})
+        format-response)))
+
+(defn iam-get-user
+  "Retrieves information about the specified IAM user"
+  [user-name]
+  (let [response (aws/invoke iam {:op :GetUser
+                                  :request {:UserName user-name}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/GetUserResponse})
         format-response)))
