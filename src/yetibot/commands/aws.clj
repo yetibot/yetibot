@@ -57,7 +57,12 @@
   (aws/iam-get-user user-name))
 
 (defn iam-list-users-cmd
-  "aws iam list-users <prefix> # Lists the IAM users that have the specified path prefix"
+  "aws iam list-users # Lists the IAM users within the default / prefix"
+  [_]
+  (aws/iam-list-users "/"))
+
+(defn iam-list-users-in-path-cmd
+  "aws iam list-users <path> # Lists the IAM users that have the specified path prefix"
   [{[_ path] :match}]
   (aws/iam-list-users path))
 
@@ -76,7 +81,8 @@
             #"iam delete-group\s+(\S+)" iam-delete-group-cmd
             #"iam create-user\s+(\S+)\s+(\S+)" iam-create-user-in-path-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
-            #"iam list-users\s+(\S+)" iam-list-users-cmd
+            #"iam list-users\s+(\S+)" iam-list-users-in-path-cmd
+            #"iam list-users" iam-list-users-cmd
             #"iam get-user\s+(\S+)" iam-get-user-cmd
             #"iam delete-user\s+(\S+)" iam-delete-user-cmd
             #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd))
