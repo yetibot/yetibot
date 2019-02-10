@@ -4,11 +4,17 @@
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.aws :as aws]))
 
+(defn iam-create-group-in-path-cmd
+  "aws iam create-group <path> <group-name> # Creates an aws IAM group named <group-name> within the specified <path>"
+  {:yb/cat #{:util :info}}
+  [{[_ path group-name] :match}]
+  (aws/iam-create-group path group-name))
+
 (defn iam-create-group-cmd
-  "aws iam create-group <group-name> # Creates an aws IAM group named <group-name>"
+  "aws iam create-group <group-name> # Creates an aws IAM group named <group-name> within the default path /"
   {:yb/cat #{:util :info}}
   [{[_ group-name] :match}]
-  (aws/iam-create-group group-name))
+  (aws/iam-create-group "/" group-name))
 
 (defn iam-create-user-cmd
   "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
@@ -57,6 +63,7 @@
 
 (when (aws/configured?)
   (cmd-hook #"aws"
+            #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
             #"iam create-group\s+(\S+)" iam-create-group-cmd
             #"iam list-groups\s+(\S+)" iam-list-groups-in-path-cmd
             #"iam list-groups" iam-list-groups-cmd

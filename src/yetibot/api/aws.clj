@@ -172,10 +172,11 @@
        Users))
 
 (defn iam-create-group
-  "Creates an aws IAM group"
-  [group-name]
+  "Creates an aws IAM group within the specified path"
+  [path group-name]
   (let [response (aws/invoke iam {:op      :CreateGroup
-                                  :request {:GroupName group-name}})]
+                                  :request {:Path path
+                                            :GroupName group-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/CreatedGroup})
         format-response)))
