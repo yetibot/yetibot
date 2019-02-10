@@ -19,7 +19,12 @@
 (defn iam-create-user-cmd
   "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
   [{[_ user-name] :match}]
-  (aws/iam-create-user user-name))
+  (aws/iam-create-user "/" user-name))
+
+(defn iam-create-user-in-path-cmd
+  "aws iam create-user <path> <user-name> # Creates an aws IAM user named <user-name> within the specified <path> prefix"
+  [{[_ path user-name] :match}]
+  (aws/iam-create-user path user-name))
 
 (defn iam-add-user-to-group-cmd
   "aws iam add-user-to-group <user-name> <group-name> # Adds an aws IAM user named <user-name> to an IAM group named <group-name>"
@@ -69,6 +74,7 @@
             #"iam list-groups" iam-list-groups-cmd
             #"iam get-group\s+(\S+)" iam-get-group-cmd
             #"iam delete-group\s+(\S+)" iam-delete-group-cmd
+            #"iam create-user\s+(\S+)\s+(\S+)" iam-create-user-in-path-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
             #"iam list-users\s+(\S+)" iam-list-users-cmd
             #"iam get-user\s+(\S+)" iam-get-user-cmd
