@@ -25,10 +25,15 @@
   [{[_ group-name] :match}]
   (aws/iam-get-group group-name))
 
-(defn iam-list-groups-cmd
+(defn iam-list-groups-in-path-cmd
   "aws iam list-groups <path-prefix> # Lists the IAM groups that have the specified path prefix <path-prefix>"
   [{[_ path] :match}]
   (aws/iam-list-groups path))
+
+(defn iam-list-groups-cmd
+  "aws iam list-groups # Lists the IAM groups in the default / path"
+  [_]
+  (aws/iam-list-groups "/"))
 
 (defn iam-delete-user-cmd
   "aws iam delete-user <user-name> # Deletes the specified IAM user. The user must not belong to any groups or have any access keys, signing certificates, or attached policies."
@@ -53,7 +58,8 @@
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)" iam-create-group-cmd
-            #"iam list-groups\s+(\S+)" iam-list-groups-cmd
+            #"iam list-groups\s+(\S+)" iam-list-groups-in-path-cmd
+            #"iam list-groups" iam-list-groups-cmd
             #"iam get-group\s+(\S+)" iam-get-group-cmd
             #"iam delete-group\s+(\S+)" iam-delete-group-cmd
             #"iam create-user\s+(\S+)" iam-create-user-cmd
