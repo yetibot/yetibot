@@ -183,9 +183,10 @@
 
 (defn iam-create-user
   "Creates an aws IAM user"
-  [user-name]
+  [path user-name]
   (let [response (aws/invoke iam {:op      :CreateUser
-                                  :request {:UserName user-name}})]
+                                  :request {:Path path
+                                            :UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/CreatedUser})
         format-response)))
