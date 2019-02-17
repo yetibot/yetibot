@@ -75,7 +75,7 @@
                                       ::DeleteUserResponseAttrs]))
 ; aws iam list-users response
 (s/def ::ListUsersResponse (s/keys :req-un [::Users ::IsTruncated]
-                                    :opt [::Marker]))
+                                   :opt [::Marker]))
 
 ; AWS get-group related specs
 (s/def ::IsTruncated boolean?)
@@ -174,10 +174,10 @@
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
   ([group-name]
-    (iam-create-group "/" group-name))
+   (iam-create-group "/" group-name))
   ([path group-name]
    (let [response (aws/invoke iam {:op      :CreateGroup
-                                   :request {:Path path
+                                   :request {:Path      path
                                              :GroupName group-name}})]
      (-> response
          (with-meta {:aws/type :aws.type/CreatedGroup})
@@ -186,10 +186,10 @@
 (defn iam-create-user
   "Creates an aws IAM user"
   ([user-name]
-    (iam-create-user "/" user-name))
+   (iam-create-user "/" user-name))
   ([path user-name]
    (let [response (aws/invoke iam {:op      :CreateUser
-                                   :request {:Path path
+                                   :request {:Path     path
                                              :UserName user-name}})]
      (-> response
          (with-meta {:aws/type :aws.type/CreatedUser})
@@ -208,7 +208,7 @@
 (defn iam-get-group
   "Returns the list of IAM user associated with this group"
   [groupe-name]
-  (let [response (aws/invoke iam {:op :GetGroup
+  (let [response (aws/invoke iam {:op      :GetGroup
                                   :request {:GroupName groupe-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/GetGroupResponse})
@@ -217,9 +217,9 @@
 (defn iam-list-groups
   "Returns the list of IAM groups that have the specified path prefix"
   ([]
-    (iam-list-groups "/"))
+   (iam-list-groups "/"))
   ([path]
-   (let [response (aws/invoke iam {:op :ListGroups
+   (let [response (aws/invoke iam {:op      :ListGroups
                                    :request {:PathPrefix path}})]
      (-> response
          (with-meta {:aws/type :aws.type/ListGroupsResponse})
@@ -228,7 +228,7 @@
 (defn iam-delete-user
   "Deletes the specified IAM user"
   [user-name]
-  (let [response (aws/invoke iam {:op :DeleteUser
+  (let [response (aws/invoke iam {:op      :DeleteUser
                                   :request {:UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/UserDeleted})
@@ -237,7 +237,7 @@
 (defn iam-get-user
   "Retrieves information about the specified IAM user"
   [user-name]
-  (let [response (aws/invoke iam {:op :GetUser
+  (let [response (aws/invoke iam {:op      :GetUser
                                   :request {:UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/GetUserResponse})
@@ -246,7 +246,7 @@
 (defn iam-list-users
   "Returns the list of IAM users that have the specified path prefix"
   [path]
-  (let [response (aws/invoke iam {:op :ListUsers
+  (let [response (aws/invoke iam {:op      :ListUsers
                                   :request {:PathPrefix path}})]
     (-> response
         (with-meta {:aws/type :aws.type/ListUsersResponse})
