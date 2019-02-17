@@ -14,7 +14,7 @@
   "aws iam create-group <group-name> # Creates an aws IAM group named <group-name> within the default path /"
   {:yb/cat #{:util :info}}
   [{[_ group-name] :match}]
-  (aws/iam-create-group "/" group-name))
+  (aws/iam-create-group group-name))
 
 (defn iam-create-user-cmd
   "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
