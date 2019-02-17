@@ -44,7 +44,7 @@
 (defn iam-list-groups-cmd
   "aws iam list-groups # Lists the IAM groups in the default / path"
   [_]
-  (aws/iam-list-groups "/"))
+  (aws/iam-list-groups))
 
 (defn iam-delete-user-cmd
   "aws iam delete-user <user-name> # Deletes the specified IAM user. The user must not belong to any groups or have any access keys, signing certificates, or attached policies."
