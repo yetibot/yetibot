@@ -185,13 +185,15 @@
 
 (defn iam-create-user
   "Creates an aws IAM user"
-  [path user-name]
-  (let [response (aws/invoke iam {:op      :CreateUser
-                                  :request {:Path path
-                                            :UserName user-name}})]
-    (-> response
-        (with-meta {:aws/type :aws.type/CreatedUser})
-        format-response)))
+  ([user-name]
+    (iam-create-user "/" user-name))
+  ([path user-name]
+   (let [response (aws/invoke iam {:op      :CreateUser
+                                   :request {:Path path
+                                             :UserName user-name}})]
+     (-> response
+         (with-meta {:aws/type :aws.type/CreatedUser})
+         format-response))))
 
 (defn iam-add-user-to-group
   "Adds an IAM user to a group"

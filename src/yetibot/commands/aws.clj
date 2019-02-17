@@ -19,7 +19,7 @@
 (defn iam-create-user-cmd
   "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
   [{[_ user-name] :match}]
-  (aws/iam-create-user "/" user-name))
+  (aws/iam-create-user user-name))
 
 (defn iam-create-user-in-path-cmd
   "aws iam create-user <path> <user-name> # Creates an aws IAM user named <user-name> within the specified <path> prefix"
