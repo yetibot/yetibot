@@ -88,6 +88,21 @@
 ; AWS get-user related spec
 (s/def ::GetUserResponse (s/keys :req-un [::User]))
 
+; AWS list-policies related spec
+(s/def ::Policy (s/keys :req-un [::PermissionsBoundaryUsageCount
+                                 ::Path
+                                 ::CreateDate
+                                 ::PolicyName
+                                 ::AttachmentCount
+                                 ::DefaultVersionId
+                                 ::IsAttachable
+                                 ::Arn
+                                 ::PolicyId
+                                 ::UpdateDate]))
+
+(s/def ::Policies (s/* ::Policy))
+(s/def ::ListPoliciesResponse (s/keys :req-un [::Policies ::IsTruncated ::Marker]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -113,6 +128,8 @@
                      (= aws-type :aws.type/ListUsersResponse)) ::IAMListUsersResponseReceived
                 (and (s/valid? ::GroupDeleted response)
                      (= aws-type :aws.type/GroupDeleted)) ::IAMGroupDeleted
+                (and (s/valid? ::ListPoliciesResponse response)
+                     (= aws-type :aws.type/ListPoliciesResponse)) ::IAMListPoliciesResponseReceived
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -170,6 +187,12 @@
   (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
                 (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
        Users))
+
+(defmethod format-response ::IAMListPoliciesResponseReceived
+  [{:keys [Policies]}]
+  (map #(format "Policy name : %s/%s [PolicyId=%s, Arn=%s] - Created on %s"
+                (:Path %) (:PolicyName %) (:PolicyId %) (:Arn %) (:CreateDate %))
+       Policies))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
@@ -255,8 +278,22 @@
 (defn iam-delete-group
   "Deletes the specified IAM group"
   [group-name]
-  (let [response (aws/invoke iam {:op :DeleteGroup
+  (let [response (aws/invoke iam {:op      :DeleteGroup
                                   :request {:GroupName group-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/GroupDeleted})
         format-response)))
+
+(defn iam-list-policies
+  "Lists IAM policies available within the api account"
+  ([]
+   (iam-list-policies "All" "/"))
+  ([path]
+   (iam-list-policies "All" path))
+  ([scope path]
+   (let [response (aws/invoke iam {:op      :ListPolicies
+                                   :request {:Scope scope
+                                             :Path  path}})]
+     (-> response
+         (with-meta {:aws/type :aws.type/ListPoliciesResponse})
+         format-response))))

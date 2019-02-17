@@ -71,6 +71,21 @@
   [{[_ group-name] :match}]
   (aws/iam-delete-group group-name))
 
+(defn iam-list-policies-cmd
+  "aws iam list-policies # Lists all the managed policies that are available in your AWS account"
+  [_]
+  (aws/iam-list-policies))
+
+(defn iam-list-policies-in-path-cmd
+  "aws iam list-policies <path> # Lists all the managed policies that are available in your AWS account within the specified <path>"
+  [{[_ path] :match}]
+  (aws/iam-list-policies path))
+
+(defn iam-list-policies-with-scope-in-path-cmd
+  "aws iam list-policies <scope> <path> # Lists all the managed policies that are available in your AWS account within the specified <path> and <scope>"
+  [{[_ scope path] :match}]
+  (aws/iam-list-policies scope path))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -85,5 +100,8 @@
             #"iam list-users" iam-list-users-cmd
             #"iam get-user\s+(\S+)" iam-get-user-cmd
             #"iam delete-user\s+(\S+)" iam-delete-user-cmd
-            #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd))
+            #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
+            #"iam list-policies\s+(\S+)\s+(\S+)" iam-list-policies-with-scope-in-path-cmd
+            #"iam list-policies\s+(\S+)" iam-list-policies-in-path-cmd
+            #"iam list-policies" iam-list-policies-cmd))
 
