@@ -216,12 +216,14 @@
 
 (defn iam-list-groups
   "Returns the list of IAM groups that have the specified path prefix"
-  [path]
-  (let [response (aws/invoke iam {:op :ListGroups
-                                  :request {:PathPrefix path}})]
-    (-> response
-        (with-meta {:aws/type :aws.type/ListGroupsResponse})
-        format-response)))
+  ([]
+    (iam-list-groups "/"))
+  ([path]
+   (let [response (aws/invoke iam {:op :ListGroups
+                                   :request {:PathPrefix path}})]
+     (-> response
+         (with-meta {:aws/type :aws.type/ListGroupsResponse})
+         format-response))))
 
 (defn iam-delete-user
   "Deletes the specified IAM user"
