@@ -10,6 +10,8 @@ as well.
 
 - Ensure `json <path>` always return a string for individual values.
   [#829](https://github.com/yetibot/yetibot/issues/829).
+- Add data and error handling to jira
+- Trim symbol in `stock` command
 
 ## 0.4.78 - 2/4/2019
 
