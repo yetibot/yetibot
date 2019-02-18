@@ -12,6 +12,7 @@ as well.
   [#829](https://github.com/yetibot/yetibot/issues/829).
 - Add data and error handling to jira
 - Trim symbol in `stock` command
+- Upgrade to yetibot.core 0.4.67
 
 ## 0.4.78 - 2/4/2019
 
