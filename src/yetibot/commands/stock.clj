@@ -24,7 +24,7 @@
   "Gets the price from a stock symbol via Yahoo API"
   [stock-symbol]
   (try
-    (let [stock-info (get-json (endpoint stock-symbol))]
+    (let [stock-info (get-json (endpoint (s/trim stock-symbol)))]
       {:result/data stock-info
        :result/value
        (map (fn [[label lookup-fn]]
@@ -89,4 +89,4 @@
   (get-price args))
 
 (cmd-hook ["stock" #"^stock$"]
-          _ stock-cmd)
+  _ stock-cmd)
