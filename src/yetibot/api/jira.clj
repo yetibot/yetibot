@@ -28,6 +28,20 @@
   "Settings for the current channel, bound by yetibot.commands.jira"
   nil)
 
+(def ^:dynamic *jira-projects*
+  "Settings for the current channel, bound by yetibot.commands.jira"
+  nil)
+
+(def jira-project-setting-key
+  "This key is used to store channel-specific JIRA projects"
+  "jira-project")
+
+(defn channel-projects
+  "Retrieve the list of configured projects for a channel, given its settings"
+  [channel-settings]
+  (when-let [setting (channel-settings jira-project-setting-key)]
+    (s/split setting #",\s*")))
+
 (defn config [] (:value (get-config jira-schema [:jira])))
 
 (defn configured? [] (config))
@@ -36,14 +50,18 @@
 
 (defn project-for-key [k] (first (filter #(= (:key %) k) (projects))))
 
-(defn project-keys [] (map :key (projects)))
+(defn project-keys [] (into (vec *jira-projects*)
+                            (map :key (projects))))
 
-(defn project-keys-str [] (s/join "," (project-keys)))
+(defn project-keys-str [] (s/join "," (into
+                                        (project-keys)
+                                        *jira-projects*)))
 
 (defn default-version-id [project-key] (-> (project-for-key project-key)
                                            :default :version :id))
 
 (defn default-project-key [] (or *jira-project*
+                                 (first *jira-projects*)
                                  (-> (config) :default :project :key)
                                  (first (project-keys))))
 
@@ -73,10 +91,10 @@
 
 (def client-opts {:as :json
                   :basic-auth auth
-                  :throw-entire-message? true
+                  :throw-exceptions true
+                  :coerce :unexceptional
+                  :throw-entire-message? false
                   :insecure? true})
-(def error-handling-opts {:coerce :always
-                          :throw-exceptions false})
 
 (defn endpoint [& fmt-with-args]
   (str (api-uri) (apply format fmt-with-args)))
@@ -198,11 +216,9 @@
   [i]
   (let [uri (endpoint "/issue/%s" i)
         opts (merge client-opts {:query-params {"fields" "*navigable,comment,worklog,attachment"}})]
-    (try
-      (:body (client/get uri opts))
-      (catch Exception _ nil))))
+    (client/get uri opts)))
 
-(def fetch-and-format-issue-short (comp format-issue-short get-issue))
+(def fetch-and-format-issue-short (comp format-issue-short :body get-issue))
 
 (defn find-project [pk]
   (try
@@ -211,11 +227,12 @@
       nil)))
 
 (defn priorities []
-  (:body (client/get (endpoint "/priority") client-opts)))
+  (client/get (endpoint "/priority") client-opts))
 
 (defn find-priority-by-key [k]
   (let [kp (re-pattern (str "(?i)" k))]
-    (first (filter #(re-find kp (:name %)) (priorities)))))
+    (first (filter #(re-find kp (:name %))
+                   (:body (priorities))))))
 
 (defn issue-types []
   (:body (client/get (endpoint "/issuetype") client-opts)))
@@ -249,11 +266,12 @@
            fix-version timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
          issue-type-id (if parent (sub-task-issue-type-id) (default-issue-type-id))
-         project-key (default-project-key)}}]
+         project-key (or (first *jira-projects*)
+                         (default-project-key))}}]
   (if-let [prj (find-project project-key)]
     (if-let [priority (if priority-key
                         (find-priority-by-key priority-key)
-                        (first (priorities)))]
+                        (first (:body (priorities))))]
       (let [pri-id (:id priority)
             prj-id (:id prj)
             fix-version-map (if fix-version
@@ -275,9 +293,7 @@
         (client/post
           (endpoint "/issue")
           (merge client-opts
-                 {:coerce :always
-                  :throw-exceptions false
-                  :form-params params
+                 {:form-params params
                   :content-type :json})))
       (warn "Could not find a priority for key " priority-key))
     (warn "Could not find project" project-key)))
@@ -294,7 +310,6 @@
   (client/put
     (endpoint "/issue/%s/assignee" issue-key)
     (merge client-opts
-           ; error-handling-opts
            {:content-type :json
             :form-params {:name assignee}})))
 
@@ -324,18 +339,14 @@
   (let [re (re-pattern (str "(?i)" pattern-str))]
     (filter #(re-find re (:name %)) (mapcat :body (all-components)))))
 
-:id "28241"
-
 ;; users
 
-(defn get-users []
-  (:body
-    (client/get
-      (endpoint "/user/assignable/multiProjectSearch")
-      (merge client-opts
-             {:query-params
-              {"projectKeys" (project-keys-str)}}))))
-
+(defn get-users [project]
+  (client/get
+    (endpoint "/user/assignable/multiProjectSearch")
+    (merge client-opts
+           {:query-params
+            {"projectKeys" project}})))
 
 ;; search
 
