@@ -16,11 +16,11 @@
    :password non-empty-str
    :projects [{:key non-empty-str
                (sch/optional-key :default) {:version {:id non-empty-str}}}]
-   (sch/optional-key :default) {:issue {:type {:id non-empty-str}}
-                                :project {:key non-empty-str}}
+   (sch/optional-key :default)
+   {(sch/optional-key :issue) {:type {:id non-empty-str}}
+    (sch/optional-key :project) {:key non-empty-str}}
    (sch/optional-key :max) {:results non-empty-str}
    (sch/optional-key :subtask) {:issue {:type {:id non-empty-str}}}})
-
 
 ;; config
 
@@ -377,5 +377,4 @@
 (defn recent [] (search (projects-jql)))
 
 ;; prime cache
-;; todo: move into a start fn
-;; (future (all-components))
+;; todo: move into a start fn ;; (future (all-components))

@@ -6,7 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-## 0.4.79 - Unreleased
+## 0.4.80 - 2/18/2019
+
+- Relax schema on jira config
+
+## 0.4.79 - 2/18/2019
 
 - Ensure `json <path>` always return a string for individual values.
   [#829](https://github.com/yetibot/yetibot/issues/829).
