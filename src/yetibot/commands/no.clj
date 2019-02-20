@@ -9,7 +9,6 @@
    "http://1.media.todaysbigthing.cvcdn.com/97/82/204166a71f807df627c8e337674c58a6.gif"
    "http://www.reactiongifs.com/wp-content/gallery/no/John-Krasinski-no.gif"
    "http://www.reactiongifs.com/wp-content/gallery/no/aint-nobody.gif"
-   "http://www.reactiongifs.com/wp-content/gallery/no/987.gif"
    "http://www.reactiongifs.com/wp-content/gallery/no/754.gif"
    "http://www.reactiongifs.com/wp-content/gallery/no/no-bird.gif"
    "http://www.reactiongifs.com/wp-content/gallery/no/Julie-White.gif"
@@ -33,7 +32,24 @@
    "http://media.giphy.com/media/Ahs5u58Qud2PC/giphy.gif"
    "http://media.giphy.com/media/ry6BrbbLysbC/giphy.gif"
    "http://media.giphy.com/media/OJcRLchr3bT5S/giphy.gif"
-   ])
+   "https://media1.giphy.com/media/15aGGXfSlat2dP6ohs/giphy.gif"
+   "https://media1.giphy.com/media/6Q2KA5ly49368/giphy.gif"
+   "https://media3.giphy.com/media/gnE4FFhtFoLKM/giphy.gif"
+   "https://media2.giphy.com/media/AmDzMmCJZABsk/giphy.gif"
+   "https://media1.giphy.com/media/EVbEdEW3kuu0o/giphy.gif"
+   "https://media3.giphy.com/media/PRH7kZqQsHTSE/giphy.gif"
+   "https://media0.giphy.com/media/T5QOxf0IRjzYQ/giphy.gif"
+   "https://media3.giphy.com/media/TdmTcdoN3egaQ/giphy.gif"
+   "https://media3.giphy.com/media/77xrxjer0slgc/giphy.gif"
+   "https://media0.giphy.com/media/yBXuEb8lC1mqA/giphy.gif"
+   "https://media2.giphy.com/media/lJ6O1tEcJUfYI/giphy.gif"
+   "https://media3.giphy.com/media/l0MYKMSOdFabmEDQc/giphy.gif"
+   "https://media0.giphy.com/media/11tVh1XRNAunYI/giphy.gif"
+   "https://media0.giphy.com/media/LZQsVAzgB6sE0/giphy.gif"
+   "https://media3.giphy.com/media/l1BgRBd4cVC8OaZKo/giphy.gif"
+   "https://media0.giphy.com/media/xT0xezwKyz4VXZlBGU/giphy.gif"
+   "https://media0.giphy.com/media/MTGCHXzeiMcMg/giphy.gif"
+   "https://media1.giphy.com/media/l41Ym7ql1UKk58KC4/giphy.gif"])
 
 (defn no-cmd
   "no # show your dissaproval"
