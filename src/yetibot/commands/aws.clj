@@ -86,6 +86,11 @@
   [{[_ scope path] :match}]
   (aws/iam-list-policies scope path))
 
+(defn iam-attach-user-policy-cmd
+  "aws iam attach-user-policy <user-name> <arn> # Attaches the specified managed policy whose Arn is <arn> to the specified user."
+  [{[_ user-name policy-arn] :match}]
+  (aws/iam-attach-user-policy user-name policy-arn))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -103,5 +108,6 @@
             #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
             #"iam list-policies\s+(\S+)\s+(\S+)" iam-list-policies-with-scope-in-path-cmd
             #"iam list-policies\s+(\S+)" iam-list-policies-in-path-cmd
-            #"iam list-policies" iam-list-policies-cmd))
+            #"iam list-policies" iam-list-policies-cmd
+            #"iam attach-user-policy\s+(\S+)\s+(\S+)" iam-attach-user-policy-cmd))
 
