@@ -109,6 +109,10 @@
 (s/def ::IAMUserPolicyAttached (s/keys :req-un [::AttachUserPolicyResponse
                                                 ::AttachUserPolicyResponseAttrs]))
 
+(s/def ::AttachedPolicy (s/keys :req-un [::PolicyName ::PolicyArn]))
+(s/def ::AttachedPolicies (s/* ::AttachedPolicy))
+(s/def ::ListAttachedUserPoliciesResponse (s/keys :req-un [::AttachedPolicies]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -138,6 +142,8 @@
                      (= aws-type :aws.type/ListPoliciesResponse)) ::IAMListPoliciesResponseReceived
                 (and (s/valid? ::IAMUserPolicyAttached response)
                      (= aws-type :aws.type/UserPolicyAttached)) ::IAMUserPolicyAttached
+                (and (s/valid? ::ListAttachedUserPoliciesResponse response)
+                     (= aws-type :aws.type/ListAttachedUserPoliciesResponse)) ::IAMListAttachedUserPoliciesResponseReceived
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -206,6 +212,12 @@
   [response]
   (format "User policy successfully attached [RequestId=%s]"
           (get-in response [:AttachUserPolicyResponse :ResponseMetadata :RequestId])))
+
+(defmethod format-response ::IAMListAttachedUserPoliciesResponseReceived
+  [{:keys [AttachedPolicies]}]
+  (map #(format "Policy name : %s [Arn=%s]"
+                (:PolicyName %) (:PolicyArn %))
+       AttachedPolicies))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
@@ -320,3 +332,15 @@
     (-> response
         (with-meta {:aws/type :aws.type/UserPolicyAttached})
         format-response)))
+
+(defn iam-list-attached-user-policies
+  "Lists all managed policies attached to a user"
+  ([user-name]
+    (iam-list-attached-user-policies "/" user-name))
+  ([path user-name]
+   (let [response (aws/invoke iam {:op      :ListAttachedUserPolicies
+                                   :request {:Path path
+                                             :UserName user-name}})]
+     (-> response
+         (with-meta {:aws/type :aws.type/ListAttachedUserPoliciesResponse})
+         format-response))))
