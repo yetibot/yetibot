@@ -113,6 +113,16 @@
 (s/def ::AttachedPolicies (s/* ::AttachedPolicy))
 (s/def ::ListAttachedUserPoliciesResponse (s/keys :req-un [::AttachedPolicies]))
 
+; user-profile related specs
+(s/def ::PasswordResetRequired boolean?)
+(s/def ::LoginProfile (s/keys :req-un [::UserName ::CreateDate ::PasswordResetRequired]))
+(s/def ::LoginProfileCreated (s/keys :req-un [::LoginProfile]))
+
+(s/def ::UpdateLoginProfileResponse (s/keys :req-un [::ResponseMetadata]))
+(s/def ::UpdateLoginProfileResponseAttrs (s/keys :req-un [::xmlns]))
+(s/def ::LoginProfileUpdated (s/keys :req-un [::UpdateLoginProfileResponse
+                                              ::UpdateLoginProfileResponseAttrs]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -144,6 +154,10 @@
                      (= aws-type :aws.type/UserPolicyAttached)) ::IAMUserPolicyAttached
                 (and (s/valid? ::ListAttachedUserPoliciesResponse response)
                      (= aws-type :aws.type/ListAttachedUserPoliciesResponse)) ::IAMListAttachedUserPoliciesResponseReceived
+                (and (s/valid? ::LoginProfileCreated response)
+                     (= aws-type :aws.type/LoginProfileCreated)) ::IAMLoginProfileCreated
+                (and (s/valid? ::LoginProfileUpdated response)
+                     (= aws-type :aws.type/LoginProfileUpdated)) ::IAMLoginProfileUpdated
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -218,6 +232,16 @@
   (map #(format "Policy name : %s [Arn=%s]"
                 (:PolicyName %) (:PolicyArn %))
        AttachedPolicies))
+
+(defmethod format-response ::IAMLoginProfileCreated
+  [{:keys [LoginProfile]}]
+  (format "Login profile for %s, requiring password reset, successfully created on %s"
+          (:UserName LoginProfile) (:CreateDate LoginProfile)))
+
+(defmethod format-response ::IAMLoginProfileUpdated
+  [response]
+  (format "Login profile successfully updated [RequestId=%s]"
+          (get-in response [:UpdateLoginProfileResponse :ResponseMetadata :RequestId])))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
@@ -344,3 +368,25 @@
      (-> response
          (with-meta {:aws/type :aws.type/ListAttachedUserPoliciesResponse})
          format-response))))
+
+(defn iam-create-login-profile
+  "Sets a temporary password for the specified user"
+  [user-name password]
+  (let [response (aws/invoke iam {:op      :CreateLoginProfile
+                                  :request {:UserName              user-name
+                                            :Password              password
+                                            :PasswordResetRequired true}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/LoginProfileCreated})
+        format-response)))
+
+(defn iam-update-login-profile
+  "Updates the specified user login profile"
+  [user-name password]
+  (let [response (aws/invoke iam {:op      :UpdateLoginProfile
+                                  :request {:UserName              user-name
+                                            :Password              password
+                                            :PasswordResetRequired true}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/LoginProfileUpdated})
+        format-response)))

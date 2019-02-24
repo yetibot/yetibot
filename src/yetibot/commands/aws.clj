@@ -101,6 +101,18 @@
   [{[_ path user-name] :match}]
   (aws/iam-list-attached-user-policies path user-name))
 
+(defn iam-create-login-profile-cmd
+  "aws iam create-login-profile <user-name> <password> # Creates a temporary password for the specified user, giving the user the
+  ability to access AWS services through the AWS Management Console and change it the first time they connect."
+  [{[_ user-name password] :match}]
+  (aws/iam-create-login-profile user-name password))
+
+(defn iam-update-login-profile-cmd
+  "aws iam update-login-profile <user-name> <password> # Updates the login profile for the specified user. The password has to
+  be updated by the user at first login."
+  [{[_ user-name password] :match}]
+  (aws/iam-update-login-profile user-name password))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -121,5 +133,7 @@
             #"iam list-policies" iam-list-policies-cmd
             #"iam attach-user-policy\s+(\S+)\s+(\S+)" iam-attach-user-policy-cmd
             #"iam list-attached-user-policies\s+(\S+)\s+(\S+)" iam-list-attached-user-policies-in-path-cmd
-            #"iam list-attached-user-policies\s+(\S+)" iam-list-attached-user-policies-cmd))
+            #"iam list-attached-user-policies\s+(\S+)" iam-list-attached-user-policies-cmd
+            #"iam create-login-profile\s+(\S+)\s+(\S+)" iam-create-login-profile-cmd
+            #"iam update-login-profile\s+(\S+)\s+(\S+)" iam-update-login-profile-cmd))
 
