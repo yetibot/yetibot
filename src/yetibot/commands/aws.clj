@@ -113,6 +113,11 @@
   [{[_ user-name password] :match}]
   (aws/iam-update-login-profile user-name password))
 
+(defn iam-create-access-key-cmd
+  "aws iam create-access-key <user-name> # Creates a new AWS secret access key and corresponding AWS access key ID for the specified user"
+  [{[_ user-name] :match}]
+  (aws/iam-create-access-key user-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -135,5 +140,6 @@
             #"iam list-attached-user-policies\s+(\S+)\s+(\S+)" iam-list-attached-user-policies-in-path-cmd
             #"iam list-attached-user-policies\s+(\S+)" iam-list-attached-user-policies-cmd
             #"iam create-login-profile\s+(\S+)\s+(\S+)" iam-create-login-profile-cmd
-            #"iam update-login-profile\s+(\S+)\s+(\S+)" iam-update-login-profile-cmd))
+            #"iam update-login-profile\s+(\S+)\s+(\S+)" iam-update-login-profile-cmd
+            #"iam create-access-key\s+(\S+)" iam-create-access-key-cmd))
 
