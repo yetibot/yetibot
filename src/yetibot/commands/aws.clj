@@ -118,6 +118,11 @@
   [{[_ user-name] :match}]
   (aws/iam-create-access-key user-name))
 
+(defn iam-list-access-keys-cmd
+  "aws iam list-access-keys <user-name> # Returns information about the access key IDs associated with the specified IAM user"
+  [{[_ user-name] :match}]
+  (aws/iam-list-access-keys user-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -141,5 +146,6 @@
             #"iam list-attached-user-policies\s+(\S+)" iam-list-attached-user-policies-cmd
             #"iam create-login-profile\s+(\S+)\s+(\S+)" iam-create-login-profile-cmd
             #"iam update-login-profile\s+(\S+)\s+(\S+)" iam-update-login-profile-cmd
-            #"iam create-access-key\s+(\S+)" iam-create-access-key-cmd))
+            #"iam create-access-key\s+(\S+)" iam-create-access-key-cmd
+            #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd))
 
