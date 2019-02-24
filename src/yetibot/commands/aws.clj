@@ -123,6 +123,11 @@
   [{[_ user-name] :match}]
   (aws/iam-list-access-keys user-name))
 
+(defn iam-delete-access-key-cmd
+  "aws iam delete-access-key <user-name> <access-key-id> # Deletes the access key pair associated with the specified IAM user"
+  [{[_ user-name access-key-id] :match}]
+  (aws/iam-delete-access-key user-name access-key-id))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -147,5 +152,6 @@
             #"iam create-login-profile\s+(\S+)\s+(\S+)" iam-create-login-profile-cmd
             #"iam update-login-profile\s+(\S+)\s+(\S+)" iam-update-login-profile-cmd
             #"iam create-access-key\s+(\S+)" iam-create-access-key-cmd
-            #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd))
+            #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd
+            #"iam delete-access-key\s+(\S+)\s+(\S+)" iam-delete-access-key-cmd))
 
