@@ -123,6 +123,13 @@
 (s/def ::LoginProfileUpdated (s/keys :req-un [::UpdateLoginProfileResponse
                                               ::UpdateLoginProfileResponseAttrs]))
 
+; access-key related specs
+(s/def ::AccessKeyId string?)
+(s/def ::Status string?)
+(s/def ::SecretAccessKey string?)
+(s/def ::AccessKey (s/keys :req-un [::UserName ::AccessKeyId ::Status ::SecretAccessKey ::CreateDate]))
+(s/def ::CreatedAccessKey (s/keys :req-un [::AccessKey]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -158,6 +165,8 @@
                      (= aws-type :aws.type/LoginProfileCreated)) ::IAMLoginProfileCreated
                 (and (s/valid? ::LoginProfileUpdated response)
                      (= aws-type :aws.type/LoginProfileUpdated)) ::IAMLoginProfileUpdated
+                (and (s/valid? ::CreatedAccessKey response)
+                     (= aws-type :aws.type/CreatedAccessKey)) ::IAMAccessKeyCreated
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -242,6 +251,11 @@
   [response]
   (format "Login profile successfully updated [RequestId=%s]"
           (get-in response [:UpdateLoginProfileResponse :ResponseMetadata :RequestId])))
+
+(defmethod format-response ::IAMAccessKeyCreated
+  [{{:keys [UserName AccessKeyId Status SecretAccessKey CreateDate]} :AccessKey}]
+  (format "An access key for user %s has been successfully created on %s\nAWS Access Key ID : %s\nAWS Secret Access Key : %s\nStatus : %s\n"
+          UserName CreateDate AccessKeyId SecretAccessKey Status))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
@@ -389,4 +403,13 @@
                                             :PasswordResetRequired true}})]
     (-> response
         (with-meta {:aws/type :aws.type/LoginProfileUpdated})
+        format-response)))
+
+(defn iam-create-access-key
+  "Creates an aws secret access key and corresponding aws access key ID"
+  [user-name]
+  (let [response (aws/invoke iam {:op      :CreateAccessKey
+                                  :request {:UserName user-name}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/CreatedAccessKey})
         format-response)))
