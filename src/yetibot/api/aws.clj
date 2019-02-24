@@ -134,6 +134,11 @@
 (s/def ::AccessKeyMetadata (s/* ::AccessKeyInfo))
 (s/def ::ListAccessKeysResponse (s/keys :req-un [::AccessKeyMetadata]))
 
+(s/def ::DeleteAccessKeyResponse (s/keys :req-un [::ResponseMetadata]))
+(s/def ::DeleteAccessKeyResponseAttrs (s/keys :req-un [::xmlns]))
+(s/def ::AccessKeyDeleted (s/keys :req-un [::DeleteAccessKeyResponse
+                                           ::DeleteAccessKeyResponseAttrs]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -173,6 +178,8 @@
                      (= aws-type :aws.type/CreatedAccessKey)) ::IAMAccessKeyCreated
                 (and (s/valid? ::ListAccessKeysResponse response)
                      (= aws-type :aws.type/ListAccessKeysResponse)) ::IAMListAccessKeysResponseReceived
+                (and (s/valid? ::AccessKeyDeleted response)
+                     (= aws-type :aws.type/AccessKeyDeleted)) ::IAMAccessKeyDeleted
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -268,6 +275,11 @@
   (map #(format "Access key ID : %s\nStatus : %s\nCreated on : %s\n"
                 (:AccessKeyId %) (:Status %) (:CreateDate %))
        AccessKeyMetadata))
+
+(defmethod format-response ::IAMAccessKeyDeleted
+  [response]
+  (format "Access Key successfully deleted [RequestId=%s]"
+          (get-in response [:DeleteAccessKeyResponse :ResponseMetadata :RequestId])))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
@@ -433,4 +445,14 @@
                                   :request {:UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/ListAccessKeysResponse})
+        format-response)))
+
+(defn iam-delete-access-key
+  "Deletes the specified user access key having the provided access key ID"
+  [user-name access-key-id]
+  (let [response (aws/invoke iam {:op      :DeleteAccessKey
+                                  :request {:UserName user-name
+                                            :AccessKeyId access-key-id}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/AccessKeyDeleted})
         format-response)))
