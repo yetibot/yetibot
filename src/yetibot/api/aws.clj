@@ -130,6 +130,10 @@
 (s/def ::AccessKey (s/keys :req-un [::UserName ::AccessKeyId ::Status ::SecretAccessKey ::CreateDate]))
 (s/def ::CreatedAccessKey (s/keys :req-un [::AccessKey]))
 
+(s/def ::AccessKeyInfo (s/keys :req-un [::UserName ::AccessKeyId ::Status ::CreateDate]))
+(s/def ::AccessKeyMetadata (s/* ::AccessKeyInfo))
+(s/def ::ListAccessKeysResponse (s/keys :req-un [::AccessKeyMetadata]))
+
 ; Mutli-method for aws api call response formatting
 (defmulti format-response
           "Returns a dispatch-value matching the operation that has been successfully invoked
@@ -167,6 +171,8 @@
                      (= aws-type :aws.type/LoginProfileUpdated)) ::IAMLoginProfileUpdated
                 (and (s/valid? ::CreatedAccessKey response)
                      (= aws-type :aws.type/CreatedAccessKey)) ::IAMAccessKeyCreated
+                (and (s/valid? ::ListAccessKeysResponse response)
+                     (= aws-type :aws.type/ListAccessKeysResponse)) ::IAMListAccessKeysResponseReceived
                 :else ::error))))
 
 (defmethod format-response ::error
@@ -256,6 +262,12 @@
   [{{:keys [UserName AccessKeyId Status SecretAccessKey CreateDate]} :AccessKey}]
   (format "An access key for user %s has been successfully created on %s\nAWS Access Key ID : %s\nAWS Secret Access Key : %s\nStatus : %s\n"
           UserName CreateDate AccessKeyId SecretAccessKey Status))
+
+(defmethod format-response ::IAMListAccessKeysResponseReceived
+  [{:keys [AccessKeyMetadata]}]
+  (map #(format "Access key ID : %s\nStatus : %s\nCreated on : %s\n"
+                (:AccessKeyId %) (:Status %) (:CreateDate %))
+       AccessKeyMetadata))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
@@ -412,4 +424,13 @@
                                   :request {:UserName user-name}})]
     (-> response
         (with-meta {:aws/type :aws.type/CreatedAccessKey})
+        format-response)))
+
+(defn iam-list-access-keys
+  "Lists aws access key IDs associated with the specified user"
+  [user-name]
+  (let [response (aws/invoke iam {:op      :ListAccessKeys
+                                  :request {:UserName user-name}})]
+    (-> response
+        (with-meta {:aws/type :aws.type/ListAccessKeysResponse})
         format-response)))
