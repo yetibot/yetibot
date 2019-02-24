@@ -91,6 +91,16 @@
   [{[_ user-name policy-arn] :match}]
   (aws/iam-attach-user-policy user-name policy-arn))
 
+(defn iam-list-attached-user-policies-cmd
+  "aws iam list-attached-user-policies <user-name> # Lists all managed policies that are attached to the specified IAM user."
+  [{[_ user-name] :match}]
+  (aws/iam-list-attached-user-policies user-name))
+
+(defn iam-list-attached-user-policies-in-path-cmd
+  "aws iam list-attached-user-policies <path> <user-name> # Lists all managed policies that are attached to the specified IAM user having the specified <path>."
+  [{[_ path user-name] :match}]
+  (aws/iam-list-attached-user-policies path user-name))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -109,5 +119,7 @@
             #"iam list-policies\s+(\S+)\s+(\S+)" iam-list-policies-with-scope-in-path-cmd
             #"iam list-policies\s+(\S+)" iam-list-policies-in-path-cmd
             #"iam list-policies" iam-list-policies-cmd
-            #"iam attach-user-policy\s+(\S+)\s+(\S+)" iam-attach-user-policy-cmd))
+            #"iam attach-user-policy\s+(\S+)\s+(\S+)" iam-attach-user-policy-cmd
+            #"iam list-attached-user-policies\s+(\S+)\s+(\S+)" iam-list-attached-user-policies-in-path-cmd
+            #"iam list-attached-user-policies\s+(\S+)" iam-list-attached-user-policies-cmd))
 
