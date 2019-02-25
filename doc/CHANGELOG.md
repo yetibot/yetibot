@@ -6,6 +6,14 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.0 - 2/24/2019
+
+This is the release where we deprecate mutable config! See [the blog
+post](https://yetibot.com/blog/2019-02-20-moving-mutable-config-to-the-database).
+
+- Upgrade to yetibot.core 0.5.0
+- Refresh the `no` gif pool
+
 ## 0.4.80 - 2/18/2019
 
 - Relax schema on jira config
