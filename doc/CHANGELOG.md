@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.1 - 2/27/2019
+
+- Upgrade to yetibot.core 0.5.2
+
 ## 0.5.0 - 2/24/2019
 
 This is the release where we deprecate mutable config! See [the blog
