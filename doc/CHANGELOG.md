@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.2 - 3/1/2019
+
+- Move `repeat` to `yetibot.core` collections
+- Upgrade to yetibot.core 0.5.3
+
 ## 0.5.1 - 2/27/2019
 
 - Upgrade to yetibot.core 0.5.2
