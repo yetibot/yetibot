@@ -18,6 +18,8 @@
   (fact search-memes-test
     (:name (first (search-memes "alien"))) => "Ancient Aliens")
 
+  (search-memes "jocko")
+
   (fact (scrape-all-memes "icahn" 2) => not-empty)
 
   (fact generate-meme-test

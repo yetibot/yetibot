@@ -40,7 +40,7 @@
   (let [res (client/get "https://imgflip.com/memesearch" {:query-params {:q q :page n}})]
     (->> res
          :body
-         (re-seq #"alt\=\"([^\"]+)\"\s+src\=.+imgflip\.com\/([\w\d]+).jpg")
+         (re-seq #"alt\=\"([^\"]+)\"\s+src\=.+imgflip\.com\/([\w\d]+).(jpg|png)")
          (map (fn [[_ alt id]]
                 {:name (s/replace alt #"\sMeme Template( Thumbnail)*" "")
                  :url (str "http://i.imgflip.com/" id ".jpg")
@@ -49,7 +49,7 @@
 (defn scrape-all-memes
   "Fetch Pages of Memes Until Max Number of Pages is Reached"
   ([q max-pages]
-   (let [initial-memes (into [] (search-via-scrape q 1))] 
+   (let [initial-memes (into [] (search-via-scrape q 1))]
      (scrape-all-memes q initial-memes 2 max-pages)))
   ([q merged-memes page-num max-pages]
    (let [new-memes (apply merge

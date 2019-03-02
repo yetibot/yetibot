@@ -26,7 +26,7 @@
 (def genthat-pattern #"^(\w+)that$")
 
 (defn genthat
-  "<gen>that # use <foo> generator to memify the last thing said
+  "<gen>that # use <gen> generator to memify the last thing said
    memethat # memeify the last thing said with random generator
    memethat angry picard # memeify the last thing said with a specific generator (allows spaces, unlike <gen>that)"
   [{:keys [cmd user yetibot-user chat-source match]}]
