@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.5 - 3/3/2019
+
+- Upgrade to yetibot.core 0.5.6
+
 ## 0.5.4 - 3/1/2019
 
 - Allow meme search to find PNGs in addition to JPGs on imgflip.com
