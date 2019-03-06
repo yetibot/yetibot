@@ -29,3 +29,10 @@ Please adhere to yetibot's existing conventions:
 - no trailing whitespace
 
 ![thanks](doc/thanks.jpg)
+
+## Merging PRs
+
+- If an outside contributor submits a PR, it is up to a core team member to
+  review and merge the PR
+- When a [core team member](https://github.com/orgs/yetibot/people) submits a
+  PR, the author should merge their own PR after it is reviewed and tests pass
