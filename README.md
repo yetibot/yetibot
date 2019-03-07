@@ -30,24 +30,26 @@ You can think of Yetibot as a **communal command line**. It excels at:
 
 Features that make Yetibot powerful and great, which is to say *fun*:
 
-- **Unix-style pipes** allow tremendous expressiveness in chaining
-  together complex and flexible commands.
-- **Sub-expressions** let you embed the output of one command into an outer
-  command. They can be nested as many levels deep as you can imagine (open a PR
-  to add to [EXAMPLES](doc/EXAMPLES.md) if you come up with something crazy!).
-- **Aliases** let you parameterize complex expressions and give them a name
-  allowing your team to quickly build up idiomatic team-specific Yetibot usages
-  (not just memes!).
-- **Per-channel settings** let you store arbitrary config at the channel level,
-  which can be used by commands or aliases to change the behavior of commands
-  depending on which channel you're in (e.g. the default JIRA project for a
-  channel).
-- **Feature category toggle** lets you disable or enable entire
-  [categories](https://github.com/yetibot/yetibot.core/blob/master/doc/CATEGORIES.md)
-  of commands per-channel; useful for disabling gifs in the work-only channel 😁.
+- [**Unix-style pipes**](https://yetibot.com/user-guide#pipes) allow tremendous
+  expressiveness in chaining together complex and flexible commands.
+- [**Sub-expressions**](https://yetibot.com/user-guide#subexpressions) let you
+  embed the output of one command into an outer command. They can be nested as
+  many levels deep as you can imagine (open a PR to add to
+  [EXAMPLES](https://yetibot.com/user-guide#examples) if you come up with
+  something crazy!).
+- [**Aliases**](https://yetibot.com/user-guide#aliases) let you parameterize
+  complex expressions and give them a name allowing your team to quickly build
+  up idiomatic team-specific Yetibot usages (not just memes!).
+- [**Per-channel settings**](https://yetibot.com/user-guide#channel_settings)
+  let you store arbitrary config at the channel level, which can be used by
+  commands or aliases to change the behavior of commands depending on which
+  channel you're in (e.g. the default JIRA project(s) for a channel).
+- [**Feature category toggle**](https://yetibot.com/user-guide#categories) lets
+  you disable or enable entire categories of commands per-channel; useful for
+  disabling gifs in the work-only channel 😁.
 
-Take a look at the [usage examples](doc/EXAMPLES.md) to see some ~~fun~~ useful
-ways it can be used.
+Take a look at the [usage examples](https://yetibot.com/user-guide#examples) to
+see some ~~fun~~ useful things it can do.
 
 ## New contributors
 
