@@ -46,7 +46,7 @@
 ; AWS iam delete-user response
 (s/def ::UserDeleted (s/keys :req-un [::DeleteUserResponse
                                       ::DeleteUserResponseAttrs]))
-; aws iam list-users response
+; AWS iam list-users response
 (s/def ::ListUsersResponse (s/keys :req-un [::Users ::IsTruncated]
                                    :opt [::Marker]))
 
@@ -161,98 +161,123 @@
 
 (defmethod format-response ::IAMGroupCreated
   [{{:keys [Path GroupName GroupId Arn CreateDate]} :Group}]
-  (format "Group %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
-          Path GroupName GroupId Arn CreateDate))
+  {:result/data  {:path Path, :group-name GroupName, :group-id GroupId, :arn Arn, :create-date CreateDate}
+   :result/value (format "Group %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
+                         Path GroupName GroupId Arn CreateDate)})
 
 (defmethod format-response ::IAMUserCreated
   [{{:keys [Path UserName UserId Arn CreateDate]} :User}]
-  (format "User %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
-          Path UserName UserId Arn CreateDate))
+  {:result/data  {:path Path, :user-name UserName, :user-id UserId, :arn Arn, :create-date CreateDate}
+   :result/value (format "User %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
+                         Path UserName UserId Arn CreateDate)})
 
 (defmethod format-response ::IAMUserAddedToGroup
   [response]
-  (format "User successfully added to group [RequestId=%s]"
-          (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])))
+  (let [request-id (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "User successfully added to group [RequestId=%s]"
+                           request-id)}))
 
 (defmethod format-response ::IAMUserDeleted
   [response]
-  (format "User successfully deleted [RequestId=%s]"
-          (get-in response [:DeleteUserResponse :ResponseMetadata :RequestId])))
+  (let [request-id (get-in response [:DeleteUserResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "User successfully deleted [RequestId=%s]"
+                           request-id)}))
 
 (defmethod format-response ::IAMGroupDeleted
   [response]
-  (format "Group successfully deleted [RequestId=%s]"
-          (get-in response [:DeleteGroupResponse :ResponseMetadata :RequestId])))
+  (let [request-id (get-in response [:DeleteGroupResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "Group successfully deleted [RequestId=%s]"
+                           request-id)}))
 
 (defmethod format-response ::IAMGetGroupResponseReceived
   [{:keys [Group Users]}]
   (let [{:keys [Path GroupName GroupId Arn CreateDate]} Group]
-    (conj (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
-                        (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
-               Users)
-          (format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
-                  Path GroupName GroupId Arn CreateDate))))
+    {:result/data  {:path Path, :group-name GroupName, :group-id GroupId, :arn Arn, :create-date CreateDate, :users Users}
+     :result/value (conj (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+                                       (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
+                              Users)
+                         (format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
+                                 Path GroupName GroupId Arn CreateDate))}))
 
 (defmethod format-response ::IAMListGroupsResponseReceived
   [{:keys [Groups]}]
-  (map #(format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
-                (:Path %) (:GroupName %) (:GroupId %) (:Arn %) (:CreateDate %))
-       Groups))
+  {:result/data  {:groups Groups}
+   :result/value (map #(format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
+                               (:Path %) (:GroupName %) (:GroupId %) (:Arn %) (:CreateDate %))
+                      Groups)})
 
 (defmethod format-response ::IAMGetUserResponseReceived
   [{:keys [User]}]
   (let [{:keys [Path UserName UserId Arn CreateDate]} User]
-    (format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
-            Path UserName UserId Arn CreateDate)))
+    {:result/data  {:path Path, :user-name UserName, :user-id UserId, :arn Arn, :create-date CreateDate}
+     :result/value (format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+                           Path UserName UserId Arn CreateDate)}))
 
 (defmethod format-response ::IAMListUsersResponseReceived
   [{:keys [Users]}]
-  (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
-                (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
-       Users))
+  {:result/data  {:users Users}
+   :result/value (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+                               (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
+                      Users)})
 
 (defmethod format-response ::IAMListPoliciesResponseReceived
   [{:keys [Policies]}]
-  (map #(format "Policy name : %s/%s [PolicyId=%s, Arn=%s] - Created on %s"
-                (:Path %) (:PolicyName %) (:PolicyId %) (:Arn %) (:CreateDate %))
-       Policies))
+  {:result/data  {:policies Policies}
+   :result/value (map #(format "Policy name : %s/%s [PolicyId=%s, Arn=%s] - Created on %s"
+                               (:Path %) (:PolicyName %) (:PolicyId %) (:Arn %) (:CreateDate %))
+                      Policies)})
 
 (defmethod format-response ::IAMUserPolicyAttached
   [response]
-  (format "User policy successfully attached [RequestId=%s]"
-          (get-in response [:AttachUserPolicyResponse :ResponseMetadata :RequestId])))
+  (let [request-id (get-in response [:AttachUserPolicyResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "User policy successfully attached [RequestId=%s]"
+                           request-id)}))
 
 (defmethod format-response ::IAMListAttachedUserPoliciesResponseReceived
   [{:keys [AttachedPolicies]}]
-  (map #(format "Policy name : %s [Arn=%s]"
-                (:PolicyName %) (:PolicyArn %))
-       AttachedPolicies))
+  {:result/data  {:attached-policies AttachedPolicies}
+   :result/value (map #(format "Policy name : %s [Arn=%s]"
+                               (:PolicyName %) (:PolicyArn %))
+                      AttachedPolicies)})
 
 (defmethod format-response ::IAMLoginProfileCreated
   [{:keys [LoginProfile]}]
-  (format "Login profile for %s, requiring password reset, successfully created on %s"
-          (:UserName LoginProfile) (:CreateDate LoginProfile)))
+  (let [user-name (:UserName LoginProfile)
+        create-date (:CreateDate LoginProfile)]
+    {:result/data  {:user-name user-name, :create-date create-date}
+     :result/value (format "Login profile for %s, requiring password reset, successfully created on %s"
+                           user-name create-date)}))
 
 (defmethod format-response ::IAMLoginProfileUpdated
   [response]
-  (format "Login profile successfully updated [RequestId=%s]"
-          (get-in response [:UpdateLoginProfileResponse :ResponseMetadata :RequestId])))
+  (let [request-id (get-in response [:UpdateLoginProfileResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "Login profile successfully updated [RequestId=%s]"
+                           request-id)}))
 
 (defmethod format-response ::IAMAccessKeyCreated
   [{{:keys [UserName AccessKeyId Status SecretAccessKey CreateDate]} :AccessKey}]
-  (format "An access key for user %s has been successfully created on %s\nAWS Access Key ID : %s\nAWS Secret Access Key : %s\nStatus : %s\n"
-          UserName CreateDate AccessKeyId SecretAccessKey Status))
+  {:result/data  {:user-name UserName, :access-key-id AccessKeyId, :status Status, :secret-access-key SecretAccessKey, :create-date CreateDate}
+   :result/value (format "An access key for user %s has been successfully created on %s\nAWS Access Key ID : %s\nAWS Secret Access Key : %s\nStatus : %s\n"
+                         UserName CreateDate AccessKeyId SecretAccessKey Status)})
 
 (defmethod format-response ::IAMListAccessKeysResponseReceived
   [{:keys [AccessKeyMetadata]}]
-  (map #(format "Access key ID : %s\nStatus : %s\nCreated on : %s\n"
-                (:AccessKeyId %) (:Status %) (:CreateDate %))
-       AccessKeyMetadata))
+  {:result/data  {:access-key-metadata AccessKeyMetadata}
+   :result/value (map #(format "Access key ID : %s\nStatus : %s\nCreated on : %s\n"
+                               (:AccessKeyId %) (:Status %) (:CreateDate %))
+                      AccessKeyMetadata)})
 
 (defmethod format-response ::IAMAccessKeyDeleted
   [response]
-  (format "Access Key successfully deleted [RequestId=%s]"
-          (get-in response [:DeleteAccessKeyResponse :ResponseMetadata :RequestId])))
+  (let [request-id (get-in response [:DeleteAccessKeyResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "Access Key successfully deleted [RequestId=%s]"
+                           request-id)}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
