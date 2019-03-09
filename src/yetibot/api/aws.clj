@@ -30,7 +30,7 @@
                                        {:access-key-id     aws-access-key-id
                                         :secret-access-key aws-secret-access-key})}))
 ; AWS clients
-(def iam (make-aws-client :iam))
+(def iam (when (configured?) (make-aws-client :iam)))
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
