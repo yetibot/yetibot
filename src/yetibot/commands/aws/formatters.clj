@@ -53,13 +53,13 @@
 (defmethod format-response ::IAMGroupCreated
   [{{:keys [Path GroupName GroupId Arn CreateDate]} :Group}]
   {:result/data  {:path Path, :group-name GroupName, :group-id GroupId, :arn Arn, :create-date CreateDate}
-   :result/value (format "Group %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
+   :result/value (format "Group %s%s [Id=%s, Arn=%s] has been created successfully on %s"
                          Path GroupName GroupId Arn CreateDate)})
 
 (defmethod format-response ::IAMUserCreated
   [{{:keys [Path UserName UserId Arn CreateDate]} :User}]
   {:result/data  {:path Path, :user-name UserName, :user-id UserId, :arn Arn, :create-date CreateDate}
-   :result/value (format "User %s/%s [Id=%s, Arn=%s] has been created successfully on %s"
+   :result/value (format "User %s%s [Id=%s, Arn=%s] has been created successfully on %s"
                          Path UserName UserId Arn CreateDate)})
 
 (defmethod format-response ::IAMUserAddedToGroup
@@ -87,16 +87,16 @@
   [{:keys [Group Users]}]
   (let [{:keys [Path GroupName GroupId Arn CreateDate]} Group]
     {:result/data  {:path Path, :group-name GroupName, :group-id GroupId, :arn Arn, :create-date CreateDate, :users Users}
-     :result/value (conj (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+     :result/value (conj (map #(format "User : %s%s [UserId=%s, Arn=%s] - Created on %s"
                                        (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
                               Users)
-                         (format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
+                         (format "Group : %s%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
                                  Path GroupName GroupId Arn CreateDate))}))
 
 (defmethod format-response ::IAMListGroupsResponseReceived
   [{:keys [Groups]}]
   {:result/data  {:groups Groups}
-   :result/value (map #(format "Group : %s/%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
+   :result/value (map #(format "Group : %s%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
                                (:Path %) (:GroupName %) (:GroupId %) (:Arn %) (:CreateDate %))
                       Groups)})
 
@@ -104,20 +104,20 @@
   [{:keys [User]}]
   (let [{:keys [Path UserName UserId Arn CreateDate]} User]
     {:result/data  {:path Path, :user-name UserName, :user-id UserId, :arn Arn, :create-date CreateDate}
-     :result/value (format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+     :result/value (format "User : %s%s [UserId=%s, Arn=%s] - Created on %s"
                            Path UserName UserId Arn CreateDate)}))
 
 (defmethod format-response ::IAMListUsersResponseReceived
   [{:keys [Users]}]
   {:result/data  {:users Users}
-   :result/value (map #(format "User : %s/%s [UserId=%s, Arn=%s] - Created on %s"
+   :result/value (map #(format "User : %s%s [UserId=%s, Arn=%s] - Created on %s"
                                (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
                       Users)})
 
 (defmethod format-response ::IAMListPoliciesResponseReceived
   [{:keys [Policies]}]
   {:result/data  {:policies Policies}
-   :result/value (map #(format "Policy name : %s/%s [PolicyId=%s, Arn=%s] - Created on %s"
+   :result/value (map #(format "Policy name : %s%s [PolicyId=%s, Arn=%s] - Created on %s"
                                (:Path %) (:PolicyName %) (:PolicyId %) (:Arn %) (:CreateDate %))
                       Policies)})
 
