@@ -9,7 +9,8 @@
 (def aws-schema
   {:aws-access-key-id         non-empty-str
    :aws-secret-access-key     non-empty-str
-   (sch/optional-key :region) non-empty-str})
+   (sch/optional-key :region) non-empty-str
+   (sch/optional-key :dev-mode) sch/Bool})
 
 (defn config
   "Returns AWS-related configuration"
@@ -21,6 +22,7 @@
 ; aws API credentials
 (def aws-access-key-id (:aws-access-key-id (config)))
 (def aws-secret-access-key (:aws-secret-access-key (config)))
+(def dev-mode? (:dev-mode (config)))
 
 (defn make-aws-client
   "Returns an aws client given an aws keywordized service name (:iam, :ec2, :s3 etc.)"
@@ -29,7 +31,9 @@
                             :credentials-provider (cognitect.aws.credentials/basic-credentials-provider
                                                     {:access-key-id     aws-access-key-id
                                                      :secret-access-key aws-secret-access-key})})]
-    (aws/validate-requests client true)
+    (when (and (not (nil? dev-mode?))
+               (true? dev-mode?))
+      (aws/validate-requests client true))
     client))
 
 ; AWS clients
