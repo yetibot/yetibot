@@ -25,10 +25,13 @@
 (defn make-aws-client
   "Returns an aws client given an aws keywordized service name (:iam, :ec2, :s3 etc.)"
   [service-name]
-  (aws/client {:api                  service-name
-               :credentials-provider (cognitect.aws.credentials/basic-credentials-provider
-                                       {:access-key-id     aws-access-key-id
-                                        :secret-access-key aws-secret-access-key})}))
+  (let [client (aws/client {:api                  service-name
+                            :credentials-provider (cognitect.aws.credentials/basic-credentials-provider
+                                                    {:access-key-id     aws-access-key-id
+                                                     :secret-access-key aws-secret-access-key})})]
+    (aws/validate-requests client true)
+    client))
+
 ; AWS clients
 (def iam (when (configured?) (make-aws-client :iam)))
 
