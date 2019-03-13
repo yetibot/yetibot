@@ -21,6 +21,11 @@
 (s/def ::UserAddedToGroup (s/keys :req-un [::AddUserToGroupResponse
                                            ::AddUserToGroupResponseAttrs]))
 
+(s/def ::RemoveUserFromGroupResponse (s/keys :req-un [::ResponseMetadata]))
+(s/def ::RemoveUserFromGroupResponseAttrs (s/keys :req-un [::xmlns]))
+(s/def ::UserRemovedFromGroup (s/keys :req-un [::RemoveUserFromGroupResponse
+                                               ::RemoveUserFromGroupResponseAttrs]))
+
 (s/def ::AttachUserPolicyResponse (s/keys :req-un [::ResponseMetadata]))
 (s/def ::AttachUserPolicyResponseAttrs (s/keys :req-un [::xmlns]))
 (s/def ::IAMUserPolicyAttached (s/keys :req-un [::AttachUserPolicyResponse

@@ -63,6 +63,13 @@
                    :request {:UserName  user-name
                              :GroupName group-name}}))
 
+(defn iam-remove-user-from-group
+  "Removes an IAM user from a group"
+  [group-name user-name]
+  (aws/invoke iam {:op      :RemoveUserFromGroup
+                   :request {:UserName  user-name
+                             :GroupName group-name}}))
+
 (defn iam-get-group
   "Returns the list of IAM user associated with this group"
   [groupe-name]
