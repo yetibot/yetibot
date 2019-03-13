@@ -3,8 +3,7 @@
     [yetibot.core.schema :refer [non-empty-str]]
     [schema.core :as sch]
     [yetibot.core.config :refer [get-config]]
-    [cognitect.aws.client.api :as aws]
-    [clojure.spec.alpha :as s]))
+    [cognitect.aws.client.api :as aws]))
 
 (def aws-schema
   {:aws-access-key-id         non-empty-str
