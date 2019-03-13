@@ -1,7 +1,10 @@
 (ns yetibot.commands.aws.formatters
   (:require
     [clojure.spec.alpha :as s]
+    [cognitect.aws.client.api :as aws]
     [yetibot.commands.aws.specs :as aws.spec]))
+
+(def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
 
 ; AWS API response formatting utility function
 (defmulti format-response
@@ -10,37 +13,37 @@
           (fn [response]
             (let [aws-type (:aws/type (meta response))]
               (cond
-                (and (s/valid? ::aws.spec/CreatedGroup response)
+                (and (s/valid? (iam-response-spec :CreateGroup) response)
                      (= aws-type :aws.type/CreatedGroup)) ::IAMGroupCreated
-                (and (s/valid? ::aws.spec/CreatedUser response)
+                (and (s/valid? (iam-response-spec :CreateUser) response)
                      (= aws-type :aws.type/CreatedUser)) ::IAMUserCreated
-                (and (s/valid? ::aws.spec/GetGroupResponse response)
+                (and (s/valid? (iam-response-spec :GetGroup) response)
                      (= aws-type :aws.type/GetGroupResponse)) ::IAMGetGroupResponseReceived
                 (and (s/valid? ::aws.spec/UserAddedToGroup response)
                      (= aws-type :aws.type/UserAddedToGroup)) ::IAMUserAddedToGroup
-                (and (s/valid? ::aws.spec/ListGroupsResponse response)
+                (and (s/valid? (iam-response-spec :ListGroups) response)
                      (= aws-type :aws.type/ListGroupsResponse)) ::IAMListGroupsResponseReceived
                 (and (s/valid? ::aws.spec/UserDeleted response)
                      (= aws-type :aws.type/UserDeleted)) ::IAMUserDeleted
-                (and (s/valid? ::aws.spec/GetUserResponse response)
+                (and (s/valid? (iam-response-spec :GetUser) response)
                      (= aws-type :aws.type/GetUserResponse)) ::IAMGetUserResponseReceived
-                (and (s/valid? ::aws.spec/ListUsersResponse response)
+                (and (s/valid? (iam-response-spec :ListUsers) response)
                      (= aws-type :aws.type/ListUsersResponse)) ::IAMListUsersResponseReceived
                 (and (s/valid? ::aws.spec/GroupDeleted response)
                      (= aws-type :aws.type/GroupDeleted)) ::IAMGroupDeleted
-                (and (s/valid? ::aws.spec/ListPoliciesResponse response)
+                (and (s/valid? (iam-response-spec :ListPolicies) response)
                      (= aws-type :aws.type/ListPoliciesResponse)) ::IAMListPoliciesResponseReceived
                 (and (s/valid? ::aws.spec/IAMUserPolicyAttached response)
                      (= aws-type :aws.type/UserPolicyAttached)) ::IAMUserPolicyAttached
-                (and (s/valid? ::aws.spec/ListAttachedUserPoliciesResponse response)
+                (and (s/valid? (iam-response-spec :ListAttachedUserPolicies) response)
                      (= aws-type :aws.type/ListAttachedUserPoliciesResponse)) ::IAMListAttachedUserPoliciesResponseReceived
-                (and (s/valid? ::aws.spec/LoginProfileCreated response)
+                (and (s/valid? (iam-response-spec :CreateLoginProfile) response)
                      (= aws-type :aws.type/LoginProfileCreated)) ::IAMLoginProfileCreated
                 (and (s/valid? ::aws.spec/LoginProfileUpdated response)
                      (= aws-type :aws.type/LoginProfileUpdated)) ::IAMLoginProfileUpdated
-                (and (s/valid? ::aws.spec/CreatedAccessKey response)
+                (and (s/valid? (iam-response-spec :CreateAccessKey) response)
                      (= aws-type :aws.type/CreatedAccessKey)) ::IAMAccessKeyCreated
-                (and (s/valid? ::aws.spec/ListAccessKeysResponse response)
+                (and (s/valid? (iam-response-spec :ListAccessKeys) response)
                      (= aws-type :aws.type/ListAccessKeysResponse)) ::IAMListAccessKeysResponseReceived
                 (and (s/valid? ::aws.spec/AccessKeyDeleted response)
                      (= aws-type :aws.type/AccessKeyDeleted)) ::IAMAccessKeyDeleted
