@@ -38,10 +38,12 @@
       format-response))
 
 (defn iam-add-user-to-group-cmd
-  "aws iam add-user-to-group <user-name> <group-name> # Adds an aws IAM user named <user-name> to an IAM group named <group-name>"
+  "aws iam add-user-to-group <group-name> <user-name> # Adds an aws IAM user <user-name> to an IAM group <group-name>"
   {:yb/cat #{:util :info}}
-  [{[_ user-name group-name] :match}]
-  (-> (aws/iam-add-user-to-group user-name group-name)
+  [{[_ group-name user-name] :match}]
+  (-> (aws/iam-add-user-to-group group-name user-name)
+      (with-meta {:aws/type :aws.type/UserAddedToGroup})
+      format-response))
       (with-meta {:aws/type :aws.type/UserAddedToGroup})
       format-response))
 

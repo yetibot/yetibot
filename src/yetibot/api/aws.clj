@@ -58,7 +58,7 @@
 
 (defn iam-add-user-to-group
   "Adds an IAM user to a group"
-  [user-name group-name]
+  [group-name user-name]
   (aws/invoke iam {:op      :AddUserToGroup
                    :request {:UserName  user-name
                              :GroupName group-name}}))
