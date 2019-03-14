@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.7 - 3/14/2019
+
+- Upgrade to yetibot.core 0.5.8
+- Ignored .dumbjump for Emacs' dumb-jump
+
 ## 0.5.6 - 3/4/2019
 
 - Upgrade to yetibot.core 0.5.7
