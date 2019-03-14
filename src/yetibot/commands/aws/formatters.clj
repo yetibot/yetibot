@@ -21,6 +21,8 @@
                      (= aws-type :aws.type/GetGroupResponse)) ::IAMGetGroupResponseReceived
                 (and (s/valid? ::aws.spec/UserAddedToGroup response)
                      (= aws-type :aws.type/UserAddedToGroup)) ::IAMUserAddedToGroup
+                (and (s/valid? ::aws.spec/UserRemovedFromGroup response)
+                     (= aws-type :aws.type/UserRemovedFromGroup)) ::IAMUserRemovedFromGroup
                 (and (s/valid? (iam-response-spec :ListGroups) response)
                      (= aws-type :aws.type/ListGroupsResponse)) ::IAMListGroupsResponseReceived
                 (and (s/valid? ::aws.spec/UserDeleted response)
@@ -70,6 +72,13 @@
   (let [request-id (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "User successfully added to group [RequestId=%s]"
+                           request-id)}))
+
+(defmethod format-response ::IAMUserRemovedFromGroup
+  [response]
+  (let [request-id (get-in response [:RemoveUserFromGroupResponse :ResponseMetadata :RequestId])]
+    {:result/data  {:request-id request-id}
+     :result/value (format "User successfully removed from group [RequestId=%s]"
                            request-id)}))
 
 (defmethod format-response ::IAMUserDeleted

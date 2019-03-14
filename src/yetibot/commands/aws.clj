@@ -25,8 +25,8 @@
   "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
   {:yb/cat #{:util :info}}
   [{[_ user-name] :match}]
-  (-> (aws/iam-create-user user-name)
-      (with-meta {:aws/type :aws.type/CreatedUser})
+    (-> (aws/iam-create-user user-name)
+        (with-meta {:aws/type :aws.type/CreatedUser})
       format-response))
 
 (defn iam-create-user-in-path-cmd
@@ -38,11 +38,19 @@
       format-response))
 
 (defn iam-add-user-to-group-cmd
-  "aws iam add-user-to-group <user-name> <group-name> # Adds an aws IAM user named <user-name> to an IAM group named <group-name>"
+  "aws iam add-user-to-group <group-name> <user-name> # Adds an aws IAM user <user-name> to an IAM group <group-name>"
   {:yb/cat #{:util :info}}
-  [{[_ user-name group-name] :match}]
-  (-> (aws/iam-add-user-to-group user-name group-name)
+  [{[_ group-name user-name] :match}]
+  (-> (aws/iam-add-user-to-group group-name user-name)
       (with-meta {:aws/type :aws.type/UserAddedToGroup})
+      format-response))
+
+(defn iam-remove-user-from-group-cmd
+  "aws iam remove-user-from-group <group-name> <user-name> # Removes an aws IAM user <user-name> from the IAM group <group-name>"
+  {:yb/cat #{:util :info}}
+  [{[_ group-name user-name] :match}]
+  (-> (aws/iam-remove-user-from-group group-name user-name)
+      (with-meta {:aws/type :aws.type/UserRemovedFromGroup})
       format-response))
 
 (defn iam-get-group-cmd
@@ -214,6 +222,7 @@
             #"iam get-user\s+(\S+)" iam-get-user-cmd
             #"iam delete-user\s+(\S+)" iam-delete-user-cmd
             #"iam add-user-to-group\s+(\S+)\s+(\S+)" iam-add-user-to-group-cmd
+            #"iam remove-user-from-group\s+(\S+)\s+(\S+)" iam-remove-user-from-group-cmd
             #"iam list-policies\s+(\S+)\s+(\S+)" iam-list-policies-with-scope-in-path-cmd
             #"iam list-policies\s+(\S+)" iam-list-policies-in-path-cmd
             #"iam list-policies" iam-list-policies-cmd
