@@ -21,6 +21,7 @@
 ; aws API credentials
 (def aws-access-key-id (:aws-access-key-id (config)))
 (def aws-secret-access-key (:aws-secret-access-key (config)))
+(def region (:region (config)))
 (def dev-mode? (:dev-mode (config)))
 
 (defn make-aws-client
@@ -29,7 +30,8 @@
   (let [client (aws/client {:api                  service-name
                             :credentials-provider (cognitect.aws.credentials/basic-credentials-provider
                                                     {:access-key-id     aws-access-key-id
-                                                     :secret-access-key aws-secret-access-key})})]
+                                                     :secret-access-key aws-secret-access-key})
+                            :region               region})]
     (when (and (not (nil? dev-mode?))
                (true? dev-mode?))
       (aws/validate-requests client true))
