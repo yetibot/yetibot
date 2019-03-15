@@ -6,7 +6,13 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.8 - 3/14/2019
+
+- Fix missing cheshire dep
+
 ## 0.5.7 - 3/14/2019
+
+Botched release - use 0.5.8 instead.
 
 - Upgrade to yetibot.core 0.5.8
 - Ignored .dumbjump for Emacs' dumb-jump

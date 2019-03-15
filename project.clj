@@ -49,6 +49,9 @@
                  [com.google.cloud/google-cloud-storage "1.57.0"]
                  [pager-duty-api "2.0"]
 
+                 ; TODO remove this and use data.json instead
+                 [cheshire "5.8.1"]
+
                  ; scraping
                  [org.jsoup/jsoup "1.11.3"]
 
