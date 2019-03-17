@@ -22,7 +22,8 @@
 (def aws-access-key-id (:aws-access-key-id (config)))
 (def aws-secret-access-key (:aws-secret-access-key (config)))
 (def region (:region (config)))
-(def dev-mode? (:dev-mode (config)))
+(def dev-mode? (and (not (nil? (:dev-mode (config))))
+                    (true? (:dev-mode (config)))))
 
 (defn make-aws-client
   "Returns an aws client given an aws keywordized service name (:iam, :ec2, :s3 etc.)"
@@ -32,8 +33,7 @@
                                                     {:access-key-id     aws-access-key-id
                                                      :secret-access-key aws-secret-access-key})
                             :region               region})]
-    (when (and (not (nil? dev-mode?))
-               (true? dev-mode?))
+    (when dev-mode?
       (aws/validate-requests client true))
     client))
 
