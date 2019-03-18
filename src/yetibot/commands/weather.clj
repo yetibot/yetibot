@@ -22,7 +22,7 @@
                                                query-params)})
           {:keys [status body]} (http.client/get uri options)]
       (condp = status
-        200 (first (:data body))
+        200 body
         204 {:error "Location not found."}))
     (catch Exception e
       (let [{:keys [status body]} (ex-data e)]
@@ -40,7 +40,8 @@
 (defn- current-by-pc
   "Get current conditions by post code and country code"
   [pc cc]
-  (get-json (endpoint "current") {:query-params {:postal_code pc :country cc}}))
+  (get-json (endpoint "current") {:query-params {:postal_code pc
+                                                 :country cc}}))
 
 (defn- error-response [{:keys [error]}]
   (when error
@@ -122,11 +123,12 @@
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
   [{:keys [match]}]
-  (let [cs (current match)]
+  (let [body (current match)]
     (or
-      (error-response cs)
-      {:result/value (format-current cs)
-       :result/data cs})))
+      (error-response body)
+      (let [{[cs] :data} body]
+        {:result/value (format-current cs)
+         :result/data cs}))))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
@@ -137,6 +139,45 @@
     {:result/error "A default zip code is not configured.
                     Configure it at path weather.weatherbitio.default.zip"}))
 
-(cmd-hook ["weather" #"^weather$"]
-          #".+" weather-cmd
-          _ default-weather-cmd)
+;; forecast
+(defn- forecast-by-name
+  "Get forecast conditions by location name str"
+  [city]
+  (get-json
+    (endpoint "forecast/daily")
+    {:query-params {:city city
+                    :days 16}}))
+
+(comment
+
+  (current-by-name "seattle")
+
+  (forecast-by-name "san jose")
+
+  (defn- forecast-by-pc
+    "Get forecast conditions by post code and country code"
+    [pc cc]
+    (get-json (endpoint "forecast/daily")
+              {:query-params {:postal_code pc
+                              :country cc}}))
+
+
+  (defn forecast
+    [s]
+    (if-let [[pc cc] (apply chk-postal-code (str/split s #"\s*,\s*"))]
+      (forecast-by-pc pc cc)
+      (forecast-by-name s)))
+
+  )
+
+(defn forecast-cmd
+  "weather forecast <location> # look up daily forecast for <location> by name or postal code"
+  {:yb/cat #{:info}}
+  [{:keys [match]}]
+
+  )
+
+(cmd-hook #"weather"
+  #"forecast" forecast-cmd
+  #".+" weather-cmd
+  _ default-weather-cmd)

@@ -36,3 +36,17 @@
        (fact fmt-wind
              (fmt-wind loc-nyc) => "Winds 6.2 mph N"
              (fmt-wind loc-bcr) => "Winds 10.0 km/h SSE"))
+
+(comment
+  (forecast-by-name "seattle, wa")
+
+  (=
+   (forecast-by-pc 59101 "us")
+   (current-by-pc 59101 "us")
+   )
+
+  (let [name "seattle, wa"]
+    (endpoint "forecast/daily" (format "city=%s" (encode name)))
+    )
+
+  )
