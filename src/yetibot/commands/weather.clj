@@ -22,7 +22,7 @@
                                                query-params)})
           {:keys [status body]} (http.client/get uri options)]
       (condp = status
-        200 (first (:data body))
+        200 body
         204 {:error "Location not found."}))
     (catch Exception e
       (let [{:keys [status body]} (ex-data e)]
@@ -122,11 +122,12 @@
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
   [{:keys [match]}]
-  (let [cs (current match)]
+  (let [result (current match)]
     (or
-      (error-response cs)
-      {:result/value (format-current cs)
-       :result/data cs})))
+      (error-response result)
+      (let [{[cs] :data} result]
+        {:result/value (format-current cs)
+         :result/data cs}))))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
