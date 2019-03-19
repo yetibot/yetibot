@@ -22,14 +22,16 @@
                                                query-params)})
           {:keys [status body]} (http.client/get uri options)]
       (condp = status
-        200 (first (:data body))
+        200 body
         204 {:error "Location not found."}))
     (catch Exception e
       (let [{:keys [status body]} (ex-data e)]
         (error "Request failed with status:" status)
         body))))
 
-(defn- endpoint [repr]
+(defn- endpoint
+  "API docs: https://www.weatherbit.io/api"
+  [repr]
   (str "https://api.weatherbit.io/v2.0/" repr))
 
 (defn- current-by-name
@@ -40,7 +42,8 @@
 (defn- current-by-pc
   "Get current conditions by post code and country code"
   [pc cc]
-  (get-json (endpoint "current") {:query-params {:postal_code pc :country cc}}))
+  (get-json (endpoint "current") {:query-params {:postal_code pc
+                                                 :country cc}}))
 
 (defn- error-response [{:keys [error]}]
   (when error
@@ -122,11 +125,12 @@
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
   [{:keys [match]}]
-  (let [cs (current match)]
+  (let [result (current match)]
     (or
-      (error-response cs)
-      {:result/value (format-current cs)
-       :result/data cs})))
+      (error-response result)
+      (let [{[cs] :data} result]
+        {:result/value (format-current cs)
+         :result/data cs}))))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
