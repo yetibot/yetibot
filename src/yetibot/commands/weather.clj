@@ -29,7 +29,9 @@
         (error "Request failed with status:" status)
         body))))
 
-(defn- endpoint [repr]
+(defn- endpoint
+  "API docs: https://www.weatherbit.io/api"
+  [repr]
   (str "https://api.weatherbit.io/v2.0/" repr))
 
 (defn- current-by-name
@@ -40,7 +42,8 @@
 (defn- current-by-pc
   "Get current conditions by post code and country code"
   [pc cc]
-  (get-json (endpoint "current") {:query-params {:postal_code pc :country cc}}))
+  (get-json (endpoint "current") {:query-params {:postal_code pc
+                                                 :country cc}}))
 
 (defn- error-response [{:keys [error]}]
   (when error
