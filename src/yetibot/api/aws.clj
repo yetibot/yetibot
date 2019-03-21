@@ -42,8 +42,6 @@
 
 (defn iam-create-group
   "Creates an aws IAM group within the specified path"
-  ([group-name]
-   (iam-create-group "/" group-name))
   ([path group-name]
    (aws/invoke iam {:op      :CreateGroup
                     :request {:Path      path
@@ -51,8 +49,6 @@
 
 (defn iam-create-user
   "Creates an aws IAM user"
-  ([user-name]
-   (iam-create-user "/" user-name))
   ([path user-name]
    (aws/invoke iam {:op      :CreateUser
                     :request {:Path     path
@@ -80,8 +76,6 @@
 
 (defn iam-list-groups
   "Returns the list of IAM groups that have the specified path prefix"
-  ([]
-   (iam-list-groups "/"))
   ([path]
    (aws/invoke iam {:op      :ListGroups
                     :request {:PathPrefix path}})))
@@ -100,8 +94,6 @@
 
 (defn iam-list-users
   "Returns the list of IAM users that have the specified path prefix"
-  ([]
-   (iam-list-users "/"))
   ([path]
    (aws/invoke iam {:op      :ListUsers
                     :request {:PathPrefix path}})))
@@ -114,10 +106,6 @@
 
 (defn iam-list-policies
   "Lists IAM policies available within the api account"
-  ([]
-   (iam-list-policies "All" "/"))
-  ([path]
-   (iam-list-policies "All" path))
   ([scope path]
    (aws/invoke iam {:op      :ListPolicies
                     :request {:Scope scope
@@ -132,8 +120,6 @@
 
 (defn iam-list-attached-user-policies
   "Lists all managed policies attached to a user"
-  ([user-name]
-   (iam-list-attached-user-policies "/" user-name))
   ([path user-name]
    (aws/invoke iam {:op      :ListAttachedUserPolicies
                     :request {:Path     path

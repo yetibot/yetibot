@@ -17,7 +17,7 @@
   "aws iam create-group <group-name> # Creates an aws IAM group named <group-name> within the default path /"
   {:yb/cat #{:util :info}}
   [{[_ group-name] :match}]
-  (-> (aws/iam-create-group group-name)
+  (-> (aws/iam-create-group "/" group-name)
       (with-meta {:aws/type :aws.type/CreatedGroup})
       format-response))
 
@@ -25,7 +25,7 @@
   "aws iam create-user <user-name> # Creates an aws IAM user named <user-name>"
   {:yb/cat #{:util :info}}
   [{[_ user-name] :match}]
-    (-> (aws/iam-create-user user-name)
+    (-> (aws/iam-create-user "/" user-name)
         (with-meta {:aws/type :aws.type/CreatedUser})
       format-response))
 
@@ -73,7 +73,7 @@
   "aws iam list-groups # Lists the IAM groups in the default / path"
   {:yb/cat #{:util :info}}
   [_]
-  (-> (aws/iam-list-groups)
+  (-> (aws/iam-list-groups "/")
       (with-meta {:aws/type :aws.type/ListGroupsResponse})
       format-response))
 
@@ -97,7 +97,7 @@
   "aws iam list-users # Lists the IAM users within the default / prefix"
   {:yb/cat #{:util :info}}
   [_]
-  (-> (aws/iam-list-users)
+  (-> (aws/iam-list-users "/")
       (with-meta {:aws/type :aws.type/ListUsersResponse})
       format-response))
 
@@ -121,7 +121,7 @@
   "aws iam list-policies # Lists all the managed policies that are available in your AWS account"
   {:yb/cat #{:util :info}}
   [_]
-  (-> (aws/iam-list-policies)
+  (-> (aws/iam-list-policies "All" "/")
       (with-meta {:aws/type :aws.type/ListPoliciesResponse})
       format-response))
 
@@ -129,7 +129,7 @@
   "aws iam list-policies <path> # Lists all the managed policies that are available in your AWS account within the specified <path>"
   {:yb/cat #{:util :info}}
   [{[_ path] :match}]
-  (-> (aws/iam-list-policies path)
+  (-> (aws/iam-list-policies "All" path)
       (with-meta {:aws/type :aws.type/ListPoliciesResponse})
       format-response))
 
@@ -153,7 +153,7 @@
   "aws iam list-attached-user-policies <user-name> # Lists all managed policies that are attached to the specified IAM user."
   {:yb/cat #{:util :info}}
   [{[_ user-name] :match}]
-  (-> (aws/iam-list-attached-user-policies user-name)
+  (-> (aws/iam-list-attached-user-policies "/" user-name)
       (with-meta {:aws/type :aws.type/ListAttachedUserPoliciesResponse})
       format-response))
 
