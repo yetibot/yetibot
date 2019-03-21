@@ -170,7 +170,7 @@
   ability to access AWS services through the AWS Management Console and change it the first time they connect."
   {:yb/cat #{:util :info}}
   [{[_ user-name password] :match}]
-  (-> (aws/iam-create-login-profile user-name password)
+  (-> (aws/iam-create-login-profile user-name password true)
       (with-meta {:aws/type :aws.type/LoginProfileCreated})
       format-response))
 
@@ -179,7 +179,7 @@
   be updated by the user at first login."
   {:yb/cat #{:util :info}}
   [{[_ user-name password] :match}]
-  (-> (aws/iam-update-login-profile user-name password)
+  (-> (aws/iam-update-login-profile user-name password true)
       (with-meta {:aws/type :aws.type/LoginProfileUpdated})
       format-response))
 

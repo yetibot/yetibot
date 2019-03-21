@@ -40,122 +40,78 @@
 ; AWS clients
 (def iam (when (configured?) (make-aws-client :iam)))
 
-(defn iam-create-group
+(defn- aws-invoke
+  [op arg-keys & args]
+  (aws/invoke iam {:op op :request (zipmap arg-keys (vec args))}))
+
+(def iam-create-group
   "Creates an aws IAM group within the specified path"
-  ([path group-name]
-   (aws/invoke iam {:op      :CreateGroup
-                    :request {:Path      path
-                              :GroupName group-name}})))
+  (partial aws-invoke :CreateGroup [:Path :GroupName]))
 
-(defn iam-create-user
+(def iam-create-user
   "Creates an aws IAM user"
-  ([path user-name]
-   (aws/invoke iam {:op      :CreateUser
-                    :request {:Path     path
-                              :UserName user-name}})))
+  (partial aws-invoke :CreateUser [:Path :UserName]))
 
-(defn iam-add-user-to-group
+(def iam-add-user-to-group
   "Adds an IAM user to a group"
-  [group-name user-name]
-  (aws/invoke iam {:op      :AddUserToGroup
-                   :request {:UserName  user-name
-                             :GroupName group-name}}))
+  (partial aws-invoke :AddUserToGroup [:UserName :GroupName]))
 
-(defn iam-remove-user-from-group
+(def iam-remove-user-from-group
   "Removes an IAM user from a group"
-  [group-name user-name]
-  (aws/invoke iam {:op      :RemoveUserFromGroup
-                   :request {:UserName  user-name
-                             :GroupName group-name}}))
+  (partial aws-invoke :RemoveUserFromGroup [:UserName :GroupName]))
 
-(defn iam-get-group
+(def iam-get-group
   "Returns the list of IAM user associated with this group"
-  [groupe-name]
-  (aws/invoke iam {:op      :GetGroup
-                   :request {:GroupName groupe-name}}))
+  (partial aws-invoke :GetGroup [:GroupName]))
 
-(defn iam-list-groups
+(def iam-list-groups
   "Returns the list of IAM groups that have the specified path prefix"
-  ([path]
-   (aws/invoke iam {:op      :ListGroups
-                    :request {:PathPrefix path}})))
+  (partial aws-invoke :ListGroups [:PathPrefix]))
 
-(defn iam-delete-user
+(def iam-delete-user
   "Deletes the specified IAM user"
-  [user-name]
-  (aws/invoke iam {:op      :DeleteUser
-                   :request {:UserName user-name}}))
+  (partial aws-invoke :DeleteUser [:UserName]))
 
-(defn iam-get-user
+(def iam-get-user
   "Retrieves information about the specified IAM user"
-  [user-name]
-  (aws/invoke iam {:op      :GetUser
-                   :request {:UserName user-name}}))
+  (partial aws-invoke :GetUser [:UserName]))
 
-(defn iam-list-users
+(def iam-list-users
   "Returns the list of IAM users that have the specified path prefix"
-  ([path]
-   (aws/invoke iam {:op      :ListUsers
-                    :request {:PathPrefix path}})))
+  (partial aws-invoke :ListUsers [:PathPrefix]))
 
-(defn iam-delete-group
+(def iam-delete-group
   "Deletes the specified IAM group"
-  [group-name]
-  (aws/invoke iam {:op      :DeleteGroup
-                   :request {:GroupName group-name}}))
+  (partial aws-invoke :DeleteGroup [:GroupName]))
 
-(defn iam-list-policies
+(def iam-list-policies
   "Lists IAM policies available within the api account"
-  ([scope path]
-   (aws/invoke iam {:op      :ListPolicies
-                    :request {:Scope scope
-                              :Path  path}})))
+  (partial aws-invoke :ListPolicies [:Scope :Path]))
 
-(defn iam-attach-user-policy
+(def iam-attach-user-policy
   "Attaches an IAM policy to a user"
-  [user-name policy-arn]
-  (aws/invoke iam {:op      :AttachUserPolicy
-                   :request {:UserName  user-name
-                             :PolicyArn policy-arn}}))
+  (partial aws-invoke :AttachUserPolicy [:UserName :PolicyArn]))
 
-(defn iam-list-attached-user-policies
+(def iam-list-attached-user-policies
   "Lists all managed policies attached to a user"
-  ([path user-name]
-   (aws/invoke iam {:op      :ListAttachedUserPolicies
-                    :request {:Path     path
-                              :UserName user-name}})))
+  (partial aws-invoke :ListAttachedUserPolicies [:Path :UserName]))
 
-(defn iam-create-login-profile
+(def iam-create-login-profile
   "Sets a temporary password for the specified user"
-  [user-name password]
-  (aws/invoke iam {:op      :CreateLoginProfile
-                   :request {:UserName              user-name
-                             :Password              password
-                             :PasswordResetRequired true}}))
+  (partial aws-invoke :CreateLoginProfile [:UserName :Password :PasswordResetRequired]))
 
-(defn iam-update-login-profile
+(def iam-update-login-profile
   "Updates the specified user login profile"
-  [user-name password]
-  (aws/invoke iam {:op      :UpdateLoginProfile
-                   :request {:UserName              user-name
-                             :Password              password
-                             :PasswordResetRequired true}}))
+  (partial aws-invoke :UpdateLoginProfile [:UserName :Password :PasswordResetRequired]))
 
-(defn iam-create-access-key
+(def iam-create-access-key
   "Creates an aws secret access key and corresponding aws access key ID"
-  [user-name]
-  (aws/invoke iam {:op      :CreateAccessKey
-                   :request {:UserName user-name}}))
+  (partial aws-invoke :CreateAccessKey [:UserName]))
 
-(defn iam-list-access-keys
+(def iam-list-access-keys
   "Lists aws access key IDs associated with the specified user"
-  [user-name]
-  (aws/invoke iam {:op      :ListAccessKeys
-                   :request {:UserName user-name}}))
+  (partial aws-invoke :ListAccessKeys [:UserName]))
 
-(defn iam-delete-access-key
+(def iam-delete-access-key
   "Deletes the specified user access key having the provided access key ID"
-  [user-name access-key-id]
-  (aws/invoke iam {:op      :DeleteAccessKey
-                   :request {:UserName    user-name
-                             :AccessKeyId access-key-id}}))
+  (partial aws-invoke :DeleteAccessKey [:UserName :AccessKeyId]))
