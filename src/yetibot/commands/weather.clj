@@ -3,7 +3,6 @@
     [schema.core :as sch]
     [clojure.string :as str]
     [clj-http.client :as http.client]
-    [yetibot.core.util.http :refer [encode]]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]
@@ -15,30 +14,36 @@
 (def default-zip (-> config :default :zip))
 
 (defn get-json
-  [uri]
+  [uri {:keys [query-params] :as opts}]
   (try
-    (let [{:keys [status body]} (http.client/get uri {:as :json :coerce :always})]
+    (let [options (merge {:as :json :coerce :always}
+                         opts
+                         {:query-params (merge {:key api-key :units "M"}
+                                               query-params)})
+          {:keys [status body]} (http.client/get uri options)]
       (condp = status
-        200 (first (:data body))
+        200 body
         204 {:error "Location not found."}))
     (catch Exception e
       (let [{:keys [status body]} (ex-data e)]
         (error "Request failed with status:" status)
         body))))
 
-(defn- endpoint [repr q]
-  (format "https://api.weatherbit.io/v2.0/%s?key=%s&units=M&%s" repr api-key q))
+(defn- endpoint
+  "API docs: https://www.weatherbit.io/api"
+  [repr]
+  (str "https://api.weatherbit.io/v2.0/" repr))
 
 (defn- current-by-name
   "Get current conditions by location name str"
   [name]
-  (get-json (endpoint "current" (format "city=%s" (encode name)))))
+  (get-json (endpoint "current") {:query-params {:city name}}))
 
 (defn- current-by-pc
   "Get current conditions by post code and country code"
   [pc cc]
-  (get-json (endpoint "current" (apply format "postal_code=%s&country=%s"
-                                       (map encode [pc cc])))))
+  (get-json (endpoint "current") {:query-params {:postal_code pc
+                                                 :country cc}}))
 
 (defn- error-response [{:keys [error]}]
   (when error
@@ -120,11 +125,12 @@
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
   [{:keys [match]}]
-  (let [cs (current match)]
+  (let [result (current match)]
     (or
-      (error-response cs)
-      {:result/value (format-current cs)
-       :result/data cs})))
+      (error-response result)
+      (let [{[cs] :data} result]
+        {:result/value (format-current cs)
+         :result/data cs}))))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
