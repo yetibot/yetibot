@@ -43,7 +43,14 @@
   "Get current conditions by post code and country code"
   [path pc cc]
   (get-json (endpoint path) {:query-params {:postal_code pc
-                                                 :country cc}}))
+                                            :country cc}}))
+(defn- get-by-loc
+  "Attempt to parse out postal code and call the corresponding get-by-name or
+   get-by-pc function"
+  [path loc]
+  (if-let [[pc cc] (apply chk-postal-code (str/split (str loc) #"\s*,\s*"))]
+    (get-by-pc path pc cc)
+    (get-by-name path loc)))
 
 (defn- error-response [{:keys [error]}]
   (when error
@@ -116,10 +123,8 @@
                fmt-wind]))
 
 (defn current
-  [s]
-  (if-let [[pc cc] (apply chk-postal-code (str/split (str s) #"\s*,\s*"))]
-    (get-by-pc "current" pc cc)
-    (get-by-name "current" s)))
+  [loc]
+  (get-by-loc "current" loc))
 
 (defn weather-cmd
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
