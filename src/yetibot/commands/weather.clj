@@ -31,18 +31,18 @@
 
 (defn- endpoint
   "API docs: https://www.weatherbit.io/api"
-  [repr]
-  (str "https://api.weatherbit.io/v2.0/" repr))
+  [path]
+  (str "https://api.weatherbit.io/v2.0/" path))
 
-(defn- current-by-name
+(defn- get-by-name
   "Get current conditions by location name str"
-  [name]
-  (get-json (endpoint "current") {:query-params {:city name}}))
+  [path city]
+  (get-json (endpoint path) {:query-params {:city city}}))
 
-(defn- current-by-pc
+(defn- get-by-pc
   "Get current conditions by post code and country code"
-  [pc cc]
-  (get-json (endpoint "current") {:query-params {:postal_code pc
+  [path pc cc]
+  (get-json (endpoint path) {:query-params {:postal_code pc
                                                  :country cc}}))
 
 (defn- error-response [{:keys [error]}]
@@ -117,9 +117,9 @@
 
 (defn current
   [s]
-  (if-let [[pc cc] (apply chk-postal-code (str/split s #"\s*,\s*"))]
-    (current-by-pc pc cc)
-    (current-by-name s)))
+  (if-let [[pc cc] (apply chk-postal-code (str/split (str s) #"\s*,\s*"))]
+    (get-by-pc "current" pc cc)
+    (get-by-name "current" s)))
 
 (defn weather-cmd
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
