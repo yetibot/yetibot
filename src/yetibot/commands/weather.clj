@@ -146,6 +146,6 @@
     {:result/error "A default zip code is not configured.
                     Configure it at path weather.weatherbitio.default.zip"}))
 
-(cmd-hook ["weather" #"^weather$"]
-          #".+" weather-cmd
-          _ default-weather-cmd)
+(cmd-hook #"weather"
+  #".+" weather-cmd
+  _ default-weather-cmd)
