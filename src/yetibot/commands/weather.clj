@@ -95,19 +95,22 @@
               (str city_name ", " state_code))]
     (format "%s (%s)" loc country_code)))
 
+(defn fmt-temp
+  [temp unit]
+  (format "%.1f°%s" temp unit))
+
 (defn fmt-description
   [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
   (let [[temp unit] (l10n-temp temp cc)]
-    (format "%.1f°%s - %s"
-            temp unit
+    (format "%s - %s"
+            (fmt-temp temp unit)
             (str/join (map str/capitalize (str/split description #"\b"))))))
 
 (defn fmt-feels-like
   [{cc :country_code app_temp :app_temp}]
   (let [[app_temp unit] (l10n-temp app_temp cc)]
-    (format "Feels like %d°%s"
-            (-> app_temp float Math/round)
-            unit)))
+    (format "Feels like %s"
+            (fmt-temp app_temp unit))))
 
 (defn fmt-wind
   [{cc :country_code :keys [wind_spd wind_cdir]}]
