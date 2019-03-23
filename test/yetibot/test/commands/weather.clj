@@ -31,8 +31,8 @@
              (fmt-description loc-nyc) => "32.0°F - Titlecase Me"
              (fmt-description loc-bcr) => "50.0°C - Titlecase Me")
        (fact fmt-feels-like
-             (fmt-feels-like loc-nyc) => "Feels like 77°F"
-             (fmt-feels-like loc-bcr) => "Feels like 100°C")
+             (fmt-feels-like loc-nyc) => "Feels like 77.0°F"
+             (fmt-feels-like loc-bcr) => "Feels like 100.0°C")
        (fact fmt-wind
              (fmt-wind loc-nyc) => "Winds 6.2 mph N"
              (fmt-wind loc-bcr) => "Winds 10.0 km/h SSE"))
