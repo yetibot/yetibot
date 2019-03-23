@@ -99,6 +99,13 @@
   [temp unit]
   (format "%.1f°%s" temp unit))
 
+(defn fmt-forecast-item [cc f]
+  (format "%s: %s - %s - %s"
+          (:valid_date f)
+          (apply fmt-temp (l10n-temp (:min_temp f) cc))
+          (apply fmt-temp (l10n-temp (:max_temp f) cc))
+          (-> f :weather :description)))
+
 (defn fmt-description
   [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
   (let [[temp unit] (l10n-temp temp cc)]
@@ -129,6 +136,10 @@
   [loc]
   (get-by-loc "current" loc))
 
+(defn forecast
+  [loc]
+  (get-by-loc "forecast/daily" loc))
+
 (defn weather-cmd
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
@@ -149,6 +160,33 @@
     {:result/error "A default zip code is not configured.
                     Configure it at path weather.weatherbitio.default.zip"}))
 
+(defn forecast-cmd
+  "weather forecast <location> # look up 16 day forecast for <location>"
+  {:yb/cat #{:info}}
+  [{[_ loc] :match :as args}]
+  (info (pr-str args))
+  (let [result (forecast loc)]
+    (or
+      (error-response result)
+      (let [{:keys [country_code data]} result]
+        {:result/value
+         (into [(fmt-location-title result)]
+               (map (partial fmt-forecast-item country_code) data))
+         :result/data result}))))
+
+(comment
+
+  (forecast-cmd
+    {:match [nil "seattle"]})
+
+  (current "seattle")
+
+  (forecast "seattle")
+
+  )
+
 (cmd-hook #"weather"
+  #"forecast\s+(.+)" forecast-cmd
   #".+" weather-cmd
   _ default-weather-cmd)
+
