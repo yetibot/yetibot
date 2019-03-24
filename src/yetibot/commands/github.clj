@@ -181,23 +181,24 @@
     (format "No releases found on %s/%s" org-name repo)))
 
 (when (gh/configured?)
-  (cmd-hook ["gh" #"^gh|github$"]
-            #"feed\s+(\S+)" feed
-            #"repos urls\s+(\S+)" repos-urls
-            #"repos urls" repos-urls
-            #"repos\s+(\S+)" repos
-            #"repos" repos
-            #"notify\s+list" notify-list-cmd
-            #"notify\s+add\s+(\S+)" notify-add-cmd
-            #"notify\s+remove\s+(\S+)" notify-remove-cmd
-            #"orgs" orgs
-            #"statuses" statuses
-            #"status$" status
-            #"pr\s+(\S+)" pull-requests
-            #"stats\s+(\S+)\/(\S+)" stats-cmd
-            #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
-            #"tags\s+(\S+)\/(\S+)" tags
-            #"branches\s+(\S+)\/(\S+)" branches
-            #"releases\s+show\s+(\S+)\/(\S+)\s+(\S+)" show-release-info-by-tag-cmd
-            #"releases\s+show\s+(\S+)\/(\S+)" show-latest-release-info-cmd
-            #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd))
+  (cmd-hook {"gh" #"gh"
+             "github" #"github"}
+    #"feed\s+(\S+)" feed
+    #"repos urls\s+(\S+)" repos-urls
+    #"repos urls" repos-urls
+    #"repos\s+(\S+)" repos
+    #"repos" repos
+    #"notify\s+list" notify-list-cmd
+    #"notify\s+add\s+(\S+)" notify-add-cmd
+    #"notify\s+remove\s+(\S+)" notify-remove-cmd
+    #"orgs" orgs
+    #"statuses" statuses
+    #"status$" status
+    #"pr\s+(\S+)" pull-requests
+    #"stats\s+(\S+)\/(\S+)" stats-cmd
+    #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
+    #"tags\s+(\S+)\/(\S+)" tags
+    #"branches\s+(\S+)\/(\S+)" branches
+    #"releases\s+show\s+(\S+)\/(\S+)\s+(\S+)" show-release-info-by-tag-cmd
+    #"releases\s+show\s+(\S+)\/(\S+)" show-latest-release-info-cmd
+    #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd))
