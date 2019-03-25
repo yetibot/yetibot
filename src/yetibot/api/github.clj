@@ -124,9 +124,20 @@
 ;;; repos
 
 (defn repos [org-name]
-  (remove :fork (remove empty?
-                  (with-url endpoint
-                    (r/org-repos org-name (merge auth {:per-page 100}))))))
+  (with-url
+    endpoint
+    (r/org-repos
+      org-name (merge auth {:per-page 100}))))
+
+(comment
+
+  (with-url
+    endpoint
+    (r/org-repos
+      "yetibot" (merge auth {:per-page 100})))
+
+  )
+
 
 (defn repos-by-org []
   (into {} (for [org-name (org-names)]

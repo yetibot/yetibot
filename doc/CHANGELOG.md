@@ -6,6 +6,15 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.12 - Unreleased
+
+- Add `data` support on GitHub commands
+- Allow flexible help and command prefixes for GitHub: `gh` or `github`
+- Remove `gh repos urls` command - use `data` instead!
+  ```
+  !gh repos | data $.[*].ssh_url
+  ```
+
 ## 0.5.11 - 3/21/2019
 
 - Upgrade to yetibot.core 0.5.11
