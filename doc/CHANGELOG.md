@@ -8,12 +8,13 @@ as well.
 
 ## 0.5.12 - Unreleased
 
-- Add `data` support on GitHub commands
+- Add `data` and error handling support on GitHub commands
 - Allow flexible help and command prefixes for GitHub: `gh` or `github`
 - Remove `gh repos urls` command - use `data` instead!
   ```
   !gh repos | data $.[*].ssh_url
   ```
+- Rename `gh statuses` to `gh incidents`
 
 ## 0.5.11 - 3/21/2019
 
