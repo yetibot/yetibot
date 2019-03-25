@@ -9,14 +9,14 @@
 
 (fact test-stats-cmd-polling-no-response
   (stats-cmd {:match (cons "dummy" mock-repo-info)}) =>
-      (apply format "Crunching the latest data for `%s/%s`, try again in a few moments 🐌"
-             mock-repo-info)
+    {:result/error
+     "Crunching the latest data for `wilfred/tv`, try again in a few moments 🐌"}
   (provided
     (gh/sum-stats anything anything) => nil))
 
 (fact test-stats-cmd-polling-success-response
   (stats-cmd {:match (cons "dummy" mock-repo-info)}) =>
-          (apply format "%s/%s: %s commits, %s additions, %s deletions, %s contributors"
-           (into mock-repo-info (vals mock-poll-result)))
+  {:result/data {:a 1 :c 1 :con 4 :d 1}
+   :result/value "wilfred/tv: 1 commits, 1 additions, 1 deletions, 4 contributors"}
   (provided
     (gh/sum-stats anything anything) => mock-poll-result))
