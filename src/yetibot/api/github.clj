@@ -165,15 +165,15 @@
 
 (defn latest-releases [org-name repo]
   (with-url endpoint
-    (r/specific-release org-name repo "latest")))
+    (r/specific-release org-name repo "latest" auth)))
 
 (defn release-by-tag [org-name repo tag]
   (with-url endpoint
-    (r/specific-release-by-tag org-name repo tag)))
+    (r/specific-release-by-tag org-name repo tag auth)))
 
 (defn releases [org-name repo]
   (with-url endpoint
-    (r/releases org-name repo)))
+    (r/releases org-name repo auth)))
 
 (defn sum-weekly
   "Takes the weekly stats for an author and sums them into:

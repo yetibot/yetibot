@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.13 - 3/25/2019
+
+- Add auth to GitHub release API calls
+
 ## 0.5.12 - 3/25/2019
 
 - Add `data` and error handling support on GitHub commands
