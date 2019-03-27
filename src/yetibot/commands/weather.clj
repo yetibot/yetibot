@@ -153,63 +153,6 @@
     {:result/error "A default zip code is not configured.
                     Configure it at path weather.weatherbitio.default.zip"}))
 
-(comment
-
-  ;; basics
-  5
-  "hi"
-  [1 2 3]
-  (+ 1 2 3 4 5 5 5 234 234 234 )
-  (if true "yes" "no")
-  (println "hello!")
-
-  ;; nested expressions
-  (+ 1
-     (* 2 3)
-     (/ 10 2))
-
-  ;; var
-  (def the-answer 42)
-
-  ;; regex
-  (re-find #"^(\S+)\s(\d+)$" "hello 123")
-
-  ;; common data structures
-  [1 2 3]
-  [1 :two "three"]
-  {:a 1 :b 2}
-
-  ;; constructors for data structures
-  (list 1 2 3)
-  (vector 1 2 3)
-  (hash-map :a 1 :b 2)
-  (hash-set :a :b :c)
-
-  ;; data structures are immutable
-  (def user {:username "yetibot"
-             :fullname "Yetibot"
-             :url "https://yetibot.com"})
-
-  (:username user)
-  (user :username)
-  (get user :username)
-  (get user :nope)
-  (get user :nope "default value")
-
-  (def new-user
-    (assoc user :github "https://github.com/yetibot/yetibot"))
-
-  (dissoc user :username)
-
-  ;; existing functionality
-
-  (current "san jose, ca")
-
-  (forecast "san jose, ca")
-
-  )
-
-
 (defn fmt-forecast-item
   "Format a forecast item like: date: min - max"
   [cc {:keys [min_temp max_temp valid_date]}]
