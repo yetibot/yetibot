@@ -6,6 +6,13 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.14 - 3/25/2019
+
+- Upgrade to yetibot.core 0.5.12
+- Add `weather forecast` support
+  [#901](https://github.com/yetibot/yetibot/pull/901)
+- Use auth on GH releases API calls
+
 ## 0.5.13 - 3/25/2019
 
 - Add auth to GitHub release API calls
