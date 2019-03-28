@@ -129,6 +129,10 @@
   [loc]
   (get-by-loc "current" loc))
 
+(defn forecast
+  [loc]
+  (get-by-loc "forecast/daily" loc))
+
 (defn weather-cmd
   "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
   {:yb/cat #{:info}}
@@ -149,6 +153,30 @@
     {:result/error "A default zip code is not configured.
                     Configure it at path weather.weatherbitio.default.zip"}))
 
+(defn fmt-forecast-item
+  "Format a forecast item like: date: min - max"
+  [cc {:keys [min_temp max_temp valid_date]}]
+  (format "%s: %s - %s"
+          valid_date
+          (apply fmt-temp (l10n-temp min_temp cc))
+          (apply fmt-temp (l10n-temp max_temp cc))))
+
+(defn forecast-cmd
+  "weather forecast <location> # look up forecast for <location> by name or postal code, with optional country code"
+  {:yb/cat #{:info}}
+  [{[_ match] :match}]
+  (let [result (forecast match)]
+    (or
+      (error-response result)
+      (let [{:keys [city_name country_code data]} result
+            location (fmt-location-title result)]
+        {:result/value (into [location]
+                             (map
+                               (partial fmt-forecast-item country_code)
+                               data))
+         :result/data result}))))
+
 (cmd-hook #"weather"
+  #"forecast\s+(.+)" forecast-cmd
   #".+" weather-cmd
   _ default-weather-cmd)
