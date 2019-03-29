@@ -52,9 +52,10 @@
     (get-by-pc path pc cc)
     (get-by-name path loc)))
 
-(defn- error-response [{:keys [error]}]
-  (when error
-    {:result/error error}))
+(defn- error-response [{:keys [error status_code status_message]}]
+  (cond
+    error {:result/error error}
+    (= 429 status_code) {:result/error status_message}))
 
 (defn c-to-f [c] (-> (* c 9/5) (+ 32) float))
 (defn km-to-mi [km] (-> (/ km 1.609) float))
