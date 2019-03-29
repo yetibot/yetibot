@@ -44,13 +44,19 @@
   [path pc cc]
   (get-json (endpoint path) {:query-params {:postal_code pc
                                             :country cc}}))
+
 (defn- get-by-loc
   "Attempt to parse out postal code and call the corresponding get-by-name or
    get-by-pc function"
   [path loc]
-  (if-let [[pc cc] (apply chk-postal-code (str/split (str loc) #"\s*,\s*"))]
-    (get-by-pc path pc cc)
-    (get-by-name path loc)))
+  (let [[_ pc cc] (re-matches #"(.+?)(?:,\s*([^,]+))?" (str loc))]
+    (if (nil? cc)
+      (if-let [[pc cc] (chk-postal-code pc)]
+        (get-by-pc path pc cc)
+        (get-by-name path loc))
+      (if-let [[pc cc] (chk-postal-code pc cc)]
+        (get-by-pc path pc cc)
+        (get-by-name path loc)))))
 
 (defn- error-response [{:keys [error status_code status_message]}]
   (cond
