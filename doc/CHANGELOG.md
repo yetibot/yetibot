@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.15 - Unreleased
+
+- Handle `429` errors from Weatherbit in the weather command
+  [#904](https://github.com/yetibot/yetibot/pull/904)
+
 ## 0.5.14 - 3/25/2019
 
 - Upgrade to yetibot.core 0.5.12
