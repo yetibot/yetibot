@@ -2,7 +2,8 @@
   (:require
     [clojure.spec.alpha :as s]
     [cognitect.aws.client.api :as aws]
-    [yetibot.commands.aws.specs :as aws.spec]))
+    [yetibot.commands.aws.specs :as aws.spec]
+    [yetibot.api.aws]))
 
 (def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
 
