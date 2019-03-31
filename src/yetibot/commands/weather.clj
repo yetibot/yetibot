@@ -6,7 +6,8 @@
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.models.postal-code :refer [chk-postal-code]]))
+    [yetibot.models.postal-code :refer [chk-postal-code]]
+    [yetibot.commands.weather.formatters :as fmt]))
 
 (def config (:value (get-config sch/Any [:weather :weatherbitio])))
 
@@ -57,62 +58,12 @@
     error {:result/error error}
     (= 429 status_code) {:result/error status_message}))
 
-(defn c-to-f [c] (-> (* c 9/5) (+ 32) float))
-(defn km-to-mi [km] (-> (/ km 1.609) float))
-
-(def imperial-units
-  {:temp  (fn [v] (format "%.1f°%s" (c-to-f v) "F"))
-   :speed (fn [v] (format "%.1f %s" (km-to-mi v) "mph"))})
-
-(def metric-units
-  {:temp  (fn [v] (format "%.1f°%s" (float v) "C"))
-   :speed (fn [v] (format "%.1f %s" (float v) "km/h"))})
-
-(defn get-formatters-by-cc
-  [cc]
-  (let [cc (-> cc str/lower-case keyword)]
-    (condp = cc
-      :lbr imperial-units  ;; Liberia
-      :mm  imperial-units  ;; Myanmar
-      :us  imperial-units  ;; The United States of America
-      ;; THE ENTIRE REST OF THE WORLD
-      metric-units)))
-
-(defn get-formatters
-  [unit cc]
-  (if (nil? unit)
-    (get-formatters-by-cc cc)
-    (if (= unit :i)
-      imperial-units
-      metric-units)))
-
-(defn fmt-location-title
-  [{:keys [city_name state_code country_code]}]
-  (let [loc (if (re-matches #"\d+" state_code)
-              city_name
-              (str city_name ", " state_code))]
-    (format "%s (%s)" loc country_code)))
-
-(defn fmt-description
-  [{fmt :temp} {temp :temp {:keys [icon code description]} :weather}]
-  (format "%s - %s"
-          (fmt temp)
-          (str/join (map str/capitalize (str/split description #"\b")))))
-
-(defn fmt-feels-like
-  [{fmt :temp} {app_temp :app_temp}]
-  (format "Feels like %s" (fmt app_temp)))
-
-(defn fmt-wind
-  [{fmt :speed} {:keys [wind_spd wind_cdir]}]
-  (format "Winds %s %s" (fmt wind_spd) wind_cdir))
-
 (defn- format-current
   [formatters c]
-  (cons (fmt-location-title c)
-        (map #(% formatters c) [fmt-description
-                                fmt-feels-like
-                                fmt-wind])))
+  (cons (fmt/location-title c)
+        (map #(% formatters c) [fmt/description
+                                fmt/feels-like
+                                fmt/wind])))
 
 (defn current
   [loc]
@@ -139,7 +90,7 @@
     (or
       (error-response result)
       (let [{[cs] :data} result
-            formatters (get-formatters unit (:country_code cs))]
+            formatters (fmt/get-formatters unit (:country_code cs))]
         {:result/value (format-current formatters cs)
          :result/data cs}))))
 
@@ -152,14 +103,6 @@
     {:result/error "A default zip code is not configured.
                     Configure it at path weather.weatherbitio.default.zip"}))
 
-(defn fmt-forecast-item
-  "Format a forecast item like: date: min - max"
-  [{fmt :temp} {:keys [min_temp max_temp valid_date]}]
-  (format "%s: %s - %s"
-          valid_date
-          (fmt min_temp)
-          (fmt max_temp)))
-
 (defn forecast-cmd
   "weather forecast <location> # look up forecast for <location> by name or postal code, optional country code, -c or -f to force units"
   {:yb/cat #{:info}}
@@ -169,11 +112,11 @@
     (or
       (error-response result)
       (let [{:keys [city_name country_code data]} result
-            formatters (get-formatters unit country_code)
-            location (fmt-location-title result)]
+            formatters (fmt/get-formatters unit country_code)
+            location (fmt/location-title result)]
         {:result/value (into [location]
                              (map
-                               (partial fmt-forecast-item formatters)
+                               (partial fmt/forecast-item formatters)
                                data))
          :result/data result}))))
 
