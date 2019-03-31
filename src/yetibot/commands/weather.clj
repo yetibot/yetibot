@@ -60,34 +60,31 @@
 (defn c-to-f [c] (-> (* c 9/5) (+ 32) float))
 (defn km-to-mi [km] (-> (/ km 1.609) float))
 
-(defn get-units
+(def imperial-units
+  {:temp  (fn [v] (format "%.1f°%s" (c-to-f v) "F"))
+   :speed (fn [v] (format "%.1f %s" (km-to-mi v) "mph"))})
+
+(def metric-units
+  {:temp  (fn [v] (format "%.1f°%s" (float v) "C"))
+   :speed (fn [v] (format "%.1f %s" (float v) "km/h"))})
+
+(defn get-formatters-by-cc
   [cc]
   (let [cc (-> cc str/lower-case keyword)]
     (condp = cc
-      ;; Liberia
-      :lbr {:temp  {:sym "F"   :conv c-to-f}
-            :speed {:sym "mph" :conv km-to-mi}}
-
-      ;; Myanmar
-      :mm  {:temp  {:sym "F"   :conv c-to-f}
-            :speed {:sym "mph" :conv km-to-mi}}
-
-      ;; The United States of America
-      :us  {:temp  {:sym "F"   :conv c-to-f}
-            :speed {:sym "mph" :conv km-to-mi}}
-
+      :lbr imperial-units  ;; Liberia
+      :mm  imperial-units  ;; Myanmar
+      :us  imperial-units  ;; The United States of America
       ;; THE ENTIRE REST OF THE WORLD
-      {:temp  {:sym "C"    :conv float}
-       :speed {:sym "km/h" :conv float}})))
+      metric-units)))
 
-(defn- l10n-value
-  [v u cc]
-  (let [{:keys [sym conv]} (get (get-units cc) u)]
-    [(conv v) sym]))
-
-(defn- l10n-temp [temp cc] (l10n-value temp :temp cc))
-
-(defn- l10n-speed [speed cc] (l10n-value speed :speed cc))
+(defn get-formatters
+  [unit cc]
+  (if (nil? unit)
+    (get-formatters-by-cc cc)
+    (if (= unit :i)
+      imperial-units
+      metric-units)))
 
 (defn fmt-location-title
   [{:keys [city_name state_code country_code]}]
@@ -96,35 +93,26 @@
               (str city_name ", " state_code))]
     (format "%s (%s)" loc country_code)))
 
-(defn fmt-temp
-  [temp unit]
-  (format "%.1f°%s" temp unit))
-
 (defn fmt-description
-  [{cc :country_code temp :temp {:keys [icon code description]} :weather}]
-  (let [[temp unit] (l10n-temp temp cc)]
-    (format "%s - %s"
-            (fmt-temp temp unit)
-            (str/join (map str/capitalize (str/split description #"\b"))))))
+  [{fmt :temp} {temp :temp {:keys [icon code description]} :weather}]
+  (format "%s - %s"
+          (fmt temp)
+          (str/join (map str/capitalize (str/split description #"\b")))))
 
 (defn fmt-feels-like
-  [{cc :country_code app_temp :app_temp}]
-  (let [[app_temp unit] (l10n-temp app_temp cc)]
-    (format "Feels like %s"
-            (fmt-temp app_temp unit))))
+  [{fmt :temp} {app_temp :app_temp}]
+  (format "Feels like %s" (fmt app_temp)))
 
 (defn fmt-wind
-  [{cc :country_code :keys [wind_spd wind_cdir]}]
-  (let [[wind_spd unit] (l10n-speed wind_spd cc)]
-    (format "Winds %.1f %s %s"
-            wind_spd unit wind_cdir)))
+  [{fmt :speed} {:keys [wind_spd wind_cdir]}]
+  (format "Winds %s %s" (fmt wind_spd) wind_cdir))
 
 (defn- format-current
-  [c]
-  (map #(% c) [fmt-location-title
-               fmt-description
-               fmt-feels-like
-               fmt-wind]))
+  [formatters c]
+  (cons (fmt-location-title c)
+        (map #(% formatters c) [fmt-description
+                                fmt-feels-like
+                                fmt-wind])))
 
 (defn current
   [loc]
@@ -134,15 +122,25 @@
   [loc]
   (get-by-loc "forecast/daily" loc))
 
+(defn parse-args
+  "parse args to vec of unit kw and args str"
+  [s]
+  (let [[_ unit args] (re-matches #"(?i)(?:\s*(-[micf]))?\s*(.+)", s)
+        unit (when-not (nil? unit)
+               (if (or (= unit "-i") (= unit "-f")) :i :m))]
+    [unit args]))
+
 (defn weather-cmd
-  "weather <location> # look up current weather for <location> by name or postal code, with optional country code"
+  "weather <location> # look up current weather for <location> by name or postal code, optional country code, -c or -f to force units"
   {:yb/cat #{:info}}
   [{:keys [match]}]
-  (let [result (current match)]
+  (let [[unit loc] (parse-args match)
+        result (current loc)]
     (or
       (error-response result)
-      (let [{[cs] :data} result]
-        {:result/value (format-current cs)
+      (let [{[cs] :data} result
+            formatters (get-formatters unit (:country_code cs))]
+        {:result/value (format-current formatters cs)
          :result/data cs}))))
 
 (defn default-weather-cmd
@@ -156,24 +154,26 @@
 
 (defn fmt-forecast-item
   "Format a forecast item like: date: min - max"
-  [cc {:keys [min_temp max_temp valid_date]}]
+  [{fmt :temp} {:keys [min_temp max_temp valid_date]}]
   (format "%s: %s - %s"
           valid_date
-          (apply fmt-temp (l10n-temp min_temp cc))
-          (apply fmt-temp (l10n-temp max_temp cc))))
+          (fmt min_temp)
+          (fmt max_temp)))
 
 (defn forecast-cmd
-  "weather forecast <location> # look up forecast for <location> by name or postal code, with optional country code"
+  "weather forecast <location> # look up forecast for <location> by name or postal code, optional country code, -c or -f to force units"
   {:yb/cat #{:info}}
   [{[_ match] :match}]
-  (let [result (forecast match)]
+  (let [[unit loc] (parse-args match)
+        result (forecast loc)]
     (or
       (error-response result)
       (let [{:keys [city_name country_code data]} result
+            formatters (get-formatters unit country_code)
             location (fmt-location-title result)]
         {:result/value (into [location]
                              (map
-                               (partial fmt-forecast-item country_code)
+                               (partial fmt-forecast-item formatters)
                                data))
          :result/data result}))))
 
