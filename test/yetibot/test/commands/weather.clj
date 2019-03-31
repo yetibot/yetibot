@@ -24,10 +24,10 @@
    :wind_cdir "SSE"})
 
 (def formatters-us (get-formatters nil (:country_code loc-nyc)))
-(def formatters-us-metric (get-formatters :c (:country_code loc-nyc)))
+(def formatters-us-metric (get-formatters :m (:country_code loc-nyc)))
 
 (def formatters-ro (get-formatters nil (:country_code loc-bcr)))
-(def formatters-ro-imperl (get-formatters :f (:country_code loc-bcr)))
+(def formatters-ro-imperl (get-formatters :i (:country_code loc-bcr)))
 
 (facts "about fomatting fns"
        (fact fmt-location-title
