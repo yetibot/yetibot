@@ -40,7 +40,8 @@
   "Retrieve the list of configured projects for a channel, given its settings"
   [channel-settings]
   (when-let [setting (channel-settings jira-project-setting-key)]
-    (s/split setting #",\s*")))
+    (info "channel-projects" (pr-str setting))
+    (seq (remove s/blank? (s/split setting #",\s*")))))
 
 (defn config [] (:value (get-config jira-schema [:jira])))
 
