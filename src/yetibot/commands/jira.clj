@@ -41,7 +41,8 @@
       ;; sometimes JIRA 200s even when there are errors so check if there are
       ;; errors in the json response
       (info "jira succ" status (pr-str body))
-      (if (:errors body)
+      (if (or (:errorMessages body)
+              (:errors body))
         (format-error res)
         (succ-fn res)))
     (catch Exception e
@@ -339,11 +340,37 @@
       {:result/value (str "Deleted " issue-key)
        :result/data (:body res)})))
 
+(defn worklog-cmd
+  "jira worklog <issue> <time-spent> <work-description> # log work on <issue>"
+  [{[_ issue-key time-spent work-description] :match}]
+  (if-let [issue-data (:body (api/get-issue issue-key))]
+    (report-if-error
+      #(api/add-worklog-item issue-key time-spent work-description)
+      (fn [res]
+        (info "worklog-response" (pr-str res))
+        (if res
+          {:result/value (-> issue-key
+                             api/get-issue
+                             :body
+                             api/format-issue-long)
+           :result/data res})))
+    {:result/error (str "Unable to find any issue `" issue-key "`")}))
+
+(comment
+
+  (-> "YETIBOT-1"
+      api/get-issue
+      :body
+      api/format-issue-long)
+
+  )
+
 (cmd-hook #"jira"
   #"^projects" projects-cmd
   #"^parse\s+(.+)" parse-cmd
   #"^show\s+(\S+)" show-cmd
   #"^delete\s+(\S+)" delete-cmd
+  #"^worklog\s+(\S+)\s+(\S+)\s+(.+)" worklog-cmd
   #"^components" components-cmd
   #"^versions\s*(\S+)*" versions-cmd
   #"^recent" recent-cmd
