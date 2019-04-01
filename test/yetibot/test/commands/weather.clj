@@ -1,7 +1,8 @@
 (ns yetibot.test.commands.weather
   (:require
    [midje.sweet :refer [facts fact =>]]
-   [yetibot.commands.weather :refer :all]))
+   [yetibot.commands.weather :refer :all]
+   [yetibot.commands.weather.formatters :as fmt]))
 
 (def loc-nyc
   {:city_name "New York"
@@ -23,16 +24,26 @@
    :wind_spd 10
    :wind_cdir "SSE"})
 
+(def formatters-us (fmt/get-formatters nil (:country_code loc-nyc)))
+(def formatters-us-metric (fmt/get-formatters :m (:country_code loc-nyc)))
+
+(def formatters-ro (fmt/get-formatters nil (:country_code loc-bcr)))
+(def formatters-ro-imperl (fmt/get-formatters :i (:country_code loc-bcr)))
+
 (facts "about fomatting fns"
-       (fact fmt-location-title
-             (fmt-location-title loc-nyc) => "New York, NY (US)"
-             (fmt-location-title loc-bcr) => "Bucharest (RO)")
-       (fact fmt-description
-             (fmt-description loc-nyc) => "32.0°F - Titlecase Me"
-             (fmt-description loc-bcr) => "50.0°C - Titlecase Me")
-       (fact fmt-feels-like
-             (fmt-feels-like loc-nyc) => "Feels like 77.0°F"
-             (fmt-feels-like loc-bcr) => "Feels like 100.0°C")
-       (fact fmt-wind
-             (fmt-wind loc-nyc) => "Winds 6.2 mph N"
-             (fmt-wind loc-bcr) => "Winds 10.0 km/h SSE"))
+       (fact fmt/location-title
+             (fmt/location-title loc-nyc) => "New York, NY (US)"
+             (fmt/location-title loc-bcr) => "Bucharest (RO)")
+       (fact fmt/description
+             (fmt/description formatters-us loc-nyc)        => "32.0°F - Titlecase Me"
+             (fmt/description formatters-us-metric loc-nyc) => "0.0°C - Titlecase Me"
+             (fmt/description formatters-ro loc-bcr)        => "50.0°C - Titlecase Me"
+             (fmt/description formatters-ro-imperl loc-bcr) => "122.0°F - Titlecase Me")
+       (fact fmt/feels-like
+             (fmt/feels-like formatters-us  loc-nyc) => "Feels like 77.0°F"
+             (fmt/feels-like formatters-ro loc-bcr)  => "Feels like 100.0°C")
+       (fact fmt/wind
+             (fmt/wind formatters-us loc-nyc)        => "Winds 6.2 mph N"
+             (fmt/wind formatters-us-metric loc-nyc) => "Winds 10.0 km/h N"
+             (fmt/wind formatters-ro loc-bcr)        => "Winds 10.0 km/h SSE"
+             (fmt/wind formatters-ro-imperl loc-bcr) => "Winds 6.2 mph SSE"))
