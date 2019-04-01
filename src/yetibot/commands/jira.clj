@@ -233,11 +233,16 @@
   {:yb/cat #{:issue}}
   [{:keys [settings]}]
   (binding [api/*jira-projects* (channel-projects settings)]
-    (report-if-error
-      #(api/recent)
-      (fn [res]
-        {:result/value (short-jira-list res)
-         :result/data (-> res :body :issues)}))))
+    (info "recent" (pr-str api/*jira-projects*))
+    (if api/*jira-projects*
+      (report-if-error
+        #(api/recent)
+        (fn [res]
+          {:result/value (short-jira-list res)
+           :result/data (-> res :body :issues)}))
+      {:result/error
+       "You don't have any JIRA projects configured for this channel. Use `channel set jira-project PROJECT1,PROJECT2` to configure 1 or more."
+       })))
 
 (defn search-cmd
   "jira search <query> # return up to 15 issues matching <query> across all configured projects"
