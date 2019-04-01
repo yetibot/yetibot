@@ -14,8 +14,9 @@
   {:domain non-empty-str
    :user non-empty-str
    :password non-empty-str
-   :projects [{:key non-empty-str
-               (sch/optional-key :default) {:version {:id non-empty-str}}}]
+   (sch/optional-key :projects) [{:key non-empty-str
+                                  (sch/optional-key :default)
+                                  {:version {:id non-empty-str}}}]
    (sch/optional-key :default)
    {(sch/optional-key :issue) {:type {:id non-empty-str}}
     (sch/optional-key :project) {:key non-empty-str}}
@@ -40,7 +41,8 @@
   "Retrieve the list of configured projects for a channel, given its settings"
   [channel-settings]
   (when-let [setting (channel-settings jira-project-setting-key)]
-    (s/split setting #",\s*")))
+    (info "channel-projects" (pr-str setting))
+    (seq (remove s/blank? (s/split setting #",\s*")))))
 
 (defn config [] (:value (get-config jira-schema [:jira])))
 
@@ -211,12 +213,61 @@
                         {:content-type :json
                          :form-params {:body body}}))))
 
+(defn add-worklog-item [issue-key time-spent work-description]
+  (let [uri (endpoint "/issue/%s/worklog" issue-key)
+        form-params {:timeSpent time-spent
+                     :comment work-description}]
+    (client/post uri
+                 (merge client-opts
+                        {:content-type :json
+                         :form-params form-params}))))
+(comment
+
+  ;; scratch space for playing with JIRA api
+
+  (def username "_Yetibot_admin")
+
+  (client/get (endpoint "/user/properties")
+              (merge client-opts
+                     {:query-params {:username username}
+                      :throw-exceptions false
+                      }
+                     ))
+
+  (def yetibot
+    (client/get (endpoint "/user")
+                (merge client-opts
+                       {:query-params {:username "_Yetibot_admin"}
+                        :throw-exceptions false}
+                       )))
+
+  (def updated-name "Yetibot")
+
+  ;; these don't work /shrug
+  (client/put (endpoint "/user/properties/displayName")
+              (merge client-opts
+                     {:query-params {:username username
+                                     :value updated-name}
+                      :throw-exceptions false}))
+  (client/put (endpoint "/user")
+              (merge client-opts
+                     {:query-params {:username username
+                                     :key "name"
+                                     :value "Yetibot"}
+                      :throw-exceptions false }))
+
+  )
+
+
 (defn get-issue
   "Fetch json for a given JIRA"
   [i]
   (let [uri (endpoint "/issue/%s" i)
         opts (merge client-opts {:query-params {"fields" "*navigable,comment,worklog,attachment"}})]
-    (client/get uri opts)))
+    (try
+      (client/get uri opts)
+      (catch Exception e
+        (info "issue not found" i)))))
 
 (def fetch-and-format-issue-short (comp format-issue-short :body get-issue))
 
