@@ -310,6 +310,8 @@
               :form-params params
               :content-type :json}))))
 
+;; TODO consolidate determineing project key from context (channel settings or
+;; global config)
 
 (defn create-issue
   "This thing is a beast; thanks JIRA."
