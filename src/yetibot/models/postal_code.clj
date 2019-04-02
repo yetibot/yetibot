@@ -61,5 +61,7 @@
   ISO country code and the canonical format of the postal code."
   ([s]    (pc-chk-clean s postal-codes))
   ([s cc]
-   (if-let [postal-codes (get postal-codes (str/upper-case cc))]
-     (pc-chk-clean s {cc postal-codes }))))
+   (if (nil? cc)
+     (chk-postal-code s)
+     (if-let [postal-codes (get postal-codes (str/upper-case cc))]
+       (pc-chk-clean s {cc postal-codes })))))
