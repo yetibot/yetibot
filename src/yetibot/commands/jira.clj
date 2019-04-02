@@ -4,7 +4,7 @@
     [yetibot.observers.jira :refer [report-jira]]
     [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
     [taoensso.timbre :refer [info debug warn error]]
-    [clojure.string :refer [split join trim]]
+    [clojure.string :refer [split join trim blank?]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [clojure.data.json :as json]
     [yetibot.api.jira :as api
@@ -117,6 +117,7 @@
 (def issue-opts
   [["-j" "--project-key PROJECT KEY" "Project key"]
    ["-c" "--component COMPONENT" "Component"]
+   ["-i" "--issue-type ISSUE TYPE" "Issue type"]
    ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
    ["-f" "--fix-version FIX VERSION" "Fix version"]
@@ -134,33 +135,50 @@
                  (into {} (map (fn [[k v]] [k (trim v)]) options))))))
 
 (defn create-cmd
-  "jira create <summary> [-c <component>] [-j project-key] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  "jira create <summary> [-c <component>] [-j project-key] [-i issue-type] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   {:yb/cat #{:issue}}
   [{[_ opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (let [parsed (parse-issue-opts opts-str)
           summary (->> parsed :arguments (join " "))
           opts (:options parsed)
+          issue-type (when-let [issue-type (:issue-type opts)]
+                       (let [parsed-it (read-string issue-type)]
+                         (if (number? parsed-it)
+                           ;; they provided an id so use that but in string form
+                           issue-type
+                           ;; they provided a string so match by name and grab
+                           ;; the first one
+                           (let [its (api/issue-types)
+                                 pattern (re-pattern
+                                          (str "(?i)" (:issue-type opts)))]
+                             (:id (first (filter #(re-find pattern (:name %))
+                                                 its)))))))
           component-ids (when (:component opts)
                           (map :id
                                (api/find-component-like (:component opts))))]
-      (report-if-error
-        #(api/create-issue
-          (filter-nil-vals
+      (if (or (seq api/*jira-projects*)
+              (:project-key opts))
+        (report-if-error
+         #(api/create-issue
+           (filter-nil-vals
             (merge
-              {:summary summary}
-              (when component-ids {:component-ids component-ids})
-              (select-keys opts [:fix-version :project-key :parent
-                                 :desc :assignee])
-              (when (:time opts)
-                {:timetracking {:originalEstimate (:time opts)
-                                :remainingEstimate (:time opts)}}))))
-        (fn [res]
-          (info "create command" (pr-str res))
-          (let [iss-key (-> res :body :key)]
-            {:result/value (api/fetch-and-format-issue-short iss-key)
-             :result/data (select-keys
-                            res [:body :status :request-time])}))))))
+             {:summary summary}
+             (when issue-type {:issue-type-id issue-type})
+             (when component-ids {:component-ids component-ids})
+             (select-keys opts [:fix-version :project-key :parent
+                                :desc :assignee])
+             (when (:time opts)
+               {:timetracking {:originalEstimate (:time opts)
+                               :remainingEstimate (:time opts)}}))))
+         (fn [res]
+           (info "create command" (pr-str res))
+           (let [iss-key (-> res :body :key)]
+             {:result/value (api/fetch-and-format-issue-short iss-key)
+              :result/data (select-keys
+                            res [:body :status :request-time])})))
+        {:result/error
+         "No project specified. Either specify it directly with `-j project-key` or set channel jira project(s) with `channel set jira-project PROJECT1,PROJECT2`"}))))
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-r <remaining time estimated>]"
@@ -356,16 +374,34 @@
            :result/data res})))
     {:result/error (str "Unable to find any issue `" issue-key "`")}))
 
+(defn issue-types-cmd
+  "jira issue-types [<name to match>] # return issue types, optionally filtering on <name to match>"
+  [{[_ issue-types-filter] :match}]
+  (info "issue-types-cmd" issue-types-filter)
+  (let [its (api/issue-types)
+        ;; optionally filter the issue types if the user provided a pattern
+        filtered (if (blank? issue-types-filter)
+                   its
+                   (let [pattern (re-pattern
+                                   (str "(?i)" issue-types-filter))]
+                     (filter #(re-find pattern (:name %)) its)))]
+    {:result/value (map (fn [{issue-type-name :name
+                              :keys [id description]}]
+                          (format "[%s] %s: %s" id issue-type-name description))
+                        filtered)
+     :result/data filtered}))
+
 (comment
 
   (-> "YETIBOT-1"
       api/get-issue
       :body
       api/format-issue-long)
-
   )
 
+
 (cmd-hook #"jira"
+  #"^issue-types\s*(.*)" issue-types-cmd
   #"^projects" projects-cmd
   #"^parse\s+(.+)" parse-cmd
   #"^show\s+(\S+)" show-cmd
