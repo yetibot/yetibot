@@ -379,12 +379,12 @@
      :result/data filtered}))
 
 (comment
+
   (-> "YETIBOT-1"
       api/get-issue
       :body
       api/format-issue-long)
   )
-
 
 
 (cmd-hook #"jira"
