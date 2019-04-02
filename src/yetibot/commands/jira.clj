@@ -117,6 +117,7 @@
 (def issue-opts
   [["-j" "--project-key PROJECT KEY" "Project key"]
    ["-c" "--component COMPONENT" "Component"]
+   ["-i" "--issue-type ISSUE TYPE" "Issue type"]
    ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
    ["-f" "--fix-version FIX VERSION" "Fix version"]
@@ -134,38 +135,50 @@
                  (into {} (map (fn [[k v]] [k (trim v)]) options))))))
 
 (defn create-cmd
-  "jira create <summary> [-c <component>] [-j project-key] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  "jira create <summary> [-c <component>] [-j project-key] [-i issue-type] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   {:yb/cat #{:issue}}
   [{[_ opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (let [parsed (parse-issue-opts opts-str)
           summary (->> parsed :arguments (join " "))
           opts (:options parsed)
+          issue-type (when-let [issue-type (:issue-type opts)]
+                       (let [parsed-it (read-string issue-type)]
+                         (if (number? parsed-it)
+                           ;; they provided an id so use that but in string form
+                           issue-type
+                           ;; they provided a string so match by name and grab
+                           ;; the first one
+                           (let [its (api/issue-types)
+                                 pattern (re-pattern
+                                          (str "(?i)" (:issue-type opts)))]
+                             (:id (first (filter #(re-find pattern (:name %))
+                                                 its)))))))
           component-ids (when (:component opts)
                           (map :id
                                (api/find-component-like (:component opts))))]
       (if (or (seq api/*jira-projects*)
               (:project-key opts))
         (report-if-error
-          #(api/create-issue
-             (filter-nil-vals
-               (merge
-                 {:summary summary}
-                 (when component-ids {:component-ids component-ids})
-                 (select-keys opts [:fix-version :project-key :parent
-                                    :desc :assignee])
-                 (when (:time opts)
-                   {:timetracking {:originalEstimate (:time opts)
-                                   :remainingEstimate (:time opts)}}))))
-          (fn [res]
-            (info "create command" (pr-str res))
-            (let [iss-key (-> res :body :key)]
-              {:result/value (api/fetch-and-format-issue-short iss-key)
-               :result/data (select-keys
-                              res [:body :status :request-time])})))
+         #(api/create-issue
+           (filter-nil-vals
+            (merge
+             {:summary summary}
+             (when issue-type {:issue-type-id issue-type})
+             (when component-ids {:component-ids component-ids})
+             (select-keys opts [:fix-version :project-key :parent
+                                :desc :assignee])
+             (when (:time opts)
+               {:timetracking {:originalEstimate (:time opts)
+                               :remainingEstimate (:time opts)}}))))
+         (fn [res]
+           (info "create command" (pr-str res))
+           (let [iss-key (-> res :body :key)]
+             {:result/value (api/fetch-and-format-issue-short iss-key)
+              :result/data (select-keys
+                            res [:body :status :request-time])})))
         {:result/error
-         "No project specified. Either specify it directly with `-j project-key` or set channel jira project(s) with `channel set jira-project PROJECT1,PROJECT2`"
-         }))))
+         "No project specified. Either specify it directly with `-j project-key` or set channel jira project(s) with `channel set jira-project PROJECT1,PROJECT2`"}))))
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-r <remaining time estimated>]"

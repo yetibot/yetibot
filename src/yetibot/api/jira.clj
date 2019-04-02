@@ -14,6 +14,7 @@
   {:domain non-empty-str
    :user non-empty-str
    :password non-empty-str
+   ;; deprecate this in favor of channel based projects
    (sch/optional-key :projects) [{:key non-empty-str
                                   (sch/optional-key :default)
                                   {:version {:id non-empty-str}}}]
@@ -256,6 +257,8 @@
                                      :value "Yetibot"}
                       :throw-exceptions false }))
 
+  ;; get issue types
+
   )
 
 
@@ -288,6 +291,8 @@
 (defn issue-types []
   (:body (client/get (endpoint "/issuetype") client-opts)))
 
+(count (issue-types))
+
 (defn update-issue
   [issue-key {:keys [fix-version summary component-ids assignee priority-key desc timetracking]}]
   (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
@@ -318,9 +323,11 @@
   [{:keys [summary component-ids assignee priority-key desc project-key
            fix-version timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
-         issue-type-id (if parent (sub-task-issue-type-id) (default-issue-type-id))
+         issue-type-id (if parent (sub-task-issue-type-id)
+                         (default-issue-type-id))
          project-key (or (first *jira-projects*)
                          (default-project-key))}}]
+  (info "issue-type-id" issue-type-id)
   (if-let [prj (find-project project-key)]
     (if-let [priority (if priority-key
                         (find-priority-by-key priority-key)
