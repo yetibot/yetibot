@@ -291,8 +291,6 @@
 (defn issue-types []
   (:body (client/get (endpoint "/issuetype") client-opts)))
 
-(count (issue-types))
-
 (defn update-issue
   [issue-key {:keys [fix-version summary component-ids assignee priority-key desc timetracking]}]
   (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
