@@ -120,6 +120,7 @@
    ["-i" "--issue-type ISSUE TYPE" "Issue type"]
    ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
+   ["-e" "--reporter REPORTER" "Reporter"]
    ["-f" "--fix-version FIX VERSION" "Fix version"]
    ["-d" "--desc DESCRIPTION" "Description"]
    ["-t" "--time TIME ESTIAMTED" "Time estimated"]
@@ -129,13 +130,14 @@
 (defn parse-issue-opts
   "Parse opts using issue-opts and trim all the values of the keys in options"
   [opts]
-  (let [parsed (parse-opts (map trim (split opts #"(?=\s-\w)|(?<=\s-\w)")) issue-opts)]
+  (let [parsed (parse-opts
+                 (map trim (split opts #"(?=\s-\w)|(?<=\s-\w)")) issue-opts)]
     (update-in parsed [:options]
                (fn [options]
                  (into {} (map (fn [[k v]] [k (trim v)]) options))))))
 
 (defn create-cmd
-  "jira create <summary> [-c <component>] [-j project-key] [-i issue-type] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  "jira create <summary> [-c <component>] [-j project-key] [-i issue-type] [-e reporter] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   {:yb/cat #{:issue}}
   [{[_ opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
@@ -167,7 +169,7 @@
              (when issue-type {:issue-type-id issue-type})
              (when component-ids {:component-ids component-ids})
              (select-keys opts [:fix-version :project-key :parent
-                                :desc :assignee])
+                                :desc :reporter :assignee])
              (when (:time opts)
                {:timetracking {:originalEstimate (:time opts)
                                :remainingEstimate (:time opts)}}))))
