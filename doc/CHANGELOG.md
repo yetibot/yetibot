@@ -3,8 +3,28 @@
 Note: `yetibot` depends on [yetibot.core](https://github.com/yetibot/yetibot.core)
 which contains Yetibot's core functionality along with a few commands. See
 [yetibot.core's
-changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
+cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
+
+## 0.5.16 - 4/2/2019
+
+Weather and JIRA improvements this release!
+
+- Add option to specify temps in C or F on weather
+  [#910](https://github.com/yetibot/yetibot/pull/910)
+  by [@jcorrado](https://github.com/jcorrado)
+- Fix weather parser [#907](https://github.com/yetibot/yetibot/pull/907)
+  by [@jcorrado](https://github.com/jcorrado)
+- Add ability to specify reporter when creating jira issues
+  [#916](https://github.com/yetibot/yetibot/pull/916)
+- Allow specifying issue type when creating jira issues
+  [#913](https://github.com/yetibot/yetibot/pull/913)
+- Add error handling when trying to create a JIRA issue without specifying a
+  project and a project was not set in the channel settings
+  improvements [#911](https://github.com/yetibot/yetibot/pull/911)
+- Add ability to log work on JIRA issue
+  [#912](https://github.com/yetibot/yetibot/pull/912)
+- Upgrade to yetibot.core 0.5.13
 
 ## 0.5.15 - 3/29/2019
 
