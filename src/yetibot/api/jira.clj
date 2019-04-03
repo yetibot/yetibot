@@ -292,7 +292,7 @@
   (:body (client/get (endpoint "/issuetype") client-opts)))
 
 (defn update-issue
-  [issue-key {:keys [fix-version summary component-ids assignee priority-key desc timetracking]}]
+  [issue-key {:keys [fix-version summary component-ids reporter assignee priority-key desc timetracking]}]
   (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
         params {:fields
                 (merge
@@ -300,6 +300,7 @@
                   (when fix-version {:fixVersions [{:name fix-version}]})
                   (when summary {:summary summary})
                   (when assignee {:assignee assignee})
+                  (when reporter {:reporter reporter})
                   (when component-ids {:components (map #(hash-map :id %) component-ids)})
                   (when desc {:description desc})
                   (when timetracking {:timetracking timetracking})
@@ -318,7 +319,7 @@
 
 (defn create-issue
   "This thing is a beast; thanks JIRA."
-  [{:keys [summary component-ids assignee priority-key desc project-key
+  [{:keys [summary component-ids reporter assignee priority-key desc project-key
            fix-version timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
          issue-type-id (if parent (sub-task-issue-type-id)
@@ -344,6 +345,7 @@
                             :description desc
                             :issuetype {:id issue-type-id}
                             :priority {:id pri-id}}
+                           (when reporter {:reporter {:name reporter}})
                            (when fix-version-map :fixVersions [fix-version-map])
                            (when timetracking {:timetracking timetracking})
                            (when parent {:parent {:id parent}}))}]
