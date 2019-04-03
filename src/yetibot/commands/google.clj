@@ -4,7 +4,8 @@
     [clojure.string :refer [join trim lower-case split]]
     [clojure.tools.cli :refer [parse-opts]]
     [yetibot.api.google :as api]
-    [yetibot.core.hooks :refer [cmd-hook suppress]]))
+    [yetibot.core.chat :refer [suppress]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defonce options-atom (atom {}))
 

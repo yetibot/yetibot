@@ -3,7 +3,8 @@
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :refer [join]]
     [yetibot.models.twitter :as model]
-    [yetibot.core.hooks :refer [cmd-hook suppress]]))
+    [yetibot.core.chat :refer [suppress]]
+    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (def limit-chars (comp join take))
 
