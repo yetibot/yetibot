@@ -137,7 +137,7 @@
                  (into {} (map (fn [[k v]] [k (trim v)]) options))))))
 
 (defn create-cmd
-  "jira create <summary> [-c <component>] [-j project-key] [-i issue-type] [-e reporter] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
+  "jira create <summary> [-c <component>] [-j project-key (use `channel set jira-project PROJECT1 to set a channel-specific default)] [-i issue-type] [-e reporter] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
   {:yb/cat #{:issue}}
   [{[_ opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
