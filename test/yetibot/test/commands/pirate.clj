@@ -39,7 +39,6 @@
       (if-prob 0 inc 0) => 0
       (if-prob 0 inc 1) => 1)
 
-
 (def test-cmd-input {:match test-str})
 
 (fact "pirate-cmd has well-formed return"
