@@ -129,11 +129,15 @@
 (defn pirate-cmd
   "pirate <string> # translate string into proper pirate, yar <string>"
   {:yb/cat #{:info}}
-  [{:keys [match]}]
-  (let [prob (probability)]
-    (-> (to-pirate match)
-        (if-prob suffix-flavor prob)
-        (if-prob slurrr prob))))
+  [{s :match}]
+  (let [prob (probability)
+        trans (-> (to-pirate s)
+                  (if-prob suffix-flavor prob)
+                  (if-prob slurrr prob))]
+    {:result/value trans
+     :result/data {:original s
+                   :translation trans
+                   :variation prob}}))
 
 (cmd-hook #"pirate"
-  #".+" pirate-cmd)
+          #".+" pirate-cmd)

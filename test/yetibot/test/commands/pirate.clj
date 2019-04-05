@@ -1,6 +1,7 @@
 (ns yetibot.test.commands.pirate
   (:require
    [midje.sweet :refer [facts fact =>]]
+   [yetibot.core.midje :refer [value data]]
    [clojure.string :as str]
    [yetibot.commands.pirate :refer :all]))
 
@@ -37,3 +38,17 @@
 (fact "if-prob respects probability constant"
       (if-prob 0 inc 0) => 0
       (if-prob 0 inc 1) => 1)
+
+
+(def test-cmd-input {:match test-str})
+
+(fact "pirate-cmd has well-formed return"
+      (pirate-cmd test-cmd-input) => map?
+      (pirate-cmd test-cmd-input) => (value string?)
+      (pirate-cmd test-cmd-input) => (data map?))
+
+(fact "pirate-cmd data result keys show original string and differing translation"
+      (pirate-cmd test-cmd-input) => (data (fn [{s :original}] (= s test-str)))
+      (pirate-cmd test-cmd-input) => (data (fn
+                                             [{:keys [original translation]}]
+                                             (not= original translation))))
