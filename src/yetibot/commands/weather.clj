@@ -63,7 +63,7 @@
 (defn- format-current
   [formatters c]
   (cons (fmt/location-title c)
-        (map #(% formatters c) [fmt/description
+        (map #(% formatters c) [fmt/summary
                                 fmt/feels-like
                                 fmt/wind])))
 

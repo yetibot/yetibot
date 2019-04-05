@@ -24,6 +24,10 @@
       ;; THE ENTIRE REST OF THE WORLD
       metric-units)))
 
+(defn- fmt-description
+  [s]
+  (str/join (map str/capitalize (str/split s #"\b"))))
+
 (defn get-formatters
   [unit cc]
   (if (nil? unit)
@@ -39,11 +43,11 @@
               (str city_name ", " state_code))]
     (format "%s (%s)" loc country_code)))
 
-(defn description
-  [{fmt :temp} {temp :temp {:keys [icon code description]} :weather}]
+(defn summary
+  [{fmt :temp} {temp :temp {description :description} :weather}]
   (format "%s - %s"
           (fmt temp)
-          (str/join (map str/capitalize (str/split description #"\b")))))
+          (fmt-description description)))
 
 (defn feels-like
   [{fmt :temp} {app_temp :app_temp}]
@@ -55,8 +59,9 @@
 
 (defn forecast-item
   "Format a forecast item like: date: min - max"
-  [{fmt :temp} {:keys [min_temp max_temp valid_date]}]
-  (format "%s: %s - %s"
+  [{fmt :temp} {:keys [min_temp max_temp valid_date weather]}]
+  (format "%s: %s - %s, %s"
           valid_date
           (fmt min_temp)
-          (fmt max_temp)))
+          (fmt max_temp)
+          (fmt-description (:description weather))))
