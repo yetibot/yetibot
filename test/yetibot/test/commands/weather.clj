@@ -34,11 +34,11 @@
        (fact fmt/location-title
              (fmt/location-title loc-nyc) => "New York, NY (US)"
              (fmt/location-title loc-bcr) => "Bucharest (RO)")
-       (fact fmt/description
-             (fmt/description formatters-us loc-nyc)        => "32.0°F - Titlecase Me"
-             (fmt/description formatters-us-metric loc-nyc) => "0.0°C - Titlecase Me"
-             (fmt/description formatters-ro loc-bcr)        => "50.0°C - Titlecase Me"
-             (fmt/description formatters-ro-imperl loc-bcr) => "122.0°F - Titlecase Me")
+       (fact fmt/summary
+             (fmt/summary formatters-us loc-nyc)        => "32.0°F - Titlecase Me"
+             (fmt/summary formatters-us-metric loc-nyc) => "0.0°C - Titlecase Me"
+             (fmt/summary formatters-ro loc-bcr)        => "50.0°C - Titlecase Me"
+             (fmt/summary formatters-ro-imperl loc-bcr) => "122.0°F - Titlecase Me")
        (fact fmt/feels-like
              (fmt/feels-like formatters-us  loc-nyc) => "Feels like 77.0°F"
              (fmt/feels-like formatters-ro loc-bcr)  => "Feels like 100.0°C")
