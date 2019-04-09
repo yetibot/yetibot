@@ -6,7 +6,7 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-## 0.5.17 - Unrleased
+## 0.5.17 - 4/9/2019
 
 - Added data and error handling to Twitter commands
 - Include full text in Twitter posts instead of the abbreviated version
