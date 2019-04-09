@@ -55,7 +55,7 @@
   "twitter track <topic> # track a <topic> on the Twitter stream"
   [{[_ topic] :match user :user}]
   (if (model/find-by-topic topic)
-    (format "You're already tracking %s." topic)
+    {:result/error (format "You're already tracking %s." topic)}
     {:result/data (model/add-topic (:id user) topic)
      :result/value (format "Tracking %s" topic)}))
 
