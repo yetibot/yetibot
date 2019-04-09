@@ -58,7 +58,7 @@
        (join " ")))
 
 (defn format-tweet-text [json]
-  (str (:text json) " " (format-media-urls json)))
+  (str (:full_text json) " " (format-media-urls json)))
 
 (defn format-tweet [json]
   (let [screen-name (format-screen-name json)
@@ -105,7 +105,11 @@
   (info "twitter search for" query)
   (search-tweets
     :oauth-creds creds
-    :params {:count 20 :q query :lang (:lang (:search config))}))
+    :params {:tweet_mode "extended"
+             :count 20
+             :q query
+             :lang (:lang (:search config))}))
+
 
 ;;;; topic tracking
 
@@ -120,15 +124,18 @@
                            :oauth-creds creds
                            :callbacks streaming-callback)))
 
-(defn reload-topics [] (reset-streaming-topics (map :topic (db/find-all))))
+(defn reload-topics []
+  (reset-streaming-topics (map :topic (db/find-all))))
 
 (defn add-topic [user-id topic]
-  (db/create {:user-id user-id :topic topic})
-  (reload-topics))
+  (let [result (db/create {:user-id user-id :topic topic})]
+    (reload-topics)
+    result))
 
 (defn remove-topic [topic-id]
-  (db/delete topic-id)
-  (reload-topics))
+  (let [result (db/delete topic-id)]
+    (reload-topics)
+    result))
 
 ;; on startup, load the existing topics
 (future (reload-topics))
@@ -185,7 +192,8 @@
 
 (defn show [id]
   (statuses-show-id :oauth-creds creds
-                    :params {:id id}))
+                    :params {:tweet_mode "extended"
+                             :id id}))
 
 ;; db helpers
 
@@ -194,3 +202,27 @@
 
 (defn find-all []
   (db/find-all))
+
+;; scratch
+
+(comment
+
+  (->>
+    (search "#rot13")
+    :body
+    :statuses
+    first
+    )
+
+
+  (->>
+    (search "#rot13")
+    :body
+    keys)
+
+  (->>
+    (search "#rot13")
+    :body
+    :search_metadata)
+
+  )
