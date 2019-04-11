@@ -2,12 +2,11 @@
   (:require
     [clojure.string :as s]
     [clojail.core :refer [sandbox]]
-    [clojail.testers :refer [secure-tester]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [taoensso.timbre :refer [error debug info color-str]]
     [yetibot.core.util.http :refer [get-json map-to-query-string]]))
 
-(def sb (sandbox secure-tester :timeout 5000))
+(def sb (sandbox [] :timeout 5000))
 
 (defn clojure-cmd
   "clj <expression> # evaluate a clojure expression"

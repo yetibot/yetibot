@@ -71,16 +71,7 @@
                  [com.vdurmont/emoji-java "4.0.0"]
 
                  ; repls
-                 [clojail "1.0.6"
-                  ;; clojail hasn't been updated in a long time, so exclude its
-                  ;; deps
-                  :exclusions [org.clojure/clojure
-                               org.flatland/useful
-                               ;; Note: excluding bultitude disables clojail's
-                               ;; `blanket` feature
-                               bultitude
-                               ]]
-                 [bultitude "0.2.8"]
+                 [juji/clojail "1.0.9"]
 
                  ;encoding
                  [org.clojure/data.codec "0.1.1"]
