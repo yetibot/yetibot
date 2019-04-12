@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.20 - 4/12/2019
+
+- Apply a new fix for `clj` by ensuring the proper `.java.policy` location when
+  running in Docker
+
 ## 0.5.19 - 4/11/2019
 
 - Fixup `clj` command to prevent security exceptions and allow access to data
