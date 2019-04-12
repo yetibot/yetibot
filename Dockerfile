@@ -33,4 +33,4 @@ VOLUME $WORKDIR/config/
 
 VOLUME $LOGDIR
 
-CMD ["lein", "run"]
+CMD ["lein", "with-profile" "+docker" "run"]
