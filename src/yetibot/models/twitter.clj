@@ -5,7 +5,7 @@
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.chat :as chat]
     [schema.core :as sch]
-    [taoensso.timbre :refer [info warn error]]
+    [taoensso.timbre :refer [info debug warn error]]
     [clj-http.client :as client]
     [clojure.string :as s :refer [join]]
     [clojure.data.json :as json]
@@ -73,13 +73,18 @@
             ; (-> (:text json) expand-twitter-urls html-decode)
             screen-name url)))
 
-(defn send-tweet [json]
+(defn send-tweet
+  "Broadcast tweet to any channels that have broadcast: true, e.g.:
+   channel set broadcast true"
+  [json]
+  (info "send-tweet" (pr-str json))
   (chat/broadcast (format-tweet json)))
 
 ;;;; streaming callback
 
 (defn succ [x y]
   (try
+    (debug "streaming callback success" (pr-str x) (pr-str y))
     (let [raw (str y)
           json (if-not (empty? raw) (json/read-json raw))]
       (if (and json (:user json))
@@ -120,7 +125,8 @@
   (when-let [s @statuses-streaming-response] ((:cancel (meta s))))
   ; now create a new streaming connection with the new topics
   (reset! statuses-streaming-response
-          (statuses-filter :params {:track (join "," ts)}
+          (statuses-filter :params {:tweet_mode "extended"
+                                    :track (join "," ts)}
                            :oauth-creds creds
                            :callbacks streaming-callback)))
 
