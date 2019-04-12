@@ -15,6 +15,7 @@
                     :dependencies [[org.clojure/tools.trace "0.7.9"]
                                    [midje "1.9.4"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
+             :docker {:jvm-opts ["-Djava.security.policy=/usr/src/app/.java.policy"]}
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
                        :aot :all}
