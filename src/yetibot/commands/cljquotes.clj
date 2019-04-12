@@ -1,5 +1,6 @@
 (ns yetibot.commands.cljquotes
   (:require
+    [clojure.core.memoize :as memo]
     [clojure.edn :as edn]
     [clojure.string :as string]
 
@@ -13,10 +14,13 @@
   (let [url "https://raw.githubusercontent.com/Azel4231/clojure-quotes/master/quotes.edn"]
     (-> (client/get url)
         :body
-        edn/read-string
-        )))
+        edn/read-string)))
 
-(def quotes (fetch-quotes))
+;; only fetch once per day
+(def quote-fetch-delay (* 24 60 60 1000))
+
+(def quotes
+  (memo/ttl fetch-quotes :ttl/threshold quote-fetch-delay))
 
 (defn format-quote
   [quote]
@@ -29,12 +33,12 @@
 (defn quote-cmd
   "cljquote # random clojure quote"
   [context]
-  (let [quote (rand-nth quotes)]
+  (let [quote (rand-nth (quotes))]
     {:result/value (format-quote quote)
      :result/data quote}))
 
 (cmd-hook #"cljquote"
   _ quote-cmd)
 
-#_(format-quote (rand-nth quotes))
-#_(string/join "\n\n" (map format-quote quotes))
+#_(format-quote (rand-nth (quotes)))
+#_(string/join "\n\n" (map format-quote (quotes)))
