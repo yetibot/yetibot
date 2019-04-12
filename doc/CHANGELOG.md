@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.21 - 4/12/2019
+
+- Upgrade to yetibot.core 0.5.16
+
 ## 0.5.20 - 4/12/2019
 
 - Apply a new fix for `clj` by ensuring the proper `.java.policy` location when
