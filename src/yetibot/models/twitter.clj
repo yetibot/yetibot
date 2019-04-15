@@ -5,7 +5,7 @@
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.chat :as chat]
     [schema.core :as sch]
-    [taoensso.timbre :refer [info debug warn error]]
+    [taoensso.timbre :refer [info warn error]]
     [clj-http.client :as client]
     [clojure.string :as s :refer [join]]
     [clojure.data.json :as json]
@@ -69,7 +69,7 @@
       " " (format-media-urls tweet))))
 
 (defn format-tweet [{:keys [extended_tweet] :as json}]
-  (info "tweet json" (pr-str json))
+  #_(info "tweet json" (pr-str json))
   (let [screen-name (format-screen-name json)
         url (format-url screen-name (:id json))
         retweeted-status (:retweeted_status json)
@@ -86,7 +86,7 @@
   "Broadcast tweet to any channels that have broadcast: true, e.g.:
    channel set broadcast true"
   [json]
-  (info "send-tweet" (pr-str json))
+  #_(info "send-tweet" (pr-str json))
   (chat/broadcast (format-tweet json)))
 
 ;;;; streaming callback
@@ -97,11 +97,8 @@
    - baos = the ByteArrayOutputStream that contains a chunk of the stream"
   [response baos]
   (try
-    #_(debug "streaming callback success" (pr-str response) (pr-str baos))
     (let [raw (str baos)
           json (if-not (empty? raw) (json/read-json raw))]
-      (debug "streaming callback"
-             (pr-str json))
       (if (and json (:user json))
         (send-tweet json)))
     (catch Exception e)))
