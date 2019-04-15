@@ -48,7 +48,6 @@
   (s/replace text #"https*://t.co/\S+" expand-url))
 
 (defn format-screen-name [json]
-  (info "format-screen-name" (:user json))
   (:screen_name (:user json)))
 
 (defn format-media-urls [json]
