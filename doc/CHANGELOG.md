@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.23 - 4/15/2019
+
+- Upgrade to yetibot.core 0.5.17
+- Fixup extended tweet handling in Twitter
+
 ## 0.5.22 - 4/12/2019
 
 - Add a `cljquotes` command for spouting random quotes about Clojure -
