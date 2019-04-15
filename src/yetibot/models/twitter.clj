@@ -149,7 +149,7 @@
 
 (comment
   ;; reset the stream:
-  (reset-streaming-topics)
+  (reload-topics)
 
   ;; inspect the current state of the streaming connection
   (meta @statuses-streaming-response)
