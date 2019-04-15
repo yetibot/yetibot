@@ -1,6 +1,6 @@
 (ns yetibot.commands.github
   (:require
-    [taoensso.timbre :refer [info warn error]]
+    [taoensso.timbre :refer [info color-str warn error]]
     [yetibot.api.github :as gh]
     [clojure.string :as s]
     [yetibot.core.util.http :refer [get-json]]
@@ -252,6 +252,31 @@
     {:result/error
      (format "No releases found on %s/%s" org-name repo)}))
 
+(defn search-cmd
+  "gh search <query> # search code on GitHub.
+
+   See GitHub's docs:
+
+   - https://help.github.com/en/articles/searching-code for docs on searching
+     code
+
+   - https://help.github.com/en/articles/understanding-the-search-syntax for
+     docs on supported search syntax"
+  [{[_ query] :match}]
+  (info "github search" (color-str :green (pr-str query)))
+  (let [results (gh/search-code query)]
+    (or
+     (report-if-error results)
+     {:result/data results
+      :result/value
+      (->> results
+           :items
+           (map (fn [{filename :name
+                      html-url :html_url
+                      score :score
+                      {repo-description :description} :repository}]
+                  html-url)))})))
+
 (when (gh/configured?)
   (cmd-hook {"gh" #"gh"
              "github" #"github"}
@@ -264,6 +289,7 @@
     ;; #"notify\s+remove\s+(\S+)" notify-remove-cmd
     #"orgs" orgs
     #"incidents" incidents
+    #"search\s+(.+)" search-cmd
     #"status$" status
     #"pr\s+(\S+)" pull-requests
     #"stats\s+(\S+)\/(\S+)" stats-cmd

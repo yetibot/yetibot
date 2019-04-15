@@ -39,6 +39,8 @@
 
 (def token (:token (config)))
 (def auth {:oauth-token token})
+
+;; populate Yetibot's user entity
 (future
   (def user (with-url endpoint (u/me auth)))
   (def user-name (:login user)))
@@ -240,6 +242,22 @@
     (search/search-issues keywords
                           (merge {:state "open" :type "pr" :user org-name} opts)
                           (merge {:sort "created"} auth))))
+
+(defn search-code [keywords & [query opts]]
+  (with-url endpoint
+    (search/search-code
+     keywords
+     (or query {})
+     (merge {:per_page 10} opts auth))))
+
+(comment
+
+  (search-code "parse")
+
+  ;; these are equiv
+  (search-code "org:yetibot parse")
+  (search-code "parse" {:org "yetibot"})
+  )
 
 
 ;;; events / feed
