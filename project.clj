@@ -42,7 +42,7 @@
                    (println))}
 
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [yetibot.core "0.5.17"]
+                 [yetibot.core "0.5.18"]
 
                  ; apis
                  [twitter-api "1.8.0"]
