@@ -224,6 +224,7 @@
 (defn user-timeline [screen-name & tweet-count]
    (statuses-user-timeline :oauth-creds creds
                            :params {:screen-name screen-name
+                                    :tweet_mode "extended"
                                     :count (if-not (nil? tweet-count)
                                              tweet-count
                                              3)}))
