@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.26 - 4/17/2019
+
+- Get extended tweets when fetching user timeline
+  [#933](https://github.com/yetibot/yetibot/pull/933)
+
 ## 0.5.25 - 4/16/2019
 
 - Upgrade to yetibot.core 0.5.19
