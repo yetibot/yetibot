@@ -55,7 +55,8 @@
        (map
          (fn [{:keys [description html_url]
                repo-name :name}]
-           (format "%s/%s - %s %s" org-name repo-name html_url description))
+           (format "%s/%s - %s %s" org-name repo-name html_url
+                   (or description "")))
          repos-response)})))
 
 (defn orgs
