@@ -242,6 +242,24 @@
                           (merge {:sort "created"} auth))))
 
 
+(defn search-code [keywords & [query opts]]
+  (with-url
+    endpoint
+    (search/search-code
+     keywords
+     (merge {} query)
+     auth)))
+
+(comment
+
+  (search-pull-requests "yetibot" "")
+
+  (search-code "org:yetibot cmd-hook")
+
+
+
+  )
+
 ;;; events / feed
 
 (defmulti fmt-event :type)
