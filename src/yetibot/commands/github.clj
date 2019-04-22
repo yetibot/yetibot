@@ -253,6 +253,15 @@
     {:result/error
      (format "No releases found on %s/%s" org-name repo)}))
 
+(defn search-cmd
+  "gh search <query> # search GitHub for <query>"
+  [{[_ query] :match}]
+  query
+  (let [{items :items :as result} (gh/search-code query)]
+    {:result/data result
+     :result/collection-path [:items]
+     :result/value (map :html_url items)}))
+
 (when (gh/configured?)
   (cmd-hook {"gh" #"gh"
              "github" #"github"}
@@ -267,6 +276,7 @@
     #"incidents" incidents
     #"status$" status
     #"pr\s+(\S+)" pull-requests
+    #"search\s+(.+)" search-cmd
     #"stats\s+(\S+)\/(\S+)" stats-cmd
     #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
     #"tags\s+(\S+)\/(\S+)" tags
