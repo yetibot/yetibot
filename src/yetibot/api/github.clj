@@ -241,22 +241,16 @@
                           (merge {:state "open" :type "pr" :user org-name} opts)
                           (merge {:sort "created"} auth))))
 
-
 (defn search-code [keywords & [query opts]]
-  (with-url
-    endpoint
-    (search/search-code
-     keywords
-     (merge {} query)
-     auth)))
+  (with-url endpoint
+            (search/search-code
+              keywords (merge {} query) auth)))
 
 (comment
 
   (search-pull-requests "yetibot" "")
 
   (search-code "org:yetibot cmd-hook")
-
-
 
   )
 
