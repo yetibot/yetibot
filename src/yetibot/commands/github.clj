@@ -257,8 +257,9 @@
   "gh search <query> # search GitHub for <query>"
   [{[_ query] :match}]
   query
-  (let [{items :items} (gh/search-code query)]
-    {:result/data items
+  (let [{items :items :as result} (gh/search-code query)]
+    {:result/data result
+     :result/collection-path [:items]
      :result/value (map :html_url items)}))
 
 (when (gh/configured?)
