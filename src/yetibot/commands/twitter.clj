@@ -68,7 +68,7 @@
     {:result/error (format "You're not tracking %s" topic)}))
 
 (defn show
-  "twitter show <screen-name> # show top 10 tweets from user <scree-name>"
+  "twitter show <screen-name> # show top 10 tweets from user <screen-name>"
   [{[_ screen-name] :match}]
   (let [tweets (:body (model/user-timeline screen-name 10))]
     {:result/data tweets

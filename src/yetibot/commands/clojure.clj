@@ -7,7 +7,7 @@
     [yetibot.core.util.http :refer [get-json map-to-query-string]]))
 
 (defn clojure-cmd
-  "clj <expression> # evaluate a clojure expression"
+  "clj <expression> # evaluate a clojure expression; any piped data will be available under a `data` var"
   {:yb/cat #{:util}}
   [{:keys [args data]}]
   (try
