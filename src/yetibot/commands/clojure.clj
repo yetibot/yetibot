@@ -1,12 +1,9 @@
 (ns yetibot.commands.clojure
-  (:require
-    [yetibot.core.loader :refer [find-namespaces]]
-    [clojure.string :as s]
-    [clojail.core :refer [sandbox safe-read]]
-    [clojail.testers :refer [secure-tester blacklist-nses blanket]]
-    [yetibot.core.hooks :refer [cmd-hook]]
-    [taoensso.timbre :refer [error debug info color-str]]
-    [yetibot.core.util.http :refer [get-json map-to-query-string]]))
+  (:require [clojail.core :refer [safe-read sandbox]]
+            [clojail.testers :refer [blacklist-nses secure-tester]]
+            [taoensso.timbre :refer [info]]
+            [yetibot.core.hooks :refer [cmd-hook]]
+            [yetibot.core.loader :refer [find-namespaces]]))
 
 (def
   ^{:doc "Dynamic var to bind data into the Clojail sandbox"

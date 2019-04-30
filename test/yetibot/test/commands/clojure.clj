@@ -1,10 +1,7 @@
 (ns yetibot.test.commands.clojure
-  (:require
-   [clojure.edn :as edn]
-   [yetibot.core.midje :refer [value data]]
-   [clojure.java.io :as io]
-   [midje.sweet :refer [fact facts => anything throws]]
-   [yetibot.commands.clojure :refer :all]))
+  (:require [midje.sweet :refer [=> fact facts throws]]
+            [yetibot.commands.clojure :refer :all]
+            [yetibot.core.midje :refer [data value]]))
 
 (def sample-data
   {:id 1234,
