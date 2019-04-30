@@ -30,12 +30,11 @@
 
 (fact "should allow access to data"
   (clojure-cmd {:args "(:location data)"
-                :data {:location "Montana"}}) => (data "Montana")
+                :data {:location "Montana"}}) => (data "Montana"))
 
-  (clojure-cmd {:args "(:members data)"
-                :data sample-data})
-
-  )
+(fact "should work with nested seq data structures"
+  (clojure-cmd {:args "(count (:members data))"
+                :data sample-data}) => (value "12"))
 
 
 
