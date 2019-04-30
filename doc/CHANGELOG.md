@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.29 - 4/30/2019
+
+- Fix data on clj when data is a lazy seq
+  [#944](https://github.com/yetibot/yetibot/pull/944)
+
 ## 0.5.28 - 4/26/2019
 
 - Upgrade to yetibot.core 0.5.10
