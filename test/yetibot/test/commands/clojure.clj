@@ -3,7 +3,7 @@
    [clojure.edn :as edn]
    [yetibot.core.midje :refer [value data]]
    [clojure.java.io :as io]
-   [midje.sweet :refer [fact => anything throws]]
+   [midje.sweet :refer [fact facts => anything throws]]
    [yetibot.commands.clojure :refer :all]))
 
 (def sample-data
@@ -36,5 +36,9 @@
   (clojure-cmd {:args "(count (:members data))"
                 :data sample-data}) => (value "12"))
 
-
-
+(facts "should not be able to access outer Yetibot context"
+  (clojure-cmd
+    {:args "(clojail.testers/blanket \"foo\")"}) => (throws #"Access")
+  (clojure-cmd
+    {:args "(yetibot.core.adapters.init/adapters-config)"}) => (throws #"tripped")
+  (clojure-cmd {:args "(yetibot.api.github/config)"}) => (throws #"tripped"))

@@ -1,7 +1,9 @@
 (ns yetibot.commands.clojure
   (:require
+    [yetibot.core.loader :refer [find-namespaces]]
     [clojure.string :as s]
     [clojail.core :refer [sandbox safe-read]]
+    [clojail.testers :refer [secure-tester blacklist-nses blanket]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [taoensso.timbre :refer [error debug info color-str]]
     [yetibot.core.util.http :refer [get-json map-to-query-string]]))
@@ -10,6 +12,11 @@
   ^{:doc "Dynamic var to bind data into the Clojail sandbox"
     :dynamic true}
   *current-data* nil)
+
+(def sandbox-tester
+  (conj secure-tester
+        ;; disallow poking at internal Yetibot stuff
+        (blacklist-nses (find-namespaces #"yetibot\..+$"))))
 
 (defn clojure-cmd
   "clj <expression> # evaluate a clojure expression"
@@ -23,7 +30,8 @@
           ;; so convert it to a vector before serializing it into Clojail
           data (if (sequential? data) (vec data) data)
           sb (binding [*current-data* data]
-               (sandbox [] :init `(def ~'data
+               (sandbox sandbox-tester
+                        :init `(def ~'data
                                     yetibot.commands.clojure/*current-data*)))
           result (sb (safe-read args))]
       {:result/data result
