@@ -19,9 +19,7 @@
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
                        :aot :all}
-             :test {:dependencies []
-                    :resource-paths ["test/resources"]
-                    }}
+             :test {:dependencies []}}
   :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
