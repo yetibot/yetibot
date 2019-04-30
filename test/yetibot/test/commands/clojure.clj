@@ -7,7 +7,20 @@
    [yetibot.commands.clojure :refer :all]))
 
 (def sample-data
-  (-> (io/resource "clj.edn") slurp edn/read-string))
+  {:id 1234,
+   :members
+   '({:id 1001, :tid 2001}
+     {:id 1002, :tid 2002}
+     {:id 1003, :tid 2003}
+     {:id 1004, :tid 2004}
+     {:id 1005, :tid 2005}
+     {:id 1006, :tid 2006}
+     {:id 3001, :tid 4001}
+     {:id 3002, :tid 4002}
+     {:id 3003, :tid 4003}
+     {:id 3004, :tid 4004}
+     {:id 3005, :tid 4005}
+     {:id 3006, :tid 4006})})
 
 (fact "should eval as clojure code and return response using clojail"
   (clojure-cmd {:args "(* 10 2)"}) => (value "20"))
