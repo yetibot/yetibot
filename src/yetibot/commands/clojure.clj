@@ -12,7 +12,12 @@
   [{:keys [args data]}]
   (try
     ;; create a sandbox with data from pipe available
-    (let [sb (sandbox [] :init `(def ~'data ~data))
+    (let [;; if `data` is a lazy seq it will throw an exception like:
+          ;; clojure.lang.ArityException: Wrong number of args (21) passed to:
+          ;; clojure.lang.PersistentHashMap
+          ;; so convert it to a vector before serializing it into Clojail
+          data (if (sequential? data) (vec data) data)
+          sb (sandbox [] :init `(def ~'data ~data))
           result (sb (safe-read args))]
       {:result/data result
        :result/value (pr-str result)})
@@ -34,18 +39,9 @@
 
   (sb (:foo data))
 
-  (let [input-code "(reduce + (range 30))"]
-    '(read-string #'input-code)
-    )
-
   (let [data {:foo [1]}
         args "1"]
-      `(let [~'data ~data]
-         (eval (safe-read ~args))))
+    `(let [~'data ~data]
+       (eval (safe-read ~args))))
 
-  (let [data {:foo [1]}
-        args "data"
-        sb (sandbox [] :init `(def ~'data ~data))]
-    (sb (safe-read args)))
-
-  )
+)
