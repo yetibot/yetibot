@@ -101,8 +101,8 @@
               rendered)})
       {:result/error (str "Could not find a schedule for `" query "`")})))
 
-(cmd-hook #{"pd" #"pd"
-            "pagerduty" #"pagerduty"}
+(cmd-hook {"pd" #"pd"
+           "pagerduty" #"pagerduty"}
   #"teams\sshow\s+(\S+)" teams-show-cmd
   #"teams$" teams-cmd
   #"teams\s+(\S+)" teams-cmd
