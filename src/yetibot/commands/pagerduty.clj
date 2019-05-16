@@ -75,17 +75,6 @@
           :result/value (map :name users)})
        {:result/error (str "Couldn't find team for `" team-name "`")}))))
 
-(comment
-  ;; P9HA21A
-  (def team-id "PEKOEL7")
-  (def marketing-tracking-team "PPK2SJ6")
-  (def performance-marketing-team "PVWS2FP")
-  (users/users-get {:team-ids [performance-marketing-team]})
-
-  (teams/teams-get {:query "performance marketing"})
-
-  )
-
 (defn users-cmd
   "pd users # list PagerDuty users
    pd users <query> # list PagerDuty users matching <query>"
