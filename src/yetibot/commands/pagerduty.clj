@@ -17,10 +17,9 @@
 (defn config [] (get-config {:token sch/Str} [:pagerduty]))
 
 (set-api-context
-  {:debug true
+  {:debug false
    :auths {"api_key" (str "Token token=" (-> (config) :value :token))}})
 
-;; TODO
 (defn report-if-error
   "Checks the stauts of the HTTP response for 2xx, and if not, looks in the body
    for :errorMessages or :errors. To use this, make sure to use the
