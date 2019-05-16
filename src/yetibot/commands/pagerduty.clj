@@ -11,7 +11,7 @@
    [pager-duty-api.api.users :as users]
    [yetibot.core.config :refer [get-config]]
    [clojure.data.json :as json]
-   [taoensso.timbre :refer [info warn error]]
+   [taoensso.timbre :refer [debug info warn error]]
    [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn config [] (get-config {:token sch/Str} [:pagerduty]))
@@ -28,7 +28,7 @@
   [req-fn succ-fn]
   (try
     (let [{:keys [body status] :as res} (req-fn)]
-      (info "pagerduty response" status (pr-str body))
+      (debug "pagerduty response" status (pr-str body))
       (succ-fn res))
     (catch Exception e
       (let [{:keys [status body] :as error} (ex-data e)
@@ -45,13 +45,13 @@
   "pd teams # list PagerDuty teams
    pd teams <query> # list PagerDuty teams matching <query>"
   [{match :match}]
-  (info "teams-cmd" (pr-str match))
+  (debug "teams-cmd" (pr-str match))
   (let [query (when (coll? match) (second match))]
-    (info "teams list" query)
+    (debug "teams list" query)
     (report-if-error
      #(teams/teams-get {:query query})
      (fn [{:keys [teams] :as response}]
-       (info "teams response" (pr-str response))
+       (debug "teams response" (pr-str response))
        (if (seq teams)
          {:result/data teams
           :result/value (map :name teams)}
@@ -62,15 +62,15 @@
 (defn teams-show-cmd
   "pd teams show <name> # list members of a team"
   [{[_ team-name] :match}]
-  (info "teams show" team-name)
+  (debug "teams show" team-name)
   (report-if-error
    #(teams/teams-get {:query team-name})
    (fn [{[first-team] :teams :as response}]
-     (info "teams show response" (pr-str response))
-     (info "getting user details for team" (pr-str first-team))
+     (debug "teams show response" (pr-str response))
+     (debug "getting user details for team" (pr-str first-team))
      (if first-team
        (let [{:keys [users] :as user-response} (users/users-get {:team-ids [(:id first-team)]})]
-         (info "users for team response" (pr-str user-response))
+         (debug "users for team response" (pr-str user-response))
          {:result/data users
           :result/value (map :name users)})
        {:result/error (str "Couldn't find team for `" team-name "`")}))))
@@ -94,7 +94,7 @@
     (report-if-error
      #(users/users-get {:query query})
      (fn [{:keys [users] :as response}]
-       (info "users response" (pr-str response))
+       (debug "users response" (pr-str response))
        (if (seq users)
          {:result/data users
           :result/value (map :name users)}
@@ -109,7 +109,7 @@
     (report-if-error
      #(schedules/schedules-get {:query query})
      (fn [{:keys [schedules] :as response}]
-       (info "schedules response" (pr-str response))
+       (debug "schedules response" (pr-str response))
        (if (seq schedules)
          {:result/data schedules
           :result/value (map :name schedules)}
