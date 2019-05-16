@@ -6,6 +6,12 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.32 - 5/16/2019
+
+- Fixup sub command parsing in `pagerduty` so it accepts queries with whitespace
+  in commands like `pd users <query>` and `pd teams <query>`
+- Add better error handling in `pagerduty` for non-200 API responses
+
 ## 0.5.31 - 5/7/2019
 
 - Upgrade to yetibot.core 0.5.21
