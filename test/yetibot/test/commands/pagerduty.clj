@@ -38,4 +38,3 @@
         (command-execution-info "pagerduty schedules show foo")]
     (first match) => "schedules show foo"
     matched-sub-cmd => #'schedules-show-cmd))
-
