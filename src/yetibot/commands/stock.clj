@@ -1,14 +1,58 @@
 (ns yetibot.commands.stock
   (:require
-    [clojure.string :as s]
-    [yetibot.core.hooks :refer [cmd-hook]]
-    [yetibot.core.util.http :refer [get-json]]))
+   [clojure.walk :refer [postwalk]]
+   [clojure.string :as s]
+   [cuerdas.core :as cuerdas]
+   [schema.core :as sch]
+   [clj-http.client :as client]
+   [taoensso.timbre :refer [warn info]]
+   [yetibot.core.config :refer [get-config]]
+   [yetibot.core.hooks :refer [cmd-hook]]
+   [yetibot.core.util.http :refer [get-json]]))
 
-(defn endpoint
-  "Returns an API endpoint to query a stock symbol"
-  [stock-symbol]
-  (format "https://api.iextrading.com/1.0/stock/%s/quote?displayPercent=true"
-          stock-symbol))
+(defn config [] (get-config {:key sch/Str} [:alphavantage]))
+
+(defn build-query-params [q]
+  (merge {:apikey (-> (config) :value :key)} q))
+
+(def endpoint "https://www.alphavantage.co/query")
+
+(defn transform-map-keys
+  "Similar to clojure.walk/keywordize-keys but takes a transformation function
+   instead of hardcoding `keyword`"
+  [m transformer]
+  (let [f (fn [[k v]] [(transformer k) v])]
+    ;; only apply to maps
+    (postwalk (fn [x] (if (map? x) (into {} (map f x)) x)) m)))
+
+(defn key-transformer
+  "Transform Alpha Vantage's weirdo keys"
+  [k]
+  (-> k
+      name
+      (s/replace-first #"^[\d\.\s]+" "")
+      cuerdas/keyword))
+
+(defn fetch [query]
+  (let [{:keys [body] :as result}
+        (client/get endpoint
+                    {:as :json
+                     :query-params (build-query-params query)})]
+    (assoc result
+           :body (transform-map-keys body key-transformer))))
+
+
+(comment
+
+  (fetch {:function "GLOBAL_QUOTE"
+          :symbol "ebay"})
+  (fetch {:function "GLOBAL_QUOTE"
+          :symbol "lolnope"})
+  ;; search
+  (fetch {:function "SYMBOL_SEARCH"
+          :keywords "lolnope"})
+  (fetch {:function "SYMBOL_SEARCH"
+          :keywords "baa"}))
 
 (defn format-percent
   "Formats number in map as percent"
@@ -24,63 +68,31 @@
   "Gets the price from a stock symbol via Yahoo API"
   [stock-symbol]
   (try
-    (let [stock-info (get-json (endpoint (s/trim stock-symbol)))]
-      {:result/data stock-info
-       :result/value
-       (map (fn [[label lookup-fn]]
-              (format "%s: %s"
-                      label
-                      (lookup-fn stock-info)))
-            [["Name" :companyName]
-             ["Latest Price" :latestPrice]
-             ["High" :high]
-             ["Low" :low]
-             ["Market Cap" (comp format-number :marketCap)]
-             ["Change Percent" (comp format-percent :changePercent)]
-             ["Week 52 High" :week52High]
-             ["Week 52 Low" :week52Low]
-             ["Latest time" :latestTime]])})
+    (let [{{stock-info :global-quote} :body}
+          (fetch {:function "GLOBAL_QUOTE"
+                  :symbol (s/trim stock-symbol)})]
+      (if (empty? stock-info)
+        {:result/error (str "Unable to find a stock for `" stock-symbol "` 🧐")}
+        {:result/data stock-info
+         :result/value
+         (map (fn [[label lookup-fn]]
+                (info lookup-fn)
+                (format "%s: %s"
+                        label
+                        (lookup-fn stock-info)))
+              [["Symbol" :symbol]
+               ["Latest Price" :price]
+               ["High" :high]
+               ["Low" :low]
+               ["Change Percent" :change-percent]
+               ["Latest trading day" :latest-trading-day]])}))
     (catch Exception _
-      (str "An error occurred trying to find stock " stock-symbol " 🧐"))))
+      {:result/error
+       (str "An error occurred trying to find stock " stock-symbol " 🧐")})))
 
 (comment
-  ;; Example response from EIX API
-  {:iexMarketPercent 0.05299,
-   :week52High 39.275,
-   :open 36.72,
-   :week52Low 28.14,
-   :latestTime "3:28:44 PM",
-   :iexLastUpdated 1512678524621,
-   :latestSource "IEX real time price",
-   :avgTotalVolume 9247166,
-   :latestPrice 36.86,
-   :iexAskSize 100,
-   :symbol "EBAY",
-   :primaryExchange "Nasdaq Global Select",
-   :latestVolume 5006246,
-   :sector "Consumer Cyclical",
-   :openTime 1512657000686,
-   :marketCap 38502892257,
-   :close 36.83,
-   :high 37.15,
-   :iexBidSize 100,
-   :closeTime 1512594000441,
-   :delayedPrice 36.78,
-   :iexBidPrice 36.84,
-   :changePercent 8.1E-4,
-   :previousClose 36.83,
-   :iexRealtimePrice 36.86,
-   :low 36.5,
-   :iexAskPrice 37.81,
-   :change 0.03,
-   :companyName "eBay Inc.",
-   :iexRealtimeSize 100,
-   :ytdChange 0.2342493297587131,
-   :delayedPriceTime 1512677641600,
-   :latestUpdate 1512678524621,
-   :peRatio 23.04,
-   :calculationPrice "tops",
-   :iexVolume 265281})
+  (get-price "ebay"))
+
 
 (defn stock-cmd
   "stock <symbol> # displays current value in market"
@@ -88,5 +100,27 @@
   [{:keys [args]}]
   (get-price args))
 
-(cmd-hook ["stock" #"^stock$"]
+(defn search-cmd
+  "stock search <query> # find the best matching symbols for <query>"
+  [{[_ query] :match}]
+  (let [{{matches :best-matches} :body} (fetch {:function "SYMBOL_SEARCH"
+                                                :keywords query})]
+    {:result/value
+     (map
+      (fn [{match-name :name
+            match-symbol :symbol
+            :keys [region
+                   currency
+                   timezone
+                   market-open
+                   market-close]}]
+        (format "%s: %s - %s %s (%s-%s %s)"
+                match-symbol match-name
+                region currency market-open market-close
+                timezone))
+      matches)
+     :result/data matches}))
+
+(cmd-hook #"stock"
+  #"search\s+(.+)" search-cmd
   _ stock-cmd)
