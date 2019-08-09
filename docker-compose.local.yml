@@ -1,0 +1,22 @@
+version: '3'
+
+# use this file to optionally override anything in docker-compose for local
+# testing via:
+
+# docker-compose -f docker-compose.yml -f docker-compose.local.yml up
+
+services:
+
+  yetibot:
+    image: yetibot/local
+
+    # add any config you need to test here, e.g.:
+    environment:
+      # - YB_SSH_GROUPS_0_KEY=/root/.ssh/id_rsa
+      # - YB_SSH_GROUPS_0_USER=root
+      # - YB_SSH_GROUPS_0_SERVERS_0_NAME=boss
+      # - YB_SSH_GROUPS_0_SERVERS_0_HOST=1.1.1.1
+
+    # you can also mount files that can be useful for config or testing
+    volumes:
+      # - ~/.ssh/id_rsa:/root/.ssh/id_rsa

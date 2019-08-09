@@ -24,6 +24,8 @@ COPY .java.policy $WORKDIR/.java.policy
 # overwrite the default location for linux
 COPY .java.policy /docker-java-home/jre/lib/security/java.policy
 
+# prepare ssh
+RUN mkdir -p /root/.ssh && touch /root/.ssh/known_hosts
 
 WORKDIR $WORKDIR
 
