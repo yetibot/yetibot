@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.35 - 8/26/19
+
+- Add `man` command - [#957](https://github.com/yetibot/yetibot/pull/957) by
+  [anthonygalea](https://github.com/anthonygalea)
+
 ## 0.5.32 - 5/17/2019
 
 - Fixup sub command parsing in `pagerduty` so it accepts queries with whitespace
