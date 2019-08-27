@@ -1,10 +1,14 @@
 (ns yetibot.api.ebay
   (:require
-    [schema.core :as s]
+    [clojure.spec.alpha :as s]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [encode get-json]]))
 
-(defn config [] (:value (get-config {:appid s/Str} [:ebay])))
+(s/def ::appid string?)
+
+(s/def ::config (s/keys :req-un [::appid]))
+
+(defn config [] (:value (get-config ::config [:ebay])))
 
 (def endpoint "http://svcs.ebay.com/services/search/FindingService/v1")
 

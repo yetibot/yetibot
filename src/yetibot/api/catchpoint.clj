@@ -3,10 +3,11 @@
    https://io.catchpoint.com/ui/help"
   (:require
     [clojure.core.async :refer [go-loop timeout <!]]
+    [clojure.spec.alpha :as s]
     [clj-http.client :as client]
     [clj-http.util :refer [utf8-bytes base64-encode]]
     [taoensso.timbre :refer [warn info]]
-    [yetibot.core.schema :refer [non-empty-str]]
+    [yetibot.core.spec :as yspec]
     [yetibot.core.config :refer [get-config]]
     [clojure.core.strint :refer [<<]]
     ))
@@ -18,12 +19,14 @@
 
 (defn token-uri [] (<< "~{host}~{prefix}/token"))
 
-(def catchpoint-schema
-  {:key non-empty-str
-   :secret non-empty-str})
+(s/def ::key ::yspec/non-blank-string)
+
+(s/def ::secret ::yspec/non-blank-string)
+
+(s/def ::config (s/keys :req-un [::key ::secret]))
 
 (defn config []
-  (let [c (get-config catchpoint-schema [:catchpoint])]
+  (let [c (get-config ::config [:catchpoint])]
     (if-let [{:keys [value]} c]
       value
       (warn "Error obtaining config for Catchpoint" c))))

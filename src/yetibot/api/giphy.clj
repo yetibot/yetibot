@@ -1,16 +1,19 @@
 (ns yetibot.api.giphy
   (:require
     [taoensso.timbre :refer [info warn error]]
-    [clojure.string :as s]
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
-    [schema.core :as sch]
+    [clojure.spec.alpha :as s]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json encode]]))
 
 (def base-url "http://api.giphy.com/v1")
 
-(defn config [] (get-config {:key String} [:giphy]))
+(s/def ::key string?)
+
+(s/def ::config (s/keys :req-un [::key]))
+
+(defn config [] (get-config ::config [:giphy]))
 
 (defn configured? [] (nil? (:error (config))))
 

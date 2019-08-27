@@ -1,10 +1,10 @@
 (ns yetibot.commands.pagerduty
   (:require
-   [clojure.string :as s :refer [join blank?]]
+   [clojure.string :as string]
    [clojure.tools.cli :refer [parse-opts]]
    [clj-time.core :as time :refer [days ago]]
    [clj-time.format :as time.format]
-   [schema.core :as sch]
+   [clojure.spec.alpha :as s]
    [pager-duty-api.core :refer [with-api-context set-api-context]]
    [pager-duty-api.api.schedules :as schedules]
    [pager-duty-api.api.teams :as teams]
@@ -14,7 +14,11 @@
    [taoensso.timbre :refer [debug info warn error]]
    [yetibot.core.hooks :refer [cmd-hook]]))
 
-(defn config [] (get-config {:token sch/Str} [:pagerduty]))
+(s/def ::token string?)
+
+(s/def ::config (s/keys :req-un [::token]))
+
+(defn config [] (get-config ::config [:pagerduty]))
 
 (set-api-context
   {:debug false
@@ -39,7 +43,7 @@
          (str
           (-> json-body :error :message)
           ": "
-          (->> json-body :error :errors (join " ")))}))))
+          (->> json-body :error :errors (string/join " ")))}))))
 
 (defn teams-cmd
   "pd teams # list PagerDuty teams
@@ -56,7 +60,7 @@
          {:result/data teams
           :result/value (map :name teams)}
          {:result/error (str "Couldn't find teams"
-                             (when-not (blank? query)
+                             (when-not (string/blank? query)
                                (str " for " query)))})))))
 
 (defn teams-show-cmd
@@ -88,7 +92,7 @@
          {:result/data users
           :result/value (map :name users)}
          {:result/error (str "No users found"
-                             (when-not (blank? query)
+                             (when-not (string/blank? query)
                                (str " for " query)))})))))
 
 (defn schedules-cmd
@@ -124,9 +128,9 @@
   [{[_ possible-opts-and-query] :match}]
   ;; find the schedule
   (let [{:keys [options arguments]} (parse-opts
-                                     (s/split possible-opts-and-query #"\s")
+                                     (string/split possible-opts-and-query #"\s")
                                      schedule-show-opts)
-        query (s/join " " arguments)]
+        query (string/join " " arguments)]
     (report-if-error
      #(schedules/schedules-get {:query query})
      (fn [{[first-schedule] :schedules}]

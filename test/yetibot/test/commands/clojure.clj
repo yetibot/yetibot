@@ -37,5 +37,5 @@
   (clojure-cmd
     {:args "(clojail.testers/blanket \"foo\")"}) => (throws Exception)
   (clojure-cmd
-    {:args "(yetibot.core.adapters.init/adapters-config)"}) => (throws Exception)
+    {:args "(yetibot.core.adapters/adapters-config)"}) => (throws Exception)
   (clojure-cmd {:args "(yetibot.api.github/config)"}) => (throws Exception))

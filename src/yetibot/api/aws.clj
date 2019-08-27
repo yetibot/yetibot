@@ -1,20 +1,26 @@
 (ns yetibot.api.aws
   (:require
-    [yetibot.core.schema :refer [non-empty-str]]
-    [schema.core :as sch]
+    [clojure.spec.alpha :as s]
     [yetibot.core.config :refer [get-config]]
+    [yetibot.core.spec :as yspec]
     [cognitect.aws.client.api :as aws]))
 
-(def aws-schema
-  {:aws-access-key-id         non-empty-str
-   :aws-secret-access-key     non-empty-str
-   (sch/optional-key :region) non-empty-str
-   (sch/optional-key :dev-mode) sch/Bool})
+(s/def ::aws-access-key-id ::yspec/non-blank-string)
+
+(s/def ::aws-secret-access-key ::yspec/non-blank-string)
+
+(s/def ::region ::yspec/non-blank-string)
+
+(s/def ::dev-mode boolean?)
+
+(s/def ::config (s/keys :req-un [::aws-access-key-id
+                                 ::aws-secret-access-key]
+                        :opt-un [::region ::dev-mode]))
 
 (defn config
   "Returns AWS-related configuration"
   []
-  (:value (get-config aws-schema [:aws])))
+  (:value (get-config ::config [:aws])))
 
 (defn configured? [] (config))
 

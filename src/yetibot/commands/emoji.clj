@@ -16,8 +16,8 @@
   []
   (map (fn [emoji] {:unicode (.getUnicode emoji)
                     :description (.getDescription emoji)
-                    :aliases (.getAliases emoji)
-                    :tags (.getTags emoji)
+                    :aliases (into [] (.getAliases emoji))
+                    :tags (into [] (.getTags emoji))
                     }) (get-all-emojis)))
 
 (defonce emojis (parse-all-emojis))

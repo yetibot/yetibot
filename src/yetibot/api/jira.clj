@@ -1,28 +1,40 @@
 (ns yetibot.api.jira
   (:require
     [taoensso.timbre :refer [info warn error]]
-    [schema.core :as sch]
-    [yetibot.core.schema :refer [non-empty-str]]
-    [clojure.string :as s]
+    [clojure.spec.alpha :as s]
+    [yetibot.core.spec :as yspec]
+    [clojure.string :as string]
     [clj-http.client :as client]
     [clojure.core.memoize :as memo]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json fetch]]
     [clj-time [format :refer [formatter formatters show-formatters parse unparse]]]))
 
-(def jira-schema
-  {:domain non-empty-str
-   :user non-empty-str
-   :password non-empty-str
-   ;; deprecate this in favor of channel based projects
-   (sch/optional-key :projects) [{:key non-empty-str
-                                  (sch/optional-key :default)
-                                  {:version {:id non-empty-str}}}]
-   (sch/optional-key :default)
-   {(sch/optional-key :issue) {:type {:id non-empty-str}}
-    (sch/optional-key :project) {:key non-empty-str}}
-   (sch/optional-key :max) {:results non-empty-str}
-   (sch/optional-key :subtask) {:issue {:type {:id non-empty-str}}}})
+(s/def ::id ::yspec/non-blank-string)
+
+(s/def ::key ::yspec/non-blank-string)
+(s/def ::version (s/keys :req-un [::id]))
+(s/def ::default (s/keys :req-un [::version]))
+(s/def ::project (s/keys :req-un [::key]
+                         :opt-un [::default]))
+
+(s/def ::projects (s/coll-of ::project :kind vector?))
+
+(s/def ::results ::yspec/non-blank-string)
+(s/def ::max (s/keys :req-un [::results]))
+
+(s/def ::type (s/keys :req-un [::id]))
+(s/def ::issue (s/keys :req-un [::type]))
+(s/def ::subtask (s/keys :req-un [::issue]))
+
+(s/def ::default (s/keys :opt-un [::issue ::project]))
+
+(s/def ::domain ::yspec/non-blank-string)
+(s/def ::user ::yspec/non-blank-string)
+(s/def ::password ::yspec/non-blank-string)
+
+(s/def ::config (s/keys :req-un [::domain ::user ::password]
+                        :opt-un [::projects ::default ::max ::subtask]))
 
 ;; config
 
@@ -43,9 +55,9 @@
   [channel-settings]
   (when-let [setting (channel-settings jira-project-setting-key)]
     (info "channel-projects" (pr-str setting))
-    (seq (remove s/blank? (s/split setting #",\s*")))))
+    (seq (remove string/blank? (string/split setting #",\s*")))))
 
-(defn config [] (:value (get-config jira-schema [:jira])))
+(defn config [] (:value (get-config ::config [:jira])))
 
 (defn configured? [] (config))
 
@@ -56,7 +68,7 @@
 (defn project-keys [] (into (vec *jira-projects*)
                             (map :key (projects))))
 
-(defn project-keys-str [] (s/join "," (into
+(defn project-keys-str [] (string/join "," (into
                                         (project-keys)
                                         *jira-projects*)))
 
@@ -162,14 +174,14 @@
       (keep identity
             [(str (:key issue-data) " ↪︎ " (-> fs :status :name) " ↪︎ " (:summary fs))
              (:description fs)
-             (s/join
+             (string/join
                "  "
                [(str "👷 " (-> fs :assignee :name))
                 (str "👮 " (-> fs :reporter :name))])
-             (s/join
+             (string/join
                " "
                [(str "❗️ Priority: " (-> fs :priority :name))
-                (str " ✅ Fix version: " (s/join ", " (map :name (:fixVersions fs))))])
+                (str " ✅ Fix version: " (string/join ", " (map :name (:fixVersions fs))))])
              (str "🕐 Created: " (parse-and-format-date-string (:created fs))
                   "  🕗 Updated: " (parse-and-format-date-string (:updated fs)))
              (map format-comment (-> fs :comment :comments))
