@@ -6,6 +6,8 @@ which contains Yetibot's core functionality along with a few commands. See
 cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+- Add `tldr` command
+
 ## 0.5.35 - 8/26/19
 
 - Add `man` command - [#957](https://github.com/yetibot/yetibot/pull/957) by
