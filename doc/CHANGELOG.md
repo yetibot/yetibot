@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.37 - 8/30/19
+
+- Upgrade to `yetibot/core "20190830.225726.6817bc3"`
+
 ## 0.5.36 - 8/30/19
 
 - Add `tldr` command - [#958](https://github.com/yetibot/yetibot/pull/958) by
