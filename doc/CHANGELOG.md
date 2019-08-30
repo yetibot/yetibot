@@ -1,12 +1,16 @@
 # Yetibot changelog
 
-Note: `yetibot` depends on [yetibot.core](https://github.com/yetibot/yetibot.core)
+Note: `yetibot` depends on [yetibot/core](https://github.com/yetibot/yetibot.core)
 which contains Yetibot's core functionality along with a few commands. See
-[yetibot.core's
-cpihangelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
+[yetibot/core's
+changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
-- Add `tldr` command
+## 0.5.36 - 8/30/19
+
+- Add `tldr` command - [#958](https://github.com/yetibot/yetibot/pull/958) by
+  [anthonygalea](https://github.com/anthonygalea)
+- Upgrade to `yetibot/core "20190830.212304.0be0d9e"`
 
 ## 0.5.35 - 8/26/19
 
