@@ -2,14 +2,16 @@
 ;;  https://github.com/urbandictionary/gcs-pow/blob/5f5b55bbc2d60419938ea44c88491fa1bf032217/src/gcs/core.clj"
 (ns yetibot.api.google.gcs
   (:require [clojure.java.io :as io]
-            [clojure.string :as s]
-            [schema.core :as sch]
+            [clojure.string :as string]
+            [clojure.spec.alpha :as s]
             [yetibot.core.config :refer [get-config]])
   (:import com.google.auth.oauth2.ServiceAccountCredentials
            [com.google.cloud.storage Blob$BlobSourceOption BlobId
             Storage$BlobListOption Storage$BucketListOption StorageOptions]))
 
-(defn config [] (get-config sch/Any [:google]))
+(s/def ::config any?)
+
+(defn config [] (get-config ::config [:google]))
 
 (def blob-source-option (Blob$BlobSourceOption/generationMatch))
 
@@ -38,7 +40,7 @@
       (bean b))))
 
 (defn content [path]
-  (let [[bucket object-name] (s/split path #"\/" 2)]
+  (let [[bucket object-name] (string/split path #"\/" 2)]
     (-> (get-object bucket object-name)
         (.getContent (into-array [(Blob$BlobSourceOption/generationMatch)]))
         String.)))

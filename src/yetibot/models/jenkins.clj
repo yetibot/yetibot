@@ -2,26 +2,41 @@
   (:require
     [yetibot.core.chat :refer [chat-data-structure]]
     [yetibot.core.util.http :refer [get-json fetch]]
-    [schema.core :as sch]
-    [yetibot.core.schema :refer [non-empty-str]]
-    [clojure.string :as s]
+    [clojure.spec.alpha :as s]
+    [clojure.string :as string]
     [clj-time.coerce :as c]
     [clj-http.client :as client]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
     [clojure.core.memoize :as memo]))
 
-(def jenkins-schema {:cache {:ttl sch/Str}
-                     :instances [{:name sch/Str
-                                  :uri sch/Str
-                                  (sch/optional-key :default) {:job sch/Str}
-                                  (sch/optional-key :user) sch/Str
-                                  (sch/optional-key :apikey) sch/Str}]})
+(s/def ::ttl string?)
+
+(s/def ::cache (s/keys :req-un [::ttl]))
+
+(s/def ::name string?)
+
+(s/def ::uri string?)
+
+(s/def ::job string?)
+
+(s/def ::default (s/keys :req-un [::job]))
+
+(s/def ::user string?)
+
+(s/def ::apikey string?)
+
+(s/def ::instance (s/keys :req-un [::name ::uri]
+                          :opt-un [::default ::user ::apikey]))
+
+(s/def ::instances (s/coll-of ::instance :kind vector?))
+
+(s/def ::config (s/keys :req-un [::cache ::instances]))
 
 ;; periodically refreshed data about Jenkins instances
 (defonce instance-root-data (atom {}))
 
-(defn config [] (:value (get-config jenkins-schema [:jenkins])))
+(defn config [] (:value (get-config ::config [:jenkins])))
 
 (defn cache-ttl [] (-> (config) :cache :ttl read-string))
 
@@ -106,7 +121,7 @@
 (defn default-job []
   (when-let [[_ inst-info] (first (filter (fn [[inst-k inst-info]]
                                             (let [d (-> inst-info :config :default-job)]
-                                              (not (s/blank? d))))
+                                              (not (string/blank? d))))
                                           @instance-root-data))]
     (resolve-job-info (-> inst-info :config :default-job))))
 
@@ -127,7 +142,7 @@
     (let [json (status [job-name job-info])]
       (if-let [building (str (:building json))] ; convert to string so a `false` doesn't give a false-negative
         (let [result (str (:result json))
-              changeset (s/join
+              changeset (string/join
                           \newline
                           (map (fn [i]
                                  (let [msg (:msg i)
