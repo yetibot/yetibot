@@ -6,6 +6,13 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.39 - 9/10/19
+
+- Switch from schema to clojure.spec -
+  [#959](https://github.com/yetibot/yetibot/pull/959/) by
+  [anthonygalea](https://github.com/anthonygalea)
+- Upgrade to `yetibot/core "20190905.175835.fe16ae2"`
+
 ## 0.5.38 - 9/3/19
 
 - Upgrade to `yetibot/core "20190903.160748.0779ab8"`
