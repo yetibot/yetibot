@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.41 - 9/13/19
+
+- Upgrade to `yetibot/core "20190913.182757.1838a79"`
+
 ## 0.5.40 - 9/10/19
 
 - Upgrade to `yetibot/core "20190910.175122.9e253dd"`
