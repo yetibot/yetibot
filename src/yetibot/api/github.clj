@@ -29,7 +29,8 @@
 
 (s/def ::token ::yspec/non-blank-string)
 
-(s/def ::org ::yspec/non-blank-string)
+(s/def ::org (s/or ::yspec/non-blank-string
+                   (s/coll-of ::yspec/non-blank-string)))
 
 (s/def ::endpoint ::yspec/non-blank-string)
 
