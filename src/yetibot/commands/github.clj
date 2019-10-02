@@ -253,8 +253,8 @@
     {:result/error
      (format "No releases found on %s/%s" org-name repo)}))
 
-(defn search-cmd
-  "gh search <query> # search GitHub for <query>"
+(defn search-code-cmd
+  "gh search <query> # search GitHub code for <query>"
   [{[_ query] :match}]
   (let [{items :items :as result} (gh/search-code query)]
     {:result/data result
@@ -262,19 +262,37 @@
      :result/value (map :html_url items)}))
 
 (defn search-repos-cmd
-  "gh search repos <query> # search GitHub for <query>"
+  "gh search repos <query> # search GitHub repos for <query>"
   [{[_ query] :match}]
   (let [{items :items :as result} (gh/search-repos query)]
     {:result/data result
      :result/collection-path [:items]
      :result/value (map :html_url items)}))
 
+(defn search-topics-cmd
+  "gh search topics <query> # search GitHub topics for <query>"
+  [{[_ query] :match}]
+  (let [{items :items :as result} (gh/search-topics query)]
+    {:result/data result
+     :result/collection-path [:items]
+     :result/value (map (fn [topic]
+                          (str
+                           (when (:featured topic) "✅ ")
+                           (:name topic)
+                           (when-let [desc (:short_description topic)]
+                             (str " - " desc))
+                           " https://github.com/topics/" (:name topic)
+                           ))
+                        items)}))
+
 (when (gh/configured?)
   (cmd-hook {"gh" #"gh"
              "github" #"github"}
     #"feed\s+(\S+)" feed
+    #"^search\s+topics\s+(.+)" search-topics-cmd
     #"^search\s+repos\s+(.+)" search-repos-cmd
-    #"^search\s+(.+)" search-cmd
+    #"^search\s+code\s+(.+)" search-code-cmd
+    #"^search\s+(.+)" search-code-cmd ;; default search
     #"^repos\s+(\S+)" repos
     #"^repos" repos
     ;; TODO

@@ -260,8 +260,7 @@
 (defn search-topics [keywords & [query opts]]
   (with-url endpoint
             (search/search-topics
-              keywords (merge {} query) auth))
-  )
+              keywords (merge {} query) auth)))
 
 (comment
 
@@ -270,6 +269,8 @@
        (map :html_url))
 
   (search-topics "yetibot")
+
+  (search-topics "clojure")
 
   (search-pull-requests "yetibot" "")
 
