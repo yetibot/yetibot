@@ -1,14 +1,17 @@
 (ns yetibot.commands.wolfram
   (:require
-    [schema.core :as sch]
+    [clojure.spec.alpha :as s]
     [yetibot.core.util.http :refer [encode]]
-    [clojure.string :as s]
     [clojure.xml :as xml]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]))
 
-(def config (:value (get-config {:appid sch/Str} [:wolfram])))
+(s/def ::appid string?)
+
+(s/def ::config (s/keys :req-un [::appid]))
+
+(def config (:value (get-config ::config [:wolfram])))
 (def app-id (:appid config))
 (def endpoint (str "http://api.wolframalpha.com/v2/query?appid=" app-id))
 

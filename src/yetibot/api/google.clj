@@ -1,9 +1,9 @@
 (ns yetibot.api.google
   (:require
-    [yetibot.core.schema :refer [non-empty-str]]
-    [schema.core :as sch]
+    [yetibot.core.spec :as yspec]
+    [clojure.spec.alpha :as s]
     [taoensso.timbre :refer [info warn]]
-    [clojure.string :as s]
+    [clojure.string :as string]
     [clojure.data.json :as json]
     [clj-http.client :as client]
     [yetibot.core.config :refer [get-config]]))
@@ -16,12 +16,24 @@
 (defonce display-order {:normal [:title :link :snippet]
                         :image  [:title :snippet :link]})
 
-(def google-schema
-  {:api {:key non-empty-str}
-   :custom {:search {:engine {:id non-empty-str}}}
-   (sch/optional-key :options) {sch/Keyword sch/Str}})
+(s/def ::key ::yspec/non-blank-string)
 
-(defn config [] (get-config google-schema [:google]))
+(s/def ::api (s/keys :req-un [::key]))
+
+(s/def ::id ::yspec/non-blank-string)
+
+(s/def ::engine (s/keys :req-un [::id]))
+
+(s/def ::search (s/keys :req-un [::engine]))
+
+(s/def ::custom (s/keys :req-un [::search]))
+
+(s/def ::options (s/map-of keyword? string?))
+
+(s/def ::config (s/keys :req-un [::api ::custom]
+                        :opt-un [::options]))
+
+(defn config [] (get-config ::config [:google]))
 
 (defn configured? [] (contains? (config) :value))
 
@@ -34,7 +46,7 @@
     (->> (select-keys result values)
          (vals)
          (remove nil?)
-         (s/join "\n"))))
+         (string/join "\n"))))
 
 (defn format-results
   "map a vector of results to a vector

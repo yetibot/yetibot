@@ -1,16 +1,20 @@
 (ns yetibot.commands.stock
   (:require
    [clojure.walk :refer [postwalk]]
-   [clojure.string :as s]
+   [clojure.string :as string]
    [cuerdas.core :as cuerdas]
-   [schema.core :as sch]
+   [clojure.spec.alpha :as s]
    [clj-http.client :as client]
    [taoensso.timbre :refer [warn info]]
    [yetibot.core.config :refer [get-config]]
    [yetibot.core.hooks :refer [cmd-hook]]
    [yetibot.core.util.http :refer [get-json]]))
 
-(defn config [] (get-config {:key sch/Str} [:alphavantage]))
+(s/def ::key string?)
+
+(s/def ::config (s/keys :req-un [::key]))
+
+(defn config [] (get-config ::config [:alphavantage]))
 
 (defn build-query-params [q]
   (merge {:apikey (-> (config) :value :key)} q))
@@ -30,7 +34,7 @@
   [k]
   (-> k
       name
-      (s/replace-first #"^[\d\.\s]+" "")
+      (string/replace-first #"^[\d\.\s]+" "")
       cuerdas/keyword))
 
 (defn fetch [query]
@@ -70,7 +74,7 @@
   (try
     (let [{{stock-info :global-quote} :body}
           (fetch {:function "GLOBAL_QUOTE"
-                  :symbol (s/trim stock-symbol)})]
+                  :symbol (string/trim stock-symbol)})]
       (if (empty? stock-info)
         {:result/error (str "Unable to find a stock for `" stock-symbol "` 🧐")}
         {:result/data stock-info

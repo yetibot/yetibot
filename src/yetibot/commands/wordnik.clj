@@ -1,16 +1,20 @@
 (ns yetibot.commands.wordnik
   (:refer-clojure :exclude [read])
   (:require
-    [schema.core :as sch]
+    [clojure.spec.alpha :as s]
     [wordnik.api.word :as word]
     [wordnik.api.words :as words]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.core.config :refer [get-config]]
-    [clojure.string :as s]
+    [clojure.string :as string]
     [wordnik.core :refer :all]))
 
-(def config (:value (get-config {:key sch/Str} [:wordnik])))
+(s/def ::key string?)
+
+(s/def ::config (s/keys :req-un [::key]))
+
+(def config (:value (get-config ::config [:wordnik])))
 
 (def ^:private api-key (:key config))
 
@@ -30,7 +34,7 @@
   {:yb/cat #{:info}}
   [{[_ w] :match}]
   (with-auth
-    (let [ds (word/definitions (s/trim w))
+    (let [ds (word/definitions (string/trim w))
           word (-> ds first :word)]
       (if word
         (conj (extract-definitions-text ds) word)

@@ -1,19 +1,21 @@
 (ns yetibot.models.imgflip
   (:require
     [taoensso.timbre :refer [info warn error]]
-    [clojure.string :as s :refer [split join]]
-    [schema.core :as sch]
-    [yetibot.core.schema :refer [non-empty-str]]
+    [clojure.string :as string]
+    [clojure.spec.alpha :as s]
+    [yetibot.core.spec :as yspec]
     [clj-http.client :as client]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json map-to-query-string encode]]
     [clojure.core.memoize :as m]))
 
-(def imgflip-schema
-  {:username non-empty-str
-   :password non-empty-str})
+(s/def ::username ::yspec/non-blank-string)
 
-(def config (:value (get-config imgflip-schema [:imgflip])))
+(s/def ::password ::yspec/non-blank-string)
+
+(s/def ::config (s/keys :req-un [::username ::password]))
+
+(def config (:value (get-config ::config [:imgflip])))
 (def configured? config)
 (def endpoint "http://api.imgflip.com")
 
@@ -29,7 +31,7 @@
   [p meme]
   (or
     (re-find p (:name meme))
-    (re-find p (s/replace (:name meme) #"\s" ""))))
+    (re-find p (string/replace (:name meme) #"\s" ""))))
 
 (def res (client/get "https://imgflip.com/memesearch"
                      {:query-params {:q "icahn" :page 1}}))
@@ -42,7 +44,7 @@
          :body
          (re-seq #"alt\=\"([^\"]+)\"\s+src\=.+imgflip\.com\/([\w\d]+).(jpg|png)")
          (map (fn [[_ alt id]]
-                {:name (s/replace alt #"\sMeme Template( Thumbnail)*" "")
+                {:name (string/replace alt #"\sMeme Template( Thumbnail)*" "")
                  :url (str "http://i.imgflip.com/" id ".jpg")
                  :id (parse-base-36-int id)})))))
 
@@ -82,8 +84,8 @@
            (into [(:id meme)]
                  (if text1
                    [text0 text1]
-                   (let [spl (split text0 #"\s")]
-                     (map (partial join " ")
+                   (let [spl (string/split text0 #"\s")]
+                     (map (partial string/join " ")
                           (split-at (/ (count spl) 2) spl))))))
     {:success false
      :error_message (str "Couldn't find any memes for " query)}))

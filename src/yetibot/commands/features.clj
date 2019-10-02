@@ -1,23 +1,25 @@
 (ns yetibot.commands.features
   (:require
     [clj-http.client :as client]
-    [schema.core :as sch]
-    [clojure.string :as s]
+    [clojure.spec.alpha :as s]
+    [clojure.string :as string]
     [tentacles [issues :as is] [core :as tc]]
     [flatland.useful.fn :as useful]
-    [yetibot.api.github :as gh]
     [yetibot.core.chat :refer [chat-data-structure]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [obs-hook cmd-hook]]))
 
-(def schema
-  {:repo sch/Str
-   :token sch/Str
-   :user sch/Str})
+(s/def ::repo string?)
+
+(s/def ::token string?)
+
+(s/def ::user string?)
+
+(s/def ::config (s/keys :req-un [::repo ::token ::user]))
 
 (def rate-limit-ms 5000)
 
-(defn config [] (:value (get-config schema [:features :github])))
+(defn config [] (:value (get-config ::config [:features :github])))
 
 (defn auth [] {:oauth-token (:token (config))})
 (defn repo [] (or (:repo (config)) "yetibot"))
@@ -49,7 +51,7 @@
 (defn listen-for-add-feature
   [event-json]
   (when-let [match (should-add-feature? (:body event-json))]
-    (let [title (s/trim (second match))]
+    (let [title (string/trim (second match))]
       (-> (post-issue title)
           format-issue-response
           chat-data-structure))))

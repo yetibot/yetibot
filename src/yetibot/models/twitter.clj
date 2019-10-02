@@ -4,10 +4,10 @@
     [yetibot.core.util.http :refer [html-decode]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.chat :as chat]
-    [schema.core :as sch]
+    [clojure.spec.alpha :as s]
     [taoensso.timbre :refer [info warn error]]
     [clj-http.client :as client]
-    [clojure.string :as s :refer [join]]
+    [clojure.string :as string]
     [clojure.data.json :as json]
     [twitter.oauth :refer :all]
     [twitter.callbacks :refer :all]
@@ -20,14 +20,21 @@
 
 ;;;; config
 
-(def twitter-schema
-  {:consumer {:key sch/Str
-              :secret sch/Str}
-   :token sch/Str
-   :secret sch/Str
-   :search {:lang sch/Str}})
+(s/def ::key string?)
 
-(def config (:value (get-config twitter-schema [:twitter])))
+(s/def ::secret string?)
+
+(s/def ::consumer (s/keys :req-un [::key ::secret]))
+
+(s/def ::token string?)
+
+(s/def ::lang string?)
+
+(s/def ::search (s/keys :req-un [::lang]))
+
+(s/def ::config (s/keys :req-un [::consumer ::token ::secret ::search]))
+
+(def config (:value (get-config ::config [:twitter])))
 
 (def creds (apply make-oauth-creds
                   ((juxt (comp :key :consumer)
@@ -45,7 +52,7 @@
       url)))
 
 (defn expand-twitter-urls [text]
-  (s/replace text #"https*://t.co/\S+" expand-url))
+  (string/replace text #"https*://t.co/\S+" expand-url))
 
 (defn format-screen-name [json]
   (:screen_name (:user json)))
@@ -55,7 +62,7 @@
   (->> (:entities json)
        :media
        (map :media_url)
-       (join " ")))
+       (string/join " ")))
 
 (defn format-tweet-text [{:keys [extended_tweet] :as json}]
   ;; use extended_tweet if available; otherwise fallback to regular json entity:
@@ -143,7 +150,7 @@
   (when-let [s @statuses-streaming-response] ((:cancel (meta s))))
   ; now create a new streaming connection with the new topics
   (reset! statuses-streaming-response
-          (statuses-filter :params {:track (join "," ts)}
+          (statuses-filter :params {:track (string/join "," ts)}
                            :oauth-creds creds
                            :callbacks streaming-callback)))
 

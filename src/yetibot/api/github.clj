@@ -1,8 +1,8 @@
 (ns yetibot.api.github
   (:require
     [taoensso.timbre :refer [info warn error]]
-    [schema.core :as sch]
-    [yetibot.core.schema :refer [non-empty-str]]
+    [clojure.spec.alpha :as s]
+    [yetibot.core.spec :as yspec]
     [clojure.data.csv :as csv]
     [clojure.java.io :as io]
     [tentacles
@@ -15,7 +15,7 @@
      [events :as e]
      [data :as data]
      [orgs :as o]]
-    [clojure.string :as s]
+    [clojure.string :as string]
     [clj-http.client :as client]
     [graphql-query.core :refer [graphql-query]]
     [yetibot.core.config :refer [get-config]]
@@ -27,13 +27,18 @@
 
 ;;; config
 
-(def github-schema
-  {:token non-empty-str
-   :org [non-empty-str]
-   (sch/optional-key :graphql) {:endpoint non-empty-str}
-   (sch/optional-key :endpoint) non-empty-str})
+(s/def ::token ::yspec/non-blank-string)
 
-(defn config [] (:value (get-config github-schema [:github])))
+(s/def ::org ::yspec/non-blank-string)
+
+(s/def ::endpoint ::yspec/non-blank-string)
+
+(s/def ::graphql (s/keys :req-un [::endpoint]))
+
+(s/def ::config (s/keys :req-un [::token ::org]
+                        :opt-un [::graphql ::endpoint]))
+
+(defn config [] (:value (get-config ::config [:github])))
 (defn configured? [] (config))
 (def endpoint (or (:endpoint (config)) "https://api.github.com/"))
 
@@ -79,11 +84,11 @@
   (client/post
     (-> (config) :graphql :endpoint)
     {:headers {"Authorization" (str "bearer " (:token (config)))}
-     :body (str "{\"query\": \"" (s/replace query #"\n" "") "\"}")
+     :body (str "{\"query\": \"" (string/replace query #"\n" "") "\"}")
      :as :json}))
 
 (defn email->username [email]
-  (first (s/split email #"\@")))
+  (first (string/split email #"\@")))
 
 ;;; data
 
@@ -266,22 +271,22 @@
 (defmethod fmt-event "PushEvent" [e]
   (into [(str (-> e :actor :login)
               " pushed to "
-              (s/replace (-> e :payload :ref) "refs/heads/" "")
+              (string/replace (-> e :payload :ref) "refs/heads/" "")
               " at "
               (-> e :repo :name))]
         (map (fn [{:keys [author sha message]}]
                (str "* "
-                    (s/join (take 7 sha))
+                    (string/join (take 7 sha))
                     " "
                     message
                     " [" (:name author) "]"))
              (-> e :payload :commits))))
 
 (defmethod fmt-event :default [e]
-  (s/join " "
-          [(-> e :actor :login)
-           (:type e)
-           (:payload e)]))
+  (string/join " "
+               [(-> e :actor :login)
+                (:type e)
+                (:payload e)]))
 
 (defn fmt-events
   [evts]

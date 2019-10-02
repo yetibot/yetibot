@@ -1,15 +1,19 @@
 (ns yetibot.api.s3
   (:require
-    [schema.core :as sch]
+    [clojure.spec.alpha :as s]
     [aws.sdk.s3 :as s3]
-    [clojure.string :as s]
+    [clojure.string :as string]
     [yetibot.core.config :refer [get-config]]))
 
-(def s3-schema
-  {:access {:key sch/Str}
-   :secret {:key sch/Str}})
+(s/def ::key string?)
 
-(defn config [] (get-config s3-schema [:s3]))
+(s/def ::access (s/keys :req-un [::key]))
+
+(s/def ::secret (s/keys :req-un [::key]))
+
+(s/def ::config (s/keys :req-un [::access ::secret]))
+
+(defn config [] (get-config ::config [:s3]))
 
 (defn transformed-config []
   (when-let [c (:value (config))]
@@ -17,11 +21,11 @@
      :secret-key (-> c :secret :key)}))
 
 (defn content [path]
-  (let [[bucket key] (s/split path #"\/" 2)]
+  (let [[bucket key] (string/split path #"\/" 2)]
     (slurp (:content (s3/get-object (transformed-config) bucket key)))))
 
 (defn put [path object]
-  (let [[bucket key] (s/split path #"\/" 2)]
+  (let [[bucket key] (string/split path #"\/" 2)]
     (s3/put-object (transformed-config) bucket key object)))
 
 (defn buckets []

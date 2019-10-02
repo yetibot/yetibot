@@ -1,7 +1,6 @@
 (ns yetibot.commands.weather
   (:require
-    [schema.core :as sch]
-    [clojure.string :as str]
+    [clojure.spec.alpha :as s]
     [clj-http.client :as http.client]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
@@ -9,7 +8,9 @@
     [yetibot.models.postal-code :refer [chk-postal-code]]
     [yetibot.commands.weather.formatters :as fmt]))
 
-(def config (:value (get-config sch/Any [:weather :weatherbitio])))
+(s/def ::config any?)
+
+(def config (:value (get-config ::config [:weather :weatherbitio])))
 
 (def api-key (:key config))
 (def default-zip (-> config :default :zip))
