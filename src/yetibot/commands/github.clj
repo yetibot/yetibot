@@ -256,8 +256,15 @@
 (defn search-cmd
   "gh search <query> # search GitHub for <query>"
   [{[_ query] :match}]
-  query
   (let [{items :items :as result} (gh/search-code query)]
+    {:result/data result
+     :result/collection-path [:items]
+     :result/value (map :html_url items)}))
+
+(defn search-repos-cmd
+  "gh search repos <query> # search GitHub for <query>"
+  [{[_ query] :match}]
+  (let [{items :items :as result} (gh/search-repos query)]
     {:result/data result
      :result/collection-path [:items]
      :result/value (map :html_url items)}))
@@ -266,8 +273,10 @@
   (cmd-hook {"gh" #"gh"
              "github" #"github"}
     #"feed\s+(\S+)" feed
-    #"repos\s+(\S+)" repos
-    #"repos" repos
+    #"^search\s+repos\s+(.+)" search-repos-cmd
+    #"^search\s+(.+)" search-cmd
+    #"^repos\s+(\S+)" repos
+    #"^repos" repos
     ;; TODO
     ;; #"notify\s+list" notify-list-cmd
     ;; #"notify\s+add\s+(\S+)" notify-add-cmd
@@ -276,7 +285,6 @@
     #"incidents" incidents
     #"status$" status
     #"pr\s+(\S+)" pull-requests
-    #"search\s+(.+)" search-cmd
     #"stats\s+(\S+)\/(\S+)" stats-cmd
     #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
     #"tags\s+(\S+)\/(\S+)" tags

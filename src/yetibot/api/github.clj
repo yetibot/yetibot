@@ -252,12 +252,32 @@
             (search/search-code
               keywords (merge {} query) auth)))
 
+(defn search-repos [keywords & [query opts]]
+  (with-url endpoint
+    (search/search-repos
+     keywords (merge {} query) auth)))
+
+(defn search-topics [keywords & [query opts]]
+  (with-url endpoint
+            (search/search-topics
+              keywords (merge {} query) auth))
+  )
+
 (comment
+
+  (->> (search-repos "topic:yetibot")
+       :items
+       (map :html_url))
+
+  (search-topics "yetibot")
 
   (search-pull-requests "yetibot" "")
 
   (search-code "org:yetibot cmd-hook")
 
+  (->> (search-code "topic:yetibot")
+       :items
+       (map :html_url))
   )
 
 ;;; events / feed
