@@ -35,4 +35,6 @@ VOLUME $WORKDIR/config/
 
 VOLUME $LOGDIR
 
+HEALTHCHECK CMD curl --fail http://localhost/healthz || exit 1
+
 CMD ["lein", "with-profile", "+docker", "run"]
