@@ -24,3 +24,25 @@ services:
     ports:
       - 5432
 
+  grafana:
+    image: grafana/grafana
+    ports:
+      - "3000:3000"
+
+  influxdb:
+    image: influxdb
+    environment:
+      - INFLUXDB_DB=events
+    ports:
+      - "8083:8083"
+      - "8086:8086"
+      - "8090:8090"
+
+  riemann:
+    image: riemannio/riemann
+    ports:
+      - "127.0.0.1:5555:5555"
+      - "127.0.0.1:5555:5555/udp"
+      - "127.0.0.1:5556:5556"
+    volumes:
+      - ./riemann.config:/etc/riemann.config
