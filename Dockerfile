@@ -4,7 +4,7 @@ FROM clojure:openjdk-11-lein
 
 MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
 
-EXPOSE 3000
+EXPOSE 3003
 
 ENV WORKDIR /usr/src/app
 ENV LOGDIR /var/log/yetibot
@@ -34,5 +34,7 @@ RUN lein deps
 VOLUME $WORKDIR/config/
 
 VOLUME $LOGDIR
+
+HEALTHCHECK CMD curl --fail http://localhost:3003/healthz || exit 1
 
 CMD ["lein", "with-profile", "+docker", "run"]
