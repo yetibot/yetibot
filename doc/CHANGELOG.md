@@ -6,6 +6,19 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.42 - 10/7/19
+
+- Upgrade to `yetibot/core "20191007.181520.9b061e6"`. This fixes a bug in
+  monitoring that prevented Yetibot from starting up and instead erring with
+  something like:
+
+  ```
+  Exception in thread "main" java.lang.IllegalArgumentException: hostname can't be null
+  ```
+
+- Add healthcheck to Dockerfile
+  [#966](https://github.com/yetibot/yetibot/pull/966)
+
 ## 0.5.41 - 9/13/19
 
 - Upgrade to `yetibot/core "20190913.182757.1838a79"`
