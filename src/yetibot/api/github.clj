@@ -238,6 +238,11 @@
   (with-url endpoint
     (issues/org-issues org-name auth)))
 
+(defn create-comment-on-issue
+  [org-name repo issue-number comment]
+  (with-url endpoint
+    (issues/create-comment org-name repo issue-number comment auth)))
+
 ;; search
 
 (defn search-pull-requests [org-name keywords & [opts]]

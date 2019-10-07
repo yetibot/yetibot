@@ -262,6 +262,16 @@
      :result/collection-path [:items]
      :result/value (map :html_url items)}))
 
+(defn comment-on-issue-cmd
+  "gh comment <org>/<repo>#<issue_number> <comment> # post comment on given issue number for a Github repository"
+  [{[_ org-name repo issue-number comment] :match}]
+  (let [response (gh/create-comment-on-issue org-name repo issue-number comment)]
+    (or
+      (report-if-error response)
+      {:result/data response
+       :result/value (format "Comment added to issue #%s"
+                             issue-number)})))
+
 (when (gh/configured?)
   (cmd-hook {"gh" #"gh"
              "github" #"github"}
@@ -283,4 +293,5 @@
     #"branches\s+(\S+)\/(\S+)" branches
     #"releases\s+show\s+(\S+)\/(\S+)\s+(\S+)" show-release-info-by-tag-cmd
     #"releases\s+show\s+(\S+)\/(\S+)" show-latest-release-info-cmd
-    #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd))
+    #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd
+    #"comment\s+(\S+)\/(\S+)#(\d+)\s+(.+)" comment-on-issue-cmd))
