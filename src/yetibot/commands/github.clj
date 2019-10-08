@@ -281,8 +281,7 @@
                            (:name topic)
                            (when-let [desc (:short_description topic)]
                              (str " - " desc))
-                           " https://github.com/topics/" (:name topic)
-                           ))
+                           " " gh/github-web-url "/topics/" (:name topic)))
                         items)}))
 
 (defn topics-cmd

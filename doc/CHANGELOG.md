@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.44 - 10/8/19
+
+- Fix base URL for GitHub instance when listing topics via
+  `gh search topics <query>`
+
 ## 0.5.43 - 10/8/19
 
 - Add additional github search and topics commands –

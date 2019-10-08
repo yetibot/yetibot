@@ -41,7 +41,14 @@
 
 (defn config [] (:value (get-config ::config [:github])))
 (defn configured? [] (config))
-(def endpoint (or (:endpoint (config)) "https://api.github.com/"))
+(def config-endpoint (:endpoint (config)))
+(def endpoint (or config-endpoint "https://api.github.com/"))
+
+(def github-web-url
+  "Infer the GitHub instance's web URL from the configured endpoint."
+  (if config-endpoint
+    (string/replace config-endpoint #"/api/v3/+$" "")
+    "https://github.com"))
 
 (def token (:token (config)))
 (def auth {:oauth-token token})
