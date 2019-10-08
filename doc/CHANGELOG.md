@@ -6,6 +6,19 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.43 - 10/8/19
+
+- Add additional github search and topics commands –
+  [#964](https://github.com/yetibot/yetibot/pull/964)
+
+  ```
+  gh search repos <query> # search GitHub repos for <query>
+  gh search <query> # search GitHub code for <query>
+  gh search topics <query> # search GitHub topics for <query>
+  gh topics <org-name>/<repo> # list topics for a repo
+  gh topics set <owner>/<repo> <collection or space-separated list of topics>
+  ```
+
 ## 0.5.42 - 10/7/19
 
 - Upgrade to `yetibot/core "20191007.181520.9b061e6"`. This fixes a bug in
