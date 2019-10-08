@@ -44,7 +44,7 @@
 
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [yetibot/core "20191007.181520.9b061e6"]
-                 [irresponsible/tentacles "0.6.5"]
+                 [irresponsible/tentacles "0.6.6"]
 
                  ; apis
                  [twitter-api "1.8.0"]
