@@ -253,34 +253,83 @@
     {:result/error
      (format "No releases found on %s/%s" org-name repo)}))
 
-(defn search-cmd
-  "gh search <query> # search GitHub for <query>"
+(defn search-code-cmd
+  "gh search <query> # search GitHub code for <query>"
   [{[_ query] :match}]
-  query
   (let [{items :items :as result} (gh/search-code query)]
     {:result/data result
      :result/collection-path [:items]
      :result/value (map :html_url items)}))
 
+(defn search-repos-cmd
+  "gh search repos <query> # search GitHub repos for <query>"
+  [{[_ query] :match}]
+  (let [{items :items :as result} (gh/search-repos query)]
+    {:result/data result
+     :result/collection-path [:items]
+     :result/value (map :html_url items)}))
+
+(defn search-topics-cmd
+  "gh search topics <query> # search GitHub topics for <query>"
+  [{[_ query] :match}]
+  (let [{items :items :as result} (gh/search-topics query)]
+    {:result/data result
+     :result/collection-path [:items]
+     :result/value (map (fn [topic]
+                          (str
+                           (when (:featured topic) "✅ ")
+                           (:name topic)
+                           (when-let [desc (:short_description topic)]
+                             (str " - " desc))
+                           " https://github.com/topics/" (:name topic)
+                           ))
+                        items)}))
+
+(defn topics-cmd
+  "gh topics <org-name>/<repo> # list topics for a repo"
+  [{[_ user repo] :match}]
+  (let [{names :names :as result} (gh/repo-topics user repo)]
+    {:result/data result
+     :result/collection-path [:names]
+     :result/value names}))
+
+(defn set-topics-cmd
+  "gh topics set <owner>/<repo> <collection or space-separated list of topics>"
+  [{[_ owner repo items] :match opts :opts}]
+  (info "set-topics-cmd" (pr-str items))
+  (let [topics (or opts (s/split items #"\s"))
+        _ (info "set-topics-cmd" topics)
+        result (gh/repo-update-topics owner repo {:names topics})]
+    {:result/data result
+     :result/collection-path [:names]
+     :result/value (format "✅ Set topics on `%s/%s` to: `%s`"
+                           owner repo
+                           (s/join " " (:names result)))}))
+
 (when (gh/configured?)
-  (cmd-hook {"gh" #"gh"
-             "github" #"github"}
-    #"feed\s+(\S+)" feed
-    #"repos\s+(\S+)" repos
-    #"repos" repos
-    ;; TODO
-    ;; #"notify\s+list" notify-list-cmd
-    ;; #"notify\s+add\s+(\S+)" notify-add-cmd
-    ;; #"notify\s+remove\s+(\S+)" notify-remove-cmd
-    #"orgs" orgs
-    #"incidents" incidents
-    #"status$" status
-    #"pr\s+(\S+)" pull-requests
-    #"search\s+(.+)" search-cmd
-    #"stats\s+(\S+)\/(\S+)" stats-cmd
-    #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
-    #"tags\s+(\S+)\/(\S+)" tags
-    #"branches\s+(\S+)\/(\S+)" branches
-    #"releases\s+show\s+(\S+)\/(\S+)\s+(\S+)" show-release-info-by-tag-cmd
-    #"releases\s+show\s+(\S+)\/(\S+)" show-latest-release-info-cmd
-    #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd))
+  (cmd-hook
+   {"gh" #"gh" "github" #"github"}
+   #"feed\s+(\S+)" feed
+   #"^topics\s(\S+)\/(\S+)" topics-cmd
+   #"^topics\s+set\s(\S+)\/(\S+)\s*(.*)" set-topics-cmd
+   #"^search\s+topics\s+(.+)" search-topics-cmd
+   #"^search\s+repos\s+(.+)" search-repos-cmd
+   #"^search\s+code\s+(.+)" search-code-cmd
+   #"^search\s+(.+)" search-code-cmd ;; default search
+   #"^repos\s+(\S+)" repos
+   #"^repos" repos
+   ;; TODO
+   ;; #"notify\s+list" notify-list-cmd
+   ;; #"notify\s+add\s+(\S+)" notify-add-cmd
+   ;; #"notify\s+remove\s+(\S+)" notify-remove-cmd
+   #"orgs" orgs
+   #"incidents" incidents
+   #"status$" status
+   #"pr\s+(\S+)" pull-requests
+   #"stats\s+(\S+)\/(\S+)" stats-cmd
+   #"contributors\s+(\S+)\/(\S+)\s+since\s+(\d+)\s+(minutes*|hours*|days*|weeks*|months*)" contributors-since-cmd
+   #"tags\s+(\S+)\/(\S+)" tags
+   #"branches\s+(\S+)\/(\S+)" branches
+   #"releases\s+show\s+(\S+)\/(\S+)\s+(\S+)" show-release-info-by-tag-cmd
+   #"releases\s+show\s+(\S+)\/(\S+)" show-latest-release-info-cmd
+   #"releases\s+(\S+)\/(\S+)" list-releases-info-cmd))

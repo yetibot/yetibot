@@ -29,7 +29,8 @@
 
 (s/def ::token ::yspec/non-blank-string)
 
-(s/def ::org ::yspec/non-blank-string)
+(s/def ::org (s/or ::yspec/non-blank-string
+                   (s/coll-of ::yspec/non-blank-string)))
 
 (s/def ::endpoint ::yspec/non-blank-string)
 
@@ -45,7 +46,7 @@
 (def token (:token (config)))
 (def auth {:oauth-token token})
 (future
-  (def user (with-url endpoint (u/me auth)))
+  (defonce user (with-url endpoint (u/me auth)))
   (def user-name (:login user)))
 
 ; ensure org-names is a sequence; config allows either
@@ -134,15 +135,36 @@
     (r/org-repos
       org-name (merge auth {:per-page 100}))))
 
+
+(defn repo-topics [user repo]
+  (with-url
+    endpoint
+    (r/list-topics user repo)))
+
+(defn repo-update-topics [owner repo options]
+  (with-url
+    endpoint
+    (r/update-topics owner repo (merge auth options))))
+
 (comment
+
+  (repo-update-topics
+   "yetibot" "yetibot" {:names ["chatbot"
+                                "chatops"
+                                "clojure"
+                                "slack"
+                                "irc"
+                                "automation"
+                                "docker"
+                                "unix-pipes"
+                                "yetibot"]})
+
+  (repo-topics "yetibot" "yetibot")
 
   (with-url
     endpoint
     (r/org-repos
-      "yetibot" (merge auth {:per-page 100})))
-
-  )
-
+     "yetibot" (merge auth {:per-page 100}))))
 
 (defn repos-by-org []
   (into {} (for [org-name (org-names)]
@@ -251,12 +273,33 @@
             (search/search-code
               keywords (merge {} query) auth)))
 
+(defn search-repos [keywords & [query opts]]
+  (with-url endpoint
+    (search/search-repos
+     keywords (merge {} query) auth)))
+
+(defn search-topics [keywords & [query opts]]
+  (with-url endpoint
+            (search/search-topics
+              keywords (merge {} query) auth)))
+
 (comment
+
+  (->> (search-repos "topic:yetibot")
+       :items
+       (map :html_url))
+
+  (search-topics "yetibot")
+
+  (search-topics "clojure")
 
   (search-pull-requests "yetibot" "")
 
   (search-code "org:yetibot cmd-hook")
 
+  (->> (search-code "topic:yetibot")
+       :items
+       (map :html_url))
   )
 
 ;;; events / feed
