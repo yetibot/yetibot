@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.46 - 10/9/19
+
+- Upgrade to `yetibot/core "20191009.221933.8c538c8"`
+
 ## 0.5.45 - 10/8/19
 
 - Detect if GitHub API is enterprise and link topic search results to web search
