@@ -44,6 +44,13 @@
 (def config-endpoint (:endpoint (config)))
 (def endpoint (or config-endpoint "https://api.github.com/"))
 
+(def enterprise?
+  "GitHub Enterprise does not have full parity with github.com so sometimes we
+   may need to adjust logic or URLs for enterprise, such as when exploring
+   topics."
+  (and config-endpoint
+       (not (re-find #"^https://api.github.com" endpoint))))
+
 (def github-web-url
   "Infer the GitHub instance's web URL from the configured endpoint."
   (if config-endpoint

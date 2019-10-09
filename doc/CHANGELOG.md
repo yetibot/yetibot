@@ -6,6 +6,12 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.45 - 10/8/19
+
+- Detect if GitHub API is enterprise and link topic search results to web search
+  instead of explore topics since there is not full parity between github.com
+  and GitHub Enterprise
+
 ## 0.5.44 - 10/8/19
 
 - Fix base URL for GitHub instance when listing topics via

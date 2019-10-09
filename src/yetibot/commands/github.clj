@@ -1,16 +1,17 @@
 (ns yetibot.commands.github
   (:require
-    [taoensso.timbre :refer [info warn error]]
-    [yetibot.api.github :as gh]
-    [clojure.string :as s]
-    [yetibot.core.util.http :refer [get-json]]
-    [yetibot.core.hooks :refer [cmd-hook]]
-    [taoensso.timbre :refer [info]]
-    [inflections.core :refer [plural]]
-    [clj-time [core :refer [ago minutes hours days weeks years months]]]
-    [clj-time.coerce :as c]
-    [clj-time.format :as f]
-    [robert.bruce :refer [try-try-again] :as rb]))
+   [yetibot.core.util.http :refer [encode]]
+   [taoensso.timbre :refer [info warn error]]
+   [yetibot.api.github :as gh]
+   [clojure.string :as s]
+   [yetibot.core.util.http :refer [get-json]]
+   [yetibot.core.hooks :refer [cmd-hook]]
+   [taoensso.timbre :refer [info]]
+   [inflections.core :refer [plural]]
+   [clj-time [core :refer [ago minutes hours days weeks years months]]]
+   [clj-time.coerce :as c]
+   [clj-time.format :as f]
+   [robert.bruce :refer [try-try-again] :as rb]))
 
 (def date-formatter (f/formatters :date))
 (def date-hour-formatter (f/formatter "MMM d, yyyy 'at' hh:mm"))
@@ -269,20 +270,29 @@
      :result/collection-path [:items]
      :result/value (map :html_url items)}))
 
+
+(defn format-topic [{:keys [featured short_description]
+                     topic-name :name}]
+  (let [topic-url (if gh/enterprise?
+                    (str gh/github-web-url "/search?q="
+                         (encode (str "topic:" topic-name)))
+                    ;; public github supports topics
+                    (str gh/github-web-url "/topics/" topic-name))]
+    (str
+     (when featured "✅ ")
+     topic-name
+     (when short_description (str " - " short_description))
+     " "
+
+     topic-url)))
+
 (defn search-topics-cmd
   "gh search topics <query> # search GitHub topics for <query>"
   [{[_ query] :match}]
   (let [{items :items :as result} (gh/search-topics query)]
     {:result/data result
      :result/collection-path [:items]
-     :result/value (map (fn [topic]
-                          (str
-                           (when (:featured topic) "✅ ")
-                           (:name topic)
-                           (when-let [desc (:short_description topic)]
-                             (str " - " desc))
-                           " " gh/github-web-url "/topics/" (:name topic)))
-                        items)}))
+     :result/value (map format-topic items)}))
 
 (defn topics-cmd
   "gh topics <org-name>/<repo> # list topics for a repo"
