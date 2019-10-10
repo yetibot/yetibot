@@ -6,6 +6,7 @@
     [yetibot.api.aws]))
 
 (def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
+(def s3-response-spec (partial aws/response-spec-key yetibot.api.aws/s3))
 
 ; IAM AWS API response formatting utility function
 (defmulti format-iam-response
@@ -182,3 +183,25 @@
     {:result/data  {:request-id request-id}
      :result/value (format "Access Key successfully deleted [RequestId=%s]"
                            request-id)}))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmulti format-s3-response
+          "Returns a dispatch-value matching the S3 operation that has been successfully invoked
+          or has failed"
+          (fn [response]
+            (let [aws-type (:aws/type (meta response))]
+              (cond
+                (and (s/valid? (s3-response-spec :CreateBucket) response)
+                     (= aws-type :aws.type/CreateBucket)
+                     (not (contains? response :Error))) ::S3BucketCreated
+                :else ::error))))
+
+(defmethod format-s3-response ::error
+  [response]
+  {:result/error (get-in response [:Error :Message])})
+
+(defmethod format-s3-response ::S3BucketCreated
+  [{:keys [Location]}]
+  {:result/data  {:location Location}
+   :result/value (format "S3 bucket successfully created at %s" Location)})

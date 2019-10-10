@@ -46,6 +46,7 @@
 
 ; AWS clients
 (def iam (make-aws-client :iam))
+(def s3 (make-aws-client :s3))
 
 (defn- aws-invoke
   [aws-client op arg-keys & args]
@@ -122,3 +123,7 @@
 (def iam-delete-access-key
   "Deletes the specified user access key having the provided access key ID"
   (partial aws-invoke iam :DeleteAccessKey [:UserName :AccessKeyId]))
+
+(def s3-create-bucket
+  "Creates a new aws s3 bucket"
+  (partial aws-invoke s3 :CreateBucket [:Bucket :CreateBucketConfiguration]))

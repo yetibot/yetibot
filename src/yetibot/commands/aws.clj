@@ -3,7 +3,7 @@
     [taoensso.timbre :refer [info]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.aws :as aws]
-    [yetibot.commands.aws.formatters :refer [format-response]]))
+    [yetibot.commands.aws.formatters :refer [format-iam-response format-s3-response]]))
 
 (defn iam-create-group-in-path-cmd
   "aws iam create-group <path> <group-name> # Creates an aws IAM group named <group-name> within the specified <path>"
@@ -207,6 +207,14 @@
       (with-meta {:aws/type :aws.type/AccessKeyDeleted})
       format-iam-response))
 
+(defn s3-create-bucket-cmd
+  "aws s3 mb s3://<bucket-name> # Creates a new s3 bucket"
+  {:yb/cat #{:util :info}}
+  [{[_ bucket-name] :match}]
+  (-> (aws/s3-create-bucket bucket-name {:LocationConstraint "eu-west-1"})
+      (with-meta {:aws/type :aws.type/CreateBucket})
+      format-s3-response))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -233,4 +241,6 @@
             #"iam update-login-profile\s+(\S+)\s+(\S+)" iam-update-login-profile-cmd
             #"iam create-access-key\s+(\S+)" iam-create-access-key-cmd
             #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd
+            #"iam delete-access-key\s+(\S+)\s+(\S+)" iam-delete-access-key-cmd
+            #"s3 mb s3://(\S+)" s3-create-bucket-cmd
 
