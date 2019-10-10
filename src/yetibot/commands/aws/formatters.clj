@@ -3,7 +3,13 @@
     [clojure.spec.alpha :as s]
     [cognitect.aws.client.api :as aws]
     [yetibot.commands.aws.specs :as aws.spec]
+<<<<<<< HEAD
     [yetibot.api.aws]))
+=======
+    [yetibot.api.aws]
+    [taoensso.timbre :as log]
+    [clojure.contrib.humanize :refer [filesize] :as h]))
+>>>>>>> Implement aws s3 list-objects command
 
 (def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
 (def s3-response-spec (partial aws/response-spec-key yetibot.api.aws/s3))
@@ -198,6 +204,9 @@
                 (and (s/valid? (s3-response-spec :ListBuckets) response)
                      (= aws-type :aws.type/ListBuckets)
                      (not (contains? response :Error))) ::S3BucketListed
+                (and (s/valid? (s3-response-spec :ListObjectsV2) response)
+                     (= aws-type :aws.type/ListObjects)
+                     (not (contains? response :Error))) ::S3ObjectsListed
                 :else ::error))))
 
 (defmethod format-s3-response ::error
@@ -215,3 +224,11 @@
    :result/value (map
                    #(format "Bucket : %s - Created on %s" (:Name %) (:CreationDate %))
                    Buckets)})
+
+(defmethod format-s3-response ::S3ObjectsListed
+  [{:keys [Contents]}]
+  {:result/data  {:contents Contents}
+   :result/value (map
+                   #(format "%s[%s](%s) - Last modified on %s"
+                            (:Key %) (:StorageClass %) (h/filesize (:Size %) :binary false) (:LastModified %))
+                   Contents)})

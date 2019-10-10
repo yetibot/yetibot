@@ -131,3 +131,7 @@
 (def s3-list-buckets
   "Lists all s3 buckets"
   (partial aws-invoke s3 :ListBuckets))
+
+(def s3-list-objects
+  "Lists objects in an aws s3 bucket"
+  (partial aws-invoke s3 :ListObjectsV2 [:Bucket]))

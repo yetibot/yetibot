@@ -223,6 +223,14 @@
       (with-meta {:aws/type :aws.type/ListBuckets})
       format-s3-response))
 
+(defn s3-list-objects-cmd
+  "aws s3 ls s3://<bucket-name> # Lists objects in s3 bucket <bucket-name>"
+  {:yb/cat #{:util :info}}
+  [{[_ bucket-name] :match}]
+  (-> (aws/s3-list-objects bucket-name)
+      (with-meta {:aws/type :aws.type/ListObjects})
+      format-s3-response))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -252,4 +260,5 @@
             #"iam delete-access-key\s+(\S+)\s+(\S+)" iam-delete-access-key-cmd
             #"s3 mb s3://(\S+)" s3-create-bucket-cmd
             #"s3 ls" s3-list-buckets-cmd
+            #"s3 ls (\S+)" s3-list-objects-cmd))
 
