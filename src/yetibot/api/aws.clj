@@ -127,3 +127,7 @@
 (def s3-create-bucket
   "Creates a new aws s3 bucket"
   (partial aws-invoke s3 :CreateBucket [:Bucket :CreateBucketConfiguration]))
+
+(def s3-list-buckets
+  "Lists all s3 buckets"
+  (partial aws-invoke s3 :ListBuckets))

@@ -215,6 +215,14 @@
       (with-meta {:aws/type :aws.type/CreateBucket})
       format-s3-response))
 
+(defn s3-list-buckets-cmd
+  "aws s3 ls # Lists all buckets owned by the associated aws credentials"
+  {:yb/cat #{:util :info}}
+  [{[_] :match}]
+  (-> (aws/s3-list-buckets [])
+      (with-meta {:aws/type :aws.type/ListBuckets})
+      format-s3-response))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -243,4 +251,5 @@
             #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd
             #"iam delete-access-key\s+(\S+)\s+(\S+)" iam-delete-access-key-cmd
             #"s3 mb s3://(\S+)" s3-create-bucket-cmd
+            #"s3 ls" s3-list-buckets-cmd
 

@@ -195,6 +195,9 @@
                 (and (s/valid? (s3-response-spec :CreateBucket) response)
                      (= aws-type :aws.type/CreateBucket)
                      (not (contains? response :Error))) ::S3BucketCreated
+                (and (s/valid? (s3-response-spec :ListBuckets) response)
+                     (= aws-type :aws.type/ListBuckets)
+                     (not (contains? response :Error))) ::S3BucketListed
                 :else ::error))))
 
 (defmethod format-s3-response ::error
@@ -205,3 +208,10 @@
   [{:keys [Location]}]
   {:result/data  {:location Location}
    :result/value (format "S3 bucket successfully created at %s" Location)})
+
+(defmethod format-s3-response ::S3BucketListed
+  [{:keys [Buckets]}]
+  {:result/data  {:buckets Buckets}
+   :result/value (map
+                   #(format "Bucket : %s - Created on %s" (:Name %) (:CreationDate %))
+                   Buckets)})
