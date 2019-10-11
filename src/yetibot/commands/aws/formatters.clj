@@ -219,15 +219,26 @@
    :result/value (format "S3 bucket successfully created at %s" Location)})
 
 (defmethod format-s3-response ::S3BucketListed
-  [{:keys [Buckets]}]
-  {:result/data  {:buckets Buckets}
+  [{:keys [Buckets Owner]}]
+  {:result/data  {:buckets Buckets :owner Owner}
    :result/value (map
                    #(format "Bucket : %s - Created on %s" (:Name %) (:CreationDate %))
                    Buckets)})
 
 (defmethod format-s3-response ::S3ObjectsListed
-  [{:keys [Contents]}]
-  {:result/data  {:contents Contents}
+  [{:keys [Prefix StartAfter EncodingType Delimiter NextContinuationToken CommonPrefixes ContinuationToken Contents MaxKeys IsTruncated Name KeyCount]}]
+  {:result/data  {:prefix                  Prefix
+                  :start-after             StartAfter
+                  :encoding-type           EncodingType
+                  :delimiter               Delimiter
+                  :next-continuation-token NextContinuationToken
+                  :common-prefixes         CommonPrefixes
+                  :continuation-token      ContinuationToken
+                  :contents                Contents
+                  :max-keys                MaxKeys
+                  :is-truncated            IsTruncated
+                  :name                    Name
+                  :key-count               KeyCount}
    :result/value (map
                    #(format "%s[%s](%s) - Last modified on %s"
                             (:Key %) (:StorageClass %) (h/filesize (:Size %) :binary false) (:LastModified %))
