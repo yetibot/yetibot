@@ -153,7 +153,7 @@
 (defn repo-topics [user repo]
   (with-url
     endpoint
-    (r/list-topics user repo)))
+    (r/list-topics user repo auth)))
 
 (defn repo-update-topics [owner repo options]
   (with-url
