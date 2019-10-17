@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.49 - 10/17/19
+
+- Upgrade to `yetibot/core "20191017.211644.6ee48e9"`
+
 ## 0.5.48 - 10/11/19
 
 - Add auth when listing github topics
