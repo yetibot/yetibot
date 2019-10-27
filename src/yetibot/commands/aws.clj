@@ -211,7 +211,7 @@
   "aws s3 mb s3://<bucket-name> # Creates a new s3 bucket"
   {:yb/cat #{:util :info}}
   [{[_ bucket-name] :match}]
-  (-> (aws/s3-create-bucket bucket-name {:LocationConstraint "eu-west-1"})
+  (-> (aws/s3-create-bucket bucket-name {:LocationConstraint aws/region})
       (with-meta {:aws/type :aws.type/CreateBucket})
       format-s3-response))
 
