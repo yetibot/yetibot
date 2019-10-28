@@ -86,6 +86,9 @@
                  ;; overwrite kvlt's outdated version of aleph
                  [aleph "0.4.6"]
 
+                 ;cowsay
+                 [com.github.ricksbrown/cowsay "1.1.0" :classifier "lib"]
+
                  ;aws
                  [com.cognitect.aws/api "0.8.198"]
                  [com.cognitect.aws/endpoints "1.1.11.457"]
