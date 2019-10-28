@@ -138,8 +138,8 @@
      authorize-url
      :rsa-sha1)))
 
-(when (every? identity auth)
-  (info "✅ basic auth is configured for JIRA API access"))
+;; (when (every? identity auth)
+;;   (info "✅ basic auth is configured for JIRA API access"))
 
 ;; formatters
 ;; move to yetibot.core util if anyone else needs date parsing and formatting:
