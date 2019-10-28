@@ -51,6 +51,8 @@
                  [clj-aws-s3 "0.3.10" :exclusions [joda-time]]
                  [com.google.cloud/google-cloud-storage "1.57.0"]
                  [pager-duty-api "2.0"]
+                 [clj-oauth "1.5.5"]
+                 [clojure-interop/java.security "1.0.5"]
 
                  ; TODO remove this and use data.json instead
                  [cheshire "5.8.1"]

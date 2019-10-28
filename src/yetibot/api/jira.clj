@@ -1,14 +1,18 @@
 (ns yetibot.api.jira
   (:require
-    [taoensso.timbre :refer [info warn error]]
-    [clojure.spec.alpha :as s]
-    [yetibot.core.spec :as yspec]
-    [clojure.string :as string]
-    [clj-http.client :as client]
-    [clojure.core.memoize :as memo]
-    [yetibot.core.config :refer [get-config]]
-    [yetibot.core.util.http :refer [get-json fetch]]
-    [clj-time [format :refer [formatter formatters show-formatters parse unparse]]]))
+   [yetibot.util :refer [oauth1-credentials]]
+   [taoensso.timbre :refer [info warn error color-str]]
+   [clojure.spec.alpha :as s]
+   [yetibot.core.spec :as yspec]
+   [clojure.string :as string]
+   [clj-http.client :as client]
+   [oauth.client :as oauth]
+   [clojure.core.memoize :as memo]
+   [yetibot.core.config :refer [get-config]]
+   [yetibot.core.util.http :refer [get-json fetch]]
+   [clj-time
+    [local :refer [local-now]]
+    [format :refer [formatter formatters show-formatters parse unparse]]]))
 
 (s/def ::id ::yspec/non-blank-string)
 
@@ -33,8 +37,24 @@
 (s/def ::user ::yspec/non-blank-string)
 (s/def ::password ::yspec/non-blank-string)
 
-(s/def ::config (s/keys :req-un [::domain ::user ::password]
-                        :opt-un [::projects ::default ::max ::subtask]))
+(s/def ::secret ::yspec/non-blank-string)
+(s/def ::verifier ::yspec/non-blank-string)
+(s/def ::token ::yspec/non-blank-string)
+(s/def ::access (s/keys :req-un [::token]))
+
+(s/def ::consumer (s/keys :req-un [::key
+                                   ::secret]))
+
+(s/def ::oauth1 (s/keys :req-un [::consumer
+                                 ::verifier
+                                 ::access]))
+
+(s/def ::config (s/keys :req-un [::domain ::user]
+                        :opt-un [::projects ::default ::max ::subtask
+                                 ;; if password is include, basic auth is used
+                                 ::password
+                                 ;; if oauth is included use it instead
+                                 ::oauth1]))
 
 ;; config
 
@@ -97,6 +117,30 @@
 
 (def auth (map (config) [:user :password]))
 
+;; oauth 1
+;; https://developer.atlassian.com/server/jira/platform/oauth/
+;; This assume that you've already gone through the OAuth dance and obtained a
+;; an access token
+(def authorize-url (str (base-uri) "/plugins/servlet/oauth/authorize"))
+(def request-token-url (str (base-uri) "/plugins/servlet/oauth/request-token"))
+(def access-token-url (str (base-uri) "/plugins/servlet/oauth/access-token"))
+
+(def oauth1 (:oauth1 (config)))
+
+(def consumer
+  (when oauth1
+    (info "✅ oauth1 is configured for JIRA API access")
+    (oauth/make-consumer
+     (-> oauth1 :consumer :key)
+     (-> oauth1 :consumer :secret)
+     request-token-url
+     access-token-url
+     authorize-url
+     :rsa-sha1)))
+
+(when (every? identity auth)
+  (info "✅ basic auth is configured for JIRA API access"))
+
 ;; formatters
 ;; move to yetibot.core util if anyone else needs date parsing and formatting:
 
@@ -104,19 +148,58 @@
 (defn parse-and-format-date-string [date-string]
   (unparse date-time-format (parse date-string)))
 
-(def client-opts {:as :json
-                  :basic-auth auth
-                  :throw-exceptions true
-                  :coerce :unexceptional
-                  :throw-entire-message? false
-                  :insecure? true})
+(defn client-opts
+  "For oauth1 client-opts need to be computed for every API in order to generate
+   an authz header, baking any query-params into the signature.
+
+   http-method should be: :GET :POST :PUT or :DELETE"
+  [uri http-method & [query-params]]
+  (merge {:as :json
+          :throw-exceptions true
+          :coerce :unexceptional
+          :throw-entire-message? false
+          :insecure? true}
+         (when query-params
+           {:query-params query-params})
+         (when (every? identity auth)
+           {:basic-auth auth})
+         (when oauth1
+           (let [oauth-params (-> (oauth1-credentials
+                                   consumer
+                                   (-> oauth1 :access :token)
+                                   (:verifier oauth1)
+                                   http-method
+                                   uri
+                                   query-params)
+                                  (dissoc :oauth_version)
+                                  (assoc :oauth_verifier (:verifier oauth1)))
+                 authz-header (oauth/authorization-header oauth-params)]
+             {:headers {"Authorization" authz-header}}))))
 
 (defn endpoint [& fmt-with-args]
   (str (api-uri) (apply format fmt-with-args)))
 
 ;; helpers
 
-(defn GET [& fmt-with-args] (client/get (apply endpoint fmt-with-args) client-opts))
+(defn http-get
+  [uri & [{:keys [query-params] :as opts}]]
+  (client/get
+   uri (merge opts (client-opts uri :GET query-params))))
+
+(defn http-post
+  [uri & [{:keys [query-params] :as opts}]]
+  (client/post
+   uri (merge opts (client-opts uri :POST query-params))))
+
+(defn http-put
+  [uri & [{:keys [query-params] :as opts}]]
+  (client/put
+   uri (merge opts (client-opts uri :PUT query-params))))
+
+(defn http-delete
+  [uri & [{:keys [query-params] :as opts}]]
+  (client/delete
+   uri (merge opts (client-opts uri :DELETE query-params))))
 
 ;; formatters
 
@@ -193,11 +276,12 @@
 
 ;; issues
 
-(defn issue-create-meta [] (GET "/issue/createmeta"))
+(defn issue-create-meta [] (http-get (endpoint "/issue/createmeta")))
 
 (defn get-transitions [i]
-  (client/get (endpoint "/issue/%s/transitions?transitionId" i)
-              client-opts))
+  (http-get
+   (endpoint "/issue/%s/transitions" i)
+   {:query-params {:transitionId nil}}))
 
 (def ^:private find-resolve (partial filter #(= "Resolve Issue" (:name %))))
 
@@ -205,10 +289,11 @@
   (let [params {:update {:comment [{:add {:body comment}}]}
                 :fields {:resolution {:name "Fixed"}}
                 :transition transition-id}]
-    (client/post
-      (endpoint "/issue/%s/transitions?transitionId" i)
-      (merge client-opts
-             {:form-params params :content-type :json}))))
+    (http-post
+     (endpoint "/issue/%s/transitions" i)
+     {:query-params {:transitionId nil}
+      :form-params params
+      :content-type :json})))
 
 (defn resolve-issue
   "Transition an issue to the resolved state. If it is unable to make that
@@ -221,79 +306,69 @@
 
 (defn post-comment [issue-key body]
   (let [uri (endpoint "/issue/%s/comment" issue-key)]
-    (client/post uri
-                 (merge client-opts
-                        {:content-type :json
-                         :form-params {:body body}}))))
+    (http-post uri
+               {:content-type :json
+                :form-params {:body body}})))
 
 (defn add-worklog-item [issue-key time-spent work-description]
   (let [uri (endpoint "/issue/%s/worklog" issue-key)
         form-params {:timeSpent time-spent
                      :comment work-description}]
-    (client/post uri
-                 (merge client-opts
-                        {:content-type :json
-                         :form-params form-params}))))
+    (http-post uri
+               {:content-type :json
+                :form-params form-params})))
+
 (comment
+  ;; this is HUGE - it will freez your REPL if you try it
+  #_(issue-create-meta)
 
-  ;; scratch space for playing with JIRA api
+  (def iss-key (-> (recent) :body :issues first :key))
 
-  (def username "_Yetibot_admin")
+  (add-worklog-item
+   iss-key
+   "2d"
+   "jira oauth1 nightmare")
+  (post-comment iss-key "will it ever end")
 
-  (client/get (endpoint "/user/properties")
-              (merge client-opts
-                     {:query-params {:username username}
-                      :throw-exceptions false
-                      }
-                     ))
+  (get-transitions iss-key)
+  (-> iss-key
+      get-transitions
+      :body
+      :transitions
+      find-resolve)
 
-  (def yetibot
-    (client/get (endpoint "/user")
-                (merge client-opts
-                       {:query-params {:username "_Yetibot_admin"}
-                        :throw-exceptions false}
-                       )))
-
-  (def updated-name "Yetibot")
-
-  ;; these don't work /shrug
-  (client/put (endpoint "/user/properties/displayName")
-              (merge client-opts
-                     {:query-params {:username username
-                                     :value updated-name}
-                      :throw-exceptions false}))
-  (client/put (endpoint "/user")
-              (merge client-opts
-                     {:query-params {:username username
-                                     :key "name"
-                                     :value "Yetibot"}
-                      :throw-exceptions false }))
-
-  ;; get issue types
-
-  )
+  (resolve-issue iss-key "do you even resolve"))
 
 
 (defn get-issue
   "Fetch json for a given JIRA"
   [i]
   (let [uri (endpoint "/issue/%s" i)
-        opts (merge client-opts {:query-params {"fields" "*navigable,comment,worklog,attachment"}})]
-    (try
-      (client/get uri opts)
+        opts {:query-params {:fields "*navigable,comment,worklog,attachment"}}]
+    (http-get uri opts)
+    #_(try
+      (http-get uri opts)
       (catch Exception e
         (info "issue not found" i)))))
+
+(comment
+  (get-issue "YETIBOT-1")
+  *e)
 
 (def fetch-and-format-issue-short (comp format-issue-short :body get-issue))
 
 (defn find-project [pk]
   (try
-    (:body (client/get (endpoint "/project/%s" pk) client-opts))
-    (catch Exception _
+    (:body (http-get (endpoint "/project/%s" pk)))
+    (catch Exception e
+      (info "unable to find project:" e)
       nil)))
 
+(comment
+  (find-project "YETIBOT"))
+
 (defn priorities []
-  (client/get (endpoint "/priority") client-opts))
+  (http-get (endpoint "/priority")))
 
 (defn find-priority-by-key [k]
   (let [kp (re-pattern (str "(?i)" k))]
@@ -301,33 +376,38 @@
                    (:body (priorities))))))
 
 (defn issue-types []
-  (:body (client/get (endpoint "/issuetype") client-opts)))
+  (:body (http-get (endpoint "/issuetype"))))
 
 (defn update-issue
-  [issue-key {:keys [fix-version summary component-ids reporter assignee priority-key desc timetracking]}]
+  [issue-key {:keys [fix-version summary component-ids reporter assignee
+                     priority-key desc timetracking]}]
   (let [pri-id (if priority-key (:id (find-priority-by-key priority-key)))
         params {:fields
                 (merge
-                  {}
-                  (when fix-version {:fixVersions [{:name fix-version}]})
-                  (when summary {:summary summary})
-                  (when assignee {:assignee assignee})
-                  (when reporter {:reporter reporter})
-                  (when component-ids {:components (map #(hash-map :id %) component-ids)})
-                  (when desc {:description desc})
-                  (when timetracking {:timetracking timetracking})
-                  (when pri-id {:priority {:id pri-id}}))}]
+                 {}
+                 (when fix-version {:fixVersions [{:name fix-version}]})
+                 (when summary {:summary summary})
+                 (when assignee {:assignee assignee})
+                 (when reporter {:reporter reporter})
+                 (when component-ids {:components (map #(hash-map :id %) component-ids)})
+                 (when desc {:description desc})
+                 (when timetracking {:timetracking timetracking})
+                 (when pri-id {:priority {:id pri-id}}))}]
     (info "update issue" (pr-str params))
-    (client/put
-      (endpoint "/issue/%s" issue-key)
-      (merge client-opts
-             {:coerce :always
-              :throw-exceptions false
-              :form-params params
-              :content-type :json}))))
+    (http-put
+     (endpoint "/issue/%s" issue-key)
+     {:coerce :always
+      :throw-exceptions false
+      :form-params params
+      :content-type :json})))
+
+(comment
+  (update-issue
+   (-> (recent) :body :issues first :key)
+   {:desc (str (local-now))}))
 
 ;; TODO consolidate determineing project key from context (channel settings or
-;; global config)
+;; global config). currently we duplicate that logic in many places.
 
 (defn create-issue
   "This thing is a beast; thanks JIRA."
@@ -335,10 +415,14 @@
            fix-version timetracking issue-type-id parent]
     :or {desc "" assignee "-1"
          issue-type-id (if parent (sub-task-issue-type-id)
-                         (default-issue-type-id))
+                           (default-issue-type-id))
          project-key (or (first *jira-projects*)
                          (default-project-key))}}]
-  (info "issue-type-id" issue-type-id)
+  (info "create-issue"
+        (color-str :blue {:issue-type-id issue-type-id
+                          :project-key project-key
+                          :assignee assignee
+                          :component-ids component-ids}))
   (if-let [prj (find-project project-key)]
     (if-let [priority (if priority-key
                         (find-priority-by-key priority-key)
@@ -349,57 +433,82 @@
                               {:name fix-version}
                               (when-let [dvi (default-version-id project-key)]
                                 {:id dvi}))
+            _ (info "fix-version-map" fix-version-map)
             params {:fields
                     (merge {:assignee {:name assignee}
                             :project {:id prj-id}
                             :summary summary
-                            :components (map #(hash-map :id %) component-ids)
                             :description desc
                             :issuetype {:id issue-type-id}
                             :priority {:id pri-id}}
-                           (when reporter {:reporter {:name reporter}})
-                           (when fix-version-map :fixVersions [fix-version-map])
-                           (when timetracking {:timetracking timetracking})
-                           (when parent {:parent {:id parent}}))}]
+                           (when component-ids
+                             {:components (map #(hash-map :id %)
+                                               component-ids)})
+                           (when reporter
+                             {:reporter {:name reporter}})
+                           (when fix-version-map
+                             {:fixVersions [fix-version-map]})
+                           (when timetracking
+                             {:timetracking timetracking})
+                           (when parent
+                             {:parent {:id parent}}))}]
         (info "create issue" (pr-str params))
-        (client/post
-          (endpoint "/issue")
-          (merge client-opts
-                 {:form-params params
-                  :content-type :json})))
+        (http-post
+         (endpoint "/issue")
+         {:form-params params
+          :content-type :json}))
       (warn "Could not find a priority for key " priority-key))
     (warn "Could not find project" project-key)))
 
+(comment
+  (create-issue {:summary "test issue creation"})
+  (default-version-id "YETIBOT")
+  *e)
+
 (defn delete-issue [issue-key]
-  (client/delete
-    (endpoint "/issue/%s" issue-key)
-    (merge client-opts {:coerce :always
-                        :content-type :json
-                        :throw-exceptions false})))
+  (http-delete
+   (endpoint "/issue/%s" issue-key)
+   {:coerce :always
+    :content-type :json
+    :throw-exceptions false}))
+
+(comment
+  ;; delete random issue
+  (let [issue (-> (recent) :body :issues rand-nth :key)]
+    (info "deleting issue" issue)
+    (delete-issue issue)))
 
 (defn assign-issue
   [issue-key assignee]
-  (client/put
+  (http-put
     (endpoint "/issue/%s/assignee" issue-key)
-    (merge client-opts
-           {:content-type :json
-            :form-params {:name assignee}})))
+   {:content-type :json
+    :form-params {:name assignee}}))
+
+(comment
+
+  ;; assign the most recent issue for the default project to a random user
+  (let [user (-> (default-project-key) get-users :body rand-nth :name)
+        issue (-> (recent) :body :issues first :key)]
+    (info {:user user :issue issue})
+    (assign-issue issue user))
+  )
 
 ;; versions
 
 (defn versions
   ([] (versions (default-project-key)))
   ([project-key]
-   (client/get
-     (endpoint "/project/%s/versions" project-key)
-     client-opts)))
+   (http-get
+     (endpoint "/project/%s/versions" project-key))))
+
+(comment (versions))
 
 ;; components
 
 (defn components [project-key]
-  (client/get
-    (endpoint "/project/%s/components" project-key)
-    client-opts))
+  (http-get
+   (endpoint "/project/%s/components" project-key)))
 
 (def all-components
   (memo/ttl #(map components (project-keys))
@@ -411,14 +520,20 @@
   (let [re (re-pattern (str "(?i)" pattern-str))]
     (filter #(re-find re (:name %)) (mapcat :body (all-components)))))
 
+(comment
+  (components (first (project-keys)))
+  (find-component-like "bugs"))
+
 ;; users
 
 (defn get-users [project]
-  (client/get
-    (endpoint "/user/assignable/multiProjectSearch")
-    (merge client-opts
-           {:query-params
-            {"projectKeys" project}})))
+  (let [uri (endpoint "/user/assignable/multiProjectSearch")]
+    (http-get
+     uri
+     {:query-params {:projectKeys project}})))
+
+(comment
+  (get-users (first (project-keys))))
 
 ;; search
 
@@ -426,16 +541,14 @@
 
 (defn search [jql]
   (info "JQL search" jql)
-  (client/get
-    (endpoint "/search")
-    (merge client-opts
-           {:coerce :always
-            :throw-exceptions false
-            :query-params
-            {:jql jql
-             :startAt 0
-             :maxResults (max-results)
-             :fields ["summary" "status" "assignee"]}})))
+  (http-get
+   (endpoint "/search")
+   {:query-params {:jql jql
+                   :startAt 0
+                   :maxResults (max-results)
+                   :fields "summary,status,assignee"}
+    :coerce :always
+    :throw-exceptions false}))
 
 (defn search-in-projects [jql]
   (search (str (projects-jql) " AND (" jql ")")))
@@ -448,5 +561,25 @@
 
 (defn recent [] (search (projects-jql)))
 
+(comment
+  (recent))
+
 ;; prime cache
 ;; todo: move into a start fn ;; (future (all-components))
+
+(comment
+  ;; scratch space for playing with JIRA api
+  (def username "_Yetibot_admin")
+  (endpoint "/user/properties")
+  (endpoint "/user")
+  (def updated-name "Yetibot")
+  ;; these don't work /shrug
+  (http-put (endpoint "/user/properties/displayName")
+            {:query-params {:username username
+                            :value updated-name}
+             :throw-exceptions false})
+  (http-put (endpoint "/user")
+            {:query-params {:username username
+                            :key "name"
+                            :value "Yetibot"}
+             :throw-exceptions false}))
