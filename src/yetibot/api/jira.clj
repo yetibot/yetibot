@@ -115,7 +115,8 @@
 
 (defn api-uri [] (str (base-uri) "/rest/api/latest"))
 
-(def auth (map (config) [:user :password]))
+(def auth (when (config)
+            (map (config) [:user :password])))
 
 ;; oauth 1
 ;; https://developer.atlassian.com/server/jira/platform/oauth/
@@ -138,8 +139,8 @@
      authorize-url
      :rsa-sha1)))
 
-;; (when (every? identity auth)
-;;   (info "✅ basic auth is configured for JIRA API access"))
+(when (and auth (every? identity auth))
+  (info "✅ basic auth is configured for JIRA API access"))
 
 ;; formatters
 ;; move to yetibot.core util if anyone else needs date parsing and formatting:
