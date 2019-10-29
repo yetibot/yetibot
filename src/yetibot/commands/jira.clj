@@ -53,7 +53,7 @@
         (format-error (assoc error :body json-body))))))
 
 (defn projects-cmd
-  "jira projects # list configured projects (⭐️ indicates global default; ⚡️ indicates room default; room default overrides global default)"
+  "jira projects # list configured projects (⭐️ indicates global default; ⚡️ indicates channel default; channel default overrides global default)"
   {:yb/cat #{:issue}}
   [{:keys [settings]}]
   (let [projects-for-chan (set (channel-projects settings))]
