@@ -43,7 +43,7 @@
                    (println))}
 
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [yetibot/core "20191017.211644.6ee48e9"]
+                 [yetibot/core "20191029.192841.d316d17"]
                  [irresponsible/tentacles "0.6.6"]
 
                  ; apis

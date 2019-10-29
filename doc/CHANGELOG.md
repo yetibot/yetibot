@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.51 - 10/29/19
+
+- Upgrade to `yetibot/core "20191017.211644.6ee48e9"`
+
 ## 0.5.50 - 10/28/19
 
 - Add support for oauth1 in JIRA API -
