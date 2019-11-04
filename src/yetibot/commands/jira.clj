@@ -51,8 +51,8 @@
         (debug "jira error" (pr-str e))
         (format-error (assoc error :body json-body))))))
 
-(defn projects-cmd
-  "jira projects # list configured projects (⭐️ indicates global default; ⚡️ indicates channel default; channel default overrides global default)"
+(defn configured-projects-cmd
+  "jira configured-projects # list configured projects (⭐️ indicates global default; ⚡️ indicates channel default; channel default overrides global default)"
   {:yb/cat #{:issue}}
   [{:keys [settings]}]
   (let [projects-for-chan (set (channel-projects settings))]
@@ -263,7 +263,7 @@
     (info "recent" (pr-str (api/default-project-key)))
     (if (api/default-project-key)
       (report-if-error
-        #(api/recent (api/default-project-key))
+        #(api/recent project)
         (fn [res]
           {:result/value (short-jira-list res)
            :result/data (-> res :body :issues)}))
@@ -401,18 +401,26 @@
                         filtered)
      :result/data filtered}))
 
-(comment
+(defn projects-cmd
+  "jira projects [<query>] - list projects, optionally  matching <query>"
+  [{[_ query] :match}]
+  (report-if-error
+   #(api/get-projects query)
+   (fn [{:keys [body]}]
+     {:result/value (map api/format-project (:values body))
+      :result/collection-path [:values]
+      :result/data body})))
 
+(comment
   (-> "YETIBOT-1"
       api/get-issue
       :body
-      api/format-issue-long)
-  )
-
+      api/format-issue-long))
 
 (cmd-hook #"jira"
  #"^issue-types\s*(.*)" issue-types-cmd
- #"^projects" projects-cmd
+ #"^configured-projects" configured-projects-cmd
+ #"^projects\s*(\S+)*" projects-cmd
  #"^parse\s+(.+)" parse-cmd
  #"^show\s+(\S+)" show-cmd
  #"^delete\s+(\S+)" delete-cmd

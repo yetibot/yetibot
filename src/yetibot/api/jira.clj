@@ -220,6 +220,17 @@
 (defn url-from-key [k]
   (str (base-uri) "/browse/" k))
 
+(defn format-project
+  [{{project-category-name :name} :projectCategory
+    project-key :key
+    project-name :name
+    :as project}]
+  (str "[" project-key "]"
+       (when project-category-name
+         (str " [" project-category-name "]"))
+       " "
+       project-name))
+
 (defn format-issue [issue-data]
   (let [fs (:fields issue-data)]
     [(:summary fs)
@@ -583,6 +594,19 @@
 ;;      (merge {:issueKey issue-key}
 ;;             (when user-to-search-for {}))}))
 
+
+;; projects
+
+(defn get-projects [& [query]]
+  (http-get
+    (endpoint "/project/search")
+    {:query-params (merge {}
+                          (when query {:query query}))}))
+
+(comment
+  (get-projects)
+  )
+
 ;; search
 
 (defn- projects-jql [& [project]]
@@ -611,7 +635,8 @@
       "\" OR comment ~ \"" query "\")")))
 
 (defn recent [& [project]]
-  (search (projects-jql project)))
+  (search
+   (str (projects-jql project) " ORDER BY updatedDate")))
 
 (comment
   (search-by-query "demo")
