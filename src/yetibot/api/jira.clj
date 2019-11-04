@@ -73,7 +73,7 @@
 (defn channel-projects
   "Retrieve the list of configured projects for a channel, given its settings"
   [channel-settings]
-  (when-let [setting (channel-settings jira-project-setting-key)]
+  (when-let [setting (get channel-settings jira-project-setting-key)]
     (info "channel-projects" (pr-str setting))
     (seq (remove string/blank? (string/split setting #",\s*")))))
 
@@ -248,7 +248,7 @@
             (url-from-key (:key issue-data)))))
 
 (defn format-comment [c]
-  (str "📞 "
+  (str "💬 "
        (-> c :author :displayName) " "
        (parse-and-format-date-string (:created c))
        ": " (:body c)))
@@ -261,9 +261,13 @@
   (when-let [worklog (-> issue-data :fields :worklog :worklogs)]
     (map format-worklog-item worklog)))
 
-(defn format-subtasks [issue-data]
-  ;; TODO
-  nil)
+(defn format-subtasks [{{subtasks :subtasks} :fields}]
+  (when subtasks
+    (map (fn [{st-key :key
+               {summary :summary} :fields}]
+           (str "➡️ "
+                "[" st-key "] " summary))
+         subtasks)))
 
 (defn format-attachment-item [a]
   (str "📎 "
@@ -281,7 +285,7 @@
   (let [fs (:fields issue-data)]
     (flatten
       (keep identity
-            [(str (:key issue-data) " ↪︎ " (-> fs :status :name) " ↪︎ " (:summary fs))
+            [(str (:key issue-data) " 🔵 " (-> fs :status :name) " 🔵 " (:summary fs))
              (:description fs)
              (string/join
                "  "

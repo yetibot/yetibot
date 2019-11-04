@@ -247,8 +247,7 @@
        #(api/post-comment iss-key body)
        (fn [res]
          {:result/value
-          (str "✅ commented. "
-               (-> iss-key api/get-issue :body api/format-issue-short))
+          (-> iss-key api/get-issue :body api/format-issue-long)
           :result/data (:body res)})))))
 
 (defn recent-cmd
