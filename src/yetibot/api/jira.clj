@@ -313,16 +313,24 @@
    (endpoint "/issue/%s/transitions" i)
    {:query-params {:transitionId nil}}))
 
-(def ^:private find-resolve (partial filter #(= "Resolve Issue" (:name %))))
+(def ^:private find-resolve
+  (partial filter #(or
+                     (= "Done" (:name %))
+                     (= "Resolve Issue" (:name %)))))
 
-(defn- transition-issue [i transition-id comment]
-  (let [params {:update {:comment [{:add {:body comment}}]}
-                :fields {:resolution {:name "Fixed"}}
-                :transition transition-id}]
+(defn- transition-issue [i transition-id iss-comment]
+  (let [params {:update {:comment [{:add {:body iss-comment}}]}
+                ;; whether resolution is present depends on the configured
+                ;; screen. by default it's not present, so including this
+                ;; property would trigger the error:
+                ;; {"errorMessages":[],"errors":{"resolution":"Field 'resolution' cannot be set. It is not on the appropriate screen, or unknown."}}
+                ;; TODO dynamically determine if `resolution` is configured
+                ;; /shrug
+                ;; :fields {:resolution {:name "Fixed"}}
+                :transition {:id transition-id}}]
     (http-post
      (endpoint "/issue/%s/transitions" i)
-     {:query-params {:transitionId nil}
-      :form-params params
+     {:form-params params
       :content-type :json})))
 
 (defn resolve-issue
@@ -361,13 +369,22 @@
   (post-comment iss-key "will it ever end")
 
   (get-transitions iss-key)
+  (->> (get-transitions iss-key)
+       :body
+       :transitions
+       (map :name))
+
+  (get-transitions "COM-3")
+
   (-> iss-key
       get-transitions
       :body
       :transitions
       find-resolve)
 
-  (resolve-issue iss-key "do you even resolve"))
+  (resolve-issue iss-key "do you even resolve")
+
+  *e)
 
 
 (defn get-issue
@@ -451,6 +468,7 @@
   (info "create-issue"
         (color-str :blue {:issue-type-id issue-type-id
                           :project-key project-key
+                          :parent parent
                           :assignee assignee
                           :component-ids component-ids}))
   (if-let [prj (find-project project-key)]
@@ -481,7 +499,7 @@
                            (when timetracking
                              {:timetracking timetracking})
                            (when parent
-                             {:parent {:id parent}}))}]
+                             {:parent {:key parent}}))}]
         (info "create issue" (pr-str params))
         (http-post
          (endpoint "/issue")

@@ -307,7 +307,7 @@
                              :keys [project lead description]}]
                          (str
                            "[" project "] "
-                           "[" (-> lead :name) "] "
+                           "[" (-> lead :displayName) "] "
                            component-name
                            " — "
                            description))
