@@ -67,9 +67,9 @@
         (map (fn [pk] (str "⚡️ " (api/url-from-key pk)))
              projects-for-chan)))))
 
-(defn users-cmd
-  "jira users # list the users channel project or default project
-   jira users <project> # list the users for the configured project(s)"
+(defn project-users-cmd
+  "jira project-users # list the users channel project or default project
+   jira project-users <project> # list the users for the configured project(s)"
   {:yb/cat #{:issue}}
   [{:keys [settings] [_ project-key] :match}]
   (let [project (or project-key
@@ -80,6 +80,17 @@
      (fn [{:keys [body] :as res}]
        {:result/data body
         :result/value (map :displayName body)}))))
+
+(defn users-cmd
+  "jira users # list all users (returns first 30)
+  jira users <query>"
+  {:yb/cat #{:issue}}
+  [{[_ query] :match}]
+  (report-if-error
+   #(api/search-users query)
+   (fn [{:keys [body] :as res}]
+     {:result/data body
+      :result/value (map :displayName body)})))
 
 (defn resolve-cmd
   "jira resolve <issue> <comment> # resolve an issue and set its resolution to fixed"
@@ -428,7 +439,8 @@
  #"^versions\s*(\S+)*" versions-cmd
  #"^recent\s*(\S+)*" recent-cmd
  #"^pri" priorities-cmd
- #"^users\s*(\S.+)*" users-cmd
+ #"^project-users\s*(\S.+)*" project-users-cmd
+ #"^users\s+(\S+)" users-cmd
  #"^assign\s+(\S+)\s+(\S+)" assign-cmd
  #"^comment\s+(\S+)\s+(.+)" comment-cmd
  #"^search\s+(.+)" search-cmd
