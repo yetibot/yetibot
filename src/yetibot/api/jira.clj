@@ -73,7 +73,7 @@
 (defn channel-projects
   "Retrieve the list of configured projects for a channel, given its settings"
   [channel-settings]
-  (when-let [setting (channel-settings jira-project-setting-key)]
+  (when-let [setting (get channel-settings jira-project-setting-key)]
     (info "channel-projects" (pr-str setting))
     (seq (remove string/blank? (string/split setting #",\s*")))))
 
@@ -85,12 +85,20 @@
 
 (defn project-for-key [k] (first (filter #(= (:key %) k) (projects))))
 
-(defn project-keys [] (into (vec *jira-projects*)
-                            (map :key (projects))))
+(defn project-keys [] (concat
+                       (if *jira-project* [*jira-project*] [])
+                       (vec *jira-projects*)
+                       (map :key (projects))))
 
 (defn project-keys-str [] (string/join "," (into
-                                        (project-keys)
-                                        *jira-projects*)))
+                                            (project-keys)
+                                            *jira-projects*)))
+
+(comment
+  (config)
+  (configured?)
+  (project-keys)
+  (project-keys-str))
 
 (defn default-version-id [project-key] (-> (project-for-key project-key)
                                            :default :version :id))
@@ -127,6 +135,8 @@
 (def access-token-url (str (base-uri) "/plugins/servlet/oauth/access-token"))
 
 (def oauth1 (:oauth1 (config)))
+
+(when (configured?) (info "✅ JIRA is configured"))
 
 (def consumer
   (when oauth1
@@ -180,6 +190,9 @@
 (defn endpoint [& fmt-with-args]
   (str (api-uri) (apply format fmt-with-args)))
 
+(comment
+  (endpoint "/search"))
+
 ;; helpers
 
 (defn http-get
@@ -207,6 +220,17 @@
 (defn url-from-key [k]
   (str (base-uri) "/browse/" k))
 
+(defn format-project
+  [{{project-category-name :name} :projectCategory
+    project-key :key
+    project-name :name
+    :as project}]
+  (str "[" project-key "]"
+       (when project-category-name
+         (str " [" project-category-name "]"))
+       " "
+       project-name))
+
 (defn format-issue [issue-data]
   (let [fs (:fields issue-data)]
     [(:summary fs)
@@ -216,29 +240,34 @@
 
 (defn format-issue-short [issue-data]
   (let [fs (:fields issue-data)]
-    (format "[%s] [%s] %s %s"
-            (or (-> fs :assignee :name) "unassigned")
+    (format "[%s] [%s] [%s] %s %s"
+            (or (-> fs :assignee :displayName) "unassigned")
             (-> fs :status :name)
+            (-> fs :issuetype :name)
             (:summary fs)
             (url-from-key (:key issue-data)))))
 
 (defn format-comment [c]
-  (str "📞 "
-       (-> c :author :name) " "
+  (str "💬 "
+       (-> c :author :displayName) " "
        (parse-and-format-date-string (:created c))
        ": " (:body c)))
 
 (defn format-worklog-item [w]
-  (str "🚧 " (-> w :author :name) " " (:timeSpent w) ": " (:comment w)
+  (str "🚧 " (-> w :author :displayName) " " (:timeSpent w) ": " (:comment w)
        " [" (parse-and-format-date-string (:started w)) "]"))
 
 (defn format-worklog-items [issue-data]
   (when-let [worklog (-> issue-data :fields :worklog :worklogs)]
     (map format-worklog-item worklog)))
 
-(defn format-subtasks [issue-data]
-  ;; TODO
-  nil)
+(defn format-subtasks [{{subtasks :subtasks} :fields}]
+  (when subtasks
+    (map (fn [{st-key :key
+               {summary :summary} :fields}]
+           (str "➡️ "
+                "[" st-key "] " summary))
+         subtasks)))
 
 (defn format-attachment-item [a]
   (str "📎 "
@@ -256,12 +285,12 @@
   (let [fs (:fields issue-data)]
     (flatten
       (keep identity
-            [(str (:key issue-data) " ↪︎ " (-> fs :status :name) " ↪︎ " (:summary fs))
+            [(str (:key issue-data) " 🔵 " (-> fs :status :name) " 🔵 " (:summary fs))
              (:description fs)
              (string/join
                "  "
-               [(str "👷 " (-> fs :assignee :name))
-                (str "👮 " (-> fs :reporter :name))])
+               [(str "👷 " (-> fs :assignee :displayName))
+                (str "👮 " (-> fs :reporter :displayName))])
              (string/join
                " "
                [(str "❗️ Priority: " (-> fs :priority :name))
@@ -284,16 +313,24 @@
    (endpoint "/issue/%s/transitions" i)
    {:query-params {:transitionId nil}}))
 
-(def ^:private find-resolve (partial filter #(= "Resolve Issue" (:name %))))
+(def ^:private find-resolve
+  (partial filter #(or
+                     (= "Done" (:name %))
+                     (= "Resolve Issue" (:name %)))))
 
-(defn- transition-issue [i transition-id comment]
-  (let [params {:update {:comment [{:add {:body comment}}]}
-                :fields {:resolution {:name "Fixed"}}
-                :transition transition-id}]
+(defn- transition-issue [i transition-id iss-comment]
+  (let [params {:update {:comment [{:add {:body iss-comment}}]}
+                ;; whether resolution is present depends on the configured
+                ;; screen. by default it's not present, so including this
+                ;; property would trigger the error:
+                ;; {"errorMessages":[],"errors":{"resolution":"Field 'resolution' cannot be set. It is not on the appropriate screen, or unknown."}}
+                ;; TODO dynamically determine if `resolution` is configured
+                ;; /shrug
+                ;; :fields {:resolution {:name "Fixed"}}
+                :transition {:id transition-id}}]
     (http-post
      (endpoint "/issue/%s/transitions" i)
-     {:query-params {:transitionId nil}
-      :form-params params
+     {:form-params params
       :content-type :json})))
 
 (defn resolve-issue
@@ -332,13 +369,22 @@
   (post-comment iss-key "will it ever end")
 
   (get-transitions iss-key)
+  (->> (get-transitions iss-key)
+       :body
+       :transitions
+       (map :name))
+
+  (get-transitions "COM-3")
+
   (-> iss-key
       get-transitions
       :body
       :transitions
       find-resolve)
 
-  (resolve-issue iss-key "do you even resolve"))
+  (resolve-issue iss-key "do you even resolve")
+
+  *e)
 
 
 (defn get-issue
@@ -353,7 +399,7 @@
         (info "issue not found" i)))))
 
 (comment
-  (get-issue "YETIBOT-1")
+  (get-issue "YETIBOT-5")
   *e)
 
 (def fetch-and-format-issue-short (comp format-issue-short :body get-issue))
@@ -422,6 +468,7 @@
   (info "create-issue"
         (color-str :blue {:issue-type-id issue-type-id
                           :project-key project-key
+                          :parent parent
                           :assignee assignee
                           :component-ids component-ids}))
   (if-let [prj (find-project project-key)]
@@ -452,7 +499,7 @@
                            (when timetracking
                              {:timetracking timetracking})
                            (when parent
-                             {:parent {:id parent}}))}]
+                             {:parent {:key parent}}))}]
         (info "create issue" (pr-str params))
         (http-post
          (endpoint "/issue")
@@ -480,19 +527,27 @@
     (delete-issue issue)))
 
 (defn assign-issue
-  [issue-key assignee]
+  [issue-key assignee-user-id]
   (http-put
     (endpoint "/issue/%s/assignee" issue-key)
    {:content-type :json
-    :form-params {:name assignee}}))
+    :form-params {:accountId assignee-user-id}}))
 
 (comment
-
   ;; assign the most recent issue for the default project to a random user
-  (let [user (-> (default-project-key) get-users :body rand-nth :name)
+  (let [user (-> (default-project-key) get-users :body rand-nth)
         issue (-> (recent) :body :issues first :key)]
     (info {:user user :issue issue})
-    (assign-issue issue user))
+    (assign-issue issue (:accountId user)))
+
+  *e)
+
+;; projects
+
+(comment
+  ;; list projects
+  (http-get
+   (endpoint "/project/"))
   )
 
 ;; versions
@@ -533,12 +588,53 @@
      uri
      {:query-params {:projectKeys project}})))
 
+
+(defn search-users
+  "Find a user entity matching against display name and email.
+
+   query - A query string that is matched against user attributes ( displayName,
+   and emailAddress) to find relevant users. The string can match the prefix of
+   the attribute's value. For example, query=john matches a user with a
+   displayName of John Smith and a user with an emailAddress of
+   johnson@example.com"
+  [query]
+  (http-get
+   (endpoint "/user/search")
+   {:query-params
+    (merge {:query query})}))
+
 (comment
+  (search-users "y")
+  (search-users "t")
   (get-users (first (project-keys))))
+
+;; (defn find-user-assignable-to
+;;   [issue-key & [user-to-search-for]]
+;;   (http-get
+;;     (endpoint "/user/assignable/search")
+;;     {:query-params
+;;      (merge {:issueKey issue-key}
+;;             (when user-to-search-for {}))}))
+
+
+;; projects
+
+(defn get-projects [& [query]]
+  (http-get
+    (endpoint "/project/search")
+    {:query-params (merge {}
+                          (when query {:query query}))}))
+
+(comment
+  (get-projects)
+  )
 
 ;; search
 
-(defn- projects-jql [] (str "(project in (" (project-keys-str) "))"))
+(defn- projects-jql [& [project]]
+  (if project
+    (str "(project in (" project "))")
+    (str "(project in (" (project-keys-str) "))")))
 
 (defn search [jql]
   (info "JQL search" jql)
@@ -547,7 +643,7 @@
    {:query-params {:jql jql
                    :startAt 0
                    :maxResults (max-results)
-                   :fields "summary,status,assignee"}
+                   :fields "summary,issuetype,status,assignee"}
     :coerce :always
     :throw-exceptions false}))
 
@@ -560,10 +656,19 @@
       "(summary ~ \"" query "\" OR description ~ \"" query
       "\" OR comment ~ \"" query "\")")))
 
-(defn recent [] (search (projects-jql)))
+(defn recent [& [project]]
+  (search
+   (str (projects-jql project) " ORDER BY updatedDate")))
 
 (comment
-  (recent))
+  (search-by-query "demo")
+  (projects-jql)
+  (projects-jql "FOO")
+  (search "created >= -5h")
+  (recent)
+  (recent "YETIBOT")
+  *e
+  )
 
 ;; prime cache
 ;; todo: move into a start fn ;; (future (all-components))
@@ -571,8 +676,12 @@
 (comment
   ;; scratch space for playing with JIRA api
   (def username "_Yetibot_admin")
-  (endpoint "/user/properties")
+  (http-get (endpoint "/user/properties"))
   (endpoint "/user")
+
+  (http-get (endpoint "/user"))
+  *e
+
   (def updated-name "Yetibot")
   ;; these don't work /shrug
   (http-put (endpoint "/user/properties/displayName")

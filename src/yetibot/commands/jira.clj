@@ -1,14 +1,13 @@
 (ns yetibot.commands.jira
   (:require
-    [clojure.tools.cli :refer [parse-opts]]
-    [yetibot.observers.jira :refer [report-jira]]
-    [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
-    [taoensso.timbre :refer [info debug warn error]]
-    [clojure.string :refer [split join trim blank?]]
-    [yetibot.core.hooks :refer [cmd-hook]]
-    [clojure.data.json :as json]
-    [yetibot.api.jira :as api
-     :refer [jira-project-setting-key channel-projects]]))
+   [clojure.tools.cli :refer [parse-opts]]
+   [yetibot.observers.jira :refer [report-jira]]
+   [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
+   [taoensso.timbre :refer [info debug warn error]]
+   [clojure.string :refer [split join trim blank?]]
+   [yetibot.core.hooks :refer [cmd-hook]]
+   [clojure.data.json :as json]
+   [yetibot.api.jira :as api :refer [channel-projects]]))
 
 (defn success? [res]
   (re-find #"^2" (str (:status res) "2")))
@@ -52,8 +51,8 @@
         (debug "jira error" (pr-str e))
         (format-error (assoc error :body json-body))))))
 
-(defn projects-cmd
-  "jira projects # list configured projects (⭐️ indicates global default; ⚡️ indicates channel default; channel default overrides global default)"
+(defn configured-projects-cmd
+  "jira configured-projects # list configured projects (⭐️ indicates global default; ⚡️ indicates channel default; channel default overrides global default)"
   {:yb/cat #{:issue}}
   [{:keys [settings]}]
   (let [projects-for-chan (set (channel-projects settings))]
@@ -68,21 +67,30 @@
         (map (fn [pk] (str "⚡️ " (api/url-from-key pk)))
              projects-for-chan)))))
 
-(defn users-cmd
-  "jira users # list the users channel project or default project
-   jira users <project> # list the users for the configured project(s)"
+(defn project-users-cmd
+  "jira project-users # list the users channel project or default project
+   jira project-users <project> # list the users for the configured project(s)"
   {:yb/cat #{:issue}}
   [{:keys [settings] [_ project-key] :match}]
   (let [project (or project-key
                     (first (channel-projects settings))
                     (api/default-project-key))]
     (report-if-error
-      #(api/get-users project)
-      (fn [{:keys [body] :as res}]
-        {:result/data body
-         :result/value
-         (into [(str "Users for project `" project "`")]
-               (map :name body))}))))
+     #(api/get-users project)
+     (fn [{:keys [body] :as res}]
+       {:result/data body
+        :result/value (map :displayName body)}))))
+
+(defn users-cmd
+  "jira users # list all users (returns first 30)
+  jira users <query>"
+  {:yb/cat #{:issue}}
+  [{[_ query] :match}]
+  (report-if-error
+   #(api/search-users query)
+   (fn [{:keys [body] :as res}]
+     {:result/data body
+      :result/value (map :displayName body)})))
 
 (defn resolve-cmd
   "jira resolve <issue> <comment> # resolve an issue and set its resolution to fixed"
@@ -159,8 +167,10 @@
           component-ids (when (:component opts)
                           (map :id
                                (api/find-component-like (:component opts))))]
-      (if (or (seq api/*jira-projects*)
-              (:project-key opts))
+      (if (or
+           (:project-key opts)
+           (api/default-project-key)
+           (seq api/*jira-projects*))
         (report-if-error
          #(api/create-issue
            (filter-nil-vals
@@ -226,38 +236,44 @@
   "jira assign <issue> <assignee> # assign <issue> to <assignee>"
   {:yb/cat #{:issue}}
   [{[_ iss-key assignee] :match settings :settings}]
-  (binding [api/*jira-project* (settings jira-project-setting-key)]
+  (binding [api/*jira-projects* (channel-projects settings)]
     (report-if-error
-      #(api/assign-issue iss-key assignee)
-      (fn [res]
-        (if (res)
-          {:result/value (report-jira iss-key)
-           :result/data (:body res)}
-          {:result/error (format "Unable to assign %s to %s"
-                                 iss-key assignee)})))))
+     #(let [user-to-assign (-> assignee api/search-users :body first)]
+        (api/assign-issue iss-key (:accountId user-to-assign)))
+     (fn [res]
+       (if res
+         {:result/value
+          (-> iss-key api/get-issue :body api/format-issue-short)
+          :result/data (:body res)}
+         {:result/error (format "Unable to assign %s to %s"
+                                iss-key assignee)})))))
 
 (defn comment-cmd
   "jira comment <issue> <comment> # comment on <issue>"
   {:yb/cat #{:issue}}
   [{[_ iss-key body] :match user :user settings :settings}]
-  (binding [api/*jira-project* (settings jira-project-setting-key)]
+  (binding [api/*jira-projects* (channel-projects settings)]
     (let [body (format "%s: %s" (:name user) body)]
       (report-if-error
-        #(api/post-comment iss-key body)
-        (fn [res]
-          (report-jira iss-key)
-          {:result/value (str "Successfully commented on " iss-key)
-           :result/data (:body res)})))))
+       #(api/post-comment iss-key body)
+       (fn [res]
+         {:result/value
+          (-> iss-key api/get-issue :body api/format-issue-long)
+          :result/data (:body res)})))))
 
 (defn recent-cmd
-  "jira recent # show the 15 most recent issues"
+  "jira recent # show the 15 most recent issues from default project(s)
+   jira recent <project> # show the 15 most recent issues for <project>"
   {:yb/cat #{:issue}}
-  [{:keys [settings]}]
-  (binding [api/*jira-projects* (channel-projects settings)]
-    (info "recent" (pr-str api/*jira-projects*))
-    (if api/*jira-projects*
+  [{[_ project] :match :keys [settings] :as cmd-opts}]
+  (info "recent opts" (pr-str cmd-opts))
+  (info "recent for project:" project)
+  (binding [api/*jira-project* project
+            api/*jira-projects* (channel-projects settings)]
+    (info "recent" (pr-str (api/default-project-key)))
+    (if (api/default-project-key)
       (report-if-error
-        #(api/recent)
+        #(api/recent project)
         (fn [res]
           {:result/value (short-jira-list res)
            :result/data (-> res :body :issues)}))
@@ -302,33 +318,35 @@
                              :keys [project lead description]}]
                          (str
                            "[" project "] "
-                           "[" (-> lead :name) "] "
+                           "[" (-> lead :displayName) "] "
                            component-name
                            " — "
                            description))
                        data)})))
 
 (defn format-version [v]
-  (str (:name v)
-       (when-let [rd (:releaseDate v)] (str " [release date " rd "]"))
-       (when (:archived v) " [archived]")
-       (when (:released v) " [released]")))
+  (str
+   (when-let [rd (:releaseDate v)] (str " [release date " rd "]"))
+   (when (:archived v) " [archived]")
+   (when (:released v) " [released]")
+   " " (:name v) " - " (:description v)))
 
 (defn versions-cmd
-  "jira versions [<project-key>] # list versions for <project-key>. Lists versions for all configured project-keys if not specified."
+  "jira versions <project-key> # list versions for <project-key>
+   jira versions # Lists versions for all configured project-keys"
   {:yb/cat #{:issue}}
   [{[_ project-key] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (let [project-keys (if project-key [project-key] (api/project-keys))
           ;; TODO needs error handling
           data (mapcat
-                 #(->> (api/versions %)
-                       :body
-                       (map (fn [v] (assoc v :project %))))
-                 project-keys)]
+                #(->> (api/versions %)
+                      :body
+                      (map (fn [v] (assoc v :project %))))
+                project-keys)]
       {:result/data data
        :result/value (map (fn [version]
-                            (str "[" (:project version) "] "
+                            (str "[" (:project version) "]"
                                  (format-version version)))
                           data)})))
 
@@ -393,31 +411,40 @@
                         filtered)
      :result/data filtered}))
 
-(comment
+(defn projects-cmd
+  "jira projects [<query>] - list projects, optionally  matching <query>"
+  [{[_ query] :match}]
+  (report-if-error
+   #(api/get-projects query)
+   (fn [{:keys [body]}]
+     {:result/value (map api/format-project (:values body))
+      :result/collection-path [:values]
+      :result/data body})))
 
+(comment
   (-> "YETIBOT-1"
       api/get-issue
       :body
-      api/format-issue-long)
-  )
-
+      api/format-issue-long))
 
 (cmd-hook #"jira"
-  #"^issue-types\s*(.*)" issue-types-cmd
-  #"^projects" projects-cmd
-  #"^parse\s+(.+)" parse-cmd
-  #"^show\s+(\S+)" show-cmd
-  #"^delete\s+(\S+)" delete-cmd
-  #"^worklog\s+(\S+)\s+(\S+)\s+(.+)" worklog-cmd
-  #"^components" components-cmd
-  #"^versions\s*(\S+)*" versions-cmd
-  #"^recent" recent-cmd
-  #"^pri" priorities-cmd
-  #"^users\s*(\S.+)*" users-cmd
-  #"^assign\s+(\S+)\s+(\S+)" assign-cmd
-  #"^comment\s+(\S+)\s+(.+)" comment-cmd
-  #"^search\s+(.+)" search-cmd
-  #"^jql\s+(.+)" jql-cmd
-  #"^create\s+(.+)" create-cmd
-  #"^update\s+(\S+)\s+(.+)" update-cmd
-  #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)
+ #"^issue-types\s*(.*)" issue-types-cmd
+ #"^configured-projects" configured-projects-cmd
+ #"^projects\s*(\S+)*" projects-cmd
+ #"^parse\s+(.+)" parse-cmd
+ #"^show\s+(\S+)" show-cmd
+ #"^delete\s+(\S+)" delete-cmd
+ #"^worklog\s+(\S+)\s+(\S+)\s+(.+)" worklog-cmd
+ #"^components" components-cmd
+ #"^versions\s*(\S+)*" versions-cmd
+ #"^recent\s*(\S+)*" recent-cmd
+ #"^pri" priorities-cmd
+ #"^project-users\s*(\S.+)*" project-users-cmd
+ #"^users\s+(\S+)" users-cmd
+ #"^assign\s+(\S+)\s+(\S+)" assign-cmd
+ #"^comment\s+(\S+)\s+(.+)" comment-cmd
+ #"^search\s+(.+)" search-cmd
+ #"^jql\s+(.+)" jql-cmd
+ #"^create\s+(.+)" create-cmd
+ #"^update\s+(\S+)\s+(.+)" update-cmd
+ #"^resolve\s+([\w\-]+)\s+(.+)" resolve-cmd)
