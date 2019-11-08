@@ -10,11 +10,11 @@
              :profiles/dev {}
              :dev [:profiles/dev
                    {:source-paths ["dev"]
-                    :exclusions [org.clojure/tools.trace]
+                    ;; :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]]
                     :dependencies [[lilactown/punk-adapter-jvm "0.0.10"]
                                    [org.clojure/tools.trace "0.7.9"]
-                                   [midje "1.9.4"]]}]
+                                   [midje "1.9.9"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :docker {:jvm-opts ["-Djava.security.policy=/usr/src/app/.java.policy"]}
              :uberjar {:uberjar-name "yetibot.jar"
