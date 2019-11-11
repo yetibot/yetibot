@@ -6,6 +6,20 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.52 - 11/11/19
+
+- Upgrade to `yetibot/core "20191107.221752.a4aa424"`
+- Upgrade all dependencies and exclude `org.flatland/useful`'s outdated
+  `org.clojure/tools.reader` dep
+- Add JIRA enhancements - [#981](https://github.com/yetibot/yetibot/pull/981)
+
+  Includes:
+
+  - Add issue type to short format
+  - Support listing subtasks in `jira show <issue>`
+  - Add ability to list or search for projects with `jira projects <query>`
+  - Add ability to list or search for users with `jira users <query>`
+
 ## 0.5.51 - 10/29/19
 
 - Upgrade to `yetibot/core "20191017.211644.6ee48e9"`
