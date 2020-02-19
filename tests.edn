@@ -1,0 +1,8 @@
+#kaocha/v1
+{:tests [{:id :unit
+          :type :kaocha.type/midje
+          ;; OPTIONAL. default value is "test"
+          :test-paths ["test"]
+          ;; OPTIONAL. default value is ".*-test"
+          :ns-patterns [".*"]
+          }]}

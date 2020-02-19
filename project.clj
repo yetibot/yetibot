@@ -13,6 +13,8 @@
                     ;; :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]]
                     :dependencies [[lilactown/punk-adapter-jvm "0.0.10"]
+                                   [lambdaisland/kaocha-midje "0.0-5"
+                                    :exclusions [midje/midje]]
                                    [org.clojure/tools.trace "0.7.9"]
                                    [midje "1.9.9"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
@@ -30,20 +32,21 @@
                  (do
                    (println)
                    (println
-                     (str
-                       "\u001B[37m"
-                       "  Welcome to the Yetibot dev REPL!"
-                       \newline
-                       "  Use \u001B[35m(\u001B[34mhelp\u001B[35m) "
-                       "\u001B[37mto see available commands."
-                       \newline
-                       \newline
-                       "\u001B[35m    λλλ"
-                       "\u001B[m"))
+                    (str
+                     "\u001B[37m"
+                     "  Welcome to the Yetibot dev REPL!"
+                     \newline
+                     "  Use \u001B[35m(\u001B[34mhelp\u001B[35m) "
+                     "\u001B[37mto see available commands."
+                     \newline
+                     \newline
+                     "\u001B[35m    λλλ"
+                     "\u001B[m"))
                    (println))}
 
   :dependencies [[org.clojure/clojure "1.10.0"]
                  [yetibot/core "20200302.181517.2c05eb0"]
+                 [yetibot/core "20200219.184121.8aef96d"]
 
                  ; apis
                  [twitter-api "1.8.0"]
@@ -62,8 +65,7 @@
                  ; utils
                  [org.flatland/useful "0.11.6"
                   ;; depends on 0.7.2 but we want 1.3.2
-                  :exclusions [org.clojure/tools.reader]
-                  ]
+                  :exclusions [org.clojure/tools.reader]]
                  ; << string interpolation macro
                  [org.clojure/core.incubator "0.1.4"]
                  ; graphql
@@ -104,8 +106,8 @@
             [lein-ring "0.12.4"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
-  :aliases { "version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]
-             "test" ["midje"]}
+  :aliases {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]
+            "test" ["midje"]}
 
   ;; :pedantic :ignore
 
