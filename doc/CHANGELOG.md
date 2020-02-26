@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.54 - 2/26/20
+
+- Upgrade to `yetibot/core "20200226.184017.75c0157"`. This upgrade adds support
+  for the [Mattermost](https://mattermost.org/) chat platform! 🎉🎉🎉
+
 ## 0.5.53 - 2/19/20
 
 - Upgrade to `yetibot/core "20200219.223432.7b72073"`
