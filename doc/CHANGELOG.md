@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.56 - 3/2/20
+
+- Upgrade to `yetibot/core "20200302.181517.2c05eb0"`. This fixes a dependency
+  that caused Slack websocket connection to stop working.
+
 ## 0.5.55 - 2/27/20
 
 - Upgrade to `yetibot/core "20200227.180915.e29cec8"`. This fixes the Slack
