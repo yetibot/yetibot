@@ -165,10 +165,11 @@
 
    http-method should be: :GET :POST :PUT or :DELETE"
   [uri http-method & [query-params]]
-  (merge {:as :json
+  ;; NOTE using :json-strict because of https://github.com/dakrone/clj-http/pull/507
+  (merge {:as :json-strict
           :throw-exceptions true
           :coerce :unexceptional
-          :throw-entire-message? false
+          :throw-entire-message? true
           :insecure? true}
          (when query-params
            {:query-params query-params})
@@ -449,6 +450,10 @@
       :content-type :json})))
 
 (comment
+
+  (priorities)
+  (issue-types)
+  *e
   (update-issue
    (-> (recent) :body :issues first :key)
    {:desc (str (local-now))}))
@@ -588,7 +593,6 @@
      uri
      {:query-params {:projectKeys project}})))
 
-
 (defn search-users
   "Find a user entity matching against display name and email.
 
@@ -601,11 +605,12 @@
   (http-get
    (endpoint "/user/search")
    {:query-params
-    (merge {:query query})}))
+    (merge {:query query
+            :username query})}))
 
 (comment
   (search-users "y")
-  (search-users "t")
+  (search-users "trevor")
   (get-users (first (project-keys))))
 
 ;; (defn find-user-assignable-to

@@ -82,8 +82,7 @@
         :result/value (map :displayName body)}))))
 
 (defn users-cmd
-  "jira users # list all users (returns first 30)
-  jira users <query>"
+  "jira users <query> # search for users matching <query>"
   {:yb/cat #{:issue}}
   [{[_ query] :match}]
   (report-if-error
