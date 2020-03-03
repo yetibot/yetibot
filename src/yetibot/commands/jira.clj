@@ -122,7 +122,8 @@
        :result/data priorities})))
 
 (def issue-opts
-  [["-j" "--project-key PROJECT KEY" "Project key"]
+  [["-j" "--project-key PROJECT KEY"
+    "Project key (use `channel set jira-project PROJECT1` to set a channel-specific default)"]
    ["-c" "--component COMPONENT" "Component"]
    ["-i" "--issue-type ISSUE TYPE" "Issue type"]
    ["-s" "--summary SUMMARY" "Summary"]
@@ -132,7 +133,8 @@
    ["-d" "--desc DESCRIPTION" "Description"]
    ["-t" "--time TIME ESTIAMTED" "Time estimated"]
    ["-r" "--remaining REMAINING TIME ESTIAMTED" "Remaining time estimated"]
-   ["-p" "--parent PARENT ISSUE KEY" "Parent issue key; creates a sub-task if specified"]])
+   ["-p" "--parent PARENT ISSUE KEY" "Parent issue key; creates a sub-task if specified"]
+   ["-y" "--priority PRIORITY" "Priority of the issue"]])
 
 (defn parse-issue-opts
   "Parse opts using issue-opts and trim all the values of the keys in options"
@@ -143,14 +145,55 @@
                (fn [options]
                  (into {} (map (fn [[k v]] [k (trim v)]) options))))))
 
+(meta #'parse-issue-opts)
+
+(def foo
+ ^{:doc "wat"}
+  (fn [] 1))
+
+(defn bar
+  "sends x to any taps. Will not block. Returns true if there was room in the queue,
+  false if not (dropped)."
+  {:added "1.10"
+   :doc (str "override" 1)}
+  [x]
+  "bar")
+
+
+
+   ;; [-c <component>] [-j project-key (use `channel set jira-project PROJECT1
+   ;; to set a channel-specific default)] [-i issue-type] [-e reporter] [-a
+   ;; <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>]
+   ;; [-p <parent-issue-key> (creates a sub-task if specified)]
 (defn create-cmd
-  "jira create <summary> [-c <component>] [-j project-key (use `channel set jira-project PROJECT1 to set a channel-specific default)] [-i issue-type] [-e reporter] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-p <parent-issue-key> (creates a sub-task if specified)]"
-  {:yb/cat #{:issue}}
+  {:doc
+   (str
+    \newline
+    "jira create <summary> [options] # creates a new JIRA issue.
+
+     Whether `options` are optional or not depend on your JIRA Project
+     configuration. For example, sometimes `description` is required.
+
+     Options are:"
+    \newline
+    \newline
+    (join
+     \newline
+     (map
+      (fn [[short-key long-key desc]]
+        (format "%s, %s %s %s"
+                short-key
+                long-key
+                (str \newline (join (map (constantly " ") (range 4))))
+                desc))
+      issue-opts))
+    \newline)
+   :yb/cat #{:issue}}
   [{[_ opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (let [parsed (parse-issue-opts opts-str)
           summary (->> parsed :arguments (join " "))
-          opts (:options parsed)
+          {:keys [priority] :as opts} (:options parsed)
           issue-type (when-let [issue-type (:issue-type opts)]
                        (let [parsed-it (read-string issue-type)]
                          (if (number? parsed-it)
@@ -175,6 +218,7 @@
            (filter-nil-vals
             (merge
              {:summary summary}
+             (when priority {:priority-key priority})
              (when issue-type {:issue-type-id issue-type})
              (when component-ids {:component-ids component-ids})
              (select-keys opts [:fix-version :project-key :parent
@@ -193,37 +237,57 @@
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-r <remaining time estimated>]"
-  {:yb/cat #{:issue}}
+  {:doc
+   (str
+    \newline
+    "jira update <issue-key> [options] # update an existing JIRA issue
+
+     Available `options` are:"
+    \newline
+    \newline
+    (join
+     \newline
+     (map
+      (fn [[short-key long-key desc]]
+        (format "%s, %s %s %s"
+                short-key
+                long-key
+                (str \newline (join (map (constantly " ") (range 4))))
+                desc))
+      issue-opts))
+    \newline)
+   :yb/cat #{:issue}}
   [{[_ issue-key opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (let [parsed (parse-issue-opts opts-str)
-          opts (:options parsed)]
+          {:keys [priority] :as opts} (:options parsed)]
       (clojure.pprint/pprint parsed)
       (let [component-ids (when (:component opts)
                             (map :id (api/find-component-like
-                                       (:component opts))))]
+                                      (:component opts))))]
 
-          (report-if-error
-            #(api/update-issue
-              issue-key
-              (filter-nil-vals
-                (merge
-                  {:component-ids component-ids}
-                  (select-keys opts [:fix-version :summary :desc :assignee])
-                  (when (or (:remaining opts) (:time opts))
-                    {:timetracking
-                     (merge (when (:remaining opts)
-                              {:remainingEstimate (:remaining opts)})
-                            (when (:time opts)
-                              {:originalEstimate (:time opts)}))}))))
+        (report-if-error
+         #(api/update-issue
+           issue-key
+           (filter-nil-vals
+            (merge
+             {:component-ids component-ids}
+             (when priority {:priority-key priority})
+             (select-keys opts [:fix-version :summary :desc :assignee])
+             (when (or (:remaining opts) (:time opts))
+               {:timetracking
+                (merge (when (:remaining opts)
+                         {:remainingEstimate (:remaining opts)})
+                       (when (:time opts)
+                         {:originalEstimate (:time opts)}))}))))
 
-            (fn [res]
-              (info "updated" res)
-              (let [iss-key (-> res :body :key)]
-                {:result/value (str "Updated: "
-                                    (api/fetch-and-format-issue-short
-                                      issue-key))
-                 :result/data (:body res)})))))))
+         (fn [res]
+           (info "updated" res)
+           (let [iss-key (-> res :body :key)]
+             {:result/value (str "Updated: "
+                                 (api/fetch-and-format-issue-short
+                                  issue-key))
+              :result/data (:body res)})))))))
 
 (defn- short-jira-list [res]
   (if (success? res)

@@ -1,4 +1,21 @@
 (ns yetibot.api.jira
+  "Interface with a configured JIRA instance. Note: there are slight differences
+   between server instances and JIRA Cloud, so some features may not be fully
+   compatible. In most cases these functions were developed against a JIRA
+   Enterprise instance.
+
+   To view all versions of the JIRA Rest API (and to suddelyl feel like you're
+   living in the 90s), visit:
+   https://docs.atlassian.com/software/jira/docs/api/REST/
+
+   This listing doesn't seem up to date  as
+   https://docs.atlassian.com/software/jira/docs/api/REST/8.5.3/
+   exists but is not in the listing.
+
+   Safest choice might be to develop against `latest` of Server REST API:
+   https://docs.atlassian.com/software/jira/docs/api/REST/latest/
+
+   Hopefully someday they unify the cloud and enterprise APIs."
   (:require
    [yetibot.util :refer [oauth1-credentials]]
    [taoensso.timbre :refer [info warn error color-str]]
@@ -241,10 +258,11 @@
 
 (defn format-issue-short [issue-data]
   (let [fs (:fields issue-data)]
-    (format "[%s] [%s] [%s] %s %s"
+    (format "[%s] [%s] [%s] [%s] %s %s"
             (or (-> fs :assignee :displayName) "unassigned")
             (-> fs :status :name)
             (-> fs :issuetype :name)
+            (-> fs :priority :name)
             (:summary fs)
             (url-from-key (:key issue-data)))))
 
@@ -514,7 +532,10 @@
     (warn "Could not find project" project-key)))
 
 (comment
-  (create-issue {:summary "test issue creation"})
+  (create-issue {:summary "test issue creation"
+                 })
+
+  (priorities)
   (default-version-id "YETIBOT")
   *e)
 
