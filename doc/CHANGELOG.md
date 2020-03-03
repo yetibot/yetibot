@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.57 - 3/2/20
+
+- [Remove lazy json parsing in jira and add username query param to user search #1002](https://github.com/yetibot/yetibot/pull/1002)
+
 ## 0.5.56 - 3/2/20
 
 - Upgrade to `yetibot/core "20200302.181517.2c05eb0"`. This fixes a dependency
