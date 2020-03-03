@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.58 - 3/3/20
+
+- [Add JIRA priority support
+  #1004](https://github.com/yetibot/yetibot/pull/1004)
+
 ## 0.5.57 - 3/2/20
 
 - [Remove lazy json parsing in jira and add username query param to user search #1002](https://github.com/yetibot/yetibot/pull/1002)
