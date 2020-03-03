@@ -126,7 +126,7 @@
     "Project key (use `channel set jira-project PROJECT1` to set a channel-specific default)"]
    ["-c" "--component COMPONENT" "Component"]
    ["-i" "--issue-type ISSUE TYPE" "Issue type"]
-   ;; ["-s" "--summary SUMMARY" "Summary"]
+   ["-s" "--summary SUMMARY" "Summary"]
    ["-a" "--assignee ASSIGNEE" "Assignee"]
    ["-e" "--reporter REPORTER" "Reporter"]
    ["-f" "--fix-version FIX VERSION" "Fix version"]
@@ -237,37 +237,57 @@
 
 (defn update-cmd
   "jira update <issue-key> [-s <summary>] [-c <component>] [-a <assignee>] [-d <description>] [-f <fix-version>] [-t <time estimated>] [-r <remaining time estimated>]"
-  {:yb/cat #{:issue}}
+  {:doc
+   (str
+    \newline
+    "jira update <issue-key> [options] # update an existing JIRA issue
+
+     Available `options` are:"
+    \newline
+    \newline
+    (join
+     \newline
+     (map
+      (fn [[short-key long-key desc]]
+        (format "%s, %s %s %s"
+                short-key
+                long-key
+                (str \newline (join (map (constantly " ") (range 4))))
+                desc))
+      issue-opts))
+    \newline)
+   :yb/cat #{:issue}}
   [{[_ issue-key opts-str] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (let [parsed (parse-issue-opts opts-str)
-          opts (:options parsed)]
+          {:keys [priority] :as opts} (:options parsed)]
       (clojure.pprint/pprint parsed)
       (let [component-ids (when (:component opts)
                             (map :id (api/find-component-like
-                                       (:component opts))))]
+                                      (:component opts))))]
 
-          (report-if-error
-            #(api/update-issue
-              issue-key
-              (filter-nil-vals
-                (merge
-                  {:component-ids component-ids}
-                  (select-keys opts [:fix-version :summary :desc :assignee])
-                  (when (or (:remaining opts) (:time opts))
-                    {:timetracking
-                     (merge (when (:remaining opts)
-                              {:remainingEstimate (:remaining opts)})
-                            (when (:time opts)
-                              {:originalEstimate (:time opts)}))}))))
+        (report-if-error
+         #(api/update-issue
+           issue-key
+           (filter-nil-vals
+            (merge
+             {:component-ids component-ids}
+             (when priority {:priority-key priority})
+             (select-keys opts [:fix-version :summary :desc :assignee])
+             (when (or (:remaining opts) (:time opts))
+               {:timetracking
+                (merge (when (:remaining opts)
+                         {:remainingEstimate (:remaining opts)})
+                       (when (:time opts)
+                         {:originalEstimate (:time opts)}))}))))
 
-            (fn [res]
-              (info "updated" res)
-              (let [iss-key (-> res :body :key)]
-                {:result/value (str "Updated: "
-                                    (api/fetch-and-format-issue-short
-                                      issue-key))
-                 :result/data (:body res)})))))))
+         (fn [res]
+           (info "updated" res)
+           (let [iss-key (-> res :body :key)]
+             {:result/value (str "Updated: "
+                                 (api/fetch-and-format-issue-short
+                                  issue-key))
+              :result/data (:body res)})))))))
 
 (defn- short-jira-list [res]
   (if (success? res)
