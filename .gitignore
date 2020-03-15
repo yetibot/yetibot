@@ -24,3 +24,4 @@ profiles.clj
 .nrepl-port
 .dumbjump
 .rebl/
+.clj-kondo
