@@ -3,13 +3,9 @@
     [clojure.spec.alpha :as s]
     [cognitect.aws.client.api :as aws]
     [yetibot.commands.aws.specs :as aws.spec]
-<<<<<<< HEAD
-    [yetibot.api.aws]))
-=======
     [yetibot.api.aws]
     [taoensso.timbre :as log]
     [clojure.contrib.humanize :refer [filesize] :as h]))
->>>>>>> Implement aws s3 list-objects command
 
 (def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
 (def s3-response-spec (partial aws/response-spec-key yetibot.api.aws/s3))
