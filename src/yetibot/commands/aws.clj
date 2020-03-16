@@ -224,7 +224,7 @@
       format-s3-response))
 
 (defn s3-list-objects-cmd
-  "aws s3 ls s3://<bucket-name> # Lists objects in s3 bucket <bucket-name>"
+  "aws s3 ls <bucket-name> # Lists objects in s3 bucket <bucket-name>"
   {:yb/cat #{:util :info}}
   [{[_ bucket-name] :match}]
   (-> (aws/s3-list-objects bucket-name)
@@ -259,6 +259,6 @@
             #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd
             #"iam delete-access-key\s+(\S+)\s+(\S+)" iam-delete-access-key-cmd
             #"s3 mb s3://(\S+)" s3-create-bucket-cmd
+            #"s3 ls\s+(\S+)" s3-list-objects-cmd
             #"s3 ls" s3-list-buckets-cmd
-            #"s3 ls (\S+)" s3-list-objects-cmd))
 
