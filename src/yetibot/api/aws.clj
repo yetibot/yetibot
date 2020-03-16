@@ -135,3 +135,7 @@
 (def s3-list-objects
   "Lists objects in an aws s3 bucket"
   (partial aws-invoke s3 :ListObjectsV2 [:Bucket]))
+
+(def s3-copy-object
+  "Makes a copy of an existing s3 object in a bucket"
+  (partial aws-invoke s3 :CopyObject [:Bucket :CopySource :Key]))

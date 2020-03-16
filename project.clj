@@ -71,6 +71,8 @@
                  [district0x/graphql-query "1.0.5"]
                  ; human-readable strings
                  [clojure-humanize "0.2.2"]
+                 ; uri manipulation
+                 [lambdaisland/uri "1.2.1"]
 
                  ; polling
                  [robert/bruce "0.8.0"]

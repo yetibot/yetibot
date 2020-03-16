@@ -3,7 +3,9 @@
     [taoensso.timbre :refer [info]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [yetibot.api.aws :as aws]
-    [yetibot.commands.aws.formatters :refer [format-iam-response format-s3-response]]))
+    [yetibot.commands.aws.formatters :refer [format-iam-response format-s3-response]]
+    [lambdaisland.uri :refer [uri]]
+    [clojure.string :as str]))
 
 (defn iam-create-group-in-path-cmd
   "aws iam create-group <path> <group-name> # Creates an aws IAM group named <group-name> within the specified <path>"
@@ -231,6 +233,25 @@
       (with-meta {:aws/type :aws.type/ListObjects})
       format-s3-response))
 
+(defn s3-copy-object-with-key-cmd
+  "aws s3 cp <bucket-name> <copy-source> <key># Creates a copy of <copy-source> in <bucket-name> with key <key>"
+  {:yb/cat #{:util :info}}
+  [{[_ bucket-name copy-source key] :match}]
+  (-> (aws/s3-copy-object bucket-name copy-source key)
+      (with-meta {:aws/type :aws.type/CopyObject})
+      format-s3-response))
+
+(defn s3-copy-object-cmd
+  "aws s3 cp <bucket-name> <copy-source># Creates a copy of <copy-source> in <bucket-name>"
+  {:yb/cat #{:util :info}}
+  [{[_ bucket-name copy-source] :match}]
+  (let [bucket-uri (uri copy-source)
+        key        (as-> (:path bucket-uri) path
+                         (subs path (inc (str/last-index-of path "/"))))]
+    (-> (aws/s3-copy-object bucket-name copy-source key)
+        (with-meta {:aws/type :aws.type/CopyObject})
+        format-s3-response)))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -261,4 +282,6 @@
             #"s3 mb s3://(\S+)" s3-create-bucket-cmd
             #"s3 ls\s+(\S+)" s3-list-objects-cmd
             #"s3 ls" s3-list-buckets-cmd
+            #"s3 cp\s+(\S+)\s+(\S+)\s+(\S+)" s3-copy-object-with-key-cmd
+            #"s3 cp\s+(\S+)\s+(\S+)" s3-copy-object-cmd))
 

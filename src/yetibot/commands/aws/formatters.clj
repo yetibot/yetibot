@@ -203,6 +203,9 @@
                 (and (s/valid? (s3-response-spec :ListObjectsV2) response)
                      (= aws-type :aws.type/ListObjects)
                      (not (contains? response :Error))) ::S3ObjectsListed
+                (and (s/valid? (s3-response-spec :CopyObject) response)
+                     (= aws-type :aws.type/CopyObject)
+                     (not (contains? response :Error))) ::S3ObjectCopied
                 :else ::error))))
 
 (defmethod format-s3-response ::error
@@ -239,3 +242,18 @@
                    #(format "%s[%s](%s) - Last modified on %s"
                             (:Key %) (:StorageClass %) (h/filesize (:Size %) :binary false) (:LastModified %))
                    Contents)})
+
+(defmethod format-s3-response ::S3ObjectCopied
+  [{:keys                       [RequestCharged SSECustomerKeyMD5 ServerSideEncryption SSECustomerAlgorithm SSEKMSKeyId CopySourceVersionId Expiration VersionId]
+    {:keys [ETag LastModified]} :CopyObjectResult}]
+  {:result/data  {:request-charged        RequestCharged
+                  :sse-customer-key-md5   SSECustomerKeyMD5
+                  :etag                   ETag
+                  :last-modified          LastModified
+                  :server-side-encryption ServerSideEncryption
+                  :sse-customer-algorithm SSECustomerAlgorithm
+                  :sse-kms-key-id         SSEKMSKeyId
+                  :copy-source-version-id CopySourceVersionId
+                  :expiration             Expiration
+                  :version-id             VersionId}
+   :result/value (format "Successful copy %s - Last modified on %s" ETag LastModified)})
