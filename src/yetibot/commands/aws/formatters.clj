@@ -209,6 +209,12 @@
                 (and (s/valid? (s3-response-spec :DeleteObject) response)
                      (= aws-type :aws.type/DeleteObject)
                      (not (contains? response :Error))) ::S3ObjectDeleted
+
+                ; Some weird stuff from AWS for their way of handling bucket deletion
+                ; http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETE.html
+                (and (nil? response)
+                     (= aws-type :aws.type/DeleteBucket)
+                     (not (contains? response :Error))) ::S3BucketDeleted
                 :else ::error))))
 
 (defmethod format-s3-response ::error
@@ -263,7 +269,12 @@
 
 (defmethod format-s3-response ::S3ObjectDeleted
   [{:keys [DeleteMarker VersionId RequestCharged]}]
-  {:result/data  {:delete-marker? DeleteMarker
-                  :request-charged        RequestCharged
-                  :version-id             VersionId}
+  {:result/data  {:delete-marker?  DeleteMarker
+                  :request-charged RequestCharged
+                  :version-id      VersionId}
    :result/value (format "Successful object deletion")})
+
+(defmethod format-s3-response ::S3BucketDeleted
+  [_]
+  {:result/data  nil
+   :result/value (format "Successful bucket deletion")})

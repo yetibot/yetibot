@@ -260,6 +260,14 @@
       (with-meta {:aws/type :aws.type/DeleteObject})
       format-s3-response))
 
+(defn s3-delete-bucket
+  "aws s3 rb s3://<bucket-name> # Deletes an empty bucket"
+  {:yb/cat #{:util :info}}
+  [{[_ bucket-name] :match}]
+  (-> (aws/s3-delete-bucket bucket-name)
+      (with-meta {:aws/type :aws.type/DeleteBucket})
+      format-s3-response))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -288,9 +296,10 @@
             #"iam list-access-keys\s+(\S+)" iam-list-access-keys-cmd
             #"iam delete-access-key\s+(\S+)\s+(\S+)" iam-delete-access-key-cmd
             #"s3 mb s3://(\S+)" s3-create-bucket-cmd
-            #"s3 ls\s+(\S+)" s3-list-objects-cmd
+            #"s3 ls s3://(\S+)" s3-list-objects-cmd
             #"s3 ls" s3-list-buckets-cmd
             #"s3 cp\s+(\S+)\s+(\S+)\s+(\S+)" s3-copy-object-with-key-cmd
             #"s3 cp\s+(\S+)\s+(\S+)" s3-copy-object-cmd
-            #"s3 rm s3://(\S+)/(\S+)" s3-delete-object-cmd))
+            #"s3 rm s3://(\S+)/(\S+)" s3-delete-object-cmd
+            #"s3 rb s3://(\S+)" s3-delete-bucket))
 
