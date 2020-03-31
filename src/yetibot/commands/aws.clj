@@ -252,6 +252,14 @@
         (with-meta {:aws/type :aws.type/CopyObject})
         format-s3-response)))
 
+(defn s3-delete-object-cmd
+  "aws s3 rm s3://<bucket-name>/<key> # Deletes an s3 object"
+  {:yb/cat #{:util :info}}
+  [{[_ bucket-name key] :match}]
+  (-> (aws/s3-delete-object bucket-name key)
+      (with-meta {:aws/type :aws.type/DeleteObject})
+      format-s3-response))
+
 (when (aws/configured?)
   (cmd-hook #"aws"
             #"iam create-group\s+(\S+)\s+(\S+)" iam-create-group-in-path-cmd
@@ -283,5 +291,6 @@
             #"s3 ls\s+(\S+)" s3-list-objects-cmd
             #"s3 ls" s3-list-buckets-cmd
             #"s3 cp\s+(\S+)\s+(\S+)\s+(\S+)" s3-copy-object-with-key-cmd
-            #"s3 cp\s+(\S+)\s+(\S+)" s3-copy-object-cmd))
+            #"s3 cp\s+(\S+)\s+(\S+)" s3-copy-object-cmd
+            #"s3 rm s3://(\S+)/(\S+)" s3-delete-object-cmd))
 

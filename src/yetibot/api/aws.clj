@@ -139,3 +139,7 @@
 (def s3-copy-object
   "Makes a copy of an existing s3 object in a bucket"
   (partial aws-invoke s3 :CopyObject [:Bucket :CopySource :Key]))
+
+(def s3-delete-object
+  "Deletes an aws s3 object"
+  (partial aws-invoke s3 :DeleteObject [:Bucket :Key]))

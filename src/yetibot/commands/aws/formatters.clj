@@ -153,7 +153,7 @@
 
 (defmethod format-iam-response ::IAMLoginProfileCreated
   [{:keys [LoginProfile]}]
-  (let [user-name (:UserName LoginProfile)
+  (let [user-name   (:UserName LoginProfile)
         create-date (:CreateDate LoginProfile)]
     {:result/data  {:user-name user-name, :create-date create-date}
      :result/value (format "Login profile for %s, requiring password reset, successfully created on %s"
@@ -206,6 +206,9 @@
                 (and (s/valid? (s3-response-spec :CopyObject) response)
                      (= aws-type :aws.type/CopyObject)
                      (not (contains? response :Error))) ::S3ObjectCopied
+                (and (s/valid? (s3-response-spec :DeleteObject) response)
+                     (= aws-type :aws.type/DeleteObject)
+                     (not (contains? response :Error))) ::S3ObjectDeleted
                 :else ::error))))
 
 (defmethod format-s3-response ::error
@@ -257,3 +260,10 @@
                   :expiration             Expiration
                   :version-id             VersionId}
    :result/value (format "Successful copy %s - Last modified on %s" ETag LastModified)})
+
+(defmethod format-s3-response ::S3ObjectDeleted
+  [{:keys [DeleteMarker VersionId RequestCharged]}]
+  {:result/data  {:delete-marker? DeleteMarker
+                  :request-charged        RequestCharged
+                  :version-id             VersionId}
+   :result/value (format "Successful object deletion")})
