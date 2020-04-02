@@ -5,10 +5,21 @@
     [yetibot.commands.aws.specs :as aws.spec]
     [yetibot.api.aws]
     [taoensso.timbre :as log]
-    [clojure.contrib.humanize :refer [filesize] :as h]))
+    [clojure.contrib.humanize :refer [filesize] :as h]
+    [clj-time.coerce :as tc]
+    [clj-time.format :as tf]
+    [clj-time.format :as f]))
 
 (def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
 (def s3-response-spec (partial aws/response-spec-key yetibot.api.aws/s3))
+(def aws-date-formatter (tf/formatter "yyyy-MM-dd HH:mm:ss"))
+
+(defn- aws-date-format
+  "Utility function to format dates like AWS CLI output"
+  [edn-date]
+  (->> edn-date
+       (tc/from-date)
+       (f/unparse aws-date-formatter)))
 
 ; IAM AWS API response formatting utility function
 (defmulti format-iam-response
@@ -230,7 +241,9 @@
   [{:keys [Buckets Owner]}]
   {:result/data  {:buckets Buckets :owner Owner}
    :result/value (map
-                   #(format "Bucket : %s - Created on %s" (:Name %) (:CreationDate %))
+                   #(format "%-20s %-50s"
+                            (aws-date-format (:CreationDate %))
+                            (:Name %))
                    Buckets)})
 
 (defmethod format-s3-response ::S3ObjectsListed
@@ -248,8 +261,10 @@
                   :name                    Name
                   :key-count               KeyCount}
    :result/value (map
-                   #(format "%s[%s](%s) - Last modified on %s"
-                            (:Key %) (:StorageClass %) (h/filesize (:Size %) :binary false) (:LastModified %))
+                   #(format "%-25s %-8s %-50s"
+                            (aws-date-format (:LastModified %))
+                            (h/filesize (:Size %) :binary false)
+                            (:Key %))
                    Contents)})
 
 (defmethod format-s3-response ::S3ObjectCopied
@@ -265,7 +280,7 @@
                   :copy-source-version-id CopySourceVersionId
                   :expiration             Expiration
                   :version-id             VersionId}
-   :result/value (format "Successful copy %s - Last modified on %s" ETag LastModified)})
+   :result/value (format "Sucessful copy of : %s" ETag)})
 
 (defmethod format-s3-response ::S3ObjectDeleted
   [{:keys [DeleteMarker VersionId RequestCharged]}]
