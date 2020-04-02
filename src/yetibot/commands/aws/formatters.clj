@@ -223,7 +223,7 @@
 
                 ; Some weird stuff from AWS for their way of handling bucket deletion
                 ; http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETE.html
-                (and (nil? response)
+                (and (empty? response)
                      (= aws-type :aws.type/DeleteBucket)
                      (not (contains? response :Error))) ::S3BucketDeleted
                 :else ::error))))
