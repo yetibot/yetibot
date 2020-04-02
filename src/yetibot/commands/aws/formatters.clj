@@ -280,7 +280,7 @@
                   :copy-source-version-id CopySourceVersionId
                   :expiration             Expiration
                   :version-id             VersionId}
-   :result/value (format "Sucessful copy of : %s" ETag)})
+   :result/value (format "Successful copy of : %s" ETag)})
 
 (defmethod format-s3-response ::S3ObjectDeleted
   [{:keys [DeleteMarker VersionId RequestCharged]}]
