@@ -49,6 +49,13 @@ Features that make Yetibot powerful and great, which is to say *fun*:
 Take a look at the [usage examples](https://yetibot.com/user-guide#examples) to
 see some ~~fun~~ useful things it can do.
 
+<p>This project is supported by:</p>
+<p>
+  <a href="https://www.digitalocean.com/">
+    <img src="https://opensource.nyc3.cdn.digitaloceanspaces.com/attribution/assets/SVG/DO_Logo_horizontal_blue.svg" width="201px">
+  </a>
+</p>
+
 ## New contributors
 
 Welcome new contributors!
