@@ -1,5 +1,8 @@
 (ns yetibot.models.imgflip
   (:require
+    [yetibot.models.jsoup :as jsoup]
+    [lambdaisland.uri :as uri]
+    [lambdaisland.uri.normalize :refer [normalize]]
     [taoensso.timbre :refer [info warn error]]
     [clojure.string :as string]
     [clojure.spec.alpha :as s]
@@ -7,7 +10,11 @@
     [clj-http.client :as client]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json map-to-query-string encode]]
-    [clojure.core.memoize :as m]))
+    [clojure.core.memoize :as m])
+  (:import
+    (org.jsoup Jsoup)
+    (org.jsoup.select Elements)
+    (org.jsoup.nodes Element)))
 
 (s/def ::username ::yspec/non-blank-string)
 
@@ -37,16 +44,47 @@
                      {:query-params {:q "icahn" :page 1}}))
 
 ;; TODO: append results of search-via-scrape to cached (memes) or use a memo/ttl
+
+(defn parse-id-from-href [href]
+  (second (re-find #"memetemplate\/(\d+)\/" href)))
+
+
 (defn search-via-scrape [q n]
-  (info "search via scraping" q n)
-  (let [res (client/get "https://imgflip.com/memesearch" {:query-params {:q q :page n}})]
-    (->> res
-         :body
-         (re-seq #"alt\=\"([^\"]+)\"\s+src\=.+imgflip\.com\/([\w\d]+).(jpg|png)")
-         (map (fn [[_ alt id]]
-                {:name (string/replace alt #"\sMeme Template( Thumbnail)*" "")
-                 :url (str "http://i.imgflip.com/" id ".jpg")
-                 :id (parse-base-36-int id)})))))
+
+  (let [scrape-url (-> (uri/uri "https://imgflip.com/memesearch")
+                       (assoc :query (format "q=%s&page=%s" q n))
+                       normalize
+                       str)
+        mt-box-elements (-> scrape-url
+                            jsoup/get-page
+                            (jsoup/get-elems ".mt-box"))]
+    (map
+     (fn [mt-box]
+       (let [meme-name (jsoup/get-attr (jsoup/get-elems mt-box ".mt-title a") "text")
+             id (-> (jsoup/get-elems mt-box ".mt-title a")
+                    (jsoup/get-attr  "href")
+                    parse-id-from-href)
+             url (-> (jsoup/get-elems mt-box "a img")
+                     (jsoup/get-attr "src"))]
+         {:name meme-name
+          :url (str "https:" url)
+          :id id}))
+     mt-box-elements)))
+
+(comment
+
+  (parse-id-from-href "/memetemplate/170703314/jocko-eyes")
+
+  (parse-base-36-int "170703314")
+
+  (search-via-scrape "jocko" 1)
+
+  (map
+   #(jsoup/get-attr % "src")
+   (-> "https://imgflip.com/memesearch?q=jocko"
+       jsoup/get-page
+       (jsoup/get-elems ".mt-box img"))))
+
 
 (defn scrape-all-memes
   "Fetch Pages of Memes Until Max Number of Pages is Reached"
