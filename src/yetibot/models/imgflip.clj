@@ -10,11 +10,7 @@
     [clj-http.client :as client]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json map-to-query-string encode]]
-    [clojure.core.memoize :as m])
-  (:import
-    (org.jsoup Jsoup)
-    (org.jsoup.select Elements)
-    (org.jsoup.nodes Element)))
+    [clojure.core.memoize :as m]))
 
 (s/def ::username ::yspec/non-blank-string)
 
