@@ -6,6 +6,10 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.65 - 4/6/20
+
+- [Fix meme scraper (#1016)](https://github.com/yetibot/yetibot/pull/1016)
+
 ## 0.5.64 - 4/1/20
 
 - Upgrade to `yetibot/core "20200401.183007.dbc3597"`
