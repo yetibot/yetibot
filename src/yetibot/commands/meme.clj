@@ -38,6 +38,10 @@
   (instance-result
     (model/generate-meme-by-query inst text)))
 
+(comment
+  (generate-auto-split-cmd {:match [nil "jocko" "good"]})
+  )
+
 (defn rand-generate-auto-split-cmd
   "meme <text> # when <text> is 4 words or more, autosplit <text> in half and generate the instance; otherwise it'll fallback to meme search"
   {:yb/cat #{:fun :img :meme}}

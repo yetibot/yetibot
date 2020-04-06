@@ -262,7 +262,7 @@
             (or (-> fs :assignee :displayName) "unassigned")
             (-> fs :status :name)
             (-> fs :issuetype :name)
-            (-> fs :priority :name)
+            (or (-> fs :priority :name) "Not set")
             (:summary fs)
             (url-from-key (:key issue-data)))))
 
