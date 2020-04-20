@@ -24,6 +24,10 @@
 
 (defn fetch-memes [] (get-json (str endpoint "/get_memes")))
 (defonce memes (m/ttl fetch-memes :ttl/threshold 3600000)) ; one hour memo
+(comment
+  (memes)
+  (-> (memes) :data :memes count)
+  )
 
 (defn rand-meme [] (-> (memes) :data :memes rand-nth :name))
 
@@ -97,12 +101,16 @@
 (defn search-memes [query]
   (let [ms (-> (memes) :data :memes)
         p (re-pattern (str "(?i)" query))
-        match-fn (partial match-meme-name p)]
-    (let [matching-ms (filter match-fn ms)]
-      (if-not (empty? matching-ms)
-        matching-ms
-        ; fallback to search-via-scrape if cached results don't contain a match
-        (scrape-all-memes query 3)))))
+        match-fn (partial match-meme-name p)
+        results (let [matching-ms (filter match-fn ms)]
+                  (if-not (empty? matching-ms)
+                    matching-ms
+                                          ; fallback to search-via-scrape if
+                                          ; cached results don't contain a match
+                    (scrape-all-memes query 3)))]
+    ;; ensure we only return results with valid IDs to avoid "No template_id
+    ;; specified" errors
+    (filter :id results)))
 
 (defn generate-meme [id text0 text1]
   (get-json
@@ -111,6 +119,12 @@
            (merge config {:template_id id
                           :text0 text0
                           :text1 text1})))))
+
+(comment
+  (search-memes "whoa")
+  (generate-meme "47202892" "x" "y")
+  (generate-meme "4" "x" "y")
+  )
 
 (defn generate-meme-by-query [query text0 & [text1]]
   (if-let [meme (first (search-memes query))]
