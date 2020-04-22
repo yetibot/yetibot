@@ -6,6 +6,8 @@ services:
     image: yetibot/yetibot
     depends_on:
       - postgres
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
     environment:
       - YB_ADAPTERS_FREENODE_TYPE=irc
       - YB_ADAPTERS_FREENODE_HOST=irc.freenode.net
@@ -14,7 +16,7 @@ services:
       - YB_DB_URL=postgresql://yetibot:yetibot@postgres:5432/yetibot
       - YB_URL=http://localhost:3456
     ports:
-      - "3456:3003"
+      - 3456:3003
 
   postgres:
     image: postgres

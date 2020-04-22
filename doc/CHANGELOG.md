@@ -6,6 +6,11 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.68 - 4/22/20
+
+- Upgrade to `yetibot/core "20200421.181123.1e11176"`
+- Add volume to postgres in `docker-compose.yml`
+
 ## 0.5.67 - 4/20/20
 
 - Fix meme search by filtering out meme search results that lack IDs -
