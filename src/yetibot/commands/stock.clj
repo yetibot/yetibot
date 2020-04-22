@@ -72,11 +72,14 @@
   "Gets the price from a stock symbol via Yahoo API"
   [stock-symbol]
   (try
-    (let [{{stock-info :global-quote} :body}
+    ;; note is used to return error messages from the API
+    (let [{{note :note stock-info :global-quote} :body}
           (fetch {:function "GLOBAL_QUOTE"
                   :symbol (string/trim stock-symbol)})]
       (if (empty? stock-info)
-        {:result/error (str "Unable to find a stock for `" stock-symbol "` 🧐")}
+        {:result/error
+         (or note
+             (str "Unable to find a stock for `" stock-symbol "` 🧐")) }
         {:result/data stock-info
          :result/value
          (map (fn [[label lookup-fn]]
