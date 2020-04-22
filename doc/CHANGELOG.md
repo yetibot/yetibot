@@ -6,6 +6,15 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.69 - 4/22/20
+
+- Upgrade to `yetibot/core "20200422.204847.52f8203"`
+  This change allows using single quotes in aliases, like:
+
+  ```
+  !alias foo = 'echo foo | echo bar'
+  ```
+
 ## 0.5.68 - 4/22/20
 
 - Upgrade to `yetibot/core "20200421.181123.1e11176"`
