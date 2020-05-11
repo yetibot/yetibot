@@ -43,13 +43,13 @@
                                         unsigned-oauth-params
                                         {:oauth_verifier verifier})
                                  :oauth_version)
-         _ (info "unsigned-params" unsigned-params)
+         ;; _ (info "unsigned-params" unsigned-params)
          data-to-sign (oauth.signature/base-string
                        (-> request-method
                            oauth.signature/as-str
                            string/upper-case)
                        request-uri
                        unsigned-params)
-         _ (info "data-to-sign" data-to-sign)
+         ;; _ (info "data-to-sign" data-to-sign)
          signature (String. (rsa-sign data-to-sign (:secret consumer)))]
      (assoc unsigned-oauth-params :oauth_signature signature))))

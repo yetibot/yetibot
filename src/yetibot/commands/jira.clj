@@ -273,7 +273,7 @@
             (merge
              {:component-ids component-ids}
              (when priority {:priority-key priority})
-             (select-keys opts [:fix-version :summary :desc :assignee])
+             (select-keys opts [:fix-version :summary :desc :reporter :assignee])
              (when (or (:remaining opts) (:time opts))
                {:timetracking
                 (merge (when (:remaining opts)
@@ -301,8 +301,10 @@
   [{[_ iss-key assignee] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (report-if-error
-     #(let [user-to-assign (-> assignee api/search-users :body first)]
-        (api/assign-issue iss-key (:accountId user-to-assign)))
+     #(let [user-to-assign (api/resolve-user-by-query assignee)]
+        (if user-to-assign
+          (api/update-issue iss-key {:assignee assignee})
+          {:result/error (format "Couldn't find user for `%s`" assignee)}))
      (fn [res]
        (if res
          {:result/value
@@ -371,6 +373,7 @@
   {:yb/cat #{:issue}}
   [{:keys [settings]}]
   (binding [api/*jira-projects* (channel-projects settings)]
+    (info "components projects" (channel-projects settings))
     ;; TODO this needs error handling but our current err handling structure
     ;; doesn't work so well for composite results from multiple API calls 🤔
     ;; unless we figured out a way to report multiple results
@@ -386,6 +389,18 @@
                            " — "
                            description))
                        data)})))
+
+(defn priorities-cmd
+  "jira priorities # list JIRA priorities"
+  {:yb/cat #{:issue}}
+  [{:keys [settings]}]
+  (let [{:keys [body]} (api/priorities)]
+    {:result/value (map
+                    (fn [{:keys [statusColor description]
+                          pri-name :name}]
+                      (format "%s %s: %s" statusColor pri-name description))
+                    body)
+     :result/data body}))
 
 (defn format-version [v]
   (str
@@ -499,6 +514,7 @@
  #"^delete\s+(\S+)" delete-cmd
  #"^worklog\s+(\S+)\s+(\S+)\s+(.+)" worklog-cmd
  #"^components" components-cmd
+ #"^priorities" priorities-cmd
  #"^versions\s*(\S+)*" versions-cmd
  #"^recent\s*(\S+)*" recent-cmd
  #"^pri" priorities-cmd

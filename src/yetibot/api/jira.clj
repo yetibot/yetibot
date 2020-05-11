@@ -66,12 +66,19 @@
                                  ::verifier
                                  ::access]))
 
+(s/def ::cloud string?)
+
 (s/def ::config (s/keys :req-un [::domain ::user]
-                        :opt-un [::projects ::default ::max ::subtask
+                        :opt-un [::cloud
+                                 ::projects
+                                 ::default
+                                 ::max
+                                 ::subtask
                                  ;; if password is include, basic auth is used
                                  ::password
                                  ;; if oauth is included use it instead
                                  ::oauth1]))
+
 
 ;; config
 
@@ -98,14 +105,22 @@
 
 (defn configured? [] (config))
 
+(defn cloud?
+  "Whether or not to use Cloud REST API calls:
+   https://developer.atlassian.com/cloud/jira/platform/rest/v2/#api-group-User-search"
+  []
+  (-> (config) :cloud (= "true")))
+
 (defn projects [] (:projects (config)))
 
 (defn project-for-key [k] (first (filter #(= (:key %) k) (projects))))
 
-(defn project-keys [] (concat
-                       (if *jira-project* [*jira-project*] [])
-                       (vec *jira-projects*)
-                       (map :key (projects))))
+(defn project-keys []
+  (set
+   (concat
+    (if *jira-project* [*jira-project*] [])
+    (vec *jira-projects*)
+    (map :key (projects)))))
 
 (defn project-keys-str [] (string/join "," (into
                                             (project-keys)
@@ -113,6 +128,7 @@
 
 (comment
   (config)
+  (cloud?)
   (configured?)
   (project-keys)
   (project-keys-str))
@@ -303,24 +319,111 @@
   [issue-data]
   (let [fs (:fields issue-data)]
     (flatten
-      (keep identity
-            [(str (:key issue-data) " 🔵 " (-> fs :status :name) " 🔵 " (:summary fs))
-             (:description fs)
-             (string/join
-               "  "
-               [(str "👷 " (-> fs :assignee :displayName))
-                (str "👮 " (-> fs :reporter :displayName))])
-             (string/join
-               " "
-               [(str "❗️ Priority: " (-> fs :priority :name))
-                (str " ✅ Fix version: " (string/join ", " (map :name (:fixVersions fs))))])
-             (str "🕐 Created: " (parse-and-format-date-string (:created fs))
-                  "  🕗 Updated: " (parse-and-format-date-string (:updated fs)))
-             (map format-comment (-> fs :comment :comments))
-             (format-worklog-items issue-data)
-             (format-subtasks issue-data)
-             (format-attachments issue-data)
-             (str "👉 " (url-from-key (:key issue-data)))]))))
+     (keep identity
+           [(str (:key issue-data) " 🔵 " (-> fs :status :name) " 🔵 " (:summary fs))
+            (:description fs)
+            (string/join
+             "  "
+             [(str "👷 " (-> fs :assignee :displayName))
+              (str "👮 " (-> fs :reporter :displayName))])
+            (string/join
+             " "
+             [(str "🔩 Component: " (->> fs :components
+                                         (map :name)
+                                         (string/join ", ")))
+              (str "❗️ Priority: " (-> fs :priority :name))
+              (str " ✅ Fix version: " (string/join ", " (map :name (:fixVersions fs))))])
+            (str "🕐 Created: " (parse-and-format-date-string (:created fs))
+                 "  🕗 Updated: " (parse-and-format-date-string (:updated fs)))
+            (map format-comment (-> fs :comment :comments))
+            (format-worklog-items issue-data)
+            (format-subtasks issue-data)
+            (format-attachments issue-data)
+            (str "👉 " (url-from-key (:key issue-data)))]))))
+
+;; search
+
+(defn- projects-jql [& [project]]
+  (if project
+    (str "(project in (" project "))")
+    (str "(project in (" (project-keys-str) "))")))
+
+(defn search [jql]
+  (info "JQL search" jql)
+  (http-get
+   (endpoint "/search")
+   {:query-params {:jql jql
+                   :startAt 0
+                   :maxResults (max-results)
+                   :fields "summary,issuetype,status,assignee"}
+    :coerce :always
+    :throw-exceptions false}))
+
+(defn search-in-projects [jql]
+  (search (str (projects-jql) " AND (" jql ")")))
+
+(defn search-by-query [query]
+  (search-in-projects
+    (str
+      "(summary ~ \"" query "\" OR description ~ \"" query
+      "\" OR comment ~ \"" query "\")")))
+
+(defn recent [& [project]]
+  (search
+   (str (projects-jql project) " ORDER BY updatedDate")))
+
+(comment
+  (search-by-query "demo")
+  (projects-jql)
+  (projects-jql "FOO")
+  (search "created >= -5h")
+  (recent)
+  (recent "YETIBOT")
+  (str (projects-jql "YETIBOT") " ORDER BY updatedDate")
+  *e
+  )
+
+
+;; users
+
+(defn get-users [project]
+  (let [uri (endpoint "/user/assignable/multiProjectSearch")]
+    (http-get
+     uri
+     {:query-params {:projectKeys project}})))
+
+(defn search-users
+  "Find a user entity matching against display name and email.
+
+   query - A query string that is matched against user attributes ( displayName,
+   and emailAddress) to find relevant users. The string can match the prefix of
+   the attribute's value. For example, query=john matches a user with a
+   displayName of John Smith and a user with an emailAddress of
+   johnson@example.com"
+  [query]
+  (http-get
+   (endpoint "/user/search")
+   {:query-params
+    (if (cloud?)
+      {:query query}
+      {:username query})}))
+
+(defn resolve-user-by-query
+  "Given a query representing a user return the first match, if any"
+  [user-query]
+  (let [{:keys [body]} (search-users user-query)]
+    (first body)))
+
+(defn user-ref
+  "Jira Cloud and Server take different params when referencing users. Abstract
+   the diff with this function"
+  [assignee-user]
+  (if (cloud?)
+    {:id (:accountId assignee-user)} ;; TODO verify
+    ;; this doesn't work, apparently
+    ;; {:key (:key assignee-user)}
+    (select-keys assignee-user [:name])))
+
 
 
 ;; issues
@@ -418,7 +521,7 @@
         (info "issue not found" i)))))
 
 (comment
-  (get-issue "YETIBOT-5")
+  (get-issue "YETIBOT-85")
   *e)
 
 (def fetch-and-format-issue-short (comp format-issue-short :body get-issue))
@@ -444,6 +547,7 @@
 (defn issue-types []
   (:body (http-get (endpoint "/issuetype"))))
 
+
 (defn update-issue
   [issue-key {:keys [fix-version summary component-ids reporter assignee
                      priority-key desc timetracking]}]
@@ -453,8 +557,11 @@
                  {}
                  (when fix-version {:fixVersions [{:name fix-version}]})
                  (when summary {:summary summary})
-                 (when assignee {:assignee assignee})
-                 (when reporter {:reporter reporter})
+                 (when assignee
+                   (when-let [assignee-user (resolve-user-by-query assignee)]
+                     {:assignee (user-ref assignee-user)}))
+                 (when reporter
+                   {:reporter (user-ref (resolve-user-by-query reporter))})
                  (when component-ids {:components (map #(hash-map :id %) component-ids)})
                  (when desc {:description desc})
                  (when timetracking {:timetracking timetracking})
@@ -468,6 +575,34 @@
       :content-type :json})))
 
 (comment
+
+  ;; assign the most recent issue for the default project to a random user
+  (let [user "trevor"
+        issue (-> (recent) :body :issues second :key)]
+    (info "test assign" {:user user :issue issue})
+    (update-issue issue {:assignee user}))
+
+  (let [issue (-> (recent) :body :issues second :key)]
+    (http-get (endpoint "/issue/%s/editmeta" issue)))
+
+  *e
+  (resolve-user-by-query "trevor")
+  (user-ref (resolve-user-by-query "trevor hartman"))
+
+  ;; update example
+
+  (http-put
+   (endpoint "/issue/%s" "YETIBOT-89")
+   {:coerce :always
+    :throw-exceptions false
+    :form-params {:fields {:assignee
+                           (user-ref (resolve-user-by-query "trevor hartman"))}}
+    :content-type :json})
+
+
+  (search-users "y")
+  (search-users "trevor")
+  (get-users (first (project-keys)))
 
   (priorities)
   (issue-types)
@@ -506,7 +641,8 @@
                                 {:id dvi}))
             _ (info "fix-version-map" fix-version-map)
             params {:fields
-                    (merge {:assignee {:name assignee}
+                    (merge {:assignee (-> assignee resolve-user-by-query
+                                          user-ref)
                             :project {:id prj-id}
                             :summary summary
                             :description desc
@@ -516,7 +652,8 @@
                              {:components (map #(hash-map :id %)
                                                component-ids)})
                            (when reporter
-                             {:reporter {:name reporter}})
+                             {:reporter (-> reporter resolve-user-by-query
+                                            user-ref)})
                            (when fix-version-map
                              {:fixVersions [fix-version-map]})
                            (when timetracking
@@ -552,21 +689,7 @@
     (info "deleting issue" issue)
     (delete-issue issue)))
 
-(defn assign-issue
-  [issue-key assignee-user-id]
-  (http-put
-    (endpoint "/issue/%s/assignee" issue-key)
-   {:content-type :json
-    :form-params {:accountId assignee-user-id}}))
 
-(comment
-  ;; assign the most recent issue for the default project to a random user
-  (let [user (-> (default-project-key) get-users :body rand-nth)
-        issue (-> (recent) :body :issues first :key)]
-    (info {:user user :issue issue})
-    (assign-issue issue (:accountId user)))
-
-  *e)
 
 ;; projects
 
@@ -604,35 +727,13 @@
 
 (comment
   (components (first (project-keys)))
+  (->> (project-keys)
+       first
+       components
+       :body
+       (map :description))
+
   (find-component-like "bugs"))
-
-;; users
-
-(defn get-users [project]
-  (let [uri (endpoint "/user/assignable/multiProjectSearch")]
-    (http-get
-     uri
-     {:query-params {:projectKeys project}})))
-
-(defn search-users
-  "Find a user entity matching against display name and email.
-
-   query - A query string that is matched against user attributes ( displayName,
-   and emailAddress) to find relevant users. The string can match the prefix of
-   the attribute's value. For example, query=john matches a user with a
-   displayName of John Smith and a user with an emailAddress of
-   johnson@example.com"
-  [query]
-  (http-get
-   (endpoint "/user/search")
-   {:query-params
-    (merge {:query query
-            :username query})}))
-
-(comment
-  (search-users "y")
-  (search-users "trevor")
-  (get-users (first (project-keys))))
 
 ;; (defn find-user-assignable-to
 ;;   [issue-key & [user-to-search-for]]
@@ -653,47 +754,6 @@
 
 (comment
   (get-projects)
-  )
-
-;; search
-
-(defn- projects-jql [& [project]]
-  (if project
-    (str "(project in (" project "))")
-    (str "(project in (" (project-keys-str) "))")))
-
-(defn search [jql]
-  (info "JQL search" jql)
-  (http-get
-   (endpoint "/search")
-   {:query-params {:jql jql
-                   :startAt 0
-                   :maxResults (max-results)
-                   :fields "summary,issuetype,status,assignee"}
-    :coerce :always
-    :throw-exceptions false}))
-
-(defn search-in-projects [jql]
-  (search (str (projects-jql) " AND (" jql ")")))
-
-(defn search-by-query [query]
-  (search-in-projects
-    (str
-      "(summary ~ \"" query "\" OR description ~ \"" query
-      "\" OR comment ~ \"" query "\")")))
-
-(defn recent [& [project]]
-  (search
-   (str (projects-jql project) " ORDER BY updatedDate")))
-
-(comment
-  (search-by-query "demo")
-  (projects-jql)
-  (projects-jql "FOO")
-  (search "created >= -5h")
-  (recent)
-  (recent "YETIBOT")
-  *e
   )
 
 ;; prime cache
