@@ -1,9 +1,8 @@
 (ns yetibot.commands.jira
   (:require
    [clojure.tools.cli :refer [parse-opts]]
-   [yetibot.observers.jira :refer [report-jira]]
-   [yetibot.core.util :refer [filter-nil-vals map-to-strs]]
-   [taoensso.timbre :refer [info debug warn error]]
+   [yetibot.core.util :refer [filter-nil-vals ]]
+   [taoensso.timbre :refer [info debug]]
    [clojure.string :refer [split join trim blank?]]
    [yetibot.core.hooks :refer [cmd-hook]]
    [clojure.data.json :as json]
@@ -273,7 +272,7 @@
             (merge
              {:component-ids component-ids}
              (when priority {:priority-key priority})
-             (select-keys opts [:fix-version :summary :desc :assignee])
+             (select-keys opts [:fix-version :summary :desc :reporter :assignee])
              (when (or (:remaining opts) (:time opts))
                {:timetracking
                 (merge (when (:remaining opts)
@@ -301,8 +300,10 @@
   [{[_ iss-key assignee] :match settings :settings}]
   (binding [api/*jira-projects* (channel-projects settings)]
     (report-if-error
-     #(let [user-to-assign (-> assignee api/search-users :body first)]
-        (api/assign-issue iss-key (:accountId user-to-assign)))
+     #(let [user-to-assign (api/resolve-user-by-query assignee)]
+        (if user-to-assign
+          (api/update-issue iss-key {:assignee assignee})
+          {:result/error (format "Couldn't find user for `%s`" assignee)}))
      (fn [res]
        (if res
          {:result/value
@@ -371,6 +372,7 @@
   {:yb/cat #{:issue}}
   [{:keys [settings]}]
   (binding [api/*jira-projects* (channel-projects settings)]
+    (info "components projects" (channel-projects settings))
     ;; TODO this needs error handling but our current err handling structure
     ;; doesn't work so well for composite results from multiple API calls 🤔
     ;; unless we figured out a way to report multiple results
@@ -386,6 +388,18 @@
                            " — "
                            description))
                        data)})))
+
+(defn priorities-cmd
+  "jira priorities # list JIRA priorities"
+  {:yb/cat #{:issue}}
+  [{:keys [settings]}]
+  (let [{:keys [body]} (api/priorities)]
+    {:result/value (map
+                    (fn [{:keys [statusColor description]
+                          pri-name :name}]
+                      (format "%s %s: %s" statusColor pri-name description))
+                    body)
+     :result/data body}))
 
 (defn format-version [v]
   (str
@@ -490,7 +504,35 @@
       :body
       api/format-issue-long))
 
-(cmd-hook #"jira"
+(defn transitions-cmd
+  "jira transitions <issue> # list the available transitions for <issue>"
+  {:yb/cat #{:issue}}
+  [{[_ issue-key] :match}]
+  (let [{{transitions :transitions} :body} (api/get-transitions issue-key)]
+    {:result/data transitions
+     :result/value (map :name transitions)}))
+
+(defn transition-cmd
+  "jira transition <issue> <transition> # Move <issue> through <transition>"
+  {:yb/cat #{:issue}}
+  [{[_ issue-key transition-name] :match}]
+  (let [transition (api/find-transition issue-key transition-name)]
+    (if transition
+      (report-if-error
+       #(api/transition-issue issue-key (:id transition))
+          (fn [res]
+            (info "transition result" (pr-str res))
+            (if res
+              {:result/value (api/fetch-and-format-issue-short issue-key)
+               :result/data res})))
+      {:result/error (format "Couldn't find transition `%s` for issue `%s`"
+                             issue-key transition-name)})))
+
+
+(cmd-hook
+ #"jira"
+ #"transition\s+(\S+)\s+(\S+)" transition-cmd
+ #"transitions\s+(\S+)" transitions-cmd
  #"^issue-types\s*(.*)" issue-types-cmd
  #"^configured-projects" configured-projects-cmd
  #"^projects\s*(\S+)*" projects-cmd
@@ -499,6 +541,7 @@
  #"^delete\s+(\S+)" delete-cmd
  #"^worklog\s+(\S+)\s+(\S+)\s+(.+)" worklog-cmd
  #"^components" components-cmd
+ #"^priorities" priorities-cmd
  #"^versions\s*(\S+)*" versions-cmd
  #"^recent\s*(\S+)*" recent-cmd
  #"^pri" priorities-cmd

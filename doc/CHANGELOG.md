@@ -6,6 +6,15 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.71 - 5/6/20
+
+- Upgrade to `yetibot/core "20200506.175620.6cd5d91"`
+- Add `jira priorities` command
+- Add `jira transitions <issue>` command
+- Add `jira transition <issue> <transition>` command
+- Support both Jira server and cloud versions, and allow users to specify
+  whether they are using "cloud" with a new config option
+
 ## 0.5.70 - 4/22/20
 
 - Return error note from Alpha Vantage if present
