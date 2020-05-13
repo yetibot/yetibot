@@ -18,7 +18,7 @@
    Hopefully someday they unify the cloud and enterprise APIs."
   (:require
    [yetibot.util :refer [oauth1-credentials]]
-   [taoensso.timbre :refer [info warn error color-str]]
+   [taoensso.timbre :refer [info warn color-str]]
    [clojure.spec.alpha :as s]
    [yetibot.core.spec :as yspec]
    [clojure.string :as string]
@@ -26,10 +26,9 @@
    [oauth.client :as oauth]
    [clojure.core.memoize :as memo]
    [yetibot.core.config :refer [get-config]]
-   [yetibot.core.util.http :refer [get-json fetch]]
    [clj-time
     [local :refer [local-now]]
-    [format :refer [formatter formatters show-formatters parse unparse]]]))
+    [format :refer [formatters show-formatters parse unparse]]]))
 
 (s/def ::id ::yspec/non-blank-string)
 
@@ -435,21 +434,29 @@
    (endpoint "/issue/%s/transitions" i)
    {:query-params {:transitionId nil}}))
 
+(defn find-transition
+  "Use regex to find by partial match on transition name"
+  [issue-key query]
+  (let [p (re-pattern (str "(?i)" query))]
+    (first (filter #(re-find p (:name %))
+                   (-> (get-transitions issue-key) :body :transitions)))))
+
 (def ^:private find-resolve
   (partial filter #(or
                      (= "Done" (:name %))
                      (= "Resolve Issue" (:name %)))))
 
-(defn- transition-issue [i transition-id iss-comment]
-  (let [params {:update {:comment [{:add {:body iss-comment}}]}
-                ;; whether resolution is present depends on the configured
-                ;; screen. by default it's not present, so including this
-                ;; property would trigger the error:
-                ;; {"errorMessages":[],"errors":{"resolution":"Field 'resolution' cannot be set. It is not on the appropriate screen, or unknown."}}
-                ;; TODO dynamically determine if `resolution` is configured
-                ;; /shrug
-                ;; :fields {:resolution {:name "Fixed"}}
-                :transition {:id transition-id}}]
+;; whether resolution is present depends on the configured
+;; screen. by default it's not present, so including this
+;; property would trigger the error:
+;; {"errorMessages":[],"errors":{"resolution":"Field 'resolution' cannot be set. It is not on the appropriate screen, or unknown."}}
+;; TODO dynamically determine if `resolution` is configured
+;; /shrug
+;; :fields {:resolution {:name "Fixed"}}
+(defn transition-issue [i transition-id & iss-comment]
+  (let [params (merge {:transition {:id transition-id}}
+                      (when iss-comment
+                        {:update {:comment [{:add {:body iss-comment}}]}}))]
     (http-post
      (endpoint "/issue/%s/transitions" i)
      {:form-params params
