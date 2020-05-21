@@ -5,7 +5,7 @@ if:
 
 1. the feature makes sense for Yetibot
 1. whether it should be in `yetibot` or `yetibot.core`
-1. no one is [working on it already](https://waffle.io/devth/yetibot)
+1. no one is [working on it already](https://github.com/yetibot/yetibot/labels/in%20progress)
 
 When ready to contribute:
 
