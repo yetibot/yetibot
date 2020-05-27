@@ -10,7 +10,7 @@ as well.
 
 `xkcd` improvements by [@mdave16](https://github.com/mdave16):
 
-- [Xkcd random #1023](https://github.com/yetibot/yetibot/pull/1021)
+- [Xkcd random #1023](https://github.com/yetibot/yetibot/pull/1023)
 - [Get xkcd comic by index #1022](https://github.com/yetibot/yetibot/pull/1022)
 
 ## 0.5.71 - 5/6/20
