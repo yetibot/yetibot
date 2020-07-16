@@ -5,7 +5,7 @@
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]
     [clojure.data.json :as json]
-    [taoensso.timbre :refer [error]]
+    [clj-http.client :as client]
     [clojure.string :as string]))
 
 (s/def ::appid string?)
@@ -14,8 +14,7 @@
 
 (def config (:value (get-config ::config [:wolfram])))
 (def app-id (:appid config))
-(def endpoint (str "http://api.wolframalpha.com/v2/query?output=json&appid="
-                   app-id))
+(def endpoint "http://api.wolframalpha.com/v2/query")
 
 (defn plaintext-or-image
   "Return the subpods plaintext if present, otherwise it's image link."
@@ -29,7 +28,7 @@
   "Concatenate pod title and all subpods' data."
   [pod]
   (->> pod
-       (:subpods)
+       :subpods
        (map plaintext-or-image)
        (string/join "; ")
        (str (:title pod) ": ")))
@@ -47,18 +46,21 @@
   "wolfram <query> # search for <query> on Wolfram Alpha"
   {:yb/cat #{:info :img}}
   [{q :match}]
-  (let [data (:queryresult (json/read-str
-                            (slurp (str endpoint "&input=" (encode q)))
-                            :key-fn keyword))]
+  (let [data (get-in (client/get endpoint
+                                       {:query-params {:input q
+                                                       :output "json"
+                                                       :appid app-id
+                                                       :reinterpret true}
+                                        :as :json})
+                     [:body :queryresult])]
     (if (:success data)
       {:result/value (map data-string (:pods data))
        :result/collection-path [:pods]
        :result/data data}
-      {:result/value (if (:error data)
-                       (do (error data)
-                           "Oops, something went wrong.")
-                       (catch-suggestion data))
-       :result/data data})))
+      (if (:error data)
+        {:result/error (:error data)}
+        {:result/value (catch-suggestion data)
+         :result/data data}))))
 
 (cmd-hook #"wolfram"
   #".*" search-wolfram)
