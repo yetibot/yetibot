@@ -6,6 +6,12 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## 0.5.74 - 10/10/20
+
+- Upgrade to `yetibot/core "20201006.200018.6cd662a"`
+- [Improve wolfram command #1031](https://github.com/yetibot/yetibot/pull/1031)
+  by [@ontanj](https://github.com/ontanj)
+
 ## 0.5.73 - 6/30/20
 
 - Upgrade to `yetibot/core "20200630.181106.8100b22"`
