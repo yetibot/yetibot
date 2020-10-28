@@ -99,7 +99,8 @@
                  [com.cognitect.aws/ec2 "770.2.568.0"]
                  [com.cognitect.aws/s3 "762.2.561.0"]]
 
-  :plugins [[lein-exec "0.3.7"]
+  :plugins [[lein-inferv "20201020.015531.74d2ced"]
+            [lein-exec "0.3.7"]
             [lein-environ "1.1.0"]
             [lein-cloverage "1.0.13"]
             [lein-ring "0.12.4"]
