@@ -1,11 +1,11 @@
 name: release
 
-# on:
-#   push:
-#     branches:
-#       - master
-#     pull_request:
-#       - master
+on:
+  push:
+    # branches:
+    #   - master
+    pull_request:
+      - master
 
 jobs:
 
