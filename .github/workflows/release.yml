@@ -17,7 +17,7 @@ jobs:
       - name: checkout
         uses: actions/checkout@v2
       - name: timestamp
-        run: timestamp_ms=`date +%s%3N` >> $GITHUB_ENV
+        run: echo "timestamp_ms=`date +%s%3N`" >> $GITHUB_ENV
       - name: verify
         run: echo $timestamp_ms
 
