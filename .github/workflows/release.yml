@@ -1,0 +1,28 @@
+name: release
+
+# on:
+#   push:
+#     branches:
+#       - master
+#     pull_request:
+#       - master
+
+jobs:
+
+  deploy:
+
+    runs-on: ubuntu-latest
+    container: clojure:lein
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: timestamp
+        run: timestamp_ms=`date +%s%3N` >> $GITHUB_ENV
+      - name: verify
+        run: echo $timestamp_ms
+
+      # - name: release
+      #   env:
+      #     CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+      #     CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
+      #   run: lein release
