@@ -18,8 +18,12 @@ jobs:
         uses: actions/checkout@v2
       - name: timestamp
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
+      - name: version
+        run: echo "YETIBOT_VERSION=`lein pprint :version`" >> $GITHUB_ENV
       - name: verify
-        run: echo $INFERV_TIMESTAMP_MS
+        run: |
+          echo $VERSION
+          echo $INFERV_TIMESTAMP_MS
       - name: pprint
         run: lein pprint
 
