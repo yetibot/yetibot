@@ -24,6 +24,7 @@ jobs:
         run: |
           echo $VERSION
           echo $INFERV_TIMESTAMP_MS
+          lein pprint :version
       - name: pprint
         run: lein pprint
 
