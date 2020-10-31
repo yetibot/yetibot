@@ -22,7 +22,7 @@ jobs:
         run: echo "YETIBOT_VERSION=`lein pprint :version | tr -d '"'`" >> $GITHUB_ENV
       - name: verify
         run: |
-          echo $VERSION
+          echo yetibot/yetibot:$VERSION
           echo $INFERV_TIMESTAMP_MS
           lein pprint :version
       - name: pprint
