@@ -12,7 +12,7 @@ jobs:
   deploy:
 
     runs-on: ubuntu-latest
-    container: clojure:lein
+    # container: clojure:lein
     steps:
       - name: checkout
         uses: actions/checkout@v2
@@ -28,6 +28,7 @@ jobs:
         # `lein pprint :version`
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
       - name: version
+        uses: docker://clojure:lein
         run: echo "YB_VERSION=`lein pprint :version | sed 's/\"//g'`" >> $GITHUB_ENV
       - name: docker tag
         run: echo "YB_DOCKER_TAG=yetibot/yetibot:$YB_VERSION" >> $GITHUB_ENV
