@@ -28,9 +28,9 @@ jobs:
         # `lein pprint :version`
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
       - name: version
-        run: |
-          echo "YETIBOT_VERSION=`lein pprint :version | sed 's/\"//g'`" >> $GITHUB_ENV
-          echo "DOCKER_TAG=yetibot/yetibot:$YETIBOT_VERSION" >> $GITHUB_ENV
+        run: echo "YB_VERSION=`lein pprint :version | sed 's/\"//g'`" >> $GITHUB_ENV
+      - name: docker tag
+        run: echo "YB_DOCKER_TAG=yetibot/yetibot:$YB_VERSION" >> $GITHUB_ENV
       - name: verify
         run: |
           env
