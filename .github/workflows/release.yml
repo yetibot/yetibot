@@ -16,19 +16,23 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v2
+
+      - uses: DeLaGuardo/setup-clojure@master
+        with:
+          lein: 2.9.4
+
       - name: Cache Clojars
         uses: actions/cache@v2
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-clojars-${{ hashFiles('**/project.clj') }}
           restore-keys: |
-            ${{ runner.os }}-clojars-
+            ${{ runner.os }}-clojars
       - name: timestamp
         # by setting INFERV_TIMESTAMP_MS we will get deterministic versions from
         # `lein pprint :version`
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
       - name: version
-        uses: docker://clojure:lein
         run: echo "YB_VERSION=`lein pprint :version | sed 's/\"//g'`" >> $GITHUB_ENV
       - name: docker tag
         run: echo "YB_DOCKER_TAG=yetibot/yetibot:$YB_VERSION" >> $GITHUB_ENV
