@@ -22,6 +22,13 @@
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
                        :aot :all}
+
+             :deploy {:deploy-repositories
+                      [["releases" {:url "https://clojars.org/repo"
+                                    :username :env/clojars_username
+                                    :password :env/clojars_password
+                                    :sign-releases false}]]}
+
              :test {:dependencies []}}
   :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl

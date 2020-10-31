@@ -46,7 +46,7 @@ jobs:
         env:
           CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
           CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
-        run: lein release
+        run: lein with-profile deploy release
 
       # Docker
 
