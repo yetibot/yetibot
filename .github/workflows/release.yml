@@ -41,12 +41,12 @@ jobs:
 
       # Clojars release and docker build/push can happen in parallel
 
-      # TODO clojars
-      # - name: release
-      #   env:
-      #     CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
-      #     CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
-      #   run: lein release
+      # Clojars
+      - name: release
+        env:
+          CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
+          CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
+        run: lein release
 
       # Docker
 
