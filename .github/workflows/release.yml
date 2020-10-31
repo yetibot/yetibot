@@ -20,9 +20,11 @@ jobs:
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
       - name: version
         run: echo "YETIBOT_VERSION=`lein pprint :version | tr -d '"'`" >> $GITHUB_ENV
+        run: echo "TMPV=`lein pprint :version` >> $GITHUB_ENV
       - name: verify
         run: |
-          echo yetibot/yetibot:$VERSION
+          echo yetibot/yetibot:$YETIBOT_VERSION
+          echo yetibot/yetibot:$TMPV
           echo $INFERV_TIMESTAMP_MS
           lein pprint :version
       - name: pprint
