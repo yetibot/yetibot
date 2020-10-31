@@ -62,7 +62,10 @@ jobs:
         uses: docker/build-push-action@v2
         with:
           push: true
-          tags: $YB_DOCKER_TAG
+          tags: |
+            $YB_DOCKER_TAG
+            yetibot/yetibot:latest
+
           # build-args: |
           #   arg1=value1
           #   arg2=value2
