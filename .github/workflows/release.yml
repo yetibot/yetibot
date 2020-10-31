@@ -16,6 +16,13 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v2
+      - name: Cache Clojars
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-clojars-${{ hashFiles('**/project.clj') }}
+          restore-keys: |
+            ${{ runner.os }}-clojars-
       - name: timestamp
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
       - name: version
