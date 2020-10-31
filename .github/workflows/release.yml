@@ -24,17 +24,16 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-clojars-
       - name: timestamp
+        # by setting INFERV_TIMESTAMP_MS we will get deterministic versions from
+        # `lein pprint :version`
         run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
       - name: version
         run: |
-          echo "YETIBOT_VERSION=`lein pprint :version | tr -d '"'`" >> $GITHUB_ENV
-          echo "TMPV=`lein pprint :version`" >> $GITHUB_ENV
+          echo "YETIBOT_VERSION=`lein pprint :version | tr -d \"`" >> $GITHUB_ENV
+          echo "DOCKER_TAG=yetibot/yetibot:$YETIBOT_VERSION" >> $GITHUB_ENV
       - name: verify
         run: |
-          echo yetibot/yetibot:$YETIBOT_VERSION
-          echo yetibot/yetibot:$TMPV
-          echo $INFERV_TIMESTAMP_MS
-          lein pprint :version
+          env
       - name: pprint
         run: lein pprint
 
