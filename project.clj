@@ -3,7 +3,13 @@
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :deploy-repositories [["releases" :clojars]]
+
+  {:deploy-repositories
+   [["releases" {:url "https://clojars.org/repo"
+                 :username :env/clojars_username
+                 :password :env/clojars_password
+                 :sign-releases false}]]}
+
   :jvm-opts ["-Djava.security.policy=.java.policy"]
   :profiles {;; optionally override this profile in profiles.clj to be merged
              ;; into dev profile
