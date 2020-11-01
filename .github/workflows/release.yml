@@ -21,13 +21,14 @@ jobs:
         with:
           lein: 2.9.4
 
-      - name: Cache Clojars
+      - name: maven cache
         uses: actions/cache@v2
         with:
-          path: ~/.m2/repository
-          key: ${{ runner.os }}-clojars-${{ hashFiles('**/project.clj') }}
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('project.clj') }}
           restore-keys: |
-            ${{ runner.os }}-clojars
+            ${{ runner.os }}-maven-
+
       - name: timestamp
         # by setting INFERV_TIMESTAMP_MS we will get deterministic versions from
         # `lein pprint :version`
