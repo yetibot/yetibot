@@ -70,8 +70,7 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
+      - name: Build and push
         id: docker_build
         uses: docker/build-push-action@v2
         with:
@@ -81,9 +80,15 @@ jobs:
             yetibot/yetibot:latest
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,mode=max,dest=/tmp/.buildx-cache
-
-          # build-args: |
-          #   arg1=value1
-          #   arg2=value2
-
-
+      - name: Trigger yetibot-helm
+        uses: mvasigh/dispatch-action@main
+        with:
+          # You should create a personal access token and store it in your repository
+          token: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
+          repo: yetibot-helm
+          owner: yetibot
+          event_type: release
+          message: |
+            {
+              "docker_tag": "${{ env.YB_DOCKER_TAG }}"
+            }
