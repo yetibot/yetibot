@@ -88,7 +88,7 @@ jobs:
           token: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
           repo: yetibot-helm
           owner: yetibot
-          event_type: release
+          event_type: bump
           message: |
             {
               "yb_docker_tag": "${{ env.YB_DOCKER_TAG }}",
