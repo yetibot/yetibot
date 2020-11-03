@@ -91,5 +91,6 @@ jobs:
           event_type: release
           message: |
             {
-              "docker_tag": "${{ env.YB_DOCKER_TAG }}"
+              "yb_docker_tag": "${{ env.YB_DOCKER_TAG }}",
+              "yb_version": "${{ env.YB_VERSION }}"
             }
