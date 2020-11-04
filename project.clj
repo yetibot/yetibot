@@ -97,7 +97,7 @@
                  ;encoding
                  [org.clojure/data.codec "0.1.1"]
 
-                 ;sse
+                 ;; sse
                  [io.nervous/kvlt "0.1.4"]
                  ;; overwrite kvlt's outdated version of aleph
                  [aleph "0.4.6"]
