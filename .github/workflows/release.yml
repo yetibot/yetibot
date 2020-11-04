@@ -83,7 +83,6 @@ jobs:
       - name: Trigger yetibot-helm
         uses: mvasigh/dispatch-action@main
         with:
-          # You should create a personal access token and store it in your repository
           token: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
           repo: yetibot-helm
           owner: yetibot
