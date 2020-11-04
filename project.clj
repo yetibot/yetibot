@@ -3,7 +3,13 @@
   :url "https://github.com/yetibot/yetibot"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :deploy-repositories [["releases" :clojars]]
+
+  :deploy-repositories
+  [["releases" {:url "https://clojars.org/repo"
+                :username :env/clojars_username
+                :password :env/clojars_password
+                :sign-releases false}]]
+
   :jvm-opts ["-Djava.security.policy=.java.policy"]
   :profiles {;; optionally override this profile in profiles.clj to be merged
              ;; into dev profile
@@ -22,6 +28,13 @@
              :uberjar {:uberjar-name "yetibot.jar"
                        :jvm-opts ["-server"]
                        :aot :all}
+
+             :deploy {:deploy-repositories
+                      [["releases" {:url "https://clojars.org/repo"
+                                    :username :env/clojars_username
+                                    :password :env/clojars_password
+                                    :sign-releases false}]]}
+
              :test {:dependencies []}}
   :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
@@ -45,7 +58,7 @@
                    (println))}
 
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [yetibot/core "20201027.010840.434e9cb"]
+                 [yetibot/core "20201104.171710.5a1e514"]
 
                  ; apis
                  [twitter-api "1.8.0"]
@@ -84,7 +97,7 @@
                  ;encoding
                  [org.clojure/data.codec "0.1.1"]
 
-                 ;sse
+                 ;; sse
                  [io.nervous/kvlt "0.1.4"]
                  ;; overwrite kvlt's outdated version of aleph
                  [aleph "0.4.6"]
@@ -99,7 +112,8 @@
                  [com.cognitect.aws/ec2 "770.2.568.0"]
                  [com.cognitect.aws/s3 "762.2.561.0"]]
 
-  :plugins [[lein-inferv "20201020.015531.74d2ced"]
+  :plugins [[lein-inferv "20201028.232949.b461fd0"]
+            [lein-pprint "1.3.2"]
             [lein-exec "0.3.7"]
             [lein-environ "1.1.0"]
             [lein-cloverage "1.0.13"]
