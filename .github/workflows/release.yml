@@ -1,9 +1,9 @@
-name: release
+name: Release to Clojars and Dockerhub
 
 on:
   push:
-    # branches:
-    #   - master
+    branches:
+      - master
     pull_request:
       - master
 
