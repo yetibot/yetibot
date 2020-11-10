@@ -1,0 +1,35 @@
+
+name: Handle repository dispatch events
+
+# this allows other repos to send a release dispatch here which then triggers a
+# version bump
+on:
+  repository_dispatch:
+    types: [bump]
+    branches: ["*"]
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          token: ${{ secrets.YETIBOT_GITHUB_TOKEN}}
+
+      - name: Bump!
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+
+          echo "Upgrading to yetibot/core ${{ github.event.client_payload.message.yb_version }}"
+
+          # sed -i "s/^appVersion.*$/appVersion: ${{ github.event.client_payload.message.yb_version }}/" charts/yetibot/Chart.yaml
+          # # auto bump patch version (note: single quotes required):
+          # sed -i -r 's/^version: ([0-9]+)\.([0-9]+)\.([0-9]+)/echo version: \1.\2.$((\3+1))/ge' charts/yetibot/Chart.yaml
+          # git diff
+          # git add charts/yetibot/Chart.yaml
+          # git commit -m 'Use yetibot ${{ github.event.client_payload.message.yb_version }}'
+          #
+          # git push
+          #
