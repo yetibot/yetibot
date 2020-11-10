@@ -6,6 +6,7 @@ name: Handle repository dispatch events
 on:
   repository_dispatch:
     types: [bump]
+    branches: ["*"]
 
 jobs:
   bump:
