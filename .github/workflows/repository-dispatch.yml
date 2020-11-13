@@ -17,19 +17,20 @@ jobs:
         with:
           token: ${{ secrets.YETIBOT_GITHUB_TOKEN}}
 
+      - uses: DeLaGuardo/setup-clojure@master
+        with:
+          lein: 2.9.4
+
       - name: Bump!
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-
           echo "Upgrading to yetibot/core ${{ github.event.client_payload.message.yb_version }}"
+          lein update-dependency yetibot/core "${{ github.event.client_payload.message.yb_version }}"
 
-          # sed -i "s/^appVersion.*$/appVersion: ${{ github.event.client_payload.message.yb_version }}/" charts/yetibot/Chart.yaml
-          # # auto bump patch version (note: single quotes required):
-          # sed -i -r 's/^version: ([0-9]+)\.([0-9]+)\.([0-9]+)/echo version: \1.\2.$((\3+1))/ge' charts/yetibot/Chart.yaml
-          # git diff
-          # git add charts/yetibot/Chart.yaml
-          # git commit -m 'Use yetibot ${{ github.event.client_payload.message.yb_version }}'
-          #
-          # git push
-          #
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v3
+        with:
+          commit-message: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
+          title: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
+          branch: yetibot/core-"${{ github.event.client_payload.message.yb_version }}"

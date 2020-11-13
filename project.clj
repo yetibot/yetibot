@@ -17,7 +17,8 @@
              :dev [:profiles/dev
                    {:source-paths ["dev"]
                     ;; :exclusions [org.clojure/tools.trace]
-                    :plugins [[lein-midje "3.2.1"]]
+                    :plugins [[lein-midje "3.2.1"]
+                              [lein-update-dependency "0.1.2"]]
                     :dependencies [[lilactown/punk-adapter-jvm "0.0.10"]
                                    [lambdaisland/kaocha-midje "0.0-5"
                                     :exclusions [midje/midje]]
