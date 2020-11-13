@@ -39,6 +39,7 @@ jobs:
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v3
         with:
+          token: ${{ secrets.YETIBOT_GITHUB_TOKEN}}
           commit-message: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           title: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           branch: yetibot/core-${{ github.event.client_payload.message.yb_version }}
