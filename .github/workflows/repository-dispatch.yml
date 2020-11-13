@@ -21,6 +21,14 @@ jobs:
         with:
           lein: 2.9.4
 
+      - name: maven cache
+        uses: actions/cache@v2
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('project.clj') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
       - name: Bump!
         run: |
           git config user.name "$GITHUB_ACTOR"
@@ -33,4 +41,4 @@ jobs:
         with:
           commit-message: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           title: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
-          branch: yetibot/core-"${{ github.event.client_payload.message.yb_version }}"
+          branch: yetibot/core-${{ github.event.client_payload.message.yb_version }}

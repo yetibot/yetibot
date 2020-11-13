@@ -1,0 +1,46 @@
+name: Test
+
+on:
+  push:
+    branches:
+      - "*"
+
+jobs:
+
+  test:
+    runs-on: ubuntu-latest
+    container: clojure:lein
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_USER: yetibot
+          POSTGRES_PASSWORD: yetibot
+        # Set health checks to wait until postgres has started
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: checkout
+        uses: actions/checkout@v2
+      - name: maven cache
+        uses: actions/cache@v2
+        with:
+          path: /root/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('project.clj') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+
+      # runs the tests and generates code coverage metrics
+      - name: test
+        env:
+          YETIBOT_DB_URL: postgresql://yetibot:yetibot@postgres:5432/yetibot
+          CLOVERAGE_VERSION: 1.1.2
+        run: lein with-profile +test cloverage --codecov --runner midje
+
+      - uses: codecov/codecov-action@v1
+        with:
+          fail_ci_if_error: true # optional (default = false)
+          verbose: false # optional (default = false)
