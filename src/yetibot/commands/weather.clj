@@ -134,11 +134,11 @@
   (let [result (air loc)]
     (or
      (error-response result)
-     (let [{[cs] :data city-name :city_name country-code :country_code} result]
-       {:result/value (->> (seq cs)
-                           (map #(fmt/air-quality-item %))
-                           sort
-                           (into [(format "%s (%s)" city-name country-code)]))
+     (let [{[cs] :data city-name :city_name country-code :country_code} result
+           air-quality-data (->> (seq cs)
+                                 (map #(fmt/air-quality-item %))
+                                 sort)]
+       {:result/value (into [(format "%s (%s)" city-name country-code)] air-quality-data)
         :result/data result}))))
 
 (defn default-air-cmd
