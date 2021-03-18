@@ -124,4 +124,4 @@
 
 (defmethod air-quality-item :mold-level
   [[_ v]]
-  (format "Mold level: %s" (level v)))
+  (format "Mold level: %s (%s)" (level v) v))
