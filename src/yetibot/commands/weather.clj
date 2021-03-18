@@ -76,6 +76,10 @@
   [loc]
   (get-by-loc "forecast/daily" loc))
 
+(defn air
+  [loc]
+  (get-by-loc "current/airquality" loc))
+
 (defn parse-args
   "parse args to vec of unit kw and args str"
   [s]
@@ -123,7 +127,32 @@
                                data))
          :result/data result}))))
 
+(defn air-cmd
+  "air <location> # look up current air conditions for <location> by name or postal code, optional country code"
+  {:yb/cat #{:info}}
+  [{[_ loc] :match}]
+  (let [result (air loc)]
+    (or
+     (error-response result)
+     (let [{[cs] :data city-name :city_name country-code :country_code} result
+           air-quality-data (->> (seq cs)
+                                 (map #(fmt/air-quality-item %))
+                                 sort)]
+       {:result/value (into [(format "%s (%s)" city-name country-code)] air-quality-data)
+        :result/data result}))))
+
+(defn default-air-cmd
+  "weather air # look up current weather for default location"
+  [_]
+  (if (and default-zip
+           (not-empty default-zip))
+    (air-cmd {:match default-zip})
+    {:result/error "A default zip code is not configured.
+                    Configure it at path weather.weatherbitio.default.zip"}))
+
 (cmd-hook #"weather"
-  #"forecast\s+(.+)" forecast-cmd
-  #".+" weather-cmd
-  _ default-weather-cmd)
+          #"air\s+(.+)" air-cmd
+          #"air" default-air-cmd
+          #"forecast\s+(.+)" forecast-cmd
+          #".+" weather-cmd
+          _ default-weather-cmd)

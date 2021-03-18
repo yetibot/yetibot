@@ -65,3 +65,63 @@
           (fmt min_temp)
           (fmt max_temp)
           (fmt-description (:description weather))))
+
+(defn- keyword->name
+  "Utility function returning gas name from keywordized gas-name
+  (e.g : :no2 -> NO2)"
+  [k]
+  (-> k name clojure.string/upper-case))
+
+(defn- pm-size
+  [pm-type]
+  (condp = pm-type
+    :pm10 10
+    :pm25 2.5))
+
+(defonce pollen-origin
+  {:pollen_level_tree "Tree"
+   :pollen_level_weed "Weed"
+   :pollen_level_grass "Grass"})
+
+(defonce level
+  {0 "None"
+   1 "Low"
+   2 "Moderate"
+   3 "High"
+   4 "Very high"})
+
+(defmulti air-quality-item
+  (fn [[k v]]
+    (cond
+      (#{:aqi}  k) :air-quality-index
+      (#{:o3 :so2 :no2 :co} k) :gas
+      (#{:pm10 :pm25} k) :particulate
+      (#{:pollen_level_tree :pollen_level_weed :pollen_level_grass} k) :pollen-level
+      (#{:predominant_pollen_type} k) :predominant-pollen-type
+      (#{:mold_level} k) :mold-level)))
+
+(defmethod air-quality-item :air-quality-index
+  [[_ v]]
+  (format "Air quality index is: %s" v))
+
+(defmethod air-quality-item :gas
+  [[gas-name v]]
+  (format "Conc. of %s is %s (µg/m³)" (keyword->name gas-name) v))
+
+(defmethod air-quality-item :particulate
+  [[pm-type v]]
+  (format "Conc. of particulate matter < %s microns: %s (µg/m³)" (pm-size pm-type) v))
+
+(defmethod air-quality-item :pollen-level
+  [[p-type v]]
+  (let [p-origin (pollen-origin p-type)
+        level (level v)]
+    (format "%s pollen level: %s (%s)" p-origin level v)))
+
+(defmethod air-quality-item :predominant-pollen-type
+  [[_ v]]
+  (format "Predominant pollen type: %s" v))
+
+(defmethod air-quality-item :mold-level
+  [[_ v]]
+  (format "Mold level: %s (%s)" (level v) v))
