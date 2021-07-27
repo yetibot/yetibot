@@ -59,7 +59,7 @@
                    (println))}
 
   :dependencies [[org.clojure/clojure "1.10.0"]
-                 [yetibot/core "20210726.134250.89f88f5"]
+                 [yetibot/core "20210727.201437.afc4704"]
 
                  ; apis
                  [twitter-api "1.8.0"]
