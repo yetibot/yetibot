@@ -8,6 +8,11 @@
 (def not-nil? (complement nil?))
 
 (when configured?
+
+  (fact "it can parse ids from hrefs"
+        (parse-id-from-href "/memetemplate/170703314/jocko-eyes") => "170703314"
+        (parse-id-from-href "/meme/238477572/Jocko-Willink") => "238477572")
+
   (fact config-test
     config =not=> nil?)
 

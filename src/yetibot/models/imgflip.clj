@@ -46,8 +46,7 @@
 ;; TODO: append results of search-via-scrape to cached (memes) or use a memo/ttl
 
 (defn parse-id-from-href [href]
-  (second (re-find #"memetemplate\/(\d+)\/" href)))
-
+  (second (re-find #"meme(?:template)?\/(\d+)\/" href)))
 
 (defn search-via-scrape [q n]
 
@@ -74,6 +73,7 @@
 (comment
 
   (parse-id-from-href "/memetemplate/170703314/jocko-eyes")
+  (parse-id-from-href "/meme/238477572/Jocko-Willink")
 
   (parse-base-36-int "170703314")
 
@@ -111,6 +111,12 @@
     ;; ensure we only return results with valid IDs to avoid "No template_id
     ;; specified" errors
     (filter :id results)))
+
+(comment
+  (search-memes "icahn")
+  (scrape-all-memes "icahn" 3)
+  
+  )
 
 (defn generate-meme [id text0 text1]
   (get-json
