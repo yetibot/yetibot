@@ -1,4 +1,4 @@
-FROM clojure:openjdk-11-lein
+FROM clojure:lein-bullseye
 
 # Yetibot needs curl. If we ever switch to alpine, make sure to install it.
 
