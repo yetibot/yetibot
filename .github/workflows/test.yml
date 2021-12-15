@@ -10,7 +10,7 @@ jobs:
 
   test:
     runs-on: ubuntu-latest
-    container: clojure:lein
+    container: clojure:lein-bullseye
     services:
       postgres:
         image: postgres
