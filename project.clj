@@ -16,13 +16,11 @@
              :profiles/dev {}
              :dev [:profiles/dev
                    {:source-paths ["dev"]
-                    ;; :exclusions [org.clojure/tools.trace]
                     :plugins [[lein-midje "3.2.1"]
                               [lein-update-dependency "0.1.2"]]
                     :dependencies [[lilactown/punk-adapter-jvm "0.0.10"]
                                    [lambdaisland/kaocha-midje "0.0-5"
                                     :exclusions [midje/midje]]
-                                   [org.clojure/tools.trace "0.7.9"]
                                    [midje "1.9.9"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :docker {:jvm-opts ["-Djava.security.policy=/usr/src/app/.java.policy"]}
@@ -58,7 +56,7 @@
                      "\u001B[m"))
                    (println))}
 
-  :dependencies [[org.clojure/clojure "1.10.0"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
                  [yetibot/core "20221222.001341.75dcd7b"]
 
                  ; apis
