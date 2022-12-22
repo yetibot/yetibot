@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="http://slack.yetibot.com"><img src="https://img.shields.io/badge/Yetibot%20Slack-%E2%9C%8C%EF%B8%8F-55C4D4.svg?style=for-the-badge" alt="Slack" data-canonical-src="https://img.shields.io/badge/Yetibot%20Slack-%E2%9C%8C%EF%B8%8F-55C4D4.svg?style=for-the-badge" style="max-width:100%;"></a>
-  <a href="https://travis-ci.org/yetibot/yetibot"><img src="https://img.shields.io/travis/yetibot/yetibot.svg?style=for-the-badge" alt="Build Status" data-canonical-src="https://travis-ci.org/yetibot/yetibot.svg?branch=master&style=for-the-badge" style="max-width:100%;"></a>
+  <a href="https://github.com/yetibot/yetibot/actions/workflows/test.yml"><img alt="GitHub Workflow Status" src="https://img.shields.io/github/actions/workflow/status/yetibot/yetibot/test.yml?style=for-the-badge"></a>
   <a href="https://clojars.org/yetibot"><img src="https://img.shields.io/clojars/v/yetibot.svg?style=for-the-badge" alt="Yetibot" data-canonical-src="https://img.shields.io/clojars/v/yetibot.svg?style=for-the-badge" style="max-width:100%;"></a>
   <a href="https://versions.deps.co/yetibot/yetibot"><img src="https://img.shields.io/badge/dynamic/json.svg?label=deps&url=https%3A%2F%2Fversions.deps.co%2Fyetibot%2Fyetibot%2Fstatus.json&query=%24.stats..[%22out-of-date%22]&suffix=%20out%20of%20date&style=for-the-badge&colorB=lightgrey" alt="Outdated dependencies"></a>
   <a href="https://hub.docker.com/r/yetibot/yetibot/"><img src="https://img.shields.io/badge/Docker-%F0%9F%90%B3-FDDE68.svg?style=for-the-badge" alt="Yetibot on Docker Hub" data-canonical-src="https://img.shields.io/badge/Docker-%F0%9F%90%B3-FDDE68.svg?style=for-the-badge" style="max-width:100%;"></a>
