@@ -15,13 +15,8 @@
              ;; into dev profile
              :profiles/dev {}
              :dev [:profiles/dev
-                   {:source-paths ["dev"]
-                    :plugins [[lein-midje "3.2.1"]
-                              [lein-update-dependency "0.1.2"]]
-                    :dependencies [[lilactown/punk-adapter-jvm "0.0.10"]
-                                   [lambdaisland/kaocha-midje "0.0-5"
-                                    :exclusions [midje/midje]]
-                                   [midje "1.9.9"]]}]
+                   {:plugins [[lein-midje "3.2.2"] ]
+                    :dependencies [[midje "1.10.9"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :docker {:jvm-opts ["-Djava.security.policy=/usr/src/app/.java.policy"]}
              :uberjar {:uberjar-name "yetibot.jar"
@@ -34,7 +29,7 @@
                                     :password :env/clojars_password
                                     :sign-releases false}]]}
 
-             :test {:dependencies []}}
+             :test {}}
   :resource-paths ["resources"]
   :repl-options {:init-ns yetibot.core.repl
                  :timeout 120000
@@ -56,7 +51,7 @@
                      "\u001B[m"))
                    (println))}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [yetibot/core "20221222.204442.8fbb766"]
+                 [yetibot/core "20221222.234117.41b3150"]
 
                  ; apis
                  [twitter-api "1.8.0"]
@@ -112,10 +107,10 @@
 
   :plugins [[lein-inferv "20201028.232949.b461fd0"]
             [lein-pprint "1.3.2"]
-            [lein-exec "0.3.7"]
-            [lein-environ "1.1.0"]
-            [lein-cloverage "1.0.13"]
-            [lein-ring "0.12.4"]
+            ; [lein-exec "0.3.7"]
+            [lein-environ "1.2.0"]
+            [lein-cloverage "1.2.4"]
+            ; [lein-ring "0.12.4"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
   :aliases {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]
