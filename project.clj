@@ -15,7 +15,8 @@
              ;; into dev profile
              :profiles/dev {}
              :dev [:profiles/dev
-                   {:plugins [[lein-midje "3.2.2"] ]
+                   {:plugins [[lein-midje "3.2.2"]
+                              [lein-update-dependency "0.1.2"]]
                     :dependencies [[midje "1.10.9"]]}]
              :low-mem {:jvm-opts ^:replace ["-Xmx1g" "-server"]}
              :docker {:jvm-opts ["-Djava.security.policy=/usr/src/app/.java.policy"]}
