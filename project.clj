@@ -52,7 +52,7 @@
                      "\u001B[m"))
                    (println))}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [yetibot/core "20221222.234117.41b3150"]
+                 [yetibot/core "20230103.180605.3a4c94d"]
 
                  ; apis
                  [twitter-api "1.8.0"]
