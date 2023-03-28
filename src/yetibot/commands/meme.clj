@@ -74,11 +74,13 @@
        (scrape "https://imgflip.com" ".base-img[src!='']" "src")))
 
 (when model/configured?
-  (cmd-hook ["meme" #"^meme$"]
-            #"^popular$" chat-instance-popular
-            #"^(.+?)\s*:(.+)\/(.*)$" generate-cmd
-            #"^(.+?)\s*:(.+)$" generate-auto-split-cmd
-            #"^preview\s+(.+)" preview-cmd
-            #"^(.+)\/(.*)$" rand-generate-cmd
-            #"^(\S+\s+){3,}.*" rand-generate-auto-split-cmd ; at least 4 words
-            #"^(?:search\s)?(.+)" search-cmd))
+  (cmd-hook
+   ["meme" #"^meme$"]
+   #"^popular$" chat-instance-popular
+   #"^(?:search\s)?(.+)" search-cmd
+   #"^(.+?)\s*:(.+)\/(.*)$" generate-cmd
+   #"^(.+?)\s*:(.+)$" generate-auto-split-cmd
+   #"^preview\s+(.+)" preview-cmd
+   #"^(.+)\/(.*)$" rand-generate-cmd
+   ; at least 4 words
+   #"^(\S+\s+){3,}.*" rand-generate-auto-split-cmd))
