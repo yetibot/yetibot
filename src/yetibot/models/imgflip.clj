@@ -49,7 +49,6 @@
   (second (re-find #"meme(?:template)?\/(\d+)\/" href)))
 
 (defn search-via-scrape [q n]
-
   (let [scrape-url (-> (uri/uri "https://imgflip.com/memesearch")
                        (assoc :query (format "q=%s&page=%s" q n))
                        normalize
@@ -57,18 +56,26 @@
         mt-box-elements (-> scrape-url
                             jsoup/get-page
                             (jsoup/get-elems ".mt-box"))]
-    (map
-     (fn [mt-box]
-       (let [meme-name (jsoup/get-attr (jsoup/get-elems mt-box ".mt-title a") "text")
-             id (-> (jsoup/get-elems mt-box ".mt-title a")
-                    (jsoup/get-attr  "href")
-                    parse-id-from-href)
-             url (-> (jsoup/get-elems mt-box "a img")
-                     (jsoup/get-attr "src"))]
-         {:name meme-name
-          :url (str "https:" url)
-          :id id}))
-     mt-box-elements)))
+    (->>
+     mt-box-elements
+     ;; filter out any memes that contain
+     ;; <div class="mt-animated-label">animated</div>
+     ;; since the imgflip generator API does not accept gif templates.
+     (filter
+      (fn [mt-box]
+        (empty? (jsoup/get-elems mt-box ".mt-animated-label"))))
+     (map
+      (fn [mt-box]
+        (let [meme-name (jsoup/get-attr (jsoup/get-elems mt-box ".mt-title a") "text")
+              id (-> (jsoup/get-elems mt-box ".mt-title a")
+                     (jsoup/get-attr  "href")
+                     parse-id-from-href)
+              url (-> (jsoup/get-elems mt-box "a img")
+                      (jsoup/get-attr "src"))]
+          {:name meme-name
+           :url (str "https:" url)
+           :id id}))
+      ))))
 
 (comment
 
@@ -78,6 +85,8 @@
   (parse-base-36-int "170703314")
 
   (search-via-scrape "jocko" 1)
+  (search-via-scrape "typing kitty" 1)
+  (generate-meme "260948664" "x" "y")
 
   (map
    #(jsoup/get-attr % "src")
@@ -105,18 +114,19 @@
         results (let [matching-ms (filter match-fn ms)]
                   (if-not (empty? matching-ms)
                     matching-ms
-                                          ; fallback to search-via-scrape if
-                                          ; cached results don't contain a match
+                    ; fallback to search-via-scrape if cached results don't
+                    ; contain a match
                     (scrape-all-memes query 3)))]
     ;; ensure we only return results with valid IDs to avoid "No template_id
     ;; specified" errors
     (filter :id results)))
 
 (comment
+  ;; NOTE: this term returns a gif on the web UI which we filter out since the
+  ;; API doesn't support gif templates
+  (search-memes "typing kitty")
   (search-memes "icahn")
-  (scrape-all-memes "icahn" 3)
-  
-  )
+  (scrape-all-memes "icahn" 3))
 
 (defn generate-meme [id text0 text1]
   (get-json
@@ -130,6 +140,8 @@
   (search-memes "whoa")
   (generate-meme "47202892" "x" "y")
   (generate-meme "4" "x" "y")
+  (generate-meme "249356939" "x" "y")
+  
   )
 
 (defn generate-meme-by-query [query text0 & [text1]]
