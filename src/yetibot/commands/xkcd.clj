@@ -5,6 +5,11 @@
 
 (def todays-comic-number (atom 1))
 
+;; on startup fetch the latest comic so we know what the latest number is
+(future
+  (let [latest-comic (get-json "https://xkcd.com/info.0.json")]
+    (reset! todays-comic-number (:num latest-comic))))
+
 (defn- random-comic-num
   "Random integer between 1 and todays comic number"
   []
