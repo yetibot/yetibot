@@ -25,7 +25,7 @@
   [json]
   ((juxt :title :img :alt) json))
 
-(defn xkcd-cmdb
+(defn xkcd-cmd
   "xkcd # fetch current xkcd comic"
   {:yb/cat #{:fun :img}}
   [_]
