@@ -145,6 +145,7 @@
   )
 
 (defn generate-meme-by-query [query text0 & [text1]]
+  (info "generate-meme-by-query" {:query query :text0 text0})
   (if-let [meme (first (search-memes query))]
     (apply generate-meme
            (into [(:id meme)]
@@ -156,3 +157,6 @@
     {:success false
      :error_message (str "Couldn't find any memes for " query)}))
 
+(comment
+  (generate-meme-by-query "lipstick" "text0")
+  )

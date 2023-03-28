@@ -77,7 +77,7 @@
   (cmd-hook
    ["meme" #"^meme$"]
    #"^popular$" chat-instance-popular
-   #"^(?:search\s)?(.+)" search-cmd
+   #"^search\s+(.+)$" search-cmd
    #"^(.+?)\s*:(.+)\/(.*)$" generate-cmd
    #"^(.+?)\s*:(.+)$" generate-auto-split-cmd
    #"^preview\s+(.+)" preview-cmd
