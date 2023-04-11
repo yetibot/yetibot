@@ -58,7 +58,7 @@
                  ; we found that pomegranate does not work inside a docker
                  ; container (need to investigate more).
                  [yetibot/kroki "20201022.004119.9d97f7c"]
-                 [yetibot/github "20201026.024321.499bc7e"]
+                 [yetibot/github "20230411.145307.7e5fe33"]
 
                  ; apis
                  [twitter-api "1.8.0"]
