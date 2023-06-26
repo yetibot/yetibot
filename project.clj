@@ -52,7 +52,7 @@
                      "\u001B[m"))
                    (println))}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [yetibot/core "20230512.214941.3bd2628"]
+                 [yetibot/core "20230626.172527.346b09e"]
                  ; yetibot plugins. Note: we're baking these into the jar/docker
                  ; image instead of loading them dynamically at runtime because
                  ; we found that pomegranate does not work inside a docker
