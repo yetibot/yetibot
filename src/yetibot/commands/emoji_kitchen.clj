@@ -32,5 +32,6 @@
   )
   ;; fetch an emoji from emoji kitchen
 
-(cmd-hook ["ek" #"^ek$"]
-          #"(\S+)\s+(\S+)" emoji-kitchen)
+(cmd-hook
+ {"ek" #"ek" "emoji-kitchen" #"emoji-kitchen"}
+ #"(\S+)\s+(\S+)" emoji-kitchen)
