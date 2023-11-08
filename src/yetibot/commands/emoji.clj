@@ -121,6 +121,22 @@
      [(:unicode found-emoji)]
      (str "Couldn't find any emojis with: \"" alias "\" alias"))))
 
+(defn find-by-slack-emoji
+  "Take an emoji in the Slack format, e.g.
+  :smile: and return the emoji object"
+  [slack-emoji]
+  (let [emoji-name (re-find #":(.+):" slack-emoji)]
+    (filter-by-alias (last emoji-name))))
+
+(comment
+  (find-by-slack-emoji ":smile:")
+  (drop-first ":smile")
+
+  (filter-by-alias ":smile:")
+
+  (all-tags nil)
+  )
+
 (cmd-hook ["emoji" #"^emoji$"]
           #"^tags$" all-tags
           #"^list(\s-i)?$" list-emojis
