@@ -1,20 +1,34 @@
 (ns yetibot.commands.emoji-kitchen
   (:require [clj-http.client :as client]
-            [yetibot.commands.emoji :refer [search-by-alias]]
+            [yetibot.commands.emoji :refer [find-by-slack-emoji search-by-alias]]
             [yetibot.core.hooks :refer [cmd-hook]]))
 
 (defn emoji-kitchen
   "ek <emoji-1> <emoji-2> # fetch an emoji from emoji kitchen"
   {:yb/cat #{:fun}}
-  [{[_ emoji-1 emoji-2] :match}]
-  (println "Unicode:" (:unicode emoji-1) (:unicode emoji-2))
-  (println (search-by-alias emoji-1) (search-by-alias emoji-2))
-  (let [url "https://tenor.googleapis.com/v2/featured?key=AIzaSyACvEq5cnT7AcHpDdj64SE3TJZRhW-iHuo&client_key=emoji_kitchen_funbox&collection=emoji_kitchen_v6"]
-    (-> (client/get url
-                    {:query-params {:q (str (:unicode emoji-1) "_" (:unicode emoji-2))}
-                     :as           :json}))))
+  [{[_ slack-emoji-1 slack-emoji-2] :match}]
+  (let [[{emoji-1 :unicode}] (find-by-slack-emoji slack-emoji-1)
+        [{emoji-2 :unicode}] (find-by-slack-emoji slack-emoji-2)
+        url "https://tenor.googleapis.com/v2/featured?key=AIzaSyACvEq5cnT7AcHpDdj64SE3TJZRhW-iHuo&client_key=emoji_kitchen_funbox&collection=emoji_kitchen_v6"
+        result (client/get url
+                           {:query-params {:q (str emoji-1 "_" emoji-2)}
+                            :as           :json})]
+    (-> result
+        :body
+        :results
+        first
+        :url)))
+
 (comment
-  (emoji-kitchen {:match [nil, ":magic_wand:", ":potato:"]})
+
+  (let [[{emoji-1 :unicode}] (find-by-slack-emoji ":smile:")]
+        emoji-1)
+
+  (find-by-slack-emoji ":sweet_potato:")
+  (find-by-slack-emoji ":magic:")
+
+  (emoji-kitchen {:match [nil ":smile:" ":star:"]})
+  (search-by-alias {:match [nil ":magic_wand:"]})
   )
   ;; fetch an emoji from emoji kitchen
 
