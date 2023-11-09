@@ -1,4 +1,4 @@
-FROM clojure:lein-bullseye
+FROM clojure:lein
 
 # Yetibot needs curl. If we ever switch to alpine, make sure to install it.
 
@@ -29,6 +29,8 @@ RUN mkdir -p /root/.ssh && touch /root/.ssh/known_hosts
 
 WORKDIR $WORKDIR
 
+# lein deps requires git
+RUN apt-get update && apt-get install git -y && apt-get clean
 RUN lein deps
 
 VOLUME $WORKDIR/config/

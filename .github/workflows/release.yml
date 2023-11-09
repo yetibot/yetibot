@@ -8,11 +8,8 @@ on:
       - master
 
 jobs:
-
   deploy:
-
     runs-on: ubuntu-latest
-    # container: clojure:lein
     steps:
       - name: checkout
         uses: actions/checkout@v2
