@@ -30,7 +30,8 @@ RUN mkdir -p /root/.ssh && touch /root/.ssh/known_hosts
 WORKDIR $WORKDIR
 
 # lein deps requires git
-RUN apt-get update && apt-get install git -y && apt-get clean
+# yetibot curl feature requires curl
+RUN apt-get update && apt-get install curl git -y && apt-get clean
 RUN lein deps
 
 VOLUME $WORKDIR/config/
