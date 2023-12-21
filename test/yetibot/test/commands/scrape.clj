@@ -3,5 +3,7 @@
     [midje.sweet :refer [fact =>]]
     [yetibot.commands.scrape :refer :all]))
 
-(fact test-scrape
-    (scrape "https://imgflip.com" ".base-img[src!='']" "src") => not-empty)
+(fact
+ test-scrape
+ (scrape
+  "https://knowyourmeme.com/memes/doge" ".bodycopy p" "text") => not-empty)
