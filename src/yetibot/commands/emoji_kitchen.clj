@@ -21,6 +21,7 @@
   (String. (Character/toChars (Integer/parseInt hex 16))))
 
 (comment
+
   (str "\ud83d\ude00")
 
   (.getBytes "❇️")
@@ -29,10 +30,7 @@
   (let [s "❇️"]
     ;; get unicode for string
     s
-    (get s 1)
-    )
-
-  (let [c \❇️]] c)
+    (get s 1))
 
   (hex-to-unichar "2747-fe0f")
 
@@ -64,7 +62,7 @@
   {:yb/cat #{:fun}}
   [{[_ arg1 arg2] :match chat-source :chat-source :as cmd-args}]
   (info (color-str :blue "emoji-kitchen " arg1 " " arg2))
-  (info (pr-str cmd-args))
+  (info (pr-str (:raw-event chat-source)))
   (let [[emoji-1 emoji-2]
         ;; extract unicode from slack-specific raw event
         (if (= :slack (:adapter chat-source))
