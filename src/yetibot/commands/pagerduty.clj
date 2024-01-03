@@ -20,6 +20,11 @@
 
 (defn config [] (get-config ::config [:pagerduty]))
 
+(comment
+  (config)
+  (users/users-get)
+  (schedules/schedules-get))
+
 (set-api-context
   {:debug false
    :auths {"api_key" (str "Token token=" (-> (config) :value :token))}})
@@ -140,7 +145,7 @@
                {:keys [schedule]} (schedules/schedules-id-get
                                    (:id first-schedule)
                                    {:until until :since since})
-               rendered (-> schedule :final_schedulei
+               rendered (-> schedule :final_schedule
                             :rendered_schedule_entries)]
            {:result/data schedule
             :result/value
