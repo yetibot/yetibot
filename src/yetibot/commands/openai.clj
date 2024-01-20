@@ -15,6 +15,7 @@
 (def model "gpt-4")
 
 (defn openai-completions
+  {:yb/cat #{:info :fun}}
   [msg]
   (client/post
    "https://api.openai.com/v1/chat/completions"
@@ -26,16 +27,16 @@
     :headers {:Authorization (str "Bearer " (:key config))}}))
 
 (defn openai-cmd
-  "Ask OpenAI for a response to a message."
-  [msg]
+  "openai <prompt> # prompt OpenAI completions API"
+  [{msg :match}]
+  (println "openai-cmd")
+  (info "OpenAI msg" msg)
   (let [response (openai-completions msg)]
     (info "OpenAI response" response)
-    (let [choices (get-in response [:body :choices])
-          text (get-in (first choices) [:text])]
+    (let [text (-> response :body :choices first :message :content)]
       (info "OpenAI text" text)
       {:result/data response
        :result/value text})))
-
 
 (comment
   (openai-completions "why is python so slow?")
