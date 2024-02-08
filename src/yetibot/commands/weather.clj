@@ -128,7 +128,7 @@
          :result/data result}))))
 
 (defn air-cmd
-  "air <location> # look up current air conditions for <location> by name or postal code, optional country code"
+  "weather air <location> # look up current air conditions for <location> by name or postal code, optional country code"
   {:yb/cat #{:info}}
   [{[_ loc] :match}]
   (let [result (air loc)]
