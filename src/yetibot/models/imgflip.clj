@@ -116,7 +116,7 @@
                     matching-ms
                     ; fallback to search-via-scrape if cached results don't
                     ; contain a match
-                    (scrape-all-memes query 3)))]
+                    (scrape-all-memes query 69)))]
     ;; ensure we only return results with valid IDs to avoid "No template_id
     ;; specified" errors
     (filter :id results)))
