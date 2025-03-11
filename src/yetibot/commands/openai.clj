@@ -12,14 +12,14 @@
 
 (def config (:value (get-config ::config [:openai])))
 
-(def model "gpt-4")
+(def model "deepseek/deepseek-r1-zero:free")
 
 (defn openai-completions
   {:yb/cat #{:info :fun}}
   [messages]
   (info "openai-completions" messages)
   (client/post
-   "https://api.openai.com/v1/chat/completions"
+   "https://openrouter.ai/api/v1/chat/completions"
    {:as :json
     :content-type :json
     :form-params {:model model
@@ -41,6 +41,9 @@
   (reset! context {})
 
   (conj [initial-context] {:role "user"})
+
+  (openai-completions [{:role "user"
+                        :content "why is python so slow?"}])
 
   (openai-completions "why is python so slow?")
   (let [room "abc"
