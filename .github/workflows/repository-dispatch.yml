@@ -1,4 +1,3 @@
-
 name: Handle repository dispatch events
 
 # this allows other repos to send a release dispatch here which then triggers a
@@ -6,20 +5,19 @@ name: Handle repository dispatch events
 on:
   repository_dispatch:
     types: [bump]
-    branches: ["*"]
 
 jobs:
   bump:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
         with:
-          token: ${{ secrets.YETIBOT_GITHUB_TOKEN}}
+          token: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
 
-      - uses: DeLaGuardo/setup-clojure@master
+      - uses: DeLaGuardo/setup-clojure@12.5
         with:
-          lein: 2.9.4
+          lein: 2.11.2
 
       - name: maven cache
         uses: actions/cache@v4
@@ -37,9 +35,9 @@ jobs:
           lein update-dependency yetibot/core "${{ github.event.client_payload.message.yb_version }}"
 
       - name: Create Pull Request
-        uses: peter-evans/create-pull-request@v3
+        uses: peter-evans/create-pull-request@v7
         with:
-          token: ${{ secrets.YETIBOT_GITHUB_TOKEN}}
+          token: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
           commit-message: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           title: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           branch: yetibot/core-${{ github.event.client_payload.message.yb_version }}
