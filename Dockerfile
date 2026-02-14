@@ -5,14 +5,14 @@ LABEL maintainer="Trevor Hartman <trevorhartman@gmail.com>"
 
 EXPOSE 3003
 
-ENV WORKDIR /usr/src/app
-ENV LOGDIR /var/log/yetibot
+ENV WORKDIR=/usr/src/app
+ENV LOGDIR=/var/log/yetibot
 
 RUN mkdir -p $WORKDIR && mkdir -p $LOGDIR
 
 COPY ./project.clj $WORKDIR/project.clj
 
-COPY .java.policy $HOME/
+COPY .java.policy /root/
 COPY .java.policy $WORKDIR/.java.policy
 COPY .java.policy /docker-java-home/jre/lib/security/java.policy
 
