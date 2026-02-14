@@ -1,8 +1,7 @@
+# syntax=docker/dockerfile:1
 FROM clojure:lein
 
-# Yetibot needs curl. If we ever switch to alpine, make sure to install it.
-
-MAINTAINER Trevor Hartman <trevorhartman@gmail.com>
+LABEL maintainer="Trevor Hartman <trevorhartman@gmail.com>"
 
 EXPOSE 3003
 
@@ -11,28 +10,22 @@ ENV LOGDIR /var/log/yetibot
 
 RUN mkdir -p $WORKDIR && mkdir -p $LOGDIR
 
-COPY ./src $WORKDIR/src/
-
-COPY ./resources $WORKDIR/resources/
-
-COPY ./test $WORKDIR/test/
-
 COPY ./project.clj $WORKDIR/project.clj
 
 COPY .java.policy $HOME/
 COPY .java.policy $WORKDIR/.java.policy
-# overwrite the default location for linux
 COPY .java.policy /docker-java-home/jre/lib/security/java.policy
 
-# prepare ssh
 RUN mkdir -p /root/.ssh && touch /root/.ssh/known_hosts
 
 WORKDIR $WORKDIR
 
-# lein deps requires git
-# yetibot curl feature requires curl
 RUN apt-get update && apt-get install curl git -y && apt-get clean
-RUN lein deps
+RUN --mount=type=cache,target=/root/.m2/repository lein deps
+
+COPY ./src $WORKDIR/src/
+COPY ./resources $WORKDIR/resources/
+COPY ./test $WORKDIR/test/
 
 VOLUME $WORKDIR/config/
 
