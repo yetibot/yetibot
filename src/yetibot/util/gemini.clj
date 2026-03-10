@@ -16,7 +16,7 @@
 
 (def config (:value (get-config ::config [:gemini :api])))
 
-(def default-model "gemini-2.5-flash-image")
+(def default-model "gemini-3.1-flash-image-preview")
 
 (defn gemini-model []
   (or (:model config) default-model))
@@ -197,7 +197,8 @@
               "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s"
               model api-key)
          body (cond-> {:contents [{:parts [{:text prompt}]}]
-                       :generationConfig {:responseModalities ["TEXT" "IMAGE"]}}
+                       :generationConfig {:responseModalities ["TEXT" "IMAGE"]
+                                          :imageConfig {:imageSize "512"}}}
                 system-instruction
                 (assoc :systemInstruction
                        {:parts [{:text system-instruction}]}))
