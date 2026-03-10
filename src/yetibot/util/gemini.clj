@@ -197,8 +197,7 @@
               "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s"
               model api-key)
          body (cond-> {:contents [{:parts [{:text prompt}]}]
-                       :generationConfig {:responseModalities ["TEXT" "IMAGE"]
-                                          :imageConfig {:imageSize "512"}}}
+                       :generationConfig {:responseModalities ["TEXT" "IMAGE"]}}
                 system-instruction
                 (assoc :systemInstruction
                        {:parts [{:text system-instruction}]}))
