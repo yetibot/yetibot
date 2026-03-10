@@ -16,7 +16,7 @@
 
 (def config (:value (get-config ::config [:gemini :api])))
 
-(def default-model "gemini-2.5-flash-image")
+(def default-model "gemini-3.1-flash-image-preview")
 
 (defn gemini-model []
   (or (:model config) default-model))
