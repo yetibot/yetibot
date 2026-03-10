@@ -8,7 +8,8 @@
             [yetibot.core.config :refer [get-config]]
             [yetibot.db.image-budget :as image-budget])
   (:import [java.time YearMonth]
-           [java.time.format DateTimeFormatter]))
+           [java.time.format DateTimeFormatter]
+           [java.util Base64]))
 
 (s/def ::key string?)
 
@@ -184,19 +185,34 @@
 
       :else nil)))
 
+(defn- url->inline-part
+  "Fetch an image URL and return a Gemini inlineData part."
+  [image-url]
+  (let [resp (client/get image-url {:as :byte-array :throw-exceptions false})
+        content-type (get-in resp [:headers "Content-Type"] "image/png")
+        mime (first (string/split content-type #";"))]
+    (when (<= 200 (:status resp) 299)
+      {:inlineData {:mimeType mime
+                    :data (.encodeToString (Base64/getEncoder)
+                                           ^bytes (:body resp))}})))
+
 (defn generate-image
   "Call the Gemini API to generate an image from a text prompt.
-   Accepts an optional system-instruction string for guiding generation style.
+   Accepts optional system-instruction and image-urls for multimodal input.
    Checks monthly budget before making the API call and records usage on success."
-  ([prompt] (generate-image prompt nil))
-  ([prompt system-instruction]
+  ([prompt] (generate-image prompt nil nil))
+  ([prompt system-instruction] (generate-image prompt system-instruction nil))
+  ([prompt system-instruction image-urls]
    (check-budget!)
    (let [api-key (:key config)
          model (gemini-model)
          url (format
               "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s"
               model api-key)
-         body (cond-> {:contents [{:parts [{:text prompt}]}]
+         image-parts (when (seq image-urls)
+                       (keep url->inline-part image-urls))
+         parts (into [{:text prompt}] image-parts)
+         body (cond-> {:contents [{:parts parts}]
                        :generationConfig {:responseModalities ["TEXT" "IMAGE"]
                                           :imageConfig {:imageSize "512"}}}
                 system-instruction

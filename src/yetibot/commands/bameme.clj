@@ -2,6 +2,7 @@
   (:require [clojure.string :as s]
             [taoensso.timbre :refer [info error]]
             [yetibot.core.hooks :refer [cmd-hook]]
+            [yetibot.core.util.image-input :as image-input]
             [yetibot.util.gemini :as gemini]
             [yetibot.webapp.routes.images :refer [store-image!]]))
 
@@ -41,12 +42,14 @@ Make the image funny, bold, and immediately recognizable as a meme.")
    Or without a template:
    bameme when the code compiles on the first try"
   {:yb/cat #{:img :meme}}
-  [{:keys [match]}]
+  [{:keys [match chat-source]}]
   (if (gemini/configured?)
     (try
-      (let [prompt (build-meme-prompt match)
-            _ (info "bameme: generating meme for:" match)
-            image (gemini/generate-image prompt meme-system-prompt)
+      (let [{:keys [prompt image-urls]} (image-input/extract-images match chat-source)
+            meme-prompt (build-meme-prompt prompt)
+            _ (info "bameme: generating meme for:" prompt
+                    "with" (count image-urls) "input image(s)")
+            image (gemini/generate-image meme-prompt meme-system-prompt image-urls)
             id (store-image! image)
             base-url (gemini/yetibot-base-url)
             image-url (format "%s/generated-images/%s.png" base-url id)]
