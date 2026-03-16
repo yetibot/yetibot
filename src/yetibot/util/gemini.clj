@@ -14,9 +14,9 @@
 (s/def ::key string?)
 
 (s/def ::cost (s/keys :opt-un [::per]))
-(s/def ::per number?)
+(s/def ::per (s/or :string string? :number number?))
 (s/def ::monthly (s/keys :opt-un [::budget]))
-(s/def ::budget number?)
+(s/def ::budget (s/or :string string? :number number?))
 
 (s/def ::config (s/keys :req-un [::key] :opt-un [::cost ::monthly]))
 
