@@ -28,7 +28,19 @@
   (or (:model config) default-model))
 
 (defn configured? []
-  (some? config))
+   (some? config))
+
+(defn- parse-number
+   "Parse a string to a number, returning the number unchanged if it's already a number.
+    Logs a warning and returns the original value if the string cannot be parsed."
+   [v]
+   (if (string? v)
+     (try
+       (Double/parseDouble v)
+       (catch Exception e
+         (warn "gemini: failed to parse number from config value" v e)
+         v))
+     v))
 
 ;; -- Monthly budget throttling --
 
@@ -41,14 +53,14 @@
   5.00)
 
 (defn- cost-per-image []
-   (or (-> config :cost :per)
+   (or (parse-number (-> config :cost :per))
        (case (gemini-model)
          "gemini-3.1-flash-image-preview" 0.039
          ;; Add other models and their costs here as needed
          default-cost-per-image)))
 
 (defn- monthly-budget []
-   (or (-> config :monthly :budget) default-monthly-budget))
+   (or (parse-number (-> config :monthly :budget)) default-monthly-budget))
 
 (defn- max-images-per-month []
   (long (Math/floor (/ (monthly-budget) (cost-per-image)))))
