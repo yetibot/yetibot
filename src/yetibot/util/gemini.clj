@@ -13,7 +13,12 @@
 
 (s/def ::key string?)
 
-(s/def ::config (s/keys :req-un [::key]))
+(s/def ::cost (s/keys :opt-un [::per]))
+(s/def ::per number?)
+(s/def ::monthly (s/keys :opt-un [::budget]))
+(s/def ::budget number?)
+
+(s/def ::config (s/keys :req-un [::key] :opt-un [::cost ::monthly]))
 
 (def config (:value (get-config ::config [:gemini :api])))
 
@@ -28,18 +33,22 @@
 ;; -- Monthly budget throttling --
 
 (def ^:private default-cost-per-image
-  "Default estimated cost per generated image in USD (Gemini 2.5 Flash pricing)."
-  0.039)
+   "Default estimated cost per generated image in USD (gemini-3.1-flash-image-preview pricing, tied to default-model)."
+   0.039)
 
 (def ^:private default-monthly-budget
   "Default monthly budget in USD for image generation."
   5.00)
 
 (defn- cost-per-image []
-  (or (:cost-per-image config) default-cost-per-image))
+   (or (-> config :cost :per)
+       (case (gemini-model)
+         "gemini-3.1-flash-image-preview" 0.039
+         ;; Add other models and their costs here as needed
+         default-cost-per-image)))
 
 (defn- monthly-budget []
-  (or (:monthly-budget config) default-monthly-budget))
+   (or (-> config :monthly :budget) default-monthly-budget))
 
 (defn- max-images-per-month []
   (long (Math/floor (/ (monthly-budget) (cost-per-image)))))
