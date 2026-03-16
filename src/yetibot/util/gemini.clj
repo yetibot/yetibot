@@ -20,7 +20,7 @@
 
 (s/def ::config (s/keys :req-un [::key] :opt-un [::cost ::monthly]))
 
-(def config (or (get-config ::config [:value :api]) {}))
+(def config (or (:value (get-config ::config [:gemini :api])) {}))
 
 (def default-model "gemini-3.1-flash-image-preview")
 
