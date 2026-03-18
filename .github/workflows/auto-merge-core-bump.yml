@@ -14,9 +14,7 @@ jobs:
       github.event.pull_request.user.login == 'yetibot-admin' &&
       startsWith(github.event.pull_request.title, 'Bump yetibot/core to')
     steps:
-      - name: Enable auto-merge
-        uses: peter-evans/enable-pull-request-automerge@v4
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          pull-request-number: ${{ github.event.pull_request.number }}
-          merge-method: merge
+      - name: Squash merge the PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh pr merge --squash --delete-branch ${{ github.event.pull_request.number }}
