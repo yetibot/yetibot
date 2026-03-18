@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      contents: write
     if: |
       github.event.pull_request.user.login == 'yetibot-admin' &&
       startsWith(github.event.pull_request.title, 'Bump yetibot/core to')
