@@ -17,4 +17,4 @@ jobs:
       - name: Squash merge the PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge --squash --delete-branch ${{ github.event.pull_request.number }}
+        run: gh pr merge --squash --delete-branch --admin ${{ github.event.pull_request.number }}
