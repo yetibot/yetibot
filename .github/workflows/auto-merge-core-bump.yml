@@ -14,6 +14,11 @@ jobs:
       github.event.pull_request.user.login == 'yetibot-admin' &&
       startsWith(github.event.pull_request.title, 'Bump yetibot/core to')
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+
       - name: Squash merge the PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
