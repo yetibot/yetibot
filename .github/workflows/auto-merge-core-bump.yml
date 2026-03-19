@@ -16,6 +16,9 @@ jobs:
       github.event.pull_request.user.login == 'yetibot-admin' &&
       startsWith(github.event.pull_request.title, 'Bump yetibot/core to')
     steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
       - name: Approve the PR
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
