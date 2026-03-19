@@ -22,7 +22,7 @@
 
 (defn- no-match [q] (str "No match for " q))
 
-(defn json-get [uri] (client/get uri {:as :json}))
+(defn json-get [uri] (client/get uri {:as :json :headers {:user-agent "yetibot (IRC bot)"}}))
 
 (defn summary-for-title [title]
   (let [res (:body (json-get (endpoint-summary title)))]
