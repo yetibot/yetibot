@@ -12,7 +12,8 @@ RUN mkdir -p $WORKDIR && mkdir -p $LOGDIR
 
 # Copy project files first for optimal layer caching
 COPY ./project.clj $WORKDIR/project.clj
-COPY ./profiles.clj $WORKDIR/profiles.clj 2>/dev/null || true
+# Optionally copy profiles.clj if it exists (needed for +docker profile)
+COPY profiles.clj* $WORKDIR/
 
 COPY .java.policy /root/
 COPY .java.policy $WORKDIR/.java.policy
