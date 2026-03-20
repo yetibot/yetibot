@@ -10,7 +10,9 @@ ENV LOGDIR=/var/log/yetibot
 
 RUN mkdir -p $WORKDIR && mkdir -p $LOGDIR
 
+# Copy project files first for optimal layer caching
 COPY ./project.clj $WORKDIR/project.clj
+COPY ./profiles.clj $WORKDIR/profiles.clj 2>/dev/null || true
 
 COPY .java.policy /root/
 COPY .java.policy $WORKDIR/.java.policy
@@ -21,7 +23,13 @@ RUN mkdir -p /root/.ssh && touch /root/.ssh/known_hosts
 WORKDIR $WORKDIR
 
 RUN apt-get update && apt-get install curl git -y && apt-get clean
-RUN --mount=type=cache,target=/root/.m2/repository lein deps
+
+# Download ALL dependencies into the image (not using cache mount)
+# This bakes the JARs into the image layer for fast startup
+RUN lein deps
+
+# Pre-download docker profile dependencies too
+RUN lein with-profile +docker deps
 
 COPY ./src $WORKDIR/src/
 COPY ./resources $WORKDIR/resources/
