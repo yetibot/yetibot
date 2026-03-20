@@ -12,6 +12,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      contents: write
     if: |
       github.event.pull_request.user.login == 'yetibot-admin' &&
       startsWith(github.event.pull_request.title, 'Bump yetibot/core to')
@@ -19,7 +20,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v6
 
-      - name: Approve the PR
+      - name: Approve and enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr review --approve ${{ github.event.pull_request.number }}
+        run: |
+          gh pr review --approve ${{ github.event.pull_request.number }}
+          gh pr merge --auto --squash --delete-branch ${{ github.event.pull_request.number }}
