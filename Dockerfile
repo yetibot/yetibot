@@ -25,6 +25,14 @@ WORKDIR $WORKDIR
 
 RUN apt-get update && apt-get install curl git -y && apt-get clean
 
+# The `code` command shells out to git and the Gemini CLI to author changes and
+# open PRs. git is installed above; add Node.js and the Gemini CLI here so the
+# command works at runtime. Set YB_GEMINI_KEY to enable it.
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends nodejs \
+    && npm install -g @google/gemini-cli \
+    && rm -rf /var/lib/apt/lists/*
+
 # Download ALL dependencies into the image (not using cache mount)
 # This bakes the JARs into the image layer for fast startup
 RUN lein deps

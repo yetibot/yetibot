@@ -6,6 +6,15 @@ which contains Yetibot's core functionality along with a few commands. See
 changelog](https://github.com/yetibot/yetibot.core/blob/master/doc/CHANGELOG.md)
 as well.
 
+## Unreleased
+
+- Add a `code` command that uses Gemini to make a change in a GitHub repo and
+  open a pull request, e.g. `code yetibot/core increase banana budget`. It
+  clones the target repo with Yetibot's existing GitHub token, rebases on the
+  latest trunk, runs the Gemini CLI to author the change, then pushes a branch
+  and opens a PR. Requires `YB_GEMINI_KEY`; defaults to the `gemini-2.5-pro`
+  coding model (override with `YB_GEMINI_MODEL`).
+
 ## 0.5.76 - 10/10/20
 
 - Upgrade to `yetibot/core "20201010.155802.10604b4"`
