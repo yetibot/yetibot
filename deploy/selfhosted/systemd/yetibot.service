@@ -1,0 +1,18 @@
+[Unit]
+Description=Yetibot (lein run)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/yetibot
+Environment=HOME=/root
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/usr/bin/lein run
+Restart=on-failure
+RestartSec=10
+TimeoutStartSec=900
+KillMode=control-group
+
+[Install]
+WantedBy=multi-user.target
