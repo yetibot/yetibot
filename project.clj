@@ -62,7 +62,7 @@
                  ; image instead of loading them dynamically at runtime because
                  ; we found that pomegranate does not work inside a docker
                  ; container (need to investigate more).
-                 [yetibot/kroki "20260604.145440.b78fa4d"]
+                 [yetibot/kroki "20260605.152659.c135d20"]
                  [yetibot/github "20230419.011409.5dac8f7"]
 
                  ; apis
