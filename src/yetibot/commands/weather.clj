@@ -27,6 +27,73 @@
         (error "Request failed with status:" status)
         (or body {:error "Failed to retrieve weather data."})))))
 
+(def country-name->code
+  {"united states of america" "US"
+   "usa" "US"
+   "united states" "US"
+   "canada" "CA"
+   "united kingdom" "GB"
+   "germany" "DE"
+   "france" "FR"
+   "italy" "IT"
+   "spain" "ES"
+   "japan" "JP"
+   "china" "CN"
+   "brazil" "BR"
+   "india" "IN"
+   "russia" "RU"
+   "australia" "AU"
+   "netherlands" "NL"
+   "switzerland" "CH"
+   "sweden" "SE"
+   "norway" "NO"
+   "denmark" "DK"
+   "finland" "FI"
+   "belgium" "BE"
+   "austria" "AT"
+   "new zealand" "NZ"
+   "ireland" "IE"
+   "singapore" "SG"
+   "south africa" "ZA"
+   "mexico" "MX"
+   "south korea" "KR"
+   "poland" "PL"
+   "portugal" "PT"
+   "greece" "GR"
+   "turkey" "TR"
+   "ukraine" "UA"
+   "romania" "RO"
+   "czechia" "CZ"
+   "czech republic" "CZ"
+   "hungary" "HU"
+   "thailand" "TH"
+   "vietnam" "VN"
+   "indonesia" "ID"
+   "malaysia" "MY"
+   "philippines" "PH"
+   "taiwan" "TW"
+   "argentina" "AR"
+   "chile" "CL"
+   "colombia" "CO"
+   "peru" "PE"
+   "egypt" "EG"
+   "saudi arabia" "SA"
+   "united arab emirates" "AE"
+   "israel" "IL"
+   "pakistan" "PK"
+   "bangladesh" "BD"
+   "nigeria" "NG"
+   "kenya" "KE"
+   "morocco" "MA"
+   "hong kong" "HK"})
+
+(defn normalize-country
+  [raw-country]
+  (let [clean (some-> raw-country clojure.string/trim clojure.string/lower-case)]
+    (or (get country-name->code clean)
+        raw-country
+        "")))
+
 (defn transform-current
   [res]
   (if-let [current (first (:current_condition res))]
@@ -34,10 +101,7 @@
           city (some-> (get-in area [:areaName 0 :value]) clojure.string/trim)
           state (some-> (get-in area [:region 0 :value]) clojure.string/trim)
           raw-country (some-> (get-in area [:country 0 :value]) clojure.string/trim)
-          country (if (or (= raw-country "United States of America")
-                          (= raw-country "USA"))
-                    "US"
-                    (or raw-country ""))
+          country (normalize-country raw-country)
           temp-c (some-> (get current :temp_C) Float/parseFloat)
           app-temp-c (some-> (get current :FeelsLikeC) Float/parseFloat)
           wind-kmh (some-> (get current :windspeedKmph) Float/parseFloat)
@@ -60,10 +124,7 @@
           city (some-> (get-in area [:areaName 0 :value]) clojure.string/trim)
           state (some-> (get-in area [:region 0 :value]) clojure.string/trim)
           raw-country (some-> (get-in area [:country 0 :value]) clojure.string/trim)
-          country (if (or (= raw-country "United States of America")
-                          (= raw-country "USA"))
-                    "US"
-                    (or raw-country ""))
+          country (normalize-country raw-country)
           forecast-data (mapv (fn [day]
                                 (let [min-temp (some-> (:mintempC day) Float/parseFloat)
                                       max-temp (some-> (:maxtempC day) Float/parseFloat)
