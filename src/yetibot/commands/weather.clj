@@ -27,6 +27,19 @@
         (error "Request failed with status:" status)
         (or body {:error "Failed to retrieve weather data."})))))
 
+(defn get-aqi
+  [lat lon]
+  (try
+    (let [uri "https://air-quality-api.open-meteo.com/v1/air-quality"
+          options {:as :json :coerce :always :query-params {:latitude lat :longitude lon :current "us_aqi"}}
+          {:keys [status body]} (http.client/get uri options)]
+      (if (= status 200)
+        (get-in body [:current :us_aqi])
+        nil))
+    (catch Exception e
+      (error "AQI request failed:" (.getMessage e))
+      nil)))
+
 (def country-name->code
   {"united states of america" "US"
    "usa" "US"
@@ -106,7 +119,11 @@
           app-temp-c (some-> (get current :FeelsLikeC) Float/parseFloat)
           wind-kmh (some-> (get current :windspeedKmph) Float/parseFloat)
           wind-dir (some-> (get current :winddir16Point) clojure.string/trim)
-          desc (some-> (get-in current [:weatherDesc 0 :value]) clojure.string/trim)]
+          desc (some-> (get-in current [:weatherDesc 0 :value]) clojure.string/trim)
+          rh (some-> (get current :humidity) Float/parseFloat)
+          lat (some-> (get area :latitude) Double/parseDouble)
+          lon (some-> (get area :longitude) Double/parseDouble)
+          aqi (when (and lat lon) (get-aqi lat lon))]
       {:data [{:city_name city
                :state_code state
                :country_code country
@@ -114,7 +131,9 @@
                :weather {:description desc}
                :app_temp app-temp-c
                :wind_spd wind-kmh
-               :wind_cdir wind-dir}]})
+               :wind_cdir wind-dir
+               :rh rh
+               :aqi aqi}]})
     {:error "No current conditions found."}))
 
 (defn transform-forecast
