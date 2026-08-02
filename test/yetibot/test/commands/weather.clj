@@ -30,6 +30,48 @@
 (def formatters-ro (fmt/get-formatters nil (:country_code loc-bcr)))
 (def formatters-ro-imperl (fmt/get-formatters :i (:country_code loc-bcr)))
 
+(def wttr-res-current
+  {:current_condition [{:temp_C "14"
+                        :FeelsLikeC "13"
+                        :windspeedKmph "6"
+                        :winddir16Point "SSW"
+                        :weatherDesc [{:value "Cloudy "}]}]
+   :nearest_area [{:areaName [{:value "Seattle"}]
+                   :region [{:value "Washington"}]
+                   :country [{:value "United States of America"}]}]})
+
+(def wttr-res-forecast
+  {:weather [{:date "2026-08-02"
+              :mintempC "12"
+              :maxtempC "21"
+              :hourly [{:time "1200"
+                        :weatherDesc [{:value "Sunny"}]}]}]
+   :nearest_area [{:areaName [{:value "Seattle"}]
+                   :region [{:value "Washington"}]
+                   :country [{:value "United States of America"}]}]})
+
+(facts "about wttr.in transformations"
+       (fact "transform-current parses wttr.in format correctly"
+             (transform-current wttr-res-current)
+             => {:data [{:city_name "Seattle"
+                         :state_code "Washington"
+                         :country_code "US"
+                         :temp 14.0
+                         :weather {:description "Cloudy"}
+                         :app_temp 13.0
+                         :wind_spd 6.0
+                         :wind_cdir "SSW"}]})
+
+       (fact "transform-forecast parses wttr.in format correctly"
+             (transform-forecast wttr-res-forecast)
+             => {:city_name "Seattle"
+                 :state_code "Washington"
+                 :country_code "US"
+                 :data [{:min_temp 12.0
+                         :max_temp 21.0
+                         :valid_date "2026-08-02"
+                         :weather {:description "Sunny"}}]}))
+
 (facts "about fomatting fns"
        (fact fmt/location-title
              (fmt/location-title loc-nyc) => "New York, NY (US)"
