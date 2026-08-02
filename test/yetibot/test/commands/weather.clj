@@ -40,6 +40,16 @@
                    :region [{:value "Washington"}]
                    :country [{:value "United States of America"}]}]})
 
+(def wttr-res-current-canada
+  {:current_condition [{:temp_C "10"
+                        :FeelsLikeC "7"
+                        :windspeedKmph "23"
+                        :winddir16Point "W"
+                        :weatherDesc [{:value "Light drizzle"}]}]
+   :nearest_area [{:areaName [{:value "Edmonton"}]
+                   :region [{:value "Alberta"}]
+                   :country [{:value "Canada"}]}]})
+
 (def wttr-res-forecast
   {:weather [{:date "2026-08-02"
               :mintempC "12"
@@ -50,7 +60,22 @@
                    :region [{:value "Washington"}]
                    :country [{:value "United States of America"}]}]})
 
+(def wttr-res-forecast-canada
+  {:weather [{:date "2026-08-02"
+              :mintempC "8"
+              :maxtempC "14"
+              :hourly [{:time "1200"
+                        :weatherDesc [{:value "Light drizzle"}]}]}]
+   :nearest_area [{:areaName [{:value "Edmonton"}]
+                   :region [{:value "Alberta"}]
+                   :country [{:value "Canada"}]}]})
+
 (facts "about wttr.in transformations"
+       (fact "normalize-country maps country names to codes"
+             (normalize-country "Canada") => "CA"
+             (normalize-country "United States") => "US"
+             (normalize-country "FR") => "FR")
+
        (fact "transform-current parses wttr.in format correctly"
              (transform-current wttr-res-current)
              => {:data [{:city_name "Seattle"
@@ -60,7 +85,16 @@
                          :weather {:description "Cloudy"}
                          :app_temp 13.0
                          :wind_spd 6.0
-                         :wind_cdir "SSW"}]})
+                         :wind_cdir "SSW"}]}
+             (transform-current wttr-res-current-canada)
+             => {:data [{:city_name "Edmonton"
+                         :state_code "Alberta"
+                         :country_code "CA"
+                         :temp 10.0
+                         :weather {:description "Light drizzle"}
+                         :app_temp 7.0
+                         :wind_spd 23.0
+                         :wind_cdir "W"}]})
 
        (fact "transform-forecast parses wttr.in format correctly"
              (transform-forecast wttr-res-forecast)
@@ -70,7 +104,15 @@
                  :data [{:min_temp 12.0
                          :max_temp 21.0
                          :valid_date "2026-08-02"
-                         :weather {:description "Sunny"}}]}))
+                         :weather {:description "Sunny"}}]}
+             (transform-forecast wttr-res-forecast-canada)
+             => {:city_name "Edmonton"
+                 :state_code "Alberta"
+                 :country_code "CA"
+                 :data [{:min_temp 8.0
+                         :max_temp 14.0
+                         :valid_date "2026-08-02"
+                         :weather {:description "Light drizzle"}}]}))
 
 (facts "about fomatting fns"
        (fact fmt/location-title
