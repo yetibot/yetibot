@@ -50,6 +50,19 @@
                    :region [{:value "Alberta"}]
                    :country [{:value "Canada"}]}]})
 
+(def wttr-res-current-with-coords
+  {:current_condition [{:temp_C "14"
+                        :FeelsLikeC "13"
+                        :windspeedKmph "6"
+                        :winddir16Point "SSW"
+                        :weatherDesc [{:value "Cloudy "}]
+                        :humidity "63"}]
+   :nearest_area [{:areaName [{:value "Seattle"}]
+                   :region [{:value "Washington"}]
+                   :country [{:value "United States of America"}]
+                   :latitude "47.6062"
+                   :longitude "-122.3321"}]})
+
 (def wttr-res-forecast
   {:weather [{:date "2026-08-02"
               :mintempC "12"
@@ -85,7 +98,9 @@
                          :weather {:description "Cloudy"}
                          :app_temp 13.0
                          :wind_spd 6.0
-                         :wind_cdir "SSW"}]}
+                         :wind_cdir "SSW"
+                         :rh nil
+                         :aqi nil}]}
              (transform-current wttr-res-current-canada)
              => {:data [{:city_name "Edmonton"
                          :state_code "Alberta"
@@ -94,7 +109,24 @@
                          :weather {:description "Light drizzle"}
                          :app_temp 7.0
                          :wind_spd 23.0
-                         :wind_cdir "W"}]})
+                         :wind_cdir "W"
+                         :rh nil
+                         :aqi nil}]})
+
+       (fact "transform-current parses wttr.in format correctly with coordinates, rh and aqi"
+             (transform-current wttr-res-current-with-coords)
+             => {:data [{:city_name "Seattle"
+                         :state_code "Washington"
+                         :country_code "US"
+                         :temp 14.0
+                         :weather {:description "Cloudy"}
+                         :app_temp 13.0
+                         :wind_spd 6.0
+                         :wind_cdir "SSW"
+                         :rh 63.0
+                         :aqi 42}]}
+             (provided
+               (get-aqi 47.6062 -122.3321) => 42))
 
        (fact "transform-forecast parses wttr.in format correctly"
              (transform-forecast wttr-res-forecast)
