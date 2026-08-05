@@ -6,6 +6,7 @@
 (s/def ::xmlns string?)
 (s/def ::ResponseMetadata (s/keys :req-un [::RequestId]))
 
+;; aws IAM
 (s/def ::DeleteGroupResponse (s/keys :req-un [::ResponseMetadata]))
 (s/def ::DeleteGroupResponseAttrs (s/keys :req-un [::xmlns]))
 (s/def ::GroupDeleted (s/keys :req-un [::DeleteGroupResponse
@@ -40,3 +41,5 @@
 (s/def ::DeleteAccessKeyResponseAttrs (s/keys :req-un [::xmlns]))
 (s/def ::AccessKeyDeleted (s/keys :req-un [::DeleteAccessKeyResponse
                                            ::DeleteAccessKeyResponseAttrs]))
+
+;; aws S3
