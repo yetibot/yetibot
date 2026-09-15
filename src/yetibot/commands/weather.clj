@@ -17,7 +17,7 @@
   [location]
   (try
     (let [uri (str "https://wttr.in/" (clojure.string/replace (or location "") #" " "+"))
-          options {:as :json :coerce :always :query-params {:format "j1"}}
+          options {:as :json :coerce :always :query-params {:format "j1"} :insecure? true}
           {:keys [status body]} (http.client/get uri options)]
       (condp = status
         200 body
