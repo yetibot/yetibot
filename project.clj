@@ -52,7 +52,7 @@
                      "\u001B[m"))
                    (println))}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [yetibot/core "20260830.235226.58b1b82"]
+                 [yetibot/core "20260917.024204.f112731"]
                  ; not sure why we need to include this at the top level since
                  ; it's already included in yetibot/core, but things don't work
                  ; without it.
@@ -131,5 +131,7 @@
   ;; :pedantic :ignore
 
   :docker {:image-name "yetibot/yetibot"}
+
+  :repositories [["local" {:url "file:local-repo" :sign-releases false}]]
 
   :main yetibot.core.init)

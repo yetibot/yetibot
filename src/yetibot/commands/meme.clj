@@ -2,6 +2,8 @@
   (:require
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.image-input :as image-input]
+    [yetibot.core.interpreter :as interp]
     [yetibot.commands.scrape :refer [scrape]]
     [yetibot.models.imgflip :as model]))
 
@@ -18,25 +20,39 @@
      :result/data json}
     {:result/error (str (:error_message json))}))
 
+(defn- get-chat-source [ctx]
+  (or (:chat-source ctx)
+      (and (bound? #'interp/*chat-source*)
+           interp/*chat-source*)))
+
 (defn generate-cmd
   "meme <generator>: <line1> / <line2> # generate an instance"
   {:yb/cat #{:fun :img :meme}}
-  [{[_ inst line1 line2] :match}]
-  (instance-result
-    (model/generate-meme-by-query inst line1 line2)))
+  [{[_ inst line1 line2] :match :as ctx}]
+  (let [chat-source (get-chat-source ctx)
+        raw-event (:raw-event chat-source)
+        resolved-line1 (image-input/resolve-mentions line1 raw-event)
+        resolved-line2 (image-input/resolve-mentions line2 raw-event)]
+    (instance-result
+      (model/generate-meme-by-query inst resolved-line1 resolved-line2))))
 
 (defn rand-generate-cmd
   "meme <line1> / <line2> # generate random meme"
   {:yb/cat #{:fun :img :meme}}
-  [{[_ line1 line2] :match}]
-  (generate-cmd {:match [nil (model/rand-meme) line1 line2]}))
+  [{[_ line1 line2] :match :as ctx}]
+  (let [chat-source (get-chat-source ctx)]
+    (generate-cmd {:match [nil (model/rand-meme) line1 line2]
+                   :chat-source chat-source})))
 
 (defn generate-auto-split-cmd
   "meme <generator>: <text> # autosplit <text> in half and generate the instance"
   {:yb/cat #{:fun :img :meme}}
-  [{[_ inst text] :match}]
-  (instance-result
-    (model/generate-meme-by-query inst text)))
+  [{[_ inst text] :match :as ctx}]
+  (let [chat-source (get-chat-source ctx)
+        raw-event (:raw-event chat-source)
+        resolved-text (image-input/resolve-mentions text raw-event)]
+    (instance-result
+      (model/generate-meme-by-query inst resolved-text))))
 
 (comment
   (generate-auto-split-cmd {:match [nil "jocko" "good"]})
@@ -45,8 +61,10 @@
 (defn rand-generate-auto-split-cmd
   "meme <text> # when <text> is 4 words or more, autosplit <text> in half and generate the instance; otherwise it'll fallback to meme search"
   {:yb/cat #{:fun :img :meme}}
-  [{[text _] :match}]
-  (generate-auto-split-cmd {:match [nil (model/rand-meme) text]}))
+  [{[text _] :match :as ctx}]
+  (let [chat-source (get-chat-source ctx)]
+    (generate-auto-split-cmd {:match [nil (model/rand-meme) text]
+                              :chat-source chat-source})))
 
 (defn preview-cmd
   "meme preview <term> # preview an example of the first match for <term>"
