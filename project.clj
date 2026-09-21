@@ -52,7 +52,7 @@
                      "\u001B[m"))
                    (println))}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [yetibot/core "20260921.215326.ad90e1e"]
+                 [yetibot/core "20260921.233200.d9e8e0f"]
                  ; not sure why we need to include this at the top level since
                  ; it's already included in yetibot/core, but things don't work
                  ; without it.
