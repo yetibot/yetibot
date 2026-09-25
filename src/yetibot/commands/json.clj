@@ -15,7 +15,7 @@
         res
         ;; always return individual values as strings
         (str res)))
-    (str "Not a valid json data structure:" (pr-str json))))
+    {:result/error (str "Not a valid json data structure: " (pr-str json))}))
 
 (defn json-cmd
   "json <url> # parse json from <url>"

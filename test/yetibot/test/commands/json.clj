@@ -22,4 +22,4 @@
 
 (fact return-error-when-json-is-invalid
   (let [args {:match ["" "$.key"] :opts "{}"}]
-    (json-path-cmd args) => "Not a valid json data structure:\"{}\""))
+    (json-path-cmd args) => {:result/error "Not a valid json data structure: \"{}\""}))
