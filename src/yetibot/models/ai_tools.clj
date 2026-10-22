@@ -4,7 +4,8 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
-            [yetibot.api.mcp :as mcp]))
+            [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-toolsets :as toolsets]))
 
 (def instructions
   (str "Use the available tools when needed to answer the user's request. "
@@ -125,16 +126,17 @@
              :result/data (clean-data (assoc body :mcp {:tool-calls used}) config)}))))))
 
 (defn complete [provider model messages]
-  (let [config (mcp/config)]
+  (let [config (toolsets/select (mcp/config) nil)]
     (if (seq (:servers config))
       (mcp/with-tools config #(run-tools provider model messages % config))
       ;; No tool settings or function-calling requirement for existing installs.
       (ai/complete provider model messages))))
 
-(defn server-names [] (mapv :name (:servers (mcp/config))))
+(defn server-names []
+  (mapv :name (:servers (toolsets/select (mcp/config) nil))))
 
 (defn tool-names [server-name]
-  (let [config (mcp/config)
+  (let [config (toolsets/select (mcp/config) nil)
         config (if server-name
                  (if-let [server (some #(when (= server-name (:name %)) %) (:servers config))]
                    (assoc config :servers [server])
