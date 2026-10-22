@@ -76,6 +76,12 @@
                  ; TODO remove this and use data.json instead
                  [cheshire "5.9.0"]
 
+                 ; MCP clients for AI tools (local processes and remote servers)
+                 [io.modelcontextprotocol.sdk/mcp "2.1.0"]
+                 ; Jackson 3 uses this shared annotations package. Keep it newer
+                 ; than the copy pulled in by Cheshire's Jackson 2 dependencies.
+                 [com.fasterxml.jackson.core/jackson-annotations "2.21"]
+
                  ; scraping
                  [org.jsoup/jsoup "1.12.1"]
 

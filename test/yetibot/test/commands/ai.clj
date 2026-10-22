@@ -2,9 +2,11 @@
   (:require [clj-http.client :as client]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as api]
+            [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
             [yetibot.core.hooks :as hooks]
-            [yetibot.models.ai-context :as context]))
+            [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-tools :as tools]))
 
 (def local-provider {:name "local" :url "http://localhost:11434/v1" :model "llama3"})
 (def hosted-provider {:name "hosted" :url "https://example.com/v1" :key "secret" :model "chat"})
@@ -15,10 +17,13 @@
   => {:prompt "hello\nworld --model literal"}
   (ai/parse-prompt "--model org/model --provider local explain this")
   => {:provider "local" :model "org/model" :prompt "explain this"}
+  (ai/parse-prompt "--no-tools --provider local hello")
+  => {:no-tools true :provider "local" :prompt "hello"}
   (ai/parse-prompt "-- --provider is part of my prompt")
   => {:prompt "--provider is part of my prompt"}
   (doseq [input ["" " " "--" "--provider" "--model x" "--unknown x hello"
-                 "--provider --model x hi" "--model x --model y hi"]]
+                 "--provider --model x hi" "--model x --model y hi" "--no-tools"
+                 "--no-tools --no-tools hello"]]
     (fact (ai/prompt-cmd {:match input}) => {:result/error ai/usage})))
 
 (facts "registered command routing"
@@ -27,6 +32,9 @@
       (second (hooks/match-sub-cmds "providers" commands)) => #'ai/providers-cmd
       (second (hooks/match-sub-cmds "models" commands)) => #'ai/models-cmd
       (second (hooks/match-sub-cmds "models local" commands)) => #'ai/models-cmd
+      (second (hooks/match-sub-cmds "servers" commands)) => #'ai/servers-cmd
+      (second (hooks/match-sub-cmds "tools" commands)) => #'ai/tools-cmd
+      (second (hooks/match-sub-cmds "tools search" commands)) => #'ai/tools-cmd
       (second (hooks/match-sub-cmds "hello\nworld" commands)) => #'ai/prompt-cmd)))
 
 (facts "provider and model selection"
@@ -86,3 +94,19 @@
                   api/complete (fn [& _] (reset! sent? true))]
       (ai/prompt-cmd {:match "hello"}) => {:result/error "Could not read the thread."}
       @sent? => false)))
+
+(fact "no-tools bypasses MCP discovery, and the default prompt uses MCP-aware completion"
+  (with-redefs [api/config (constantly config)
+                context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                api/complete (fn [& _] :plain)
+                tools/complete (fn [& _] :tools)]
+    (ai/prompt-cmd {:match "--no-tools hello"}) => :plain
+    (ai/prompt-cmd {:match "hello"}) => :tools))
+
+(facts "tool inspection commands handle configuration errors safely"
+  (with-redefs [mcp/config (constantly nil)]
+    (ai/servers-cmd {}) => []
+    (ai/tools-cmd {:match ["tools" nil]}) => "No MCP servers configured.")
+  (with-redefs [mcp/config (fn [] (mcp/fail "Tool configuration is invalid."))]
+    (ai/servers-cmd {}) => {:result/error "Tool configuration is invalid."}
+    (ai/tools-cmd {:match ["tools" nil]}) => {:result/error "Tool configuration is invalid."}))
