@@ -21,6 +21,8 @@
     (:files p) => [{:path "src/a.clj" :content "new\n"}]
     (string? (:diff p)) => true
     (:id (proposals/review! (:id p) actor)) => (:id p)
+    (error? #(proposals/claim! (:id p) actor)) => true
+    (string? (proposals/page! (:id p) actor 1)) => true
     (error? #(proposals/review! (:id p) (assoc actor :user "other"))) => true
     (proposals/cancel! (:id p) actor) => :cancelled
     (error? #(proposals/claim! (:id p) actor)) => true))
@@ -41,6 +43,7 @@
     (with-redefs [proposals/now (constantly (+ (:expires-at p) 1))]
       (error? #(proposals/claim! (:id p) actor)) => true))
   (let [p (stage)
+        _ (proposals/page! (:id p) actor 1)
         attempts (doall (repeatedly 8 #(future
                                        (try (proposals/claim! (:id p) actor)
                                             (catch Exception _ nil)))))]

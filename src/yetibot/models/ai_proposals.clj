@@ -104,12 +104,41 @@
       (ai/fail "Proposal integrity check failed."))
     p))
 
+(def page-size 2400)
+
+(defn page-count [p]
+  (max 1 (long (Math/ceil (/ (count (:diff p)) (double page-size))))))
+
+(defn preview [p]
+  (str "Proposal " (:id p) " (" (name (:status p)) ") for "
+       (:owner p) "/" (:repo p) " against " (:base p) " @ " (:base-sha p)
+       "\nTitle: " (:title p) "\nBody: " (:body p)
+       "\nFiles: " (string/join ", " (map :path (:files p)))
+       "\nHash: " (:hash p) "\nExpires: " (:expires-at p)
+       "\nNo GitHub writes have been authorized by this preview."
+       "\nReview ALL " (page-count p) " diff pages: ai proposal " (:id p) " <page>"
+       "\nThen: ai approve " (:id p) " (or ai cancel " (:id p) ")"))
+
+(defn page! [id actor page]
+  (locking proposals
+    (let [p (review! id actor)
+          pages (page-count p)]
+      (when-not (and (integer? page) (<= 1 page pages))
+        (ai/fail "Invalid proposal page number."))
+      (swap! proposals update-in [id :reviewed-pages] (fnil conj #{}) page)
+      (str "Proposal " id " diff page " page "/" pages "\n"
+           (subs (:diff p) (* (dec page) page-size)
+                 (min (count (:diff p)) (* page page-size)))))))
+
 (defn- transition! [id actor target]
   ;; Lock serializes the read/check/transition, not any network operations.
   (locking proposals
     (let [p (review! id actor)]
       (when-not (= :pending (:status p))
         (ai/fail "Proposal is no longer pending; it cannot be approved again."))
+      (when (and (= :executing target)
+                 (not= (set (range 1 (inc (page-count p)))) (:reviewed-pages p)))
+        (ai/fail "Review every diff page with ai proposal before approval."))
       (let [next (assoc p :status target)]
         (swap! proposals assoc id next)
         (audit! next)
