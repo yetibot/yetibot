@@ -160,15 +160,23 @@
                                               :content {:type "string"}}}}}}
    :host-call
    (fn [arguments]
-     (let [p (proposals/stage! (:toolset config) actor provider model arguments
-                               #(github/snapshot-with-tools! reads %1 %2 %3 %4))]
+     (when-not (= arguments (clean-data arguments config))
+       (ai/fail "A proposal contains configured credentials; it cannot be staged."))
+     (let [p (proposals/stage!
+               (:toolset config) actor provider model arguments
+               (fn [owner repo base paths]
+                 (let [snapshot (github/snapshot-with-tools! reads owner repo base paths)]
+                   (when-not (= snapshot (clean-data snapshot config))
+                     (ai/fail "Source contains configured credentials; it cannot be proposed."))
+                   snapshot)))]
        (reset! (:staged config) p)
        {:structuredContent {:proposal (:id p) :status "pending"}}))})
 
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages {:keys [toolset actor]}]
-   (let [config (assoc (toolsets/select (mcp/config) toolset) :staged (atom nil))]
+   (let [config (assoc (toolsets/select (mcp/config) toolset)
+                       :staged (atom nil) :secrets (keep identity [(:key provider)]))]
      (policy/authorize! (:toolset config) actor provider model)
      (if (seq (:servers config))
        (do
@@ -183,17 +191,35 @@
        ;; No function-calling requirement for existing installs.
        (ai/complete provider model messages)))))
 
-(defn server-names []
-  (mapv :name (:servers (toolsets/select (mcp/config) nil))))
+(defn- listing-config [actor]
+  (let [config (toolsets/validate! (mcp/config))]
+    (if (seq (:toolsets config))
+      (let [refs (mapcat :servers (filter #(policy/visible? % actor) (:toolsets config)))
+            allowed (reduce #(update %1 (:name %2) (fnil into #{}) (:tools %2)) {} refs)]
+        (assoc config :servers
+               (vec (keep #(when-let [names (get allowed (:name %))]
+                             (assoc % :tools (vec (filter names (:tools %)))))
+                          (:servers config)))))
+      config)))
 
-(defn tool-names [server-name]
-  (let [config (toolsets/select (mcp/config) nil)
-        config (if server-name
-                 (if-let [server (some #(when (= server-name (:name %)) %) (:servers config))]
-                   (assoc config :servers [server])
-                   (ai/fail "Unknown MCP server. Use ai servers to list configured servers."))
-                 config)]
-    (if-not (seq (:servers config))
-      "No MCP servers configured."
-      (mcp/with-tools config
-        #(mapv (fn [tool] (str (get-in tool [:session :server :name]) "/" (:name tool))) %)))))
+(defn toolset-names [actor]
+  (mapv :name (filter #(policy/visible? % actor)
+                      (:toolsets (toolsets/validate! (mcp/config))))))
+
+(defn server-names
+  ([] (server-names nil))
+  ([actor] (mapv :name (:servers (listing-config actor)))))
+
+(defn tool-names
+  ([server-name] (tool-names server-name nil))
+  ([server-name actor]
+   (let [config (listing-config actor)
+         config (if server-name
+                  (if-let [server (some #(when (= server-name (:name %)) %) (:servers config))]
+                    (assoc config :servers [server])
+                    (ai/fail "Unknown MCP server. Use ai servers to list configured servers."))
+                  config)]
+     (if-not (seq (:servers config))
+       "No MCP servers configured."
+       (mcp/with-tools config
+         #(mapv (fn [tool] (str (get-in tool [:session :server :name]) "/" (:name tool))) %))))))

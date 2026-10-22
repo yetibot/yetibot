@@ -37,8 +37,9 @@
       (when-not (and server (strings? (:tools ref))
                      (every? (set (:tools server)) (:tools ref))
                      (not-any? github-writes (:tools ref))
-                     (or (not (github? t))
-                         (every? github-reads (:tools ref))))
+                     (if (github? t)
+                       (every? github-reads (:tools ref))
+                       (not-any? github-reads (:tools ref))))
         (invalid!))))
   (doseq [k [:users :conversations :adapters]]
     (when (and (contains? t k) (not (strings? (get t k)))) (invalid!)))
@@ -79,7 +80,8 @@
           (invalid!))
         (doseq [t toolsets] (validate-toolset! servers t)))
       (when (or (:default-toolset config)
-                (some github-writes (mapcat :tools (:servers config))))
+                (some #(or (github-writes %) (github-reads %))
+                      (mapcat :tools (:servers config))))
         (invalid!))))
   config)
 
@@ -93,7 +95,7 @@
           t (some #(when (= selected (:name %)) %) (:toolsets config))
           servers (into {} (map (juxt :name identity) (:servers config)))]
       (when-not t (ai/fail "Unknown AI toolset. Use ai toolsets to list available toolsets."))
-      (assoc config :toolset t
+      (assoc config :toolset t :redaction-servers (:servers config)
              :servers (mapv #(assoc (get servers (:name %)) :tools (:tools %))
                             (:servers t))))
     (if toolset-name

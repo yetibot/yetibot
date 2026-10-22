@@ -166,8 +166,9 @@
 (defn redact
   "Remove configured credentials from data before it reaches the model or chat."
   [text config]
-  (let [credentials (->> (:servers config)
-                         (mapcat #(concat (vals (:env %)) (vals (:headers %))))
+  (let [credentials (->> (concat (:secrets config)
+                                 (mapcat #(concat (vals (:env %)) (vals (:headers %)))
+                                         (concat (:servers config) (:redaction-servers config))))
                          (filter text?)
                          (mapcat #(vector % (string/replace % #"(?i)^Bearer\s+" "")))
                          (filter text?)
