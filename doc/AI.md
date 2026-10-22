@@ -219,6 +219,7 @@ Replace the model, IDs, executable paths and token placeholders before use:
     :command "/usr/local/bin/github-mcp-server"
     :args ["stdio" "--read-only" "--tools" "get_file_contents,get_commit,list_branches,issue_read,pull_request_read,search_code"]
     :env {"GITHUB_PERSONAL_ACCESS_TOKEN" "READ_TOKEN_PLACEHOLDER"}
+    :github-api-token "READ_TOKEN_PLACEHOLDER"
     :tools ["get_file_contents" "get_commit" "list_branches"
             "issue_read" "pull_request_read" "search_code"]}
    {:name "github-write"
@@ -258,7 +259,15 @@ Replace the model, IDs, executable paths and token placeholders before use:
 ```
 
 The `github-pr` toolset must include `get_commit` and `get_file_contents` for
-host-side snapshots. A `search` toolset cannot expose known GitHub tools; use a
+host-side snapshots. Its `get_commit` server also requires an explicit
+`:github-api-token` with Contents read permission. GitHub MCP v2.0.3 returns
+`MinimalCommit` without parents; ancestry is therefore checked with two host-owned,
+authenticated GETs to `https://api.github.com/repos/<owner>/<repo>/git/commits/<sha>`:
+a preflight read before any mutation and a verification read after pushing. This
+is the sole REST exception; all writes remain MCP-only. Credentials are never
+inferred from MCP headers or environment, redirects/retries are disabled, and
+unsupported/error responses stop the workflow. Only GitHub.com is supported.
+A `search` toolset cannot expose known GitHub tools; use a
 GitHub kind so repository and identity checks cannot be bypassed accidentally.
 All tool names must appear in their server's allowlist and its live `tools/list`.
 Only trusted administrators may configure tools: an arbitrary third-party tool
@@ -279,7 +288,13 @@ export YETIBOT_AI_MCP_TOOLSETS_0_SERVERS_0_TOOLS_0=web_search_exa
 To configure tokens through the environment, the nested server keys are
 `YETIBOT_AI_MCP_SERVERS_1_ENV_GITHUB_PERSONAL_ACCESS_TOKEN` and
 `YETIBOT_AI_MCP_SERVERS_2_ENV_GITHUB_PERSONAL_ACCESS_TOKEN` for the example above.
-Set them privately in your service configuration. EDN does **not** interpolate
+The separate REST verification token is
+`YETIBOT_AI_MCP_SERVERS_1_GITHUB_API_TOKEN`; it may use the same read-only PAT,
+but must be explicitly configured, including for hosted MCP. Set tokens privately
+in your service configuration. Flat EDN environment keys (including lowercase
+keywords such as `:http_proxy`) retain their exact spelling; nested exploded
+environment paths are reconstructed with uppercase underscore-separated names.
+EDN does **not** interpolate
 `${ENV_VAR}` or resolve VS Code `${input:...}` variables. Do not commit secrets.
 As with other settings, configuration changes and token rotation require restart.
 
@@ -292,6 +307,9 @@ As with other settings, configuration changes and token rotation require restart
 - `:adapters` uses `"slack"` or `"discord"`. Missing IDs, edited/bot messages,
   reaction-triggered requests and unsupported adapters cannot authorize writes.
   Approval also binds the current Slack thread or Discord channel/thread.
+  Identity additionally requires the host adapter entry point and a matching
+  adapter-supplied user ID. Caller-supplied `/api` chat-source metadata cannot
+  establish identity, even when it copies an allowed user’s raw event.
 - Private reads and review output are allowed only in configured conversations.
   Choose private output channels for private repositories. Shared GitHub tokens
   do not impersonate the requesting chat user.
@@ -353,7 +371,10 @@ raw GitHub mutations. Staging reads source at an identified commit and produces
 an immutable proposal. No branch, commit or PR is created during generation.
 The preview lists its repository, base, hash and expiration. Review every
 numbered page, including the exact PR body and complete file diff; approval is
-rejected until all pages have been requested by the original user. Each added or
+rejected until all pages have been requested by the original user. Review,
+approval and cancellation must be standalone commands directly sent by that user;
+pipes, subexpressions, aliases, generated `cmd` commands and observers cannot
+supply this consent. Each added or
 removed diff line is a JSON-escaped string including its line terminator: `\r\n`,
 `\n`, `\r`, tabs and non-ASCII characters remain distinguishable. Concatenating
 those decoded strings reconstructs the original/proposed text exactly, including
@@ -389,8 +410,9 @@ Limits and failure behavior:
   force push, rollback, merge or cleanup of partially created branches.
 - The normal model budget counts model-selected calls (staging counts as one).
   Host staging additionally performs at most eleven source reads. Approved
-  execution is a fixed sequence of at most sixteen tool operations, never an
-  unbounded model loop; each uses the configured MCP operation timeout.
+  execution is a fixed sequence of at most sixteen MCP tool operations and two
+  ancestry-only REST reads, never an unbounded model loop. REST connection/read
+  timeouts use the configured MCP operation timeout.
 - Draft PRs may trigger CI. Ensure repository CI is safe for generated code
   before enabling writes; denying workflow edits alone does not make builds safe.
   Repository review and branch protections remain mandatory. This workflow does
@@ -401,6 +423,11 @@ local model and testing against a disposable repository. To disable writes,
 remove the PR toolset/writer connection and restart (pending proposals disappear).
 Watch sanitized `ai-proposal` state-transition logs for failures/unknown outcomes;
 source text, prompts and credentials are not included in these audit events.
+Once a request accesses private GitHub tools or proposal output, request-scoped
+logging filters suppress other log events before ordinary logging middleware and
+appenders see them, including interpreter result, pipeline, history and chat
+formatting logs at trace/debug levels. Sanitized `ai-proposal` audit events remain
+available. Other requests keep their existing logging configuration.
 
 ## Thread conversations
 

@@ -8,7 +8,8 @@
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-proposals :as proposals]
-            [yetibot.models.ai-github :as github]))
+            [yetibot.models.ai-github :as github]
+            [yetibot.util.ai-execution :as execution]))
 
 (def instructions
   (str "Use the available tools when needed to answer the user's request. "
@@ -180,6 +181,7 @@
    (let [config (assoc (toolsets/select (mcp/config) toolset)
                        :staged (atom nil) :secrets (keep identity [(:key provider)]))]
      (policy/authorize! (:toolset config) actor provider model)
+     (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (if (seq (:servers config))
        (do
          (when-not (ai/tool-calling? provider)

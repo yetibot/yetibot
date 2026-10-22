@@ -45,10 +45,12 @@
 (s/def ::args (s/coll-of string? :kind vector?))
 (s/def ::env (s/map-of (s/or :string text? :keyword keyword?) string?))
 (s/def ::headers (s/map-of (s/or :string text? :keyword keyword?) text?))
+(s/def ::github-api-token text?)
 (s/def ::tools (s/and (s/coll-of text? :kind vector? :min-count 1 :max-count 64)
                     #(apply distinct? %)))
 (s/def ::server
-  (s/and (s/keys :req-un [::name ::tools] :opt-un [::url ::command ::args ::env ::headers])
+  (s/and (s/keys :req-un [::name ::tools]
+                 :opt-un [::url ::command ::args ::env ::headers ::github-api-token])
          #(if (:url %) (not-any? (partial contains? %) [:command :args :env])
               (and (:command %) (not (contains? % :headers))))))
 (s/def ::servers (s/and (s/coll-of ::server :kind vector? :max-count 16)
@@ -214,7 +216,8 @@
   "Remove configured credentials from data before it reaches the model or chat."
   [text config]
   (let [credentials (->> (concat (:secrets config)
-                                 (mapcat #(concat (vals (:env %)) (vals (:headers %)))
+                                 (mapcat #(concat [(:github-api-token %)]
+                                                  (vals (:env %)) (vals (:headers %)))
                                          (concat (:servers config) (:redaction-servers config))))
                          (filter text?)
                          (mapcat #(vector % (string/replace % #"(?i)^Bearer\s+" "")))

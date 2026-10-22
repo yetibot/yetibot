@@ -1,6 +1,7 @@
 (ns yetibot.models.ai-github
   "Host-owned GitHub MCP reads and the fixed, approved draft-PR sequence."
-  (:require [cheshire.core :as json]
+  (:require [clj-http.client :as client]
+            [cheshire.core :as json]
             [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
@@ -98,21 +99,47 @@
 
 (def writer-tools ["create_branch" "push_files" "create_pull_request"])
 
-(defn- verify-commit! [reads p branch state]
+(defn- ancestry!
+  "The pinned MCP MinimalCommit omits parents. Read only this immutable Git
+   object from GitHub's authenticated REST API; never reuse MCP transport auth."
+  [token owner repo sha timeout-ms]
+  (try
+    (let [response (client/get
+                     (str "https://api.github.com/repos/" owner "/" repo
+                          "/git/commits/" sha)
+                     {:as :json :throw-exceptions false
+                      :conn-timeout timeout-ms :socket-timeout timeout-ms
+                      :redirect-strategy :none :retry-handler (fn [& _] false)
+                      :headers {"Accept" "application/vnd.github+json"
+                                "X-GitHub-Api-Version" "2022-11-28"
+                                "Authorization" (str "Bearer " token)}})
+          data (:body response)]
+      (when-not (and (= 200 (:status response)) (= sha (:sha data))
+                     (vector? (:parents data))
+                     (every? #(and (map? %) (string? (:sha %))
+                                    (re-matches #"[0-9a-f]{40,64}" (:sha %)))
+                             (:parents data)))
+        (ai/fail "GitHub commit ancestry could not be verified."))
+      (mapv :sha (:parents data)))
+    (catch Exception _
+      ;; HTTP exceptions can carry tokens, headers or private response bodies.
+      (ai/fail "GitHub commit ancestry could not be verified."))))
+
+(defn- verify-commit! [reads p branch state token timeout-ms]
   (let [{:keys [owner repo base-sha files originals]} p
         commit (commit! reads owner repo branch)
         changed (filter #(not= (:content %) (get originals (:path %))) files)
         expected (set (map :path changed))]
     (swap! state assoc :commit (:sha commit))
     (when-not
-      (and (= [base-sha] (mapv :sha (:parents commit)))
+      (and (= [base-sha] (ancestry! token owner repo (:sha commit) timeout-ms))
            (= expected (set (map :filename (:files commit))))
            (every? #(= (:content %)
                        (read-file! reads owner repo (:sha commit) (:path %)))
                    files))
       (ai/fail "Pushed commit differs from approval; no PR opened."))))
 
-(defn- write-approved! [reads writes p branch state]
+(defn- write-approved! [reads writes p branch state token timeout-ms]
   (let [{:keys [owner repo base base-sha files title body]} p
         args {"owner" owner "repo" repo}]
     (swap! state assoc :branch branch :step :create-branch)
@@ -127,7 +154,7 @@
                   "files" (mapv #(hash-map "path" (:path %)
                                            "content" (:content %)) files)))
     (swap! state assoc :step :verify-commit)
-    (verify-commit! reads p branch state)
+    (verify-commit! reads p branch state token timeout-ms)
     (swap! state assoc :step :create-pr)
     (let [result (data! (call! writes "create_pull_request"
                                (assoc args "head" branch "base" base
@@ -153,15 +180,23 @@
             {:keys [owner repo base base-sha]} p
             branch (str (or (:branch-prefix t) "yetibot/ai-") (UUID/randomUUID))
             write-config (assoc config :servers
-                                [(assoc writer :tools writer-tools)])]
+                                [(assoc writer :tools writer-tools)])
+            token (:github-api-token
+                    (first (filter #(some #{"get_commit"} (:tools %))
+                                   (:servers selected))))
+            timeout-ms (mcp/number-option (:timeout-ms config) 30000)]
+        (when-not (ai/nonblank-string? token)
+          (ai/fail "Configure a GitHub API read token before enabling PR writes."))
         (when-not (= t (:toolset p))
           (ai/fail "Tool policy changed. Generate a new proposal."))
         (mcp/with-tools selected
           (fn [reads]
             (when-not (= base-sha (:sha (commit! reads owner repo base)))
               (ai/fail "Base branch changed. Generate a new proposal."))
+            ;; Qualify API access before creating even an empty branch.
+            (ancestry! token owner repo base-sha timeout-ms)
             (mcp/with-tools write-config
-              #(write-approved! reads % p branch state)))))
+              #(write-approved! reads % p branch state token timeout-ms)))))
       @state
       (catch Exception e
         (assoc @state

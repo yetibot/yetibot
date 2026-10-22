@@ -1,6 +1,7 @@
 (ns yetibot.test.models.ai-tool-policy
   (:require [midje.sweet :refer [fact facts =>]]
-            [yetibot.models.ai-tool-policy :as policy]))
+            [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.test.support.ai-execution :as chat]))
 
 (def actor {:adapter "slack" :connection "workspace" :user "U1"
             :conversation "workspace/C1" :thread "root"})
@@ -10,14 +11,15 @@
               :providers [{:name "local" :models ["chat"]}]})
 (defn error? [f] (try (f) false (catch Exception _ true)))
 
-(fact "trusted context uses immutable IDs rather than display names or message text"
-  (policy/actor {:chat-source {:adapter :slack :uuid "workspace"
-                              :raw-event {:user "U1" :channel "C1"
-                                          :thread_ts "root" :ts "now"}}
-                 :user {:name "admin"}}) => actor
-  (policy/actor {:chat-source {:adapter :slack :uuid "workspace"
-                              :raw-event {:subtype "message_changed"
-                                          :user "U1" :channel "C1" :ts "now"}}}) => nil)
+(facts "identity requires a trusted adapter event and matching immutable user ID"
+  (chat/in-event chat/request "ai toolsets" policy/actor) => actor
+  (policy/actor chat/request) => nil
+  (chat/in-event (assoc-in chat/request [:user :id] "U2") "ai toolsets" policy/actor) => nil
+  (chat/in-event (assoc chat/request :user {:username "api"}) "ai toolsets" policy/actor) => nil
+  (chat/in-event (assoc-in chat/request [:chat-source :raw-event :subtype] "message_changed")
+                 "ai toolsets" policy/actor) => nil
+  (chat/in-event chat/request "ai toolsets"
+                 #(policy/actor (assoc-in % [:chat-source :raw-event :user] "U2"))) => nil)
 
 (facts "identity and provider/model policy fail closed"
   (policy/authorize! toolset actor {:name "local"} "chat") => toolset

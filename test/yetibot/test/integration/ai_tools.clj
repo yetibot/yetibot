@@ -1,12 +1,15 @@
 (ns yetibot.test.integration.ai-tools
   (:require [cheshire.core :as json]
+            [clj-http.client :as client]
             [clojure.string :as string]
             [midje.sweet :refer [fact =>]]
             [yetibot.api.ai :as api]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as commands]
             [yetibot.models.ai-proposals :as proposals]
-            [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.models.ai-context :as context]
+            [yetibot.test.models.ai-tool-policy :refer [actor]]
+            [yetibot.test.support.ai-execution :as chat]
             [yetibot.test.support.mcp :as support])
   (:import [java.util Base64]))
 
@@ -60,7 +63,6 @@
                    (case name
                      "web_search" {:url "https://source.test/news"}
                      "get_commit" {:sha (if @pushed commit-sha base-sha)
-                                   :parents [{:sha base-sha}]
                                    :files [{:filename "src/a.clj"}]}
                      "get_file_contents"
                      (if (= "src" (:path args))
@@ -82,8 +84,7 @@
       (fixture-handler requests pushed)
       (fn [base]
         (let [provider {:name "local" :url (str base "/v1") :model "chat"}
-              request {:chat-source {:adapter :slack :uuid "workspace"
-                                     :raw-event {:user "U1" :channel "C1" :ts "1"}}}
+              request chat/request
               t {:name "github-pr" :kind "github-pr"
                  :users ["U1"] :adapters ["slack"]
                  :conversations ["workspace/C1"] :repositories ["owner/repo"]
@@ -95,32 +96,34 @@
                       :toolsets [{:name "search" :kind "search"
                                   :servers [{:name "web" :tools ["web_search"]}]} t]
                       :servers [{:name "web" :url (str base "/search") :tools ["web_search"]}
-                                {:name "reader" :url (str base "/read") :tools reader-tools}
+                                {:name "reader" :url (str base "/read") :tools reader-tools
+                                 :github-api-token "ancestry-secret"}
                                 {:name "writer" :url (str base "/write") :tools writer-tools
                                  :headers {"Authorization" "Bearer write-secret"}}
                                 {:name "offline" :url "http://127.0.0.1:9/mcp" :tools ["unused"]}]}]
           (with-redefs [api/config (constantly {:providers [provider]})
-                        mcp/config (constantly config)]
+                        mcp/config (constantly config)
+                        context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                        client/get (fn [url _] {:status 200 :body {:sha (last (string/split url #"/"))
+                                                                  :parents [{:sha base-sha}]}})]
             (fact
-              (:result/value (commands/prompt-cmd
-                               (assoc request :match "--toolset search Search current news")))
+              (:value (chat/run-command request "ai --toolset search Search current news"))
               => "Source: https://source.test/news"
               (some #(= "/read" (:path %)) @requests) => nil)
-            (let [result (commands/prompt-cmd
-                           (assoc request :match "--toolset github-pr Fix src/a.clj"))
-                  id (get-in result [:result/data :proposal])
-                  p (proposals/review! id (policy/actor request))]
+            (let [result (chat/run-command request "ai --toolset github-pr Fix src/a.clj")
+                  id (get-in result [:data :proposal])
+                  p (proposals/review! id actor)]
               (fact (string? id) => true
                     (some #(= "/write" (:path %)) @requests) => nil)
               (doseq [page (range 1 (inc (proposals/page-count p)))]
-                (commands/proposal-cmd (assoc request :match ["proposal" id (str page)])))
+                (chat/run-command request (str "ai proposal " id " " page)))
               (fact
-                (get-in (commands/approve-cmd (assoc request :match ["approve" id]))
-                        [:result/data :status]) => :succeeded
-                (contains? (commands/approve-cmd (assoc request :match ["approve" id]))
-                           :result/error) => true
+                (get-in (chat/run-command request (str "ai approve " id))
+                        [:data :status]) => :succeeded
+                (contains? (chat/run-command request (str "ai approve " id)) :error) => true
                 (count (filter #(= "push_files" (get-in % [:body :params :name])) @requests)) => 1
                 (get-in (last (filter #(= "create_pull_request" (get-in % [:body :params :name])) @requests))
                         [:body :params :arguments :draft]) => true
-                (every? #(not (string/includes? (json/generate-string (:body %)) "write-secret"))
+                (every? #(not (re-find #"write-secret|ancestry-secret"
+                                     (json/generate-string (:body %))))
                         (filter #(= "/v1/chat/completions" (:path %)) @requests)) => true))))))))

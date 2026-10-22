@@ -6,7 +6,8 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.core.config :as config]
-            [yetibot.models.ai-toolsets :as toolsets]))
+            [yetibot.models.ai-toolsets :as toolsets]
+            [yetibot.util.ai-config :as settings]))
 
 (def expanded
   (get-in (explode
@@ -21,6 +22,7 @@
              :yetibot-ai-mcp-servers-0-name "web"
              :yetibot-ai-mcp-servers-0-command "search-server"
              :yetibot-ai-mcp-servers-0-env-github-personal-access-token "FAKE_TOKEN"
+             :yetibot-ai-mcp-servers-0-github-api-token "FAKE_REST_TOKEN"
              :yetibot-ai-mcp-servers-0-tools-0 "search"
              :yetibot-ai-mcp-toolsets-0-name "search"
              :yetibot-ai-mcp-toolsets-0-kind "search"
@@ -38,7 +40,28 @@
     (:tool-choice (first (:providers (ai/config)))) => "omit"
     (:max-tool-calls (mcp/config)) => "3"
     (get-in (mcp/config) [:servers 0 :env "GITHUB_PERSONAL_ACCESS_TOKEN"]) => "FAKE_TOKEN"
+    (get-in (mcp/config) [:servers 0 :github-api-token]) => "FAKE_REST_TOKEN"
     (get-in (toolsets/select (mcp/config) nil) [:toolset :name]) => "search"))
+
+(fact "flat EDN environment names remain byte-for-byte compatible"
+  (let [value {:servers [{:name "local" :command "server" :tools ["search"]
+                          :env {:http_proxy "http://proxy" :no_proxy "localhost"
+                                :Mixed_Case "value" :legacy-name "value"
+                                "lower_case" "value" :UPPER "value"}}]}
+        normalized (settings/mcp value)]
+    (s/valid? ::mcp/config value) => true
+    (get-in normalized [:servers 0 :env])
+    => {"http_proxy" "http://proxy" "no_proxy" "localhost"
+        "Mixed_Case" "value" "legacy-name" "value"
+        "lower_case" "value" "UPPER" "value"}
+    (settings/mcp normalized) => normalized
+    (with-redefs [config/get-config (constantly {:value value})]
+      (get-in (mcp/config) [:servers 0 :env "http_proxy"]) => "http://proxy")))
+
+(fact "the explicit REST read token is redacted like MCP credentials"
+  (mcp/redact "Bearer REST_READ_SECRET and REST_READ_SECRET"
+              {:servers [{:github-api-token "REST_READ_SECRET"}]})
+  => "Bearer [redacted] and [redacted]")
 
 (fact "documented full EDN recipe validates and selects GitHub PR reads only"
   (let [[_ example] (re-find #"(?s)## Named toolsets:.*?```clojure\n(.*?)```"

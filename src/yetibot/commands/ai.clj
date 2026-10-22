@@ -8,7 +8,8 @@
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-proposals :as proposals]
-            [yetibot.models.ai-github :as github]))
+            [yetibot.models.ai-github :as github]
+            [yetibot.util.ai-execution :as execution]))
 
 (def usage "Usage: ai [--provider <name>] [--model <model>] [--toolset <name> | --no-tools] <prompt>")
 
@@ -101,15 +102,19 @@
   "ai proposal <id> [page] # inspect a proposal and review every diff page"
   {:yb/cat #{:ai}}
   [{[_ id page] :match :as args}]
-  (safely #(if page
-             (proposals/page! id (policy/actor args) (Long/parseLong page))
-             (proposals/preview (proposals/review! id (policy/actor args))))))
+  (safely #(do
+             (execution/require-direct! args)
+             (execution/sensitive!)
+             (if page
+               (proposals/page! id (policy/actor args) (Long/parseLong page))
+               (proposals/preview (proposals/review! id (policy/actor args)))))))
 
 (defn cancel-cmd
   "ai cancel <id> # cancel your pending change proposal"
   {:yb/cat #{:ai}}
   [{[_ id] :match :as args}]
-  (safely #(name (proposals/cancel! id (policy/actor args)))))
+  (safely #(do (execution/require-direct! args)
+               (name (proposals/cancel! id (policy/actor args))))))
 
 (defn approve-cmd
   "ai approve <id> # execute exactly the reviewed change as a draft PR"
@@ -117,6 +122,8 @@
   [{[_ id] :match :as args}]
   (safely
     (fn []
+      (execution/require-direct! args)
+      (execution/sensitive!)
       (let [actor (policy/actor args)
             p (proposals/review! id actor)
             config (mcp/config)

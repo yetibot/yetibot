@@ -56,12 +56,16 @@
                            (:providers t)))
       (invalid!)))
   (when (= "github-pr" (:kind t))
-    (let [writer (get servers (:write-server t))]
+    (let [writer (get servers (:write-server t))
+          commit-reader (first (filter #(some #{"get_commit"} (:tools %))
+                                       (:servers t)))
+          ancestry-token (:github-api-token (get servers (:name commit-reader)))]
       (when-not (and (seq (:providers t)) writer
                      (every? (set (mapcat :tools (:servers t)))
                              ["get_commit" "get_file_contents"])
                      (every? (set (:tools writer))
                              ["create_branch" "push_files" "create_pull_request"])
+                     (ai/nonblank-string? ancestry-token)
                      (strings? (:base-branches t))
                      (strings? (:allowed-paths t))
                      (or (not (contains? t :denied-paths))

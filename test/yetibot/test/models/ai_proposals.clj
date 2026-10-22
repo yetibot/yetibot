@@ -89,6 +89,8 @@
                           (fn [& _] {:base-sha (apply str (repeat 40 "a"))
                                      :originals {"src/a.clj" "a\nb\n"}}))))]
     (= (render "a\r\nb\n") (render "a\nb\r\n")) => false
+    (= (render "#!/bin/sh\r\n# comment\n")
+       (render "#!/bin/sh\n# comment\r\n")) => false
     (string/includes? (string/lower-case (render "é\t\u202e\n"))
                       "\\u202e") => true
     (doseq [content ["a\r\nb\n" "a\nb\r\n" "a\r\nb\r" "a\n\n" "a" "é\t\u202e\n"]]

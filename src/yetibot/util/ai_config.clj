@@ -14,8 +14,12 @@
   (letfn [(entries [prefix m]
             (mapcat (fn [[key value]]
                       (let [part (if (keyword? key)
-                                   (-> (name key) string/upper-case
-                                       (string/replace "-" separator))
+                                   ;; Flat EDN keys historically used name verbatim.
+                                   ;; Only nested exploded paths need reconstruction.
+                                   (if (and (empty? prefix) (not (map? value)))
+                                     (name key)
+                                     (-> (name key) string/upper-case
+                                         (string/replace "-" separator)))
                                    key)
                             path (conj prefix part)]
                         (if (map? value) (entries path value)
@@ -30,7 +34,7 @@
       (update :servers
               (fn [servers]
                 (mapv #(if (map? %)
-                         (cond-> %
+                         (cond-> (lift-fields % [:github-api-token])
                            (contains? % :env) (update :env flatten-options "_")
                            (contains? % :headers)
                            (update :headers flatten-options "-"))

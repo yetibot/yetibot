@@ -2,7 +2,8 @@
   "Authorization uses adapter metadata, never the model's conversation."
   (:require [clojure.string :as string]
             [yetibot.api.ai :as ai]
-            [yetibot.models.ai-toolsets :as toolsets]))
+            [yetibot.models.ai-toolsets :as toolsets]
+            [yetibot.util.ai-execution :as execution]))
 
 (defn actor [{:keys [chat-source user event-type]}]
   (let [{:keys [adapter uuid raw-event]} chat-source
@@ -11,7 +12,11 @@
         channel (if slack? (:channel raw-event) (:channel-id raw-event))
         message (if slack? (:ts raw-event) (:id raw-event))
         thread (if slack? (:thread_ts raw-event) (:channel-id raw-event))]
-    (when (and (#{:slack :discord} adapter) uuid
+    (when (and (= chat-source (:chat-source execution/*event*))
+               (= user (:user execution/*event*))
+               (= :message (:event-type execution/*event*))
+               (#{:slack :discord} adapter) uuid
+               (= uid (:id user))
                (every? ai/nonblank-string? [uid channel message])
                (not (:yetibot? user)) (not (:bot_id raw-event))
                (not (get-in raw-event [:author :bot]))
