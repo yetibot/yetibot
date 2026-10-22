@@ -5,7 +5,8 @@
             [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
-            [yetibot.models.ai-toolsets :as toolsets]))
+            [yetibot.models.ai-toolsets :as toolsets]
+            [yetibot.models.ai-tool-policy :as policy]))
 
 (def instructions
   (str "Use the available tools when needed to answer the user's request. "
@@ -36,7 +37,7 @@
                                                  (or (:description tool) (:title tool) "")) config)
                              :parameters (clean-data schema config)}}}))
 
-(defn- parse-call [call entries seen]
+(defn- parse-call [call entries seen config]
   (let [id (:id call)
         name (get-in call [:function :name])
         arguments (get-in call [:function :arguments])]
@@ -47,7 +48,9 @@
     (let [parsed (try (json/parse-string arguments) (catch Exception _ nil))]
       (when-not (map? parsed)
         (ai/fail "The AI provider sent invalid tool arguments. No tools from that response were run."))
-      {:id id :entry (get entries name) :arguments parsed})))
+      {:id id :entry (get entries name)
+       :arguments (policy/arguments! (:toolset config)
+                                     (get-in entries [name :tool :name]) parsed)})))
 
 (defn- text-content [item]
   (case (:type item)
@@ -109,7 +112,7 @@
                            (= (count calls) (count (distinct (map :id calls)))))
               (ai/fail "The AI provider exceeded the tool-call limit or returned duplicate calls. No tools from that response were run."))
             ;; Validate the whole batch before any external effect is attempted.
-            (let [parsed (mapv #(parse-call % by-name seen) calls)
+            (let [parsed (mapv #(parse-call % by-name seen config) calls)
                   requested-actions (mapv #(vector (get-in % [:entry :name]) (:arguments %)) parsed)]
               (when (or (not= (count requested-actions) (count (distinct requested-actions)))
                         (some actions requested-actions))
@@ -125,15 +128,18 @@
             {:result/value (mcp/redact text config)
              :result/data (clean-data (assoc body :mcp {:tool-calls used}) config)}))))))
 
-(defn complete [provider model messages]
-  (let [config (toolsets/select (mcp/config) nil)]
-    (if (seq (:servers config))
-      (do
-        (when-not (ai/tool-calling? provider)
-          (ai/fail "Tool calling is disabled for this provider. Use --no-tools."))
-        (mcp/with-tools config #(run-tools provider model messages % config)))
-      ;; No tool settings or function-calling requirement for existing installs.
-      (ai/complete provider model messages))))
+(defn complete
+  ([provider model messages] (complete provider model messages {}))
+  ([provider model messages {:keys [toolset actor]}]
+   (let [config (toolsets/select (mcp/config) toolset)]
+     (policy/authorize! (:toolset config) actor provider model)
+     (if (seq (:servers config))
+       (do
+         (when-not (ai/tool-calling? provider)
+           (ai/fail "Tool calling is disabled for this provider. Use --no-tools."))
+         (mcp/with-tools config #(run-tools provider model messages % config)))
+       ;; No function-calling requirement for existing installs.
+       (ai/complete provider model messages)))))
 
 (defn server-names []
   (mapv :name (:servers (toolsets/select (mcp/config) nil))))
