@@ -9,7 +9,12 @@
   (:import [io.modelcontextprotocol.client McpClient McpSyncClient]
            [io.modelcontextprotocol.client.transport HttpClientStreamableHttpTransport
             ServerParameters StdioClientTransport]
-           [io.modelcontextprotocol.json McpJsonDefaults]
+           [io.modelcontextprotocol.json McpJsonDefaults McpJsonMapper]
+           [io.modelcontextprotocol.client.transport.customizer McpAsyncHttpClientRequestCustomizer]
+           [java.lang.reflect Proxy InvocationHandler InvocationTargetException Method]
+           [java.security AccessController PrivilegedAction]
+           [reactor.core.publisher Mono]
+           [reactor.core.scheduler Scheduler Schedulers]
            [io.modelcontextprotocol.spec McpClientTransport McpSchema$CallToolRequest McpSchema$Implementation]
            [java.net URI]
            [java.net.http HttpClient HttpClient$Redirect HttpRequest]
@@ -62,25 +67,62 @@
 (defn- string-keys [m] (into {} (map (fn [[k v]] [(name k) v]) m)))
 (defn- ignore-messages [] (reify Consumer (accept [_ _])))
 
+(defn- application-json-mapper []
+  (let [mapper (McpJsonDefaults/getMapper)]
+    ;; HttpClient callbacks have an empty access-control context once Clojail
+    ;; installs SecurityManager. Only the SDK's fixed JSON codec methods need
+    ;; application permissions; never run model code inside this boundary.
+    (Proxy/newProxyInstance
+      (.getClassLoader McpJsonMapper) (into-array Class [McpJsonMapper])
+      (reify InvocationHandler
+        (invoke [_ _ method arguments]
+          (AccessController/doPrivileged
+            (reify PrivilegedAction
+              (run [_]
+                (try (.invoke ^Method method mapper arguments)
+                     (catch InvocationTargetException e
+                       (throw (.getCause e))))))))))))
+
+(defn- http-transport [url headers timeout-ms]
+  (let [scheduler (Schedulers/newSingle "yetibot-mcp-http" true)]
+    (try
+      ;; Create the daemon worker in application context, not lazily inside a
+      ;; restricted HTTP callback. Each session owns and disposes its worker.
+      (.block (.subscribeOn (Mono/fromRunnable (fn [])) scheduler)
+              (Duration/ofMillis timeout-ms))
+      (let [uri (URI. url)
+            origin (str (.getScheme uri) "://" (.getRawAuthority uri))
+            path (if (string/blank? (.getRawPath uri)) "/" (.getRawPath uri))
+            request (doto (HttpRequest/newBuilder)
+                      (.timeout (Duration/ofMillis timeout-ms)))]
+        (doseq [[k v] (string-keys headers)] (.header request k v))
+        (let [transport
+              (-> (HttpClientStreamableHttpTransport/builder origin)
+                  (.endpoint path)
+                  (.clientBuilder (doto (HttpClient/newBuilder)
+                                    (.followRedirects HttpClient$Redirect/NEVER)
+                                    (.connectTimeout (Duration/ofMillis timeout-ms))))
+                  (.jsonMapper (application-json-mapper))
+                  (.addAsyncHttpRequestCustomizer
+                    (reify McpAsyncHttpClientRequestCustomizer
+                      (customize [_ builder _ _ _ _]
+                        ;; Follow-up requests must not inherit HttpClient's
+                        ;; restricted callback context either.
+                        (.publishOn (Mono/just builder) scheduler))))
+                  (.requestBuilder request)
+                  (.resumableStreams false)
+                  (.openConnectionOnStartup false)
+                  (.maxResponseSize 1048576)
+                  (.build))]
+          (.setExceptionHandler transport (ignore-messages))
+          {:transport transport :scheduler scheduler}))
+      (catch Throwable e
+        (.dispose scheduler)
+        (throw e)))))
+
 (defn- transport [{:keys [url command args env headers]} timeout-ms]
   (if url
-    (let [uri (URI. url)
-          origin (str (.getScheme uri) "://" (.getRawAuthority uri))
-          path (if (string/blank? (.getRawPath uri)) "/" (.getRawPath uri))
-          request (doto (HttpRequest/newBuilder) (.timeout (Duration/ofMillis timeout-ms)))]
-      (doseq [[k v] (string-keys headers)] (.header request k v))
-      (let [transport (-> (HttpClientStreamableHttpTransport/builder origin)
-                          (.endpoint path)
-                          (.clientBuilder (doto (HttpClient/newBuilder)
-                                            (.followRedirects HttpClient$Redirect/NEVER)
-                                            (.connectTimeout (Duration/ofMillis timeout-ms))))
-                          (.requestBuilder request)
-                          (.resumableStreams false)
-                          (.openConnectionOnStartup false)
-                          (.maxResponseSize 1048576)
-                          (.build))]
-        (.setExceptionHandler transport (ignore-messages))
-        transport))
+    (http-transport url headers timeout-ms)
     (let [params (-> (ServerParameters/builder command)
                      (.args ^java.util.List (or args []))
                      (.env (string-keys env))
@@ -93,28 +135,31 @@
                           (.clear (.environment builder))
                           builder)))]
       (.setStdErrorHandler transport (ignore-messages))
-      transport)))
+      {:transport transport})))
 
-(defn close! [{:keys [client transport]}]
+(defn close! [{:keys [client transport scheduler]}]
   (try
     (if client
       (.closeGracefully ^McpSyncClient client)
       (when transport
         (.block (.closeGracefully ^McpClientTransport transport) (Duration/ofSeconds 5))))
-    (catch Exception _ nil)))
+    (catch Exception _ nil)
+    (finally
+      (when scheduler (.dispose ^Scheduler scheduler)))))
 
 (defn connect! [server timeout-ms]
   (let [holder (atom nil)]
     (try
-      (let [transport (transport server timeout-ms)
-            _ (reset! holder {:transport transport})
+      (let [resources (transport server timeout-ms)
+            transport (:transport resources)
+            _ (reset! holder resources)
             client (-> (McpClient/sync transport)
                        (.requestTimeout (Duration/ofMillis timeout-ms))
                        (.initializationTimeout (Duration/ofMillis timeout-ms))
                        (.clientInfo (McpSchema$Implementation. "yetibot" "1.0"))
                        (.enableCallToolSchemaCaching false)
                        (.build))
-            session {:server server :client client}]
+            session (assoc resources :server server :client client)]
         (reset! holder session)
         (.initialize client)
         session)
