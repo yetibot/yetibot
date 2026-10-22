@@ -2,7 +2,8 @@
   (:require [clj-http.client :as client]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [yetibot.core.config :refer [get-config]])
+            [yetibot.core.config :refer [get-config]]
+            [yetibot.util.ai-config :as settings])
   (:import [java.net URI]))
 
 (defn nonblank-string? [value]
@@ -23,16 +24,25 @@
 (s/def ::url base-url?)
 (s/def ::key nonblank-string?)
 (s/def ::model nonblank-string?)
-(s/def ::provider (s/keys :req-un [::name ::url] :opt-un [::key ::model]))
+(s/def ::tool-calling #(or (boolean? %) (contains? #{"true" "false"} %)))
+(s/def ::tool-choice #{"standard" "omit"})
+(s/def ::provider
+  (s/keys :req-un [::name ::url]
+          :opt-un [::key ::model ::tool-calling ::tool-choice]))
+
+(defn tool-calling? [provider]
+  (not (contains? #{false "false"} (:tool-calling provider))))
 (s/def ::providers
   (s/and (s/coll-of ::provider :kind vector? :min-count 1)
          #(apply distinct? (map :name %))))
 (s/def ::default-provider ::name)
-(s/def ::config
+(s/def ::settings
   (s/and (s/keys :req-un [::providers] :opt-un [::default-provider])
          #(or (nil? (:default-provider %))
               (some (fn [provider] (= (:default-provider %) (:name provider)))
                     (:providers %)))))
+
+(s/def ::config #(s/valid? ::settings (settings/ai %)))
 
 (defn fail [message]
   (throw (ex-info message {:ai/error true})))
@@ -44,7 +54,7 @@
       (fail (if (= :not-found error)
               "AI is not configured. Configure ai.providers first."
               "AI configuration is invalid. Check provider names, URLs and defaults.")))
-    value))
+    (settings/ai value)))
 
 (defn provider [config provider-name]
   (let [provider-name (or provider-name (:default-provider config)
@@ -88,7 +98,9 @@
   (request client/post provider "/chat/completions"
            {:content-type :json
             :form-params (merge {:model model :messages messages}
-                                (select-keys options [:tools :tool_choice]))}))
+                                (cond-> (select-keys options [:tools :tool_choice])
+                                  (= "omit" (:tool-choice provider))
+                                  (dissoc :tool_choice)))}))
 
 (defn complete [provider model messages]
   (let [body (chat provider model messages {})

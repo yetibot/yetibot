@@ -4,7 +4,8 @@
   (:require [cheshire.core :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [yetibot.core.config :refer [get-config]])
+            [yetibot.core.config :refer [get-config]]
+            [yetibot.util.ai-config :as settings])
   (:import [io.modelcontextprotocol.client McpClient McpSyncClient]
            [io.modelcontextprotocol.client.transport HttpClientStreamableHttpTransport
             ServerParameters StdioClientTransport]
@@ -44,23 +45,26 @@
 (s/def ::args (s/coll-of string? :kind vector?))
 (s/def ::env (s/map-of (s/or :string text? :keyword keyword?) string?))
 (s/def ::headers (s/map-of (s/or :string text? :keyword keyword?) text?))
+(s/def ::github-api-token text?)
 (s/def ::tools (s/and (s/coll-of text? :kind vector? :min-count 1 :max-count 64)
                     #(apply distinct? %)))
 (s/def ::server
-  (s/and (s/keys :req-un [::name ::tools] :opt-un [::url ::command ::args ::env ::headers])
+  (s/and (s/keys :req-un [::name ::tools]
+                 :opt-un [::url ::command ::args ::env ::headers ::github-api-token])
          #(if (:url %) (not-any? (partial contains? %) [:command :args :env])
               (and (:command %) (not (contains? % :headers))))))
 (s/def ::servers (s/and (s/coll-of ::server :kind vector? :max-count 16)
                        #(or (empty? %) (apply distinct? (map :name %)))))
 (s/def ::max-tool-calls #(bounded-number? 1 20 %))
 (s/def ::timeout-ms #(bounded-number? 100 120000 %))
-(s/def ::config (s/keys :req-un [::servers] :opt-un [::max-tool-calls ::timeout-ms]))
+(s/def ::settings (s/keys :req-un [::servers] :opt-un [::max-tool-calls ::timeout-ms]))
+(s/def ::config #(s/valid? ::settings (settings/mcp %)))
 
 (defn config []
   (let [{:keys [value error]} (get-config ::config [:ai :mcp])]
     (when (and error (not= :not-found error))
       (fail "AI tool configuration is invalid. Check MCP server connections and allowed tool names."))
-    value))
+    (settings/mcp value)))
 
 (defn- string-keys [m] (into {} (map (fn [[k v]] [(name k) v]) m)))
 (defn- ignore-messages [] (reify Consumer (accept [_ _])))
@@ -211,8 +215,10 @@
 (defn redact
   "Remove configured credentials from data before it reaches the model or chat."
   [text config]
-  (let [credentials (->> (:servers config)
-                         (mapcat #(concat (vals (:env %)) (vals (:headers %))))
+  (let [credentials (->> (concat (:secrets config)
+                                 (mapcat #(concat [(:github-api-token %)]
+                                                  (vals (:env %)) (vals (:headers %)))
+                                         (concat (:servers config) (:redaction-servers config))))
                          (filter text?)
                          (mapcat #(vector % (string/replace % #"(?i)^Bearer\s+" "")))
                          (filter text?)

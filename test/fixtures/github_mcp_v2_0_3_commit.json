@@ -1,0 +1,7 @@
+{
+  "sha": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "html_url": "https://github.com/owner/repo/commit/bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  "commit": {"message": "Fix"},
+  "stats": {"additions": 1, "deletions": 1, "total": 2},
+  "files": [{"filename": "src/a.clj", "status": "modified", "additions": 1, "deletions": 1, "changes": 2, "patch": "@@ -1 +1 @@\n-old\n+new"}]
+}
