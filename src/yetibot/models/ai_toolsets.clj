@@ -58,6 +58,8 @@
   (when (= "github-pr" (:kind t))
     (let [writer (get servers (:write-server t))]
       (when-not (and (seq (:providers t)) writer
+                     (every? (set (mapcat :tools (:servers t)))
+                             ["get_commit" "get_file_contents"])
                      (every? (set (:tools writer))
                              ["create_branch" "push_files" "create_pull_request"])
                      (strings? (:base-branches t))

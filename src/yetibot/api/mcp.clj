@@ -4,7 +4,8 @@
   (:require [cheshire.core :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [yetibot.core.config :refer [get-config]])
+            [yetibot.core.config :refer [get-config]]
+            [yetibot.util.ai-config :as settings])
   (:import [io.modelcontextprotocol.client McpClient McpSyncClient]
            [io.modelcontextprotocol.client.transport HttpClientStreamableHttpTransport
             ServerParameters StdioClientTransport]
@@ -49,13 +50,14 @@
                        #(or (empty? %) (apply distinct? (map :name %)))))
 (s/def ::max-tool-calls #(bounded-number? 1 20 %))
 (s/def ::timeout-ms #(bounded-number? 100 120000 %))
-(s/def ::config (s/keys :req-un [::servers] :opt-un [::max-tool-calls ::timeout-ms]))
+(s/def ::settings (s/keys :req-un [::servers] :opt-un [::max-tool-calls ::timeout-ms]))
+(s/def ::config #(s/valid? ::settings (settings/mcp %)))
 
 (defn config []
   (let [{:keys [value error]} (get-config ::config [:ai :mcp])]
     (when (and error (not= :not-found error))
       (fail "AI tool configuration is invalid. Check MCP server connections and allowed tool names."))
-    value))
+    (settings/mcp value)))
 
 (defn- string-keys [m] (into {} (map (fn [[k v]] [(name k) v]) m)))
 (defn- ignore-messages [] (reify Consumer (accept [_ _])))

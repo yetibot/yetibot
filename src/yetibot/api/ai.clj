@@ -2,7 +2,8 @@
   (:require [clj-http.client :as client]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
-            [yetibot.core.config :refer [get-config]])
+            [yetibot.core.config :refer [get-config]]
+            [yetibot.util.ai-config :as settings])
   (:import [java.net URI]))
 
 (defn nonblank-string? [value]
@@ -35,11 +36,13 @@
   (s/and (s/coll-of ::provider :kind vector? :min-count 1)
          #(apply distinct? (map :name %))))
 (s/def ::default-provider ::name)
-(s/def ::config
+(s/def ::settings
   (s/and (s/keys :req-un [::providers] :opt-un [::default-provider])
          #(or (nil? (:default-provider %))
               (some (fn [provider] (= (:default-provider %) (:name provider)))
                     (:providers %)))))
+
+(s/def ::config #(s/valid? ::settings (settings/ai %)))
 
 (defn fail [message]
   (throw (ex-info message {:ai/error true})))
@@ -51,7 +54,7 @@
       (fail (if (= :not-found error)
               "AI is not configured. Configure ai.providers first."
               "AI configuration is invalid. Check provider names, URLs and defaults.")))
-    value))
+    (settings/ai value)))
 
 (defn provider [config provider-name]
   (let [provider-name (or provider-name (:default-provider config)

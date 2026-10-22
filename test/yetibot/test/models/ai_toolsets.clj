@@ -25,6 +25,9 @@
                    (assoc-in config [:toolsets 0 :servers 0 :tools] ["missing"])
                    (assoc-in config [:toolsets 0 :servers 0 :tools] [])
                    (assoc-in config [:toolsets 0 :kind] "unknown")
+                   (-> config
+                       (assoc-in [:servers 0 :tools] ["get_commit"])
+                       (assoc-in [:toolsets 0 :servers 0 :tools] ["get_commit"]))
                    (assoc-in config [:toolsets 0 :servers 0 :tools]
                              ["create_pull_request"])]]
     (fact (error? #(toolsets/select invalid nil)) => true)))

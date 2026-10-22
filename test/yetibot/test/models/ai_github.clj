@@ -38,7 +38,9 @@
                             :files [{:filename "src/a.clj"}]}
               "get_file_contents"
               (if (= "src" (get args "path"))
-                [{:path "src/a.clj" :name "a.clj" :type "file" :size 4}]
+                [{:path "src/a.clj" :name "a.clj" :type "file" :size 4
+                  :sha (if @pushed "3e757656cf36eca53338e520d134963a44f793f8"
+                           "3367afdbbf91e638efe983616377c60477cc6612")}]
                 {:type "file" :encoding "base64"
                  :content (.encodeToString (Base64/getEncoder)
                                            (.getBytes (if @pushed "new\n" "old\n") "UTF-8"))})
@@ -80,3 +82,21 @@
       (:status (github/execute! config proposal)) => :unknown
       (count (filter #(= "push_files" (first %)) @calls)) => 1
       (some #(= "create_pull_request" (first %)) @calls) => nil)))
+
+(fact "same-length content corruption is rejected, not approved as complete text"
+  (with-fixture (fn [name args]
+                  (when (and (= "get_file_contents" name)
+                             (= "src/a.clj" (get args "path")))
+                    {:structuredContent {:encoding "base64" :content "YmFkCg=="}}))
+    (fn [_]
+      (try (github/snapshot! config t "owner" "repo" "main" ["src/a.clj"])
+           (catch Exception _ :rejected)) => :rejected)))
+
+(fact "a branch-creation race leaves the empty branch untouched"
+  (let [read-count (atom 0)]
+    (with-fixture (fn [name _]
+                    (when (and (= name "get_commit") (= 2 (swap! read-count inc)))
+                      {:structuredContent {:sha new-sha}}))
+      (fn [calls]
+        (:status (github/execute! config proposal)) => :failed
+        (some #(= "push_files" (first %)) @calls) => nil))))

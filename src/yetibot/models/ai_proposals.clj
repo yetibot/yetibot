@@ -43,7 +43,7 @@
 
 (defn- fingerprint [p]
   (let [manifest (select-keys p [:actor :provider :model :toolset :owner :repo
-                                :base :base-sha :files :originals :title :body])
+                                :base :base-sha :files :originals :title :body :diff])
         canonical (walk/postwalk #(if (map? %) (into (sorted-map) %) %) manifest)
         bytes (.digest (MessageDigest/getInstance "SHA-256")
                        (.getBytes (json/generate-string canonical) "UTF-8"))]
@@ -61,7 +61,11 @@
                      (when (seq xs) "\n")
                      (when (and (seq xs) (not (string/ends-with? text "\n")))
                        "\\ No newline at end of file\n")))]
-    (str "--- " (if (nil? before) "/dev/null" (str "a/" path)) "\n"
+    (str "File: " path "\nUTF-8 bytes: " (utf8-size (or before ""))
+         " -> " (utf8-size after)
+         "; CRLF sequences: " (count (re-seq #"\r\n" (or before "")))
+         " -> " (count (re-seq #"\r\n" after)) "\n"
+         "--- " (if (nil? before) "/dev/null" (str "a/" path)) "\n"
          "+++ b/" path "\n@@ -1," (count old-lines) " +1,"
          (count new-lines) " @@\n"
          (lines "-" old-lines before) (lines "+" new-lines after))))
@@ -96,10 +100,11 @@
                                             (<= (utf8-size (get originals (:path %))) 20000)))) files)
                      (some #(not= (:content %) (get originals (:path %))) files))
         (ai/fail "Could not obtain complete source text, or the proposal makes no changes."))
-      (let [p (assoc p :hash (fingerprint p)
-                     :diff (apply str (map #(diff-file (:path %)
-                                                     (get originals (:path %))
-                                                     (:content %)) files)))]
+      (let [p (assoc p :diff
+                     (apply str (map #(diff-file (:path %)
+                                                 (get originals (:path %))
+                                                 (:content %)) files)))
+            p (assoc p :hash (fingerprint p))]
         (swap! proposals
                (fn [state]
                  (let [state (unexpired state)]

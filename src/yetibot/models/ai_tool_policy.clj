@@ -61,16 +61,18 @@
           (when-not (and (string? query)
                          (re-matches #"[\p{L}\p{N} _./-]{1,500}" query)
                          (not (re-find #"(?i)\b(?:OR|AND|NOT)\b" query)))
-            (ai/fail "GitHub search accepts plain terms only; repository scope is set by policy."))
+            (ai/fail (str "GitHub search accepts plain terms only; "
+                          "repository scope is set by policy.")))
           (assoc args "query"
                  (str "(" query ") "
-                      (string/join " " (map #(str "repo:" %) (:repositories t))))))
+                      (string/join " " (map #(str "repo:" %)
+                                            (:repositories t))))))
         (do
           (when-not (and (ai/nonblank-string? (get args "owner"))
                          (ai/nonblank-string? (get args "repo"))
                          (some #{(str (get args "owner") "/" (get args "repo"))}
                                (:repositories t)))
-            (ai/fail "This repository is not allowed for the selected toolset."))
+            (ai/fail "This repository is not allowed for this toolset."))
           (when (and (#{"issue_read" "pull_request_read"} tool)
                      (not (contains? #{"get" "get_comments" "get_sub_issues"
                                        "get_diff" "get_status" "get_files"

@@ -5,7 +5,8 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets])
-  (:import [java.util Arrays Base64 UUID]))
+  (:import [java.util Arrays Base64 UUID]
+           [java.security MessageDigest]))
 
 (defn- json-data [text]
   (when (string? text)
@@ -56,6 +57,12 @@
       (string? (:text resource)) (:text resource)
       :else (ai/fail "GitHub file content is missing or unsupported."))))
 
+(defn- blob-sha [text]
+  (let [bytes (.getBytes ^String text "UTF-8")
+        digest (MessageDigest/getInstance "SHA-1")]
+    (.update digest (.getBytes (str "blob " (alength bytes) \u0000) "UTF-8"))
+    (apply str (map #(format "%02x" (bit-and 255 %)) (.digest digest bytes)))))
+
 (defn- read-file! [tools owner repo sha path]
   (let [parent (string/join "/" (butlast (string/split path #"/")))
         args {"owner" owner "repo" repo "ref" sha}
@@ -68,11 +75,15 @@
     (when-let [entry (some #(when (= path (:path %)) %) entries)]
       (when-not (and (= "file" (:type entry))
                      (not (:target entry)) (not (:submodule_git_url entry))
+                     (or (nil? (:mode entry)) (= "100644" (:mode entry))
+                         (= "100755" (:mode entry)))
+                     (string? (:sha entry))
                      (number? (:size entry)) (<= 0 (:size entry) 20000))
         (ai/fail "Only complete small text files can be changed; no symlinks or submodules."))
       (let [text (file-text! (call! tools "get_file_contents" (assoc args "path" path)))]
-        (when-not (= (:size entry) (alength (.getBytes ^String text "UTF-8")))
-          (ai/fail "GitHub file content was incomplete."))
+        (when-not (and (= (:size entry) (alength (.getBytes ^String text "UTF-8")))
+                       (= (:sha entry) (blob-sha text)))
+          (ai/fail "GitHub file content was incomplete or did not match its blob identity."))
         text))))
 
 (defn snapshot-with-tools! [tools owner repo base paths]
@@ -85,6 +96,51 @@
     (mcp/with-tools selected
       #(snapshot-with-tools! % owner repo base paths))))
 
+(def writer-tools ["create_branch" "push_files" "create_pull_request"])
+
+(defn- verify-commit! [reads p branch state]
+  (let [{:keys [owner repo base-sha files originals]} p
+        commit (commit! reads owner repo branch)
+        changed (filter #(not= (:content %) (get originals (:path %))) files)
+        expected (set (map :path changed))]
+    (swap! state assoc :commit (:sha commit))
+    (when-not
+      (and (= [base-sha] (mapv :sha (:parents commit)))
+           (= expected (set (map :filename (:files commit))))
+           (every? #(= (:content %)
+                       (read-file! reads owner repo (:sha commit) (:path %)))
+                   files))
+      (ai/fail "Pushed commit differs from approval; no PR opened."))))
+
+(defn- write-approved! [reads writes p branch state]
+  (let [{:keys [owner repo base base-sha files title body]} p
+        args {"owner" owner "repo" repo}]
+    (swap! state assoc :branch branch :step :create-branch)
+    (call! writes "create_branch"
+           (assoc args "branch" branch "from_branch" base))
+    (swap! state assoc :step :verify-branch)
+    (when-not (= base-sha (:sha (commit! reads owner repo branch)))
+      (ai/fail "Created branch has a different base; no files pushed."))
+    (swap! state assoc :step :push-files)
+    (call! writes "push_files"
+           (assoc args "branch" branch "message" title
+                  "files" (mapv #(hash-map "path" (:path %)
+                                           "content" (:content %)) files)))
+    (swap! state assoc :step :verify-commit)
+    (verify-commit! reads p branch state)
+    (swap! state assoc :step :create-pr)
+    (let [result (data! (call! writes "create_pull_request"
+                               (assoc args "head" branch "base" base
+                                      "draft" true "title" title "body" body)))
+          url (:html_url result)
+          prefix (str "https://github.com/" owner "/" repo "/pull/")]
+      (when-not (and (string? url) (string/starts-with? url prefix)
+                     (re-matches
+                       #"https://github\.com/[^/]+/[^/]+/pull/[0-9]+" url))
+        (throw (ex-info "PR result could not be verified."
+                        {:unknown-outcome true})))
+      (swap! state assoc :status :succeeded :pr-url url))))
+
 (defn execute! [config p]
   (let [state (atom {:status :failed :step :validate})]
     (try
@@ -92,50 +148,26 @@
         (ai/fail "Proposal has not been claimed for execution."))
       (let [selected (toolsets/select config (get-in p [:toolset :name]))
             t (:toolset selected)
-            writer (some #(when (= (:write-server t) (:name %)) %) (:servers config))
-            {:keys [owner repo base base-sha files]} p
+            writer (some #(when (= (:write-server t) (:name %)) %)
+                         (:servers config))
+            {:keys [owner repo base base-sha]} p
             branch (str (or (:branch-prefix t) "yetibot/ai-") (UUID/randomUUID))
-            args {"owner" owner "repo" repo}]
+            write-config (assoc config :servers
+                                [(assoc writer :tools writer-tools)])]
         (when-not (= t (:toolset p))
           (ai/fail "Tool policy changed. Generate a new proposal."))
         (mcp/with-tools selected
           (fn [reads]
             (when-not (= base-sha (:sha (commit! reads owner repo base)))
               (ai/fail "Base branch changed. Generate a new proposal."))
-            (mcp/with-tools (assoc config :servers [(assoc writer :tools
-                                                          ["create_branch" "push_files" "create_pull_request"])])
-              (fn [writes]
-                (swap! state assoc :branch branch :step :create-branch)
-                (call! writes "create_branch" (assoc args "branch" branch "from_branch" base))
-                (swap! state assoc :step :verify-branch)
-                (when-not (= base-sha (:sha (commit! reads owner repo branch)))
-                  (ai/fail "Created branch does not match the approved base; no files pushed."))
-                (swap! state assoc :step :push-files)
-                (call! writes "push_files"
-                       (assoc args "branch" branch "message" (:title p)
-                              "files" (mapv #(hash-map "path" (:path %) "content" (:content %)) files)))
-                (swap! state assoc :step :verify-commit)
-                (let [commit (commit! reads owner repo branch)
-                      expected (set (map :path (filter #(not= (:content %) (get (:originals p) (:path %))) files)))]
-                  (swap! state assoc :commit (:sha commit))
-                  (when-not (and (= [base-sha] (mapv :sha (:parents commit)))
-                                 (= expected (set (map :filename (:files commit))))
-                                 (every? #(= (:content %) (read-file! reads owner repo (:sha commit) (:path %))) files))
-                    (ai/fail "Pushed commit differs from the approved manifest; no PR opened.")))
-                (swap! state assoc :step :create-pr)
-                (let [result (data! (call! writes "create_pull_request"
-                                           (assoc args "head" branch "base" base
-                                                  "draft" true "title" (:title p)
-                                                  "body" (:body p))))
-                      url (:html_url result)]
-                  (when-not (and (string? url)
-                                 (string/starts-with? url (str "https://github.com/" owner "/" repo "/pull/"))
-                                 (re-matches #"https://github\.com/[^/]+/[^/]+/pull/[0-9]+" url))
-                    (throw (ex-info "PR result could not be verified." {:unknown-outcome true})))
-                  (swap! state assoc :status :succeeded :pr-url url)))))))
+            (mcp/with-tools write-config
+              #(write-approved! reads % p branch state)))))
       @state
       (catch Exception e
-        (assoc @state :status (if (or (:unknown-outcome (ex-data e))
-                                      (#{:create-branch :push-files :create-pr} (:step @state)))
-                               :unknown :failed)
-               :message "GitHub workflow stopped. Inspect known identifiers before any new attempt; no automatic retry.")))))
+        (assoc @state
+               :status (if (or (:unknown-outcome (ex-data e))
+                               (#{:create-branch :push-files :create-pr}
+                                (:step @state)))
+                         :unknown :failed)
+               :message (str "GitHub workflow stopped. Inspect known identifiers "
+                             "before any new attempt; no automatic retry."))))))

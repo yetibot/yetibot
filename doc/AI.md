@@ -157,11 +157,11 @@ entries, not Yetibot's full environment or its other API keys.
 - Every server needs a unique `:name` and an explicit, nonempty `:tools` list.
   Only those tools are offered to the model, and calls to other names are rejected.
   Tools with the same name on different servers remain separate.
-- Allowed tools are available to everyone who can run `ai`. Connections use the
-  configured service credentials, not the chat user's identity. Start with search
-  tools and narrowly scoped keys. Adding a tool that changes data grants that
-  ability too; this release does **not** provide per-user tool permissions or an
-  interactive approval step. Use Yetibot's command access controls where needed.
+- Legacy search tools are available to everyone who can run `ai`. Named toolsets
+  can restrict access by stable user and conversation IDs. GitHub tools require
+  a GitHub toolset with explicit access policy; raw GitHub mutations cannot be
+  exposed to the model. Connections use service credentials, not the chat user's
+  GitHub identity. Use least-privilege keys and command access controls too.
 - Supports local stdio and remote **Streamable HTTP**, including JSON and SSE
   response bodies. Old standalone `/sse` transports, interactive OAuth sign-in,
   MCP prompts/resources and server-requested model sampling are not enabled.
@@ -188,6 +188,215 @@ entries, not Yetibot's full environment or its other API keys.
   are removed from returned text, and tool results are marked as untrusted data
   in the model's instructions. No connection credentials are deliberately sent
   to the AI provider.
+
+## Named toolsets: GitHub and search
+
+Toolsets separate connection settings from what a request may use. Only selected
+servers connect, so an unavailable GitHub server does not break search. Existing
+flat search configuration still works without toolsets; migrate any flat GitHub
+configuration to the access-controlled recipes below.
+
+Add the following under `:yetibot :ai`, alongside your existing provider settings.
+Replace the model, IDs, executable paths and token placeholders before use:
+
+```clojure
+{:providers
+ [{:name "local"
+   :url "http://localhost:1234/v1"
+   :model "YOUR_TOOL_CAPABLE_MODEL"
+   :tool-calling true
+   :tool-choice "standard"}]
+ :default-provider "local"
+ :mcp
+ {:default-toolset "search"
+  :max-tool-calls 6
+  :timeout-ms 30000
+  :servers
+  [{:name "web"
+    :url "https://mcp.exa.ai/mcp"
+    :tools ["web_search_exa"]}
+   {:name "github-read"
+    :command "/usr/local/bin/github-mcp-server"
+    :args ["stdio" "--read-only" "--tools" "get_file_contents,get_commit,list_branches,issue_read,pull_request_read,search_code"]
+    :env {"GITHUB_PERSONAL_ACCESS_TOKEN" "READ_TOKEN_PLACEHOLDER"}
+    :tools ["get_file_contents" "get_commit" "list_branches"
+            "issue_read" "pull_request_read" "search_code"]}
+   {:name "github-write"
+    :command "/usr/local/bin/github-mcp-server"
+    :args ["stdio" "--tools" "create_branch,push_files,create_pull_request"]
+    :env {"GITHUB_PERSONAL_ACCESS_TOKEN" "WRITE_TOKEN_PLACEHOLDER"}
+    :tools ["create_branch" "push_files" "create_pull_request"]}]
+  :toolsets
+  [{:name "search"
+    :kind "search"
+    :servers [{:name "web" :tools ["web_search_exa"]}]}
+   {:name "github-read"
+    :kind "github-read"
+    :users ["SLACK_USER_ID"]
+    :adapters ["slack"]
+    :conversations ["ADAPTER_UUID/SLACK_CHANNEL_ID"]
+    :repositories ["your-org/your-repo"]
+    :providers [{:name "local" :models ["YOUR_TOOL_CAPABLE_MODEL"]}]
+    :servers [{:name "github-read"
+               :tools ["get_file_contents" "get_commit" "list_branches"
+                       "issue_read" "pull_request_read" "search_code"]}]}
+   {:name "github-pr"
+    :kind "github-pr"
+    :users ["SLACK_USER_ID"]
+    :adapters ["slack"]
+    :conversations ["ADAPTER_UUID/SLACK_CHANNEL_ID"]
+    :repositories ["your-org/your-repo"]
+    :providers [{:name "local" :models ["YOUR_TOOL_CAPABLE_MODEL"]}]
+    :base-branches ["main"]
+    :allowed-paths ["src/" "test/" "doc/"]
+    :denied-paths ["src/credentials/"]
+    :branch-prefix "yetibot/ai-"
+    :write-server "github-write"
+    :servers [{:name "github-read"
+               :tools ["get_file_contents" "get_commit" "list_branches"
+                       "issue_read" "pull_request_read" "search_code"]}]}]}}
+```
+
+The `github-pr` toolset must include `get_commit` and `get_file_contents` for
+host-side snapshots. A `search` toolset cannot expose known GitHub tools; use a
+GitHub kind so repository and identity checks cannot be bypassed accidentally.
+All tool names must appear in their server's allowlist and its live `tools/list`.
+Only trusted administrators may configure tools: an arbitrary third-party tool
+named like a search function is not automatically safe or read-only.
+
+Configuration uses the existing environment mapping, for example:
+
+```sh
+export YETIBOT_AI_PROVIDERS_0_TOOL_CALLING=true
+export YETIBOT_AI_PROVIDERS_0_TOOL_CHOICE=standard
+export YETIBOT_AI_MCP_DEFAULT_TOOLSET=search
+export YETIBOT_AI_MCP_TOOLSETS_0_NAME=search
+export YETIBOT_AI_MCP_TOOLSETS_0_KIND=search
+export YETIBOT_AI_MCP_TOOLSETS_0_SERVERS_0_NAME=web
+export YETIBOT_AI_MCP_TOOLSETS_0_SERVERS_0_TOOLS_0=web_search_exa
+```
+
+To configure tokens through the environment, the nested server keys are
+`YETIBOT_AI_MCP_SERVERS_1_ENV_GITHUB_PERSONAL_ACCESS_TOKEN` and
+`YETIBOT_AI_MCP_SERVERS_2_ENV_GITHUB_PERSONAL_ACCESS_TOKEN` for the example above.
+Set them privately in your service configuration. EDN does **not** interpolate
+`${ENV_VAR}` or resolve VS Code `${input:...}` variables. Do not commit secrets.
+As with other settings, configuration changes and token rotation require restart.
+
+### Identity and repository policy
+
+- `:users` contains platform user IDs, never display names. `:conversations`
+  contains `<adapter UUID>/<raw channel ID>`, using Yetibot's configured adapter
+  UUID and Slack's channel ID or Discord's channel/thread ID. The adapter UUID
+  appears in Yetibot's chat-source diagnostics; it is not a workspace name.
+- `:adapters` uses `"slack"` or `"discord"`. Missing IDs, edited/bot messages,
+  reaction-triggered requests and unsupported adapters cannot authorize writes.
+  Approval also binds the current Slack thread or Discord channel/thread.
+- Private reads and review output are allowed only in configured conversations.
+  Choose private output channels for private repositories. Shared GitHub tokens
+  do not impersonate the requesting chat user.
+- GitHub search accepts plain terms, not query operators. The host adds the
+  repository qualifiers. Use structured owner/repo reads for precise inspection.
+- `:providers` lists exact provider names and model IDs. It is mandatory for
+  `github-pr`, including model overrides. Pin it to your intended local endpoint;
+  a name such as `local` is not itself a network security boundary. There is no
+  automatic fallback to a hosted model.
+- Use repository-limited fine-grained GitHub tokens. The reader needs Contents,
+  Issues and Pull requests read permissions only as required by enabled tools.
+  The writer needs Contents and Pull requests write permissions for selected
+  repositories, not workflow or administration privileges.
+
+For hosted GitHub MCP, replace each connection's command/args/env with
+`:url "https://api.githubcopilot.com/mcp/"` and a private
+`:headers {"Authorization" "Bearer YOUR_TOKEN"}`. Set `X-MCP-Readonly` to `"true"`
+on the read connection and `X-MCP-Tools` to its exact comma-separated allowlist.
+For the writer, set `X-MCP-Tools` to `create_branch,push_files,create_pull_request`
+and do not enable read-only mode. Pin a reviewed local server version when
+reproducible tool/result schemas are required. Interactive OAuth is not supported.
+
+### Local endpoint compatibility
+
+`:tool-calling false` (or the environment value `false`) rejects tool-enabled
+requests before discovery. Plain `--no-tools` requests still work.
+`:tool-choice "omit"` omits `tool_choice` for endpoints needing that compatibility
+mode; the default `"standard"` sends `auto`/`none`. Host-side budgets, call-ID
+validation and approval restrictions remain enforced in both modes.
+
+A working `/models` response does not prove tool support. Qualify the exact
+server version/model/template with a search round trip first. Ollama, vLLM,
+llama.cpp and LM Studio vary by version and model; vLLM may require its automatic
+tool-choice flag and model-specific parser/template. The bot only executes real
+OpenAI `tool_calls`, never JSON/XML/prose that merely looks like a tool call.
+
+### Usage and guarded PR workflow
+
+```text
+!ai toolsets
+!ai servers
+!ai tools github-read
+!ai --provider local --toolset search Find this week's Clojure news with sources.
+!ai --provider local --toolset github-read Explain your-org/your-repo's PR #123.
+!ai --provider local --toolset github-pr In your-org/your-repo, fix the typo in src/example.clj and propose a draft PR.
+!ai proposal <id>
+!ai proposal <id> 1
+!ai proposal <id> 2
+!ai approve <id>
+!ai cancel <id>
+```
+
+`--toolset` and `--no-tools` are mutually exclusive. Discovery commands hide
+inaccessible toolsets and writer-only connections. The configured default toolset
+is used when the flag is omitted; otherwise the first named toolset is the default.
+
+The model has GitHub read tools and a host-side `stage_changes` function, **not**
+raw GitHub mutations. Staging reads source at an identified commit and produces
+an immutable proposal. No branch, commit or PR is created during generation.
+The preview lists its repository, base, hash and expiration. Review every
+numbered page, including the exact PR body and complete file diff; approval is
+rejected until all pages have been requested by the original user.
+
+Approval never calls the model. It rechecks policy/provider identity and base
+freshness, creates an unpredictable bot branch, verifies its base SHA, pushes
+exactly the approved bytes, verifies commit ancestry/content and opens a
+**draft** PR. The PR body discloses that changes were not locally tested; that
+footer is visible in the review pages before approval.
+
+Limits and failure behavior:
+
+- At most five text-file additions/updates and 8 KiB of new UTF-8 content; model
+  tool arguments remain limited to 16,384 characters. Existing files must be
+  complete UTF-8 text no larger than 20,000 bytes. Ambiguous, truncated or
+  unsupported GitHub result shapes fail closed.
+- No deletions, binary files, symlinks, submodules, traversal, `.git`, `.env`,
+  secret/key files or workflow-file edits. Allowed/denied path entries are literal
+  prefixes, not globs. New files require an existing, complete parent directory
+  listing; directories with 1,000 or more entries are rejected conservatively.
+- Proposals containing configured credentials, including source text matching
+  a configured secret, are rejected rather than redacted into different code.
+  Avoid putting public feature-flag values into MCP `:env` where possible;
+  the existing conservative redactor treats explicitly supplied env values as
+  sensitive. Use server command arguments for public options such as read-only.
+- Approval expires after ten minutes. State is process-local, bounded to 128
+  active entries, periodically cleaned, and invalidated on restart. Run one
+  executor instance; this is not distributed or durable job coordination.
+- Each proposal is one-shot, including failed/uncertain executions. A timeout
+  stops further mutations without retry. Inspect the reported branch, commit,
+  step and GitHub state before generating another proposal. There is no automatic
+  force push, rollback, merge or cleanup of partially created branches.
+- The normal model budget counts model-selected calls (staging counts as one).
+  Host staging additionally performs at most eleven source reads. Approved
+  execution is a fixed sequence of at most sixteen tool operations, never an
+  unbounded model loop; each uses the configured MCP operation timeout.
+- Draft PRs may trigger CI. Ensure repository CI is safe for generated code
+  before enabling writes; denying workflow edits alone does not make builds safe.
+  Repository review and branch protections remain mandatory. This workflow does
+  not clone repositories, run tests or replace the existing Gemini `code` command.
+
+Enable `search` and `github-read` first. Add `github-pr` only after qualifying the
+local model and testing against a disposable repository. To disable writes,
+remove the PR toolset/writer connection and restart (pending proposals disappear).
+Watch sanitized `ai-proposal` state-transition logs for failures/unknown outcomes;
+source text, prompts and credentials are not included in these audit events.
 
 ## Thread conversations
 

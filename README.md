@@ -80,6 +80,8 @@ To quickly try out Yetibot with minimal config:
 - See the [Getting Started](doc/GETTING_STARTED.md) docs including a Docker
   Compose example
 - [Yetibot on Docker](doc/DOCKER.md) docs if you want to run it with Docker
+- [AI providers and MCP tools](doc/AI.md) for local models, configurable web
+  search, GitHub access, and reviewed draft-PR creation
 
 ## Yetibot users
 

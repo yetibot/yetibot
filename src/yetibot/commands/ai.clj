@@ -133,6 +133,7 @@
           {:result/data result
            :result/value (str "GitHub workflow: " (name (:status result))
                               (when-let [url (:pr-url result)] (str "\n" url))
+                              (when-let [step (:step result)] (str "\nStep: " (name step)))
                               (when-let [branch (:branch result)] (str "\nBranch: " branch))
                               (when-let [commit (:commit result)] (str "\nCommit: " commit))
                               (when-let [message (:message result)] (str "\n" message)))})))))

@@ -34,3 +34,10 @@
       (try (tools/complete {:tool-calling "false"} "chat" [])
            (catch Exception _ :disabled)) => :disabled
       @connected => false)))
+
+(fact "filtered connections retain redaction of unselected writer credentials"
+  (mcp/redact "do not expose writer-secret"
+              {:servers []
+               :redaction-servers [{:name "writer"
+                                    :env {"TOKEN" "writer-secret"}}]})
+  => "do not expose [redacted]")

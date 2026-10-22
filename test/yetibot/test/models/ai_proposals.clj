@@ -24,6 +24,7 @@
     (error? #(proposals/claim! (:id p) actor)) => true
     (string? (proposals/page! (:id p) actor 1)) => true
     (error? #(proposals/review! (:id p) (assoc actor :user "other"))) => true
+    (error? #(proposals/review! (:id p) (assoc actor :thread "other"))) => true
     (proposals/cancel! (:id p) actor) => :cancelled
     (error? #(proposals/claim! (:id p) actor)) => true))
 
@@ -49,3 +50,9 @@
                                             (catch Exception _ nil)))))]
     (count (filter some? (map deref attempts))) => 1
     (:status (proposals/review! (:id p) actor)) => :executing))
+
+(fact "review pages expose line-ending-only changes rather than hiding them"
+  (let [p (proposals/stage! pr-toolset actor {:name "local"} "chat" args
+                            (fn [& _] {:base-sha (apply str (repeat 40 "a"))
+                                       :originals {"src/a.clj" "new\r\n"}}))]
+    (boolean (re-find #"CRLF sequences: 1 -> 0" (:diff p))) => true))
