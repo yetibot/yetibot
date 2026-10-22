@@ -73,8 +73,8 @@
             => {"initialize" 1 "notifications/initialized" 1 "tools/list" 2 "tools/call" 1}))))))
 
 (fact "a local stdio MCP server receives only explicit keys and the SDK's safe environment"
-  (mcp/with-tools {:servers [{:name "local" :command "python3"
-                             :args [(.getAbsolutePath (io/file "test/fixtures/mcp_server.py"))]
+  (mcp/with-tools {:servers [{:name "local" :command "node"
+                             :args [(.getAbsolutePath (io/file "test/fixtures/mcp_server.mjs"))]
                              :env {"MCP_TEST_KEY" "fake-mcp-key"} :tools ["web_search"]}]}
     (fn [tools]
       (let [result (mcp/call-tool (:session (first tools)) "web_search" {"query" "current news"})

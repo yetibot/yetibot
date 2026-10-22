@@ -16,5 +16,6 @@
                     "clojure.main" "test/fixtures/mcp_security.clj")]
       (when-not (zero? exit)
         (println "MCP SecurityManager regression failed:" (subs err 0 (min 4000 (count err)))))
-      exit => 0
-      (string/includes? out "MCP_SECURITY_OK") => true)))
+      (fact
+        exit => 0
+        (string/includes? out "MCP_SECURITY_OK") => true))))

@@ -96,6 +96,13 @@ reviewer's relocated-CRLF shebang example. Five remaining findings are fixed:
 Validation: `lein midje :all` and the CI-equivalent coverage command above both
 pass 637 checks on JDK 17. Live GitHub/model qualification is still not claimed.
 
+After the fixes were pushed, the prerequisite PR #1240 was found merged via
+`1f9fbbd`; GitHub had retargeted this PR to master and conflicts prevented CI.
+The updated master was merged without rewriting branch history. Its Node stdio
+fixture replaces the removed Python fixture, and its sandbox regression form is
+retained. The feature/security changes remain intact; both validation commands
+still pass 637 checks against the integrated base.
+
 ## Remaining qualification
 
 A deployed local inference server/model and GitHub/search credentials were not supplied for live smoke testing.
