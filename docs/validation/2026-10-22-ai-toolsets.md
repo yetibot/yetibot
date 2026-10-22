@@ -10,17 +10,20 @@ No changes were made to the user's `.env`, production configuration, deployed se
 
 ## Verification
 
-- **AI/MCP regression and integration tests:** 335 checks pass, covering all AI API, capability, environment, MCP transport, toolset/policy/proposal/GitHub model, context, command, and integration namespaces.
-- **Full suite:** 520 checks pass; three fail in the unchanged `test/yetibot/test/commands/clojure.clj` at its Clojail evaluations (lines 23, 29, 33). The available JDK 25 reports `Setting a Security Manager is not supported`. Neither the Clojail implementation nor its tests differ from the baseline. These failures were not suppressed or modified.
+- **Full JDK 17 suite:** all 545 checks pass, including Clojail's positive and forbidden-operation checks and the new proposal/transport regressions.
+- **CI-equivalent coverage:** `CLOVERAGE_VERSION=1.1.2 lein with-profile +test cloverage --codecov --runner midje` passes all 545 checks on JDK 17.
+- **Sandbox/transport regression:** a fresh JDK 17 subprocess installs Clojail's SecurityManager before loading MCP, then verifies real JSON/SSE exchanges and worker cleanup on both successful sessions and failed initialization. The same SecurityManager remains installed and forbidden sandbox operations remain denied. This regression initially failed before the transport fix.
+- **Runtime qualification:** earlier JDK 25 runs failed three unchanged Clojail checks because that JDK removed SecurityManager support; no tests were suppressed or weakened. Use JDK 17 for the full legacy sandbox suite. The optional CI JDK pin was omitted at the operator's request, so the GitHub workflow is unchanged.
 - **Compilation check:** `lein check` reached every namespace, including all new AI namespaces, but did not exit within 120 seconds. It was terminated by the command timeout. Legacy reflection/Unsafe warnings remain; do not treat this as a successful completed check.
 - **Whitespace check:** `git diff --check` passes.
-- **Runtime used:** Homebrew OpenJDK through per-command `JAVA_HOME` and PATH overrides; no global Java configuration was changed.
+- **Runtime used:** a temporary Temurin 17 installation through per-command `JAVA_HOME` and PATH overrides; no global Java configuration was changed.
 
 The focused command is:
 
 ```sh
 lein test yetibot.test.api.ai-environment yetibot.test.api.ai \
   yetibot.test.api.ai-capabilities yetibot.test.api.mcp \
+  yetibot.test.api.mcp-security \
   yetibot.test.models.ai-toolsets yetibot.test.models.ai-tool-policy \
   yetibot.test.models.ai-proposals yetibot.test.models.ai-github \
   yetibot.test.models.ai-tools yetibot.test.models.ai-context \
@@ -43,8 +46,15 @@ lein test yetibot.test.api.ai-environment yetibot.test.api.ai \
 Simplification and correctness/security/failure-path review were performed inline.
 The executor was split into source verification, approved writes, and connection/orchestration helpers without changing its tested operation order.
 The pass strengthened source-byte/blob matching, mutation uncertainty cutoffs, credential redaction across filtered connections, exact PR-body review, and review-text hash binding.
-No independent subagents or cross-model review were launched: delegation was not requested.
-A dedicated multi-agent code review was therefore not run; independent review is still recommended before merge for this credentialed-write feature.
+After the operator requested independent review, a fresh-context native reviewer examined PR #1241 at `02b991b` and found two P1 issues and one P2 issue:
+
+- Cleanup could remove a proposal between review and update, allowing a partial record to be recreated. Page updates and approval transitions now validate inside atomic CAS updates; deterministic interleaving tests prove later cleanup/staging remain usable.
+- The original diff presentation discarded per-line CR/LF positions. Required review text now uses lossless JSON-escaped strings for lines, delimiters and PR metadata; reconstruction tests cover relocated CRLF, lone CR, trailing blanks, missing final newline and Unicode. Invalid UTF-8 strings are rejected.
+- Sensitive-path checks omitted common SSH key basenames. RSA/DSA/ECDSA/Ed25519/XMSS families, nested paths and case variants are now covered.
+
+All three findings were reproduced by failing regressions before correction. The same read-only reviewer independently checked the fixes and transport context/lifecycle changes and returned no remaining blockers. Initial review run: `33451105-d875-4cdd-8baf-74fc5b636984`; follow-up: `20cb3ff2-a559-4641-8ef4-70ab9e1afd90`. No external CLI fallback or cross-model review was used.
+
+The CI investigation separately reproduced a JDK 17 failure when Clojail initialized SecurityManager before the Java HTTP callbacks: an empty callback access-control context denied JSON reflection and follow-up HTTP requests. MCP now confines application permissions to the fixed SDK JSON codec and schedules request publication on a session-owned application-context daemon worker. Workers are disposed on success and failure; sandbox policy and protected operations are unchanged. The focused regression prevents suite load order from hiding this failure.
 
 ## Remaining qualification
 
