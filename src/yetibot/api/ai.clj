@@ -23,7 +23,14 @@
 (s/def ::url base-url?)
 (s/def ::key nonblank-string?)
 (s/def ::model nonblank-string?)
-(s/def ::provider (s/keys :req-un [::name ::url] :opt-un [::key ::model]))
+(s/def ::tool-calling #(or (boolean? %) (contains? #{"true" "false"} %)))
+(s/def ::tool-choice #{"standard" "omit"})
+(s/def ::provider
+  (s/keys :req-un [::name ::url]
+          :opt-un [::key ::model ::tool-calling ::tool-choice]))
+
+(defn tool-calling? [provider]
+  (not (contains? #{false "false"} (:tool-calling provider))))
 (s/def ::providers
   (s/and (s/coll-of ::provider :kind vector? :min-count 1)
          #(apply distinct? (map :name %))))
@@ -88,7 +95,9 @@
   (request client/post provider "/chat/completions"
            {:content-type :json
             :form-params (merge {:model model :messages messages}
-                                (select-keys options [:tools :tool_choice]))}))
+                                (cond-> (select-keys options [:tools :tool_choice])
+                                  (= "omit" (:tool-choice provider))
+                                  (dissoc :tool_choice)))}))
 
 (defn complete [provider model messages]
   (let [body (chat provider model messages {})

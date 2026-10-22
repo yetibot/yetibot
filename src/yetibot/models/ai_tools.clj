@@ -128,7 +128,10 @@
 (defn complete [provider model messages]
   (let [config (toolsets/select (mcp/config) nil)]
     (if (seq (:servers config))
-      (mcp/with-tools config #(run-tools provider model messages % config))
+      (do
+        (when-not (ai/tool-calling? provider)
+          (ai/fail "Tool calling is disabled for this provider. Use --no-tools."))
+        (mcp/with-tools config #(run-tools provider model messages % config)))
       ;; No tool settings or function-calling requirement for existing installs.
       (ai/complete provider model messages))))
 
