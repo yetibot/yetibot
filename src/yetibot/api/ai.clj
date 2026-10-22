@@ -82,10 +82,16 @@
       (fail (str "AI provider " (:name provider) " returned an invalid model list.")))
     (vec (sort (distinct (map :id data))))))
 
+(defn chat
+  "Return a chat response, optionally offering OpenAI-compatible function tools."
+  [provider model messages options]
+  (request client/post provider "/chat/completions"
+           {:content-type :json
+            :form-params (merge {:model model :messages messages}
+                                (select-keys options [:tools :tool_choice]))}))
+
 (defn complete [provider model messages]
-  (let [body (request client/post provider "/chat/completions"
-                      {:content-type :json
-                       :form-params {:model model :messages messages}})
+  (let [body (chat provider model messages {})
         text (get-in body [:choices 0 :message :content])]
     (when-not (nonblank-string? text)
       (fail (str "AI provider " (:name provider) " returned no text response.")))

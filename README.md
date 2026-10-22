@@ -135,7 +135,7 @@ There are a few ways to run Yetibot:
 
 See [Configuration docs](https://yetibot.com/ops-guide#configuration).
 
-For the `ai` command, see [AI providers, models and thread conversations](doc/AI.md).
+For the `ai` command, see [AI providers, web search, MCP tools and threads](doc/AI.md).
 
 ## Usage
 
