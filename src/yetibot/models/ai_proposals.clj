@@ -17,8 +17,10 @@
 (defn now [] (System/currentTimeMillis))
 
 (defn- unexpired [state]
-  (into {} (filter #(or (= :executing (:status (val %)))
-                        (> (:expires-at (val %)) (now))) state)))
+  (into {} (filter #(let [{:keys [status expires-at]} (val %)]
+                      (and (number? expires-at)
+                           (or (= :executing status) (> expires-at (now)))))
+                   state)))
 
 (defn cleanup! [] (swap! proposals unexpired))
 
@@ -33,13 +35,19 @@
        (not (string/starts-with? path "/"))
        (every? #(not (contains? #{"" "." ".." ".git" ".env"} %))
                (string/split path #"/" -1))
-       (not (re-find #"(?i)(?:^|/)(?:\.env[^/]*|credentials[^/]*|secrets?[^/]*|id_rsa[^/]*)(?:/|$)|\.(?:pem|key)$" path))
+       (not (re-find #"(?i)(?:^|/)(?:\.env[^/]*|credentials[^/]*|secrets?[^/]*|id_(?:rsa|dsa|ecdsa|ed25519|xmss)[^/]*)(?:/|$)|\.(?:pem|key)$" path))
        (not (string/starts-with? path ".github/workflows/"))
        (some #(string/starts-with? path %) (:allowed-paths t))
        (not-any? #(string/starts-with? path %) (:denied-paths t))))
 
 (defn- utf8-size [s] (alength (.getBytes ^String s "UTF-8")))
-(defn- text? [s] (and (string? s) (not (re-find #"[\x00-\x08\x0b\x0c\x0e-\x1f]" s))))
+(defn- text? [s]
+  (and (string? s)
+       (not (re-find #"[\x00-\x08\x0b\x0c\x0e-\x1f]" s))
+       (= s (String. (.getBytes ^String s "UTF-8") "UTF-8"))))
+
+(defn- escaped-text [s]
+  (json/generate-string s {:escape-non-ascii true}))
 
 (defn- fingerprint [p]
   (let [manifest (select-keys p [:actor :provider :model :toolset :owner :repo
@@ -54,10 +62,12 @@
                                      :hash :status :branch :commit :pr-url])))
 
 (defn- diff-file [path before after]
-  (let [old-lines (if (nil? before) [] (string/split-lines before))
-        new-lines (string/split-lines after)
+  (let [tokens #(filter seq (re-seq #"[^\r\n]*(?:\r\n|\r|\n|$)" (or % "")))
+        old-lines (tokens before)
+        new-lines (tokens after)
         lines (fn [prefix xs text]
-                (str (string/join "\n" (map #(str prefix %) xs))
+                (str (string/join "\n"
+                                  (map #(str prefix (escaped-text %)) xs))
                      (when (seq xs) "\n")
                      (when (and (seq xs) (not (string/ends-with? text "\n")))
                        "\\ No newline at end of file\n")))]
@@ -65,6 +75,7 @@
          " -> " (utf8-size after)
          "; CRLF sequences: " (count (re-seq #"\r\n" (or before "")))
          " -> " (count (re-seq #"\r\n" after)) "\n"
+         "Lines are JSON strings including exact line terminators.\n"
          "--- " (if (nil? before) "/dev/null" (str "a/" path)) "\n"
          "+++ b/" path "\n@@ -1," (count old-lines) " +1,"
          (count new-lines) " @@\n"
@@ -79,7 +90,7 @@
                    (every? #{"owner" "repo" "base" "title" "body" "files"} (keys args))
                    (some #{(str owner "/" repo)} (:repositories t))
                    (some #{base} (:base-branches t))
-                   (ai/nonblank-string? title) (<= (count title) 120)
+                   (ai/nonblank-string? title) (text? title) (<= (count title) 120)
                    (text? body) (<= (count body) 2000)
                    (<= 1 (count files) 5)
                    (= (count files) (count (distinct (map :path files))))
@@ -114,19 +125,23 @@
         (audit! p)
         p))))
 
+(defn- checked-proposal! [p actor]
+  (when-not (and p actor (= actor (:actor p)))
+    (ai/fail "Proposal is unavailable in this user/conversation context."))
+  (when (<= (:expires-at p) (now))
+    (ai/fail "Proposal expired. Generate a new proposal."))
+  (when-not (= (:hash p) (fingerprint p))
+    (ai/fail "Proposal integrity check failed."))
+  p)
+
 (defn review! [id actor]
-  (let [p (get @proposals id)]
-    (when-not (and p actor (= actor (:actor p)))
-      (ai/fail "Proposal is unavailable in this user/conversation context."))
-    (when (<= (:expires-at p) (now)) (ai/fail "Proposal expired. Generate a new proposal."))
-    (when-not (= (:hash p) (fingerprint p))
-      (ai/fail "Proposal integrity check failed."))
-    p))
+  (checked-proposal! (get @proposals id) actor))
 
 (def page-size 1200)
 
 (defn- review-text [p]
-  (str "Title: " (:title p) "\nPR body:\n" (:body p)
+  (str "Title (JSON string): " (escaped-text (:title p))
+       "\nPR body (JSON string): " (escaped-text (:body p))
        "\n\nFile diff:\n" (:diff p)))
 
 (defn page-count [p]
@@ -148,24 +163,31 @@
           pages (page-count p)]
       (when-not (and (integer? page) (<= 1 page pages))
         (ai/fail "Invalid proposal page number."))
-      (swap! proposals update-in [id :reviewed-pages] (fnil conj #{}) page)
+      ;; Cleanup may remove this ID after review!. Revalidate inside the CAS
+      ;; update so an expired/missing entry is never recreated.
+      (swap! proposals
+             (fn [state]
+               (let [current (checked-proposal! (get state id) actor)]
+                 (assoc state id
+                        (update current :reviewed-pages (fnil conj #{}) page)))))
       (str "Proposal " id " diff page " page "/" pages "\n"
            (subs (review-text p) (* (dec page) page-size)
                  (min (count (review-text p)) (* page page-size)))))))
 
 (defn- transition! [id actor target]
-  ;; Lock serializes the read/check/transition, not any network operations.
-  (locking proposals
-    (let [p (review! id actor)]
-      (when-not (= :pending (:status p))
-        (ai/fail "Proposal is no longer pending; it cannot be approved again."))
-      (when (and (= :executing target)
-                 (not= (set (range 1 (inc (page-count p)))) (:reviewed-pages p)))
-        (ai/fail "Review every diff page with ai proposal before approval."))
-      (let [next (assoc p :status target)]
-        (swap! proposals assoc id next)
-        (audit! next)
-        next))))
+  (let [state (swap! proposals
+                     (fn [state]
+                       (let [p (checked-proposal! (get state id) actor)]
+                         (when-not (= :pending (:status p))
+                           (ai/fail "Proposal is no longer pending."))
+                         (when (and (= :executing target)
+                                    (not= (set (range 1 (inc (page-count p))))
+                                          (:reviewed-pages p)))
+                           (ai/fail "Review every diff page before approval."))
+                         (assoc state id (assoc p :status target)))))
+        next (get state id)]
+    (audit! next)
+    next))
 
 (defn claim! [id actor] (transition! id actor :executing))
 (defn cancel! [id actor]

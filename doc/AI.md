@@ -353,7 +353,11 @@ raw GitHub mutations. Staging reads source at an identified commit and produces
 an immutable proposal. No branch, commit or PR is created during generation.
 The preview lists its repository, base, hash and expiration. Review every
 numbered page, including the exact PR body and complete file diff; approval is
-rejected until all pages have been requested by the original user.
+rejected until all pages have been requested by the original user. Each added or
+removed diff line is a JSON-escaped string including its line terminator: `\r\n`,
+`\n`, `\r`, tabs and non-ASCII characters remain distinguishable. Concatenating
+those decoded strings reconstructs the original/proposed text exactly, including
+trailing blank lines or a missing final newline.
 
 Approval never calls the model. It rechecks policy/provider identity and base
 freshness, creates an unpredictable bot branch, verifies its base SHA, pushes
