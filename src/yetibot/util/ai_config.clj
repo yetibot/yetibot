@@ -52,4 +52,6 @@
     (cond-> value
       (vector? (:providers value))
       (update :providers
-              #(mapv (fn [p] (lift-fields p [:tool-calling :tool-choice])) %)))))
+              #(mapv (fn [p]
+                       (lift-fields p [:tool-calling :tool-choice
+                                       :native-tools :max-turns])) %)))))
