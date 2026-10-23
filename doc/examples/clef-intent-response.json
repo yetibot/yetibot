@@ -1,0 +1,27 @@
+{
+  "success": true,
+  "errors": [],
+  "result": {
+    "model": "clef",
+    "answers": {
+      "intent": {
+        "type": "choice",
+        "choice": "code_change",
+        "probabilities": {
+          "code_change": 0.9568,
+          "answer": 0.026,
+          "clarify": 0.0172
+        },
+        "confidence": 0.8746
+      },
+      "explicit_change": {
+        "type": "noul",
+        "noul": 0.951
+      }
+    },
+    "usage": {
+      "input_tokens": 369,
+      "output_tokens": 0
+    }
+  }
+}

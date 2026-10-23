@@ -193,6 +193,29 @@
         (some #(contains? (set write-tools) (first %)) @calls) => nil
         (string/includes? (pr-str result) "fake-ancestry-token") => false))))
 
+(facts "automatic requests use a stable branch and do not push when it already exists"
+  (let [key (apply str (repeat 64 "d"))
+        p (assoc proposal :execution :automatic :request-key key)
+        branches (atom #{}) pushes (atom 0) outcomes (atom [])]
+    (dotimes [_ 2]
+      (with-fixture
+        (fn [name args]
+          (cond
+            (= "create_branch" name)
+            (if (contains? @branches (get args "branch"))
+              {:isError true}
+              (do (swap! branches conj (get args "branch")) nil))
+            (= "push_files" name) (do (swap! pushes inc) nil)))
+        (fn [_] (swap! outcomes conj (:status (github/execute! config p))))))
+    (fact @outcomes => [:succeeded :unknown]
+          @pushes => 1
+          @branches => #{(str "yetibot/ai-request-" key)}))
+  (with-fixture (fn [& _] nil)
+    (fn [calls]
+      (fact (:status (github/execute! config (assoc proposal :execution :automatic :request-key "untrusted")))
+            => :failed
+            @calls => []))))
+
 (fact "a branch-creation race leaves the empty branch untouched"
   (let [read-count (atom 0)]
     (with-fixture (fn [name _]

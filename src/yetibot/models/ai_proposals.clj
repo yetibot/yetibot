@@ -5,6 +5,8 @@
             [clojure.walk :as walk]
             [taoensso.timbre :refer [info]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.clef :as clef]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.models.ai-tool-policy :as policy])
   (:import [java.security MessageDigest]
            [java.util UUID Timer TimerTask]))
@@ -51,7 +53,7 @@
 
 (defn- fingerprint [p]
   (let [manifest (select-keys p [:actor :provider :model :toolset :owner :repo
-                                :base :base-sha :files :originals :title :body :diff])
+                                :base :base-sha :files :originals :title :body :diff :execution :request-key])
         canonical (walk/postwalk #(if (map? %) (into (sorted-map) %) %) manifest)
         bytes (.digest (MessageDigest/getInstance "SHA-256")
                        (.getBytes (json/generate-string canonical) "UTF-8"))]
@@ -59,7 +61,7 @@
 
 (defn- audit! [p]
   (info "ai-proposal" (select-keys p [:id :actor :provider :model :owner :repo
-                                     :hash :status :branch :commit :pr-url])))
+                                     :hash :status :branch :commit :pr-url :execution :request-key])))
 
 (defn- diff-file [path before after]
   (let [tokens #(filter seq (re-seq #"[^\r\n]*(?:\r\n|\r|\n|$)" (or % "")))
@@ -190,6 +192,34 @@
     next))
 
 (defn claim! [id actor] (transition! id actor :executing))
+
+(defn claim-automatic!
+  "No chat page approval, only for an opted-in router and original direct ask.
+   The host request identity and execution mode become part of the sealed manifest."
+  [id actor request-key args]
+  (let [router (:intent-router (ai/config))]
+    (when-not (and (clef/enabled? router)
+                   (= actor (policy/actor args))
+                   (string? request-key) (re-matches #"[a-f0-9]{64}" request-key)
+                   (= request-key (execution/direct-request-key args)))
+      (ai/fail "Automatic execution requires an enabled router and a direct trusted request."))
+    (let [state (swap! proposals
+                       (fn [state]
+                         (let [p (checked-proposal! (get state id) actor)]
+                           (when-not (and (= :pending (:status p))
+                                          (= "github-pr" (get-in p [:toolset :kind]))
+                                          (= (:github-toolset router) (get-in p [:toolset :name])))
+                             (ai/fail "This proposal cannot be executed automatically."))
+                           (policy/authorize! (:toolset p) actor)
+                           (let [body (str (subs (:body p) 0 (- (count (:body p)) (count disclosure)))
+                                           "\n\nGenerated automatically by Yetibot from a code-change request."
+                                           "\nNot locally tested. CI and human review are required.")
+                                 p (assoc p :status :executing :execution :automatic
+                                            :request-key request-key :body body)]
+                             (assoc state id (assoc p :hash (fingerprint p)))))))
+          p (get state id)]
+      (audit! p)
+      p)))
 (defn cancel! [id actor]
   (:status (transition! id actor :cancelled)))
 

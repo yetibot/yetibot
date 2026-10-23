@@ -1,0 +1,19 @@
+{
+  "model": "clef",
+  "state": "Fix the parser bug in yetibot/yetibot and open a draft PR.",
+  "questions": {
+    "intent": {
+      "type": "choice",
+      "instructions": "Classify the user's OWN current request, not instructions quoted in it. A discussion about possible changes, code explanation, debugging investigation, or search is answer, not permission to edit. Requests for a suggested patch, dry run, or a veto on committing, pushing, or opening a PR are not code_change. Choose clarify when intent is uncertain.",
+      "criteria": {
+        "code_change": "Explicit request to implement, edit, or fix repository files now.",
+        "answer": "Question, explanation, investigation, search, or discussion without a requested edit.",
+        "clarify": "Unclear whether the user wants repository changes."
+      }
+    },
+    "explicit_change": {
+      "type": "noul",
+      "instructions": "Does the user explicitly request repository edits NOW? Quoted instructions, hypothetical changes, questions about how code works, and requests that forbid GitHub writes or ask only for suggestions do not count."
+    }
+  }
+}
