@@ -48,8 +48,10 @@
                                        :write-server :branch-prefix])) %)))))
 
 (defn ai [value]
-  (let [value (lift-fields value [:default-provider])]
+  (let [value (lift-fields value [:default-provider :intent-router])]
     (cond-> value
+      (map? (:intent-router value))
+      (update :intent-router lift-fields [:account-id :key-file :min-probability :github-toolset])
       (vector? (:providers value))
       (update :providers
               #(mapv (fn [p]

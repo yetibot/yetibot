@@ -52,6 +52,19 @@
   => "[redacted] and [redacted] and [redacted]"
   (mcp/redact "answer" {:servers [(assoc server :headers {"Authorization" "Bearer "})]}) => "answer")
 
+(facts "public GitHub transport controls are not mistaken for credentials"
+  (let [s (assoc server :tools ["get_commit"]
+                        :headers {"Authorization" "Bearer private-token"
+                                  "X-MCP-Readonly" "true" "X-MCP-Tools" "get_commit"})]
+    (fact (mcp/redact "true get_commit private-token" {:servers [s]})
+          => "true get_commit [redacted]"
+          (mcp/redact "private-token" {:servers [(assoc s :headers {"X-MCP-Readonly" "private-token"})]})
+          => "[redacted]"
+          (mcp/redact "private-token" {:servers [(assoc s :headers {"X-MCP-Tools" "private-token"})]})
+          => "[redacted]"
+          (mcp/redact "true" {:servers [(assoc s :github-api-token "true")]})
+          => "[redacted]")))
+
 (facts "HTTP MCP supports JSON and SSE responses, pagination, allowlists and cleanup"
   (doseq [sse [false true]]
     (let [requests (atom [])]

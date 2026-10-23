@@ -190,9 +190,9 @@
 
 (defn complete
   ([provider model messages] (complete provider model messages {}))
-  ([provider model messages {:keys [toolset actor]}]
+  ([provider model messages {:keys [toolset actor additional-secrets]}]
    (let [config (assoc (toolsets/select (mcp/config) toolset)
-                       :staged (atom nil) :secrets (keep identity [(:key provider)]))]
+                       :staged (atom nil) :secrets (keep identity (cons (:key provider) additional-secrets)))]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (if (or (seq (:servers config))

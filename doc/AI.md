@@ -525,6 +525,102 @@ For the writer, set `X-MCP-Tools` to `create_branch,push_files,create_pull_reque
 and do not enable read-only mode. Pin a reviewed local server version when
 reproducible tool/result schemas are required. Interactive OAuth is not supported.
 
+### Clef intent routing and automatic draft PRs (opt-in)
+
+By default, GitHub changes still require chat proposal review/approval. To replace
+that interaction with **automatic draft PRs for explicit change requests**, add
+this sibling of `:providers` and `:mcp` under `:yetibot :ai`:
+
+```clojure
+:intent-router
+{:enabled false                  ; enable only after reviewing the write policy
+ :account-id "YOUR_32_HEX_CLOUDFLARE_ACCOUNT_ID"
+ :key-file "/root/yetibot/config/.clef-api-token"
+ :github-toolset "github-pr"
+ :min-probability 0.95}
+```
+
+Use a Cloudflare Workers AI token authorized for inference in that account. Keep
+the raw replacement token in the server-side file (mode 0600), not in Git, command
+arguments, chat or example payloads. A token pasted into chat must be revoked.
+The client reads the file on each request, so token-file rotation does not require
+a restart; changing router settings does. The token-verification endpoint
+`/user/tokens/verify` does not perform classification. Inference uses the fixed
+HTTPS endpoint `/accounts/<account-id>/ai/run/@cf/cloudflare/clef`;
+redirects and automatic HTTP retries are disabled.
+
+Only a trusted, standalone `!ai` message from a user/channel/provider/model
+already authorized by the named GitHub PR toolset is eligible:
+
+| Request | Behavior |
+| --- | --- |
+| `!ai In your-org/your-repo, fix the typo in src/example.clj` | Clef classifies; the existing generation model reads/stages, then the host pushes verified bytes and opens a draft PR |
+| `!ai Explain how this parser works` | Normal answer using the existing default tools; no automatic PR |
+| Unclear change intent, no approved `owner/repo`, or multiple approved repositories | Clarification, no writes |
+| `!ai --toolset github-pr ...` | Existing manual proposal/review/approve workflow |
+| `!ai --no-tools ...` | Bypass routing and tools |
+| `!grok ...`, pipelines, aliases, observers, generated commands or copied `/api` identity | Never start automatic GitHub writes |
+
+Clef receives **only the latest request text**, not retrieved repository files,
+thread history or connection settings. Code pasted into that request is therefore
+sent to Cloudflare too. Requests containing recognized/configured credentials
+are rejected; known credentials are also redacted from generation context and
+rejected in staged files. Clef does not generate code or execute tools. Generation
+uses the selected existing provider, which must match the toolset's exact
+provider/model policy; pin that policy to the intended local endpoint.
+
+Writes require both the chosen `code_change` probability and the separate
+`explicit_change.noul` score to meet `:min-probability` (default 0.95, minimum
+0.9). Clef's `confidence` is a different distribution-derived score, not the
+option probability. Valid read-only `answer` decisions do not need a write
+threshold. Malformed responses, outages and low-confidence change decisions
+never fall through into mutations. **Scores are routing hints, not authorization
+or a guarantee against misclassification.**
+
+There are no user-facing proposal pages or `!ai approve` in automatic mode.
+An internal immutable manifest still captures exact files, source identities,
+policy and request identity. All existing repository/base/path/size/secret and
+post-push verification checks remain. No additional model turn edits the manifest
+during execution. Only branch creation, file push and **draft** PR creation are
+available; never automatic merging. The PR body discloses automatic generation
+and that changes were not locally tested.
+
+**Enabling this mode authorizes pre-review pushes.** Draft PRs can trigger CI;
+GitHub review happens after the push, not before it. Use trusted users/private
+channels and small approved repository scopes. No tests or arbitrary shell
+commands are run by this MCP-only workflow.
+
+Duplicate deliveries share bounded, process-local receipts (128 code-work entries
+plus up to 128 read-only decisions, with a 24-hour completed-receipt TTL). Older
+read-only decisions may be evicted; questions do not consume code-work capacity. Automatic branch names derive from the platform message
+identity. After a restart, an existing branch causes branch creation to stop
+rather than repush/reopen; receipts themselves do not survive restart. This is
+not a durable exactly-once job queue. Do not delete an uncertain branch and
+blindly replay the request. Failures/unknown mutation outcomes are not retried
+automatically; inspect any reported branch/commit first.
+
+#### Clef request and response examples
+
+- [Request payload](examples/clef-intent-request.json)
+- [Sanitized response sample](examples/clef-intent-response.json): captured from a
+  live classifier-only qualification; scores vary, and this did not perform any
+  repository writes.
+- [Official model/API schema](https://developers.cloudflare.com/workers-ai/models/clef/)
+
+To reproduce without placing the token in process arguments or shell history:
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=YOUR_ACCOUNT_ID
+{
+  printf 'Authorization: Bearer '
+  tr -d '\r\n' < "$HOME/yetibot/config/.clef-api-token"
+  printf '\n'
+} | curl --silent --show-error --fail-with-body \
+  "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/ai/run/@cf/cloudflare/clef" \
+  --header @- --header 'Content-Type: application/json' \
+  --data-binary @doc/examples/clef-intent-request.json
+```
+
 ### Local endpoint compatibility
 
 `:tool-calling false` (or the environment value `false`) rejects tool-enabled
@@ -539,7 +635,7 @@ llama.cpp and LM Studio vary by version and model; vLLM may require its automati
 tool-choice flag and model-specific parser/template. The bot only executes real
 OpenAI `tool_calls`, never JSON/XML/prose that merely looks like a tool call.
 
-### Usage and guarded PR workflow
+### Usage and manual guarded PR workflow
 
 ```text
 !ai toolsets
@@ -559,6 +655,8 @@ OpenAI `tool_calls`, never JSON/XML/prose that merely looks like a tool call.
 inaccessible toolsets and writer-only connections. The configured default toolset
 is used when the flag is omitted; otherwise the first named toolset is the default.
 
+The following review steps describe manual mode (the default, or an explicit
+`--toolset` override), not the opt-in automatic route above.
 The model has GitHub read tools and a host-side `stage_changes` function, **not**
 raw GitHub mutations. Staging reads source at an identified commit and produces
 an immutable proposal. No branch, commit or PR is created during generation.
@@ -594,6 +692,9 @@ Limits and failure behavior:
   Avoid putting public feature-flag values into MCP `:env` where possible;
   the existing conservative redactor treats explicitly supplied env values as
   sensitive. Use server command arguments for public options such as read-only.
+  Valid GitHub `X-MCP-Readonly` Boolean values and an `X-MCP-Tools` value matching
+  the server's declared tool list are public transport controls, not credentials;
+  authentication and unknown/custom header values remain protected.
 - Approval expires after ten minutes. State is process-local, bounded to 128
   active entries, periodically cleaned, and invalidated on restart. Run one
   executor instance; this is not distributed or durable job coordination.

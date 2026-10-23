@@ -3,6 +3,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-autodraft :as autodraft]
             [yetibot.models.ai-tools :as tools]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -189,7 +190,7 @@
    ai --no-tools <prompt> # answer without MCP or provider-native search"
   {:yb/cat #{:ai}}
   [args]
-  (safely #(complete-prompt (prepare-prompt args))))
+  (safely #(autodraft/complete (prepare-prompt args) args complete-prompt)))
 
 (cmd-hook #"ai"
   #"^providers\s*$" providers-cmd

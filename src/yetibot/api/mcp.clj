@@ -212,12 +212,22 @@
         (f tools))
       (finally (doseq [session (reverse @sessions)] (close! session))))))
 
+(defn- header-credentials [{:keys [headers tools]}]
+  (keep (fn [[k v]]
+          (let [header (when (or (keyword? k) (string? k)) (string/lower-case (name k)))
+                public? (or (and (= "x-mcp-readonly" header) (string? v)
+                                 (contains? #{"true" "false"} (string/lower-case v)))
+                            (and (= "x-mcp-tools" header) (seq tools)
+                                 (= v (string/join "," tools))))]
+            (when-not public? v)))
+        headers))
+
 (defn redact
   "Remove configured credentials from data before it reaches the model or chat."
   [text config]
   (let [credentials (->> (concat (:secrets config)
                                  (mapcat #(concat [(:github-api-token %)]
-                                                  (vals (:env %)) (vals (:headers %)))
+                                                  (vals (:env %)) (header-credentials %))
                                          (concat (:servers config) (:redaction-servers config))))
                          (filter text?)
                          (mapcat #(vector % (string/replace % #"(?i)^Bearer\s+" "")))

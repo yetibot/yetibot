@@ -178,7 +178,13 @@
             writer (some #(when (= (:write-server t) (:name %)) %)
                          (:servers config))
             {:keys [owner repo base base-sha]} p
-            branch (str (or (:branch-prefix t) "yetibot/ai-") (UUID/randomUUID))
+            branch (str (or (:branch-prefix t) "yetibot/ai-")
+                        (if (= :automatic (:execution p))
+                          (let [key (:request-key p)]
+                            (when-not (and (string? key) (re-matches #"[a-f0-9]{64}" key))
+                              (ai/fail "Automatic execution is missing its request identity."))
+                            (str "request-" key))
+                          (UUID/randomUUID)))
             write-config (assoc config :servers
                                 [(assoc writer :tools writer-tools)])
             token (:github-api-token
