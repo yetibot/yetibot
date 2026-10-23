@@ -15,36 +15,41 @@
 
 (defn parse-prompt
   "Only leading flags are options. Use -- to start a prompt with a flag."
-  [args]
-  (loop [remaining (string/trim args) options {}]
-    (cond
-      (string/blank? remaining) (ai/fail usage)
-      (string/starts-with? remaining "--")
-      (let [[flag rest-args] (string/split remaining #"\s+" 2)]
-        (cond
-          (= "--" flag)
-          (if (string/blank? rest-args)
-            (ai/fail usage)
-            (do
-              (when (and (:toolset options) (:no-tools options)) (ai/fail usage))
-              (assoc options :prompt rest-args)))
-          (= "--no-tools" flag)
-          (if (:no-tools options)
-            (ai/fail usage)
-            (recur (or rest-args "") (assoc options :no-tools true)))
-          :else
-          (let [option ({"--provider" :provider "--model" :model "--toolset" :toolset} flag)
-                [value rest-args] (when rest-args (string/split rest-args #"\s+" 2))]
-            (when-not (and option (ai/nonblank-string? value)
-                           (not (string/starts-with? value "--"))
-                           (not (contains? options option)))
-              (ai/fail usage))
-            (recur (or rest-args "") (assoc options option value)))))
-      :else (do
-              (when (and (:toolset options) (:no-tools options)) (ai/fail usage))
-              (assoc options :prompt remaining)))))
+  ([args] (parse-prompt args usage))
+  ([args usage]
+   (loop [remaining (string/trim args) options {}]
+     (cond
+       (string/blank? remaining) (ai/fail usage)
+       (string/starts-with? remaining "--")
+       (let [[flag rest-args] (string/split remaining #"\s+" 2)]
+         (cond
+           (= "--" flag)
+           (if (string/blank? rest-args)
+             (ai/fail usage)
+             (do
+               (when (and (:toolset options) (:no-tools options))
+                 (ai/fail usage))
+               (assoc options :prompt rest-args)))
+           (= "--no-tools" flag)
+           (if (:no-tools options)
+             (ai/fail usage)
+             (recur (or rest-args "") (assoc options :no-tools true)))
+           :else
+           (let [option ({"--provider" :provider "--model" :model
+                          "--toolset" :toolset} flag)
+                 [value rest-args] (when rest-args
+                                     (string/split rest-args #"\s+" 2))]
+             (when-not (and option (ai/nonblank-string? value)
+                            (not (string/starts-with? value "--"))
+                            (not (contains? options option)))
+               (ai/fail usage))
+             (recur (or rest-args "") (assoc options option value)))))
+       :else (do
+               (when (and (:toolset options) (:no-tools options))
+                 (ai/fail usage))
+               (assoc options :prompt remaining))))))
 
-(defn- safely [f]
+(defn safely [f]
   (try
     (f)
     (catch Exception e
@@ -145,25 +150,38 @@
                               (when-let [commit (:commit result)] (str "\nCommit: " commit))
                               (when-let [message (:message result)] (str "\n" message)))})))))
 
+(defn prepare-prompt
+  "Pin provider/model and trusted policy context before any asynchronous work."
+  ([args] (prepare-prompt args nil usage))
+  ([{:keys [match] :as args} preferred-provider prompt-usage]
+   (let [options (parse-prompt match prompt-usage)
+         config (ai/config)
+         preferred (some #(when (= preferred-provider (:name %)) (:name %))
+                         (:providers config))
+         provider (ai/provider config (or (:provider options) preferred))
+         model (or (:model options) (:model provider))]
+     (when-not model
+       (ai/fail (str "No default model configured for this provider. "
+                     "Use --model <model> or configure its model.")))
+     (assoc options :provider provider :model model
+            :messages (context/messages args (:prompt options))
+            :actor (policy/actor args)))))
+
+(defn complete-prompt
+  [{:keys [provider model messages no-tools toolset actor]}]
+  (if no-tools
+    (ai/complete (dissoc provider :native-tools) model messages)
+    (tools/complete provider model messages {:toolset toolset :actor actor})))
+
 (defn prompt-cmd
   "ai <prompt> # ask the default AI provider; includes the conversation in Slack/Discord threads
    ai --provider <name> <prompt> # ask a named provider using its default model
    ai --provider <name> --model <model> <prompt> # choose a provider and model
    ai --model <model> <prompt> # choose a model on the default provider
-   ai --no-tools <prompt> # answer without connecting to MCP servers"
+   ai --no-tools <prompt> # answer without MCP or provider-native search"
   {:yb/cat #{:ai}}
-  [{:keys [match] :as args}]
-  (safely
-    (fn []
-      (let [{:keys [provider model prompt no-tools toolset]} (parse-prompt match)
-            provider (ai/provider (ai/config) provider)
-            model (or model (:model provider))]
-        (when-not model
-          (ai/fail "No default model configured for this provider. Use --model <model> or configure its model."))
-        (if no-tools
-          (ai/complete provider model (context/messages args prompt))
-          (tools/complete provider model (context/messages args prompt)
-                          {:toolset toolset :actor (policy/actor args)}))))))
+  [args]
+  (safely #(complete-prompt (prepare-prompt args))))
 
 (cmd-hook #"ai"
   #"^providers\s*$" providers-cmd

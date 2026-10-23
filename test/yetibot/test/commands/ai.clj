@@ -103,6 +103,16 @@
     (ai/prompt-cmd {:match "--no-tools hello"}) => :plain
     (ai/prompt-cmd {:match "hello"}) => :tools))
 
+(fact "no-tools also disables provider-native search"
+  (with-redefs [api/config
+                (constantly {:providers [(assoc hosted-provider
+                                                :api "responses"
+                                                :native-tools ["x_search"])]})
+                context/messages (fn [_ prompt]
+                                   [{:role "user" :content prompt}])
+                api/complete (fn [provider _ _] (:native-tools provider))]
+    (ai/prompt-cmd {:match "--no-tools hello"}) => nil))
+
 (facts "tool inspection commands handle configuration errors safely"
   (with-redefs [mcp/config (constantly nil)]
     (ai/servers-cmd {}) => []

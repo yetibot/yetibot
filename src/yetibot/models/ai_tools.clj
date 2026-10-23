@@ -111,7 +111,7 @@
            used 0 seen #{} actions #{} halted false]
       (let [body (ai/chat provider model messages
                           {:tools definitions :tool_choice (if (and (< used limit) (not halted)) "auto" "none")})
-            message (get-in body [:choices 0 :message])
+            message (ai/message provider body)
             calls (:tool_calls message)]
         (if (seq calls)
           (do
@@ -129,12 +129,12 @@
               (when (and (> (count parsed) 1)
                          (some #(get-in % [:entry :tool :host-call]) parsed))
                 (ai/fail "Stage changes in a separate, single-tool response."))
-              (let [{:keys [replies attempted halted]} (execute-batch parsed config)
-                    assistant {:role "assistant" :content (:content message) :tool_calls calls}]
+              (let [{:keys [replies attempted halted]}
+                    (execute-batch parsed config)]
                 (if-let [p (some-> (:staged config) deref)]
                   {:result/value (proposals/preview p)
                    :result/data {:proposal (:id p) :mcp {:tool-calls (+ used attempted)}}}
-                  (recur (into (conj messages assistant) replies)
+                  (recur (ai/continue-messages provider messages body replies)
                          (long (+ used attempted)) (into seen (map :id calls))
                          (into actions requested-actions) halted)))))
           (let [text (:content message)]

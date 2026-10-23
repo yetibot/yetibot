@@ -1,9 +1,11 @@
 # AI command
 
-`ai` works with any endpoint that supports the OpenAI Chat Completions API
-(`POST /chat/completions`) and model list API (`GET /models`). You can configure
-multiple providers, each with its own name, base URL, optional API key and default
-model. The existing `openai` command is unchanged and uses separate configuration.
+`ai` works with OpenAI-compatible Chat Completions endpoints
+(`POST /chat/completions`) and xAI Responses (`POST /responses`), with model
+listing through `GET /models`. You can configure multiple providers, each with
+its own name, base URL, optional API key and default model. The `grok` shortcut
+shares this configuration and MCP tools. The existing `openai` command is
+unchanged and uses separate configuration.
 
 ## Configuration
 
@@ -38,7 +40,8 @@ export YETIBOT_AI_PROVIDERS_1_MODEL=llama3.2
 
 - Provider names must be unique and cannot contain whitespace.
 - `:url` is the API **base URL**, including any required prefix such as `/v1`.
-  Do not include `/chat/completions` or `/models`. Trailing slashes are allowed.
+  Do not include `/chat/completions`, `/responses` or `/models`.
+  Trailing slashes are allowed.
   URLs must use HTTP or HTTPS and cannot contain credentials, query strings or
   fragments. Use HTTPS for remote providers.
 - `:key` is optional, for local servers that do not need authentication. When
@@ -67,6 +70,85 @@ uses the default provider. `ai models` queries every provider and labels each
 model list with the provider's name. A failure from one provider does not hide
 results from the others. `ai models <provider>` queries just that provider.
 
+## Grok and xAI Responses
+
+Add a provider like this to your existing `:ai :providers` vector. Keep your MCP
+servers and toolsets, including `cloudflare_read`, in the same `:ai` map:
+
+```clojure
+{:name "grok"
+ :url "https://api.x.ai/v1"
+ :key "YOUR_XAI_API_KEY"
+ :model "grok-4.7"
+ :api "responses"
+ :native-tools ["web_search" "x_search"]
+ :max-turns 6}
+```
+
+Use a model supported by your xAI account. Set `:default-provider "grok"` to
+make it the default for `ai` too. A sole provider is selected automatically.
+Existing providers default to `:api "chat-completions"`; they need no
+configuration change. `:native-tools` and `:max-turns` are Responses-only
+options.
+
+```text
+!ai --provider grok --toolset cloudflare_read List our Workers.
+!grok --toolset cloudflare_read Which Cloudflare account is connected?
+!grok What are people on X saying about Clojure today? Include sources.
+!grok --model grok-4.7 --toolset cloudflare_read Summarize our account.
+!grok --provider local --model llama3.2 Explain this error.
+!grok --no-tools Explain map and reduce without searching.
+```
+
+`grok` prefers a provider named `grok` when present, otherwise it uses the
+shared default (or first/only provider). Explicit `--provider` and `--model`
+win.
+Both commands use the same thread context, MCP connections, toolset selection
+and
+user/conversation/provider/model authorization. Discord `grok` retains its
+threaded response and animated thinking indicator. Its footer names the selected
+model; it does not show a hardcoded cost estimate or encrypted reasoning.
+
+There are two distinct tool paths:
+
+- **Native search:** xAI executes `web_search` and `x_search` on its servers.
+  These are opt-in through `:native-tools`, which accepts only those names.
+  They are independent of local MCP toolset allowlists. `:max-turns` (default 6,
+  range 1–20) bounds server-side agentic turns **per xAI request**, not the
+  whole conversation; each continuation starts a fresh server-side budget.
+  Native searches can incur charges in addition to model tokens.
+- **MCP/functions:** Grok returns structured function requests to Yetibot.
+  Yetibot validates the complete batch, applies the existing toolset policy and
+  call budget, executes permitted tools, and returns their results. Grok never
+  receives the MCP authentication headers or executes these functions itself.
+
+`--no-tools` disables **both** native search and MCP for that request. At the
+MCP call limit, or after an uncertain MCP outcome, the final turn also has all
+tool definitions removed. `:tool-calling false` continues to prohibit
+client-side MCP execution; native search is controlled separately by
+`:native-tools`.
+
+Requests are outbound-only: no public Yetibot URL, webhook or inbound callback
+is needed. Responses uses `store: false` and replays the complete output plus
+function results within the request loop, including opaque encrypted agentic
+state. It does not rely on remotely stored response IDs. The configured model
+provider still receives the prompt and allowed tool results; treat native search
+queries as external disclosures too. A Cloudflare server is read-only only when
+its API token has Read permissions: allowing a tool named `execute` does not
+make that tool read-only.
+
+If the entire shared `:ai` configuration is absent, `grok` keeps its original
+core `xai.key` behavior. Invalid shared configuration fails rather than silently
+falling back. Image commands still use their separate `xai` configuration. This
+change does not replace the coding agent or add MCP auto-discovery.
+
+See xAI's [function calling][xai-functions] and [agentic state][xai-state] docs.
+Mixed-tool behavior is covered by local HTTP/MCP fixtures; a live xAI/Cloudflare
+account is still needed to qualify your deployment and model's tool support.
+
+[xai-functions]: https://docs.x.ai/developers/tools/function-calling
+[xai-state]: https://docs.x.ai/developers/tools/advanced-usage
+
 ## MCP tools and web search
 
 `ai` can use tools from named MCP servers. This is a general connection, not a
@@ -75,9 +157,11 @@ only needs configuration. The model decides when to call the available tools.
 For current facts, it is instructed to search and cite source URLs from the results.
 
 MCP is optional. Without it, existing chat requests are unchanged. When enabled,
-the selected model **and** its OpenAI-compatible endpoint must support function
-calling (`tools`, `tool_choice`, `tool_calls` and tool-result messages). Use
-`--no-tools` for a model that does not support this, or to skip MCP for one request.
+the selected model **and** its endpoint must support function calling: Chat
+Completions uses `tools`, `tool_choice`, `tool_calls` and tool-result messages;
+xAI Responses uses `function_call` and `function_call_output` items. Use
+`--no-tools` for a model that does not support this, or to skip all tools for
+one request.
 
 Add `:mcp` alongside `:providers` inside your `:ai` configuration. For example:
 

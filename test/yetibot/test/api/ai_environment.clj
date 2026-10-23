@@ -43,6 +43,22 @@
     (get-in (mcp/config) [:servers 0 :github-api-token]) => "FAKE_REST_TOKEN"
     (get-in (toolsets/select (mcp/config) nil) [:toolset :name]) => "search"))
 
+(fact "Responses environment keys normalize before provider validation"
+  (let [value (get-in
+                (explode {:yetibot-ai-providers-0-name "grok"
+                          :yetibot-ai-providers-0-url "https://api.x.ai/v1"
+                          :yetibot-ai-providers-0-api "responses"
+                          :yetibot-ai-providers-0-native-tools-0 "web_search"
+                          :yetibot-ai-providers-0-native-tools-1 "x_search"
+                          :yetibot-ai-providers-0-max-turns "4"})
+                [:yetibot :ai])
+        normalized (settings/ai value)]
+    (s/valid? ::ai/config value) => true
+    (get-in normalized [:providers 0 :native-tools])
+    => ["web_search" "x_search"]
+    (get-in normalized [:providers 0 :max-turns]) => "4"
+    (settings/ai normalized) => normalized))
+
 (fact "flat EDN environment names remain byte-for-byte compatible"
   (let [value {:servers [{:name "local" :command "server" :tools ["search"]
                           :env {:http_proxy "http://proxy" :no_proxy "localhost"

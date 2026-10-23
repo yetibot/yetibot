@@ -26,9 +26,25 @@
 (s/def ::model nonblank-string?)
 (s/def ::tool-calling #(or (boolean? %) (contains? #{"true" "false"} %)))
 (s/def ::tool-choice #{"standard" "omit"})
+(s/def ::api #{"chat-completions" "responses"})
+(s/def ::native-tools
+  (s/and (s/coll-of #{"web_search" "x_search"} :kind vector?)
+         #(or (empty? %) (apply distinct? %))))
+(s/def ::max-turns
+  #(try
+     (and (or (integer? %) (string? %))
+          (<= 1 (Long/parseLong (str %)) 20))
+     (catch Exception _ false)))
 (s/def ::provider
-  (s/keys :req-un [::name ::url]
-          :opt-un [::key ::model ::tool-calling ::tool-choice]))
+  (s/and
+    (s/keys :req-un [::name ::url]
+            :opt-un [::key ::model ::tool-calling ::tool-choice ::api
+                     ::native-tools ::max-turns])
+    #(or (= "responses" (:api %))
+         (not (or (seq (:native-tools %)) (contains? % :max-turns))))))
+
+(defn responses? [provider]
+  (= "responses" (:api provider)))
 
 (defn tool-calling? [provider]
   (not (contains? #{false "false"} (:tool-calling provider))))
@@ -93,19 +109,74 @@
     (vec (sort (distinct (map :id data))))))
 
 (defn chat
-  "Return a chat response, optionally offering OpenAI-compatible function tools."
+  "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]
-  (request client/post provider "/chat/completions"
-           {:content-type :json
-            :form-params (merge {:model model :messages messages}
-                                (cond-> (select-keys options [:tools :tool_choice])
-                                  (= "omit" (:tool-choice provider))
-                                  (dissoc :tool_choice)))}))
+  (let [responses-api? (responses? provider)
+        options (if responses-api?
+                  (assoc options :tools
+                         (if (= "none" (:tool_choice options)) []
+                           (into (mapv #(hash-map :type %)
+                                       (:native-tools provider))
+                                 (map #(assoc (:function %) :type "function")
+                                      (:tools options)))))
+                  options)
+        params (if responses-api?
+                 {:model model :input messages :store false
+                  :include ["reasoning.encrypted_content"]
+                  :max_turns (Long/parseLong
+                               (str (or (:max-turns provider) 6)))}
+                 {:model model :messages messages})]
+    (request client/post provider
+             (if responses-api? "/responses" "/chat/completions")
+             {:content-type :json
+              :form-params
+              (merge params
+                     (cond-> (select-keys options [:tools :tool_choice])
+                       (= "omit" (:tool-choice provider))
+                       (dissoc :tool_choice)))})))
+
+(defn message
+  "Normalize only client-side function calls; native searches run at xAI."
+  [provider body]
+  (if-not (responses? provider)
+    (get-in body [:choices 0 :message])
+    (do
+      (when-not (and (= "completed" (:status body))
+                     (sequential? (:output body)))
+        (fail (str "AI provider " (:name provider)
+                   " returned no completed text response.")))
+      {:role "assistant"
+       :content (->> (:output body)
+                     (filter #(= "message" (:type %)))
+                     (mapcat :content)
+                     (filter #(= "output_text" (:type %)))
+                     (map :text)
+                     (string/join ""))
+       :tool_calls
+       (mapv (fn [item]
+               {:type "function" :id (:call_id item)
+                :function (select-keys item [:name :arguments])})
+             (filter #(= "function_call" (:type %)) (:output body)))})))
+
+(defn continue-messages
+  "Carry all Responses output, including opaque reasoning/search state, forward.
+   Tool replies use call_id, which is distinct from a Responses item's id."
+  [provider messages body replies]
+  (if (responses? provider)
+    (into (into messages (:output body))
+          (map (fn [reply]
+                 {:type "function_call_output" :call_id (:tool_call_id reply)
+                  :output (:content reply)}) replies))
+    (let [{:keys [content tool_calls]} (message provider body)]
+      (into (conj messages {:role "assistant" :content content
+                           :tool_calls tool_calls}) replies))))
 
 (defn complete [provider model messages]
   (let [body (chat provider model messages {})
-        text (get-in body [:choices 0 :message :content])]
+        text (:content (message provider body))]
     (when-not (nonblank-string? text)
-      (fail (str "AI provider " (:name provider) " returned no text response.")))
+      (fail (str "AI provider " (:name provider) " returned no "
+                 (when (responses? provider) "completed ")
+                 "text response.")))
     {:result/value text
      :result/data body}))
