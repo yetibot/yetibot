@@ -27,16 +27,25 @@
     (if (= path "/v1/chat/completions")
       (let [search? (some #(and (= "user" (:role %))
                                 (string/includes? (:content %) "Search")) (:messages body))
+            read? (some #(and (= "user" (:role %))
+                              (string/includes? (:content %) "Read"))
+                        (:messages body))
             done? (= "tool" (:role (last (:messages body))))
+            answer (if read? "Commit loaded."
+                         "Source: https://source.test/news")
+            suffix (cond search? "web_search" read? "get_commit"
+                         :else "stage_changes")
             name (some #(let [n (get-in % [:function :name])]
-                          (when (string/ends-with? n (if search? "web_search" "stage_changes")) n))
+                          (when (string/ends-with? n suffix) n))
                        (:tools body))
-            arguments (if search? {"query" "news"}
-                        {"owner" "owner" "repo" "repo" "base" "main"
+            arguments (cond
+                        search? {"query" "news"}
+                        read? {"owner" "owner" "repo" "repo" "sha" "main"}
+                        :else {"owner" "owner" "repo" "repo" "base" "main"
                          "title" "Fix a" "body" "A focused fix"
                          "files" [{"path" "src/a.clj" "content" "new\n"}]})]
         {:body {:choices [{:message (if done?
-                                      {:role "assistant" :content "Source: https://source.test/news"}
+                                      {:role "assistant" :content answer}
                                       {:role "assistant" :content nil
                                        :tool_calls [{:id "call-1" :type "function"
                                                      :function {:name name
@@ -87,7 +96,7 @@
               request chat/request
               t {:name "github-pr" :kind "github-pr"
                  :users ["U1"] :adapters ["slack"]
-                 :conversations ["workspace/C1"] :repositories ["owner/repo"]
+                 :repositories ["owner/repo"]
                  :providers [{:name "local" :models ["chat"]}]
                  :base-branches ["main"] :allowed-paths ["src/"]
                  :write-server "writer"
@@ -127,3 +136,49 @@
                 (every? #(not (re-find #"write-secret|ancestry-secret"
                                      (json/generate-string (:body %))))
                         (filter #(= "/v1/chat/completions" (:path %)) @requests)) => true))))))))
+
+(fact "GitHub tools are discoverable and executable across channels and threads"
+  (let [requests (atom [])
+        discord (fn [room]
+                  {:user {:id "U1" :username "alice"}
+                   :chat-source
+                   {:adapter :discord :uuid "discord-prod" :room room
+                    :raw-event {:author {:id "U1"} :channel-id room
+                                :id "M1"}}})
+        other-slack (-> chat/request
+                        (assoc-in [:chat-source :room] "other")
+                        (assoc-in [:chat-source :raw-event :channel] "C2"))]
+    (support/with-http-server
+      (fixture-handler requests (atom false))
+      (fn [base]
+        (let [provider {:name "local" :url (str base "/v1") :model "chat"}
+              toolset {:name "repo" :kind "github-read" :users ["U1"]
+                       :adapters ["slack" "discord"]
+                       :repositories ["owner/repo"]
+                       :providers [{:name "local" :models ["chat"]}]
+                       :servers [{:name "reader" :tools ["get_commit"]}]}]
+          (doseq [legacy? [false true]
+                  request [(discord "parent") (discord "thread")
+                           chat/request other-slack]]
+            (let [t (cond-> toolset
+                      legacy? (assoc :conversations ["discord-prod/parent"]))
+                  config {:toolsets [t]
+                          :servers [{:name "reader" :url (str base "/read")
+                                     :tools ["get_commit"]}]}]
+              (reset! requests [])
+              (with-redefs
+                [api/config (constantly {:providers [provider]})
+                 mcp/config (constantly config)
+                 context/messages (fn [_ prompt]
+                                    [{:role "user" :content prompt}])]
+                (fact
+                  (:value (chat/run-command request "ai toolsets")) => ["repo"]
+                  (some #{"reader/get_commit"}
+                        (:value (chat/run-command request "ai tools")))
+                  => "reader/get_commit"
+                  (:value (chat/run-command request
+                                           "ai --toolset repo Read owner/repo"))
+                  => "Commit loaded."
+                  (count (filter #(= "get_commit"
+                                     (get-in % [:body :params :name]))
+                                 @requests)) => 1)))))))))

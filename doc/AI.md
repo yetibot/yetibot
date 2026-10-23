@@ -110,7 +110,7 @@ still using the shared MCP runtime and policy. Without either configuration,
 for your shared default.
 
 Both commands use the same thread context, MCP connections, toolset selection
-and user/conversation/provider/model authorization. Discord `grok` retains its
+and user/adapter/provider/model authorization. Discord `grok` retains its
 threaded response and animated thinking indicator. Its footer names the selected
 model; it does not show a hardcoded cost estimate or encrypted reasoning.
 
@@ -193,14 +193,13 @@ keep existing servers/toolsets if you also want external tools:
    :servers []
    :native-tools ["help" "history" "history_count"]
    :users ["U0123456789"]
-   :conversations ["slack-prod/C0123456789"]
    :adapters ["slack"]
    :providers [{:name "grok" :models ["grok-4.7"]}]}]}
 ```
 
 Replace the example identities with yours. An explicit nonempty `:native-tools`
-override requires user, conversation, Slack/Discord adapter and provider/model
-allowlists. The conversation format is `<connection-id>/<raw-channel-id>`.
+override requires user, Slack/Discord adapter and provider/model allowlists.
+Access does not depend on a channel or thread allowlist.
 Only `search` toolsets accept explicit native overrides; other toolsets inherit
 the built-ins under their existing policy. Set `:native-tools []` on a search
 toolset to disable its built-ins, or use `--no-tools` for one request.
@@ -218,7 +217,7 @@ the generic AI default model.
 !ai --provider grok How many launch messages are here?
 ```
 
-Discovery hides tools from unauthorized users/conversations. The configured
+Discovery hides tools from unauthorized users or adapters. The configured
 default toolset, or first named toolset if none is configured, applies when
 `--toolset` is omitted. `--no-tools` disables these tools too.
 
@@ -364,7 +363,7 @@ entries, not Yetibot's full environment or its other API keys.
   Only those tools are offered to the model, and calls to other names are rejected.
   Tools with the same name on different servers remain separate.
 - Legacy search tools are available to everyone who can run `ai`. Named toolsets
-  can restrict access by stable user and conversation IDs. GitHub tools require
+  can restrict access by stable user IDs and adapters. GitHub tools require
   a GitHub toolset with explicit access policy; raw GitHub mutations cannot be
   exposed to the model. Connections use service credentials, not the chat user's
   GitHub identity. Use least-privilege keys and command access controls too.
@@ -441,7 +440,6 @@ Replace the model, IDs, executable paths and token placeholders before use:
     :kind "github-read"
     :users ["SLACK_USER_ID"]
     :adapters ["slack"]
-    :conversations ["ADAPTER_UUID/SLACK_CHANNEL_ID"]
     :repositories ["your-org/your-repo"]
     :providers [{:name "local" :models ["YOUR_TOOL_CAPABLE_MODEL"]}]
     :servers [{:name "github-read"
@@ -451,7 +449,6 @@ Replace the model, IDs, executable paths and token placeholders before use:
     :kind "github-pr"
     :users ["SLACK_USER_ID"]
     :adapters ["slack"]
-    :conversations ["ADAPTER_UUID/SLACK_CHANNEL_ID"]
     :repositories ["your-org/your-repo"]
     :providers [{:name "local" :models ["YOUR_TOOL_CAPABLE_MODEL"]}]
     :base-branches ["main"]
@@ -506,19 +503,21 @@ As with other settings, configuration changes and token rotation require restart
 
 ### Identity and repository policy
 
-- `:users` contains platform user IDs, never display names. `:conversations`
-  contains `<adapter UUID>/<raw channel ID>`, using Yetibot's configured adapter
-  UUID and Slack's channel ID or Discord's channel/thread ID. The adapter UUID
-  appears in Yetibot's chat-source diagnostics; it is not a workspace name.
+- `:users` contains platform user IDs, never display names. Tools are available
+  to authorized users in any channel or thread on an allowed adapter. There is
+  no conversation allowlist; old `:conversations` entries are ignored and can
+  be removed without replacement.
 - `:adapters` uses `"slack"` or `"discord"`. Missing IDs, edited/bot messages,
   reaction-triggered requests and unsupported adapters cannot authorize writes.
   Approval also binds the current Slack thread or Discord channel/thread.
   Identity additionally requires the host adapter entry point and a matching
   adapter-supplied user ID. Caller-supplied `/api` chat-source metadata cannot
   establish identity, even when it copies an allowed user’s raw event.
-- Private reads and review output are allowed only in configured conversations.
-  Choose private output channels for private repositories. Shared GitHub tokens
-  do not impersonate the requesting chat user.
+- Authorized users can request private repository reads in any channel or
+  thread. Choose private output channels for private repositories. Proposal
+  review and approval still require the original user, channel and thread.
+  Shared GitHub tokens do not impersonate the requesting chat user. History
+  tools still read only the request's stored channel or thread.
 - GitHub search accepts plain terms, not query operators. The host adds the
   repository qualifiers. Use structured owner/repo reads for precise inspection.
 - `:providers` lists exact provider names and model IDs. It is mandatory for

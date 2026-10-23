@@ -29,8 +29,7 @@
 (defn authorize!
   ([t actor] (authorize! t actor nil nil))
   ([t actor provider model]
-   (doseq [[rule field] [[:users :user] [:conversations :conversation]
-                         [:adapters :adapter]]]
+   (doseq [[rule field] [[:users :user] [:adapters :adapter]]]
      (when (and (contains? t rule)
                 (not (some #{(get actor field)} (get t rule))))
        (ai/fail "You do not have access to this AI toolset here.")))

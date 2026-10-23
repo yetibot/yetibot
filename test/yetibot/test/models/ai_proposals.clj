@@ -27,6 +27,8 @@
     (string? (proposals/page! (:id p) actor 1)) => true
     (error? #(proposals/review! (:id p) (assoc actor :user "other"))) => true
     (error? #(proposals/review! (:id p) (assoc actor :thread "other"))) => true
+    (error? #(proposals/review!
+                (:id p) (assoc actor :conversation "workspace/other"))) => true
     (proposals/cancel! (:id p) actor) => :cancelled
     (error? #(proposals/claim! (:id p) actor)) => true))
 
