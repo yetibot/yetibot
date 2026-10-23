@@ -1,18 +1,20 @@
 (ns yetibot.commands.grok
   "Grok shortcut over shared AI configuration, policy and MCP execution."
   (:require [clojure.core.async :as async]
-            [clojure.string :as string]
             [discljord.messaging :as discord]
+            [yetibot.api.ai :as api]
             [yetibot.commands.ai :as ai]
             [yetibot.core.chat :as chat]
             ;; Require before registering our hook: the loader may encounter
             ;; core before or after this namespace, but require is idempotent.
             [yetibot.core.commands.grok :as legacy]
             [yetibot.core.config :refer [get-config]]
-            [yetibot.core.hooks :refer [cmd-hook]]))
+            [yetibot.core.hooks :refer [cmd-hook]]
+            [yetibot.core.util.xai :as xai]))
 
 (def usage
-  (string/replace ai/usage "Usage: ai" "Usage: grok"))
+  (str "Usage: grok [--model <model>] "
+       "[--toolset <name> | --no-tools] <prompt>"))
 
 (defn- generate [prepared]
   (let [result (ai/complete-prompt prepared)]
@@ -76,27 +78,35 @@
                                   (:result/value result))))
     (chat/suppress {})))
 
+(defn- grok-config []
+  (let [config (if (= :not-found (:error (get-config map? [:ai])))
+                 {:providers []}
+                 (api/config))
+        key (:key xai/config)]
+    (if (and (not-any? #(= "grok" (:name %)) (:providers config))
+             (api/nonblank-string? key))
+      (update config :providers conj
+              {:name "grok" :url "https://api.x.ai/v1" :key key
+               :model "grok-4.7" :api "responses"
+               :native-tools ["web_search" "x_search"]})
+      config)))
+
 (defn grok-cmd
-  "grok <prompt> # ask the grok provider, or the shared default provider
-   grok --provider <name> --model <model> <prompt> # choose a provider/model
+  "grok <prompt> # ask Grok (provider named grok or xai.key)
+   grok --model <model> <prompt> # choose a model from the Grok provider
    grok --toolset <name> <prompt> # use an authorized shared MCP toolset
    grok --no-tools <prompt> # disable MCP and native search for this request"
   {:yb/cat #{:ai}}
   [{:keys [chat-source] :as args}]
-  (if (= :not-found (:error (get-config map? [:ai])))
-    ;; Existing core-only configuration remains usable. Invalid shared config
-    ;; must fail closed rather than silently bypassing its toolset policy.
-    (legacy/grok-cmd args)
-    (ai/safely
-      (fn []
-        (let [prepared (ai/prepare-prompt args "grok" usage)
-              event (:raw-event chat-source)
-              channel-id (or (:channel-id event) chat/*target*)
-              message-id (:id event)]
-          (if (and (legacy/discord?) channel-id message-id)
-            (in-discord-thread prepared channel-id message-id)
-            (generate prepared)))))))
+  (ai/safely
+    (fn []
+      (let [prepared (ai/prepare-prompt args "grok" usage grok-config)
+            event (:raw-event chat-source)
+            channel-id (or (:channel-id event) chat/*target*)
+            message-id (:id event)]
+        (if (and (legacy/discord?) channel-id message-id)
+          (in-discord-thread prepared channel-id message-id)
+          (generate prepared))))))
 
 (cmd-hook #"grok"
-  #"^agent\s+(?s)(.+)" legacy/grok-agent-cmd
   #"(?s)^.+$" grok-cmd)

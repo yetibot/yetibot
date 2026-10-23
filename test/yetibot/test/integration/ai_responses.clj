@@ -1,11 +1,13 @@
 (ns yetibot.test.integration.ai-responses
   (:require [cheshire.core :as json]
+            [clj-http.client :as client]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.grok]
             [yetibot.core.config :as config]
+            [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-tools :as tools]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.test.support.mcp :as support]))
@@ -160,6 +162,52 @@
                                      "--toolset cloudflare_read Identify us.")))
               "provider/model is not allowed") => true
             (count @calls) => 2))))))
+
+(fact "legacy xAI credentials keep Grok identity with real HTTP and MCP"
+  (let [endpoints (atom [])
+        post client/post]
+    (with-runtime
+      (fn [body]
+        (if (= "function_call_output" (:type (last (:input body))))
+          (response [(text-output "Grok account answer.")])
+          (response [(function-call (:name (last (:tools body)))
+                                    "account-1" "{}")])))
+      {:structuredContent {:name "Yetibot"} :content []}
+      (fn [provider requests calls]
+        (let [request (update-in execution/request [:chat-source :raw-event]
+                                 dissoc :thread_ts)]
+          (with-redefs [config/get-config (constantly {:value {}})
+                        xai/config {:key "LEGACY_XAI_SECRET"}
+                        ai/config
+                        (constantly
+                          {:providers [{:name "local"
+                                        :url "http://unreachable.invalid/v1"
+                                        :model "qwen"}]
+                           :default-provider "local"})
+                        ;; Redirect only the fixed xAI endpoint to our fixture.
+                        ;; MCP still uses the real SDK/HTTP transport.
+                        client/post
+                        (fn [url options]
+                          (swap! endpoints conj url)
+                          (when-not (= url "https://api.x.ai/v1/responses")
+                            (throw (ex-info "Wrong provider endpoint" {})))
+                          (post (str (:url provider) "/responses") options))]
+            (let [result (execution/run-command request "grok Identify us.")
+                  turns (filter #(= "/v1/responses" (:path %)) @requests)]
+              (fact
+                (:error result) => nil
+                (:value result)
+                => "Grok account answer.\n\nSent via grok-4.7"
+                (get-in result [:data :provider]) => "grok"
+                (get-in result [:data :mcp :tool-calls]) => 1
+                (mapv #(get-in % [:body :model]) turns)
+                => ["grok-4.7" "grok-4.7"]
+                (take 2 (get-in (first turns) [:body :tools]))
+                => [{:type "web_search"} {:type "x_search"}]
+                (mapv #(get-in % [:headers "authorization"]) turns)
+                => ["Bearer LEGACY_XAI_SECRET" "Bearer LEGACY_XAI_SECRET"]
+                (count @endpoints) => 2
+                (count @calls) => 1))))))))
 
 (facts "invalid Responses function batches fail before any MCP call"
   (doseq [kind [:unknown :bad-json :duplicate-id
