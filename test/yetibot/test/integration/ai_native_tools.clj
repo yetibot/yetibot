@@ -25,6 +25,7 @@
    :users ["U1"] :conversations ["workspace/C1"] :adapters ["slack"]
    :providers [{:name "grok" :models ["grok-4.7"]}]})
 (def config {:servers [] :toolsets [toolset] :max-tool-calls 4})
+(def implicit-config (update-in config [:toolsets 0] dissoc :native-tools))
 (def provider {:name "grok" :url "http://localhost/v1"})
 (def messages [{:role "user" :content "Find the launch discussion."}])
 
@@ -98,6 +99,60 @@
               => ["yetibot/help" "yetibot/history" "yetibot/history_count"])
         (fact (tools/server-names nil) => [])))))
 
+(facts "built-ins appear alongside legacy MCP tools without an opt-in toolset"
+  (execution/in-event execution/request "ai tools"
+    (fn [request]
+      (let [actor (policy/actor request)
+            remote {:name "search" :session {:server {:name "exa"}}}]
+        (doseq [settings [nil {:servers []}
+                          {:servers [{:name "exa" :tools ["search"]}]}]]
+          (with-redefs [mcp/config (constantly settings)
+                        mcp/with-tools
+                        (fn [cfg f] (f (if (seq (:servers cfg)) [remote] [])))]
+            (fact (tools/tool-names "yetibot" actor)
+                  => ["yetibot/help" "yetibot/history"
+                      "yetibot/history_count"])
+            (fact (tools/tool-names nil actor)
+                  => (vec (concat (when (seq (:servers settings))
+                                    ["exa/search"])
+                                  ["yetibot/help" "yetibot/history"
+                                   "yetibot/history_count"])))))))))
+
+(facts "implicit built-ins respect named policy and explicit opt-out"
+  (execution/in-event execution/request "ai tools"
+    (fn [request]
+      (let [actor (policy/actor request)
+            defaults implicit-config]
+        (with-redefs [mcp/config (constantly defaults)]
+          (fact (tools/tool-names "yetibot" actor)
+                => ["yetibot/help" "yetibot/history"
+                    "yetibot/history_count"])
+          (fact (tools/server-names (assoc actor :user "U2")) => []))
+        (with-redefs [mcp/config
+                      (constantly (assoc-in config [:toolsets 0 :native-tools]
+                                            []))]
+          (fact (tools/server-names actor) => []))))))
+
+(facts "default history keeps current-room scope without native configuration"
+  (with-history
+    (fn []
+      (let [result (run-calls nil [["history" {"limit" 2}]
+                                   ["history_count" {}]])]
+        (fact (mapv :body (get-in result
+                                 [:replies 0 :structuredContent :messages]))
+              => ["launch 23" "launch 24"])
+        (fact (get-in result [:replies 1 :structuredContent :count]) => 25)))))
+
+(fact "text-only providers still work without MCP or explicit native tools"
+  (execution/in-event execution/request "ai explain"
+    (fn [request]
+      (with-redefs [mcp/config (constantly nil)
+                    ai/complete (fn [& _] {:result/value "Plain answer."})
+                    ai/chat (fn [& _] (throw (AssertionError. "Tool loop")))]
+        (tools/complete (assoc provider :tool-calling false)
+                        "text-only" messages {:actor (policy/actor request)})
+        => {:result/value "Plain answer."}))))
+
 (facts "real PostgreSQL history is bounded, tied by id, and current-room only"
   (with-history
     (fn []
@@ -160,7 +215,7 @@
                            [["history" {}] ["history_count" {}]]))
           => (contains "tool-call limit"))))
 
-(facts "native configuration must explicitly opt in and constrain disclosure"
+(facts "explicit native overrides still validate their names and access policy"
   (fact (error-message #(toolsets/validate!
                          {:servers [] :native-tools ["history"]}))
         => (contains "Invalid AI toolsets"))
@@ -173,6 +228,24 @@
     (fact (error-message #(toolsets/validate! (assoc config :toolsets [t])))
           => (str "Invalid AI toolsets. Check names, references "
                   "and access policy."))))
+
+(facts "implicit native tools enforce the selected toolset's policy"
+  (execution/in-event execution/request "ai find launch"
+    (fn [request]
+      (let [actor (policy/actor request)]
+        (with-redefs [mcp/config (constantly implicit-config)
+                      ai/chat (fn [& _]
+                                (throw (AssertionError. "Model called")))
+                      jdbc/query (fn [& _]
+                                   (throw (AssertionError. "DB called")))]
+          (doseq [[a p model]
+                  [[nil provider "grok-4.7"]
+                   [(assoc actor :user "U2") provider "grok-4.7"]
+                   [actor {:name "other"} "grok-4.7"]
+                   [actor provider "forbidden"]]]
+            (fact (string? (error-message
+                             #(tools/complete p model messages {:actor a})))
+                  => true)))))))
 
 (facts "identity/model policy runs before model or database access"
   (execution/in-event execution/request "ai find launch"
@@ -311,11 +384,12 @@
                                 (read-config spec path)))
                             mcp/config (constantly config)
                             context/messages (fn [& _] messages)]
-                (doseq [cmd [(str "ai --provider grok --toolset yetibot_read "
-                                  "find launch")
-                             "grok --toolset yetibot_read find launch"]]
+                (doseq [settings [nil {:servers []} config implicit-config]
+                        cmd ["ai --provider grok find launch"
+                             "grok find launch"]]
                   (reset! requests [])
-                  (let [result (execution/run-command execution/request cmd)
+                  (let [result (with-redefs [mcp/config (constantly settings)]
+                                 (execution/run-command execution/request cmd))
                         first-turn (first @requests)
                         reply (last (:input (last @requests)))]
                     (fact (string/includes? (:value result)

@@ -16,7 +16,11 @@
   (and (vector? xs) (seq xs) (every? ai/nonblank-string? xs)
        (= (count xs) (count (distinct xs)))))
 
-(def native-names #{"help" "history" "history_count"})
+(def default-native-tools ["help" "history" "history_count"])
+(def native-names (set default-native-tools))
+
+(defn native-tools [config]
+  (get (:toolset config) :native-tools default-native-tools))
 
 (defn github? [toolset]
   (contains? #{"github-read" "github-pr"} (:kind toolset)))
@@ -32,7 +36,7 @@
     (and (named? (:name t))
          (contains? #{"search" "github-read" "github-pr"} (:kind t))
          (vector? (:servers t))
-         (or (seq (:servers t)) (seq (:native-tools t)))
+         (or (seq (:servers t)) (= "search" (:kind t)))
          (= (count (:servers t)) (count (distinct (map :name (:servers t))))))
     (invalid!))
   (doseq [ref (:servers t)]
@@ -45,13 +49,14 @@
                        (not-any? github-reads (:tools ref))))
         (invalid!))))
   (when (contains? t :native-tools)
-    (when-not (and (= "search" (:kind t)) (strings? (:native-tools t))
-                   (every? native-names (:native-tools t))
-                   (every? #(strings? (get t %))
-                           [:users :conversations :adapters])
-                   (every? #{"slack" "discord"} (:adapters t))
-                   (seq (:providers t))
-                   (not (contains? servers "yetibot")))
+    (when-not (and (= "search" (:kind t)) (vector? (:native-tools t))
+                   (or (empty? (:native-tools t))
+                       (and (strings? (:native-tools t))
+                            (every? native-names (:native-tools t))
+                            (every? #(strings? (get t %))
+                                    [:users :conversations :adapters])
+                            (every? #{"slack" "discord"} (:adapters t))
+                            (seq (:providers t)))))
       (invalid!)))
   (doseq [k [:users :conversations :adapters]]
     (when (and (contains? t k) (not (strings? (get t k)))) (invalid!)))
@@ -87,7 +92,9 @@
         (invalid!)))))
 
 (defn validate! [config]
-  (when (contains? config :native-tools) (invalid!))
+  (when (or (contains? config :native-tools)
+            (some #(= "yetibot" (:name %)) (:servers config)))
+    (invalid!))
   (let [toolsets (:toolsets config)
         servers (into {} (map (juxt :name identity) (:servers config)))]
     (if (contains? config :toolsets)
