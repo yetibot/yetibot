@@ -68,6 +68,34 @@
       (every? #(= sha (get (second %) "ref"))
               (filter #(= "get_file_contents" (first %)) @calls)) => true)))
 
+(facts "JSON text-block directories support complete snapshots and approved draft PRs"
+  (doseq [envelope [identity #(hash-map :structuredContent %)]]
+    (with-fixture (fn [& _] nil)
+      (fn [_]
+        (let [call-tool mcp/call-tool]
+          (with-redefs [mcp/call-tool
+                        (fn [session name args]
+                          (let [result (call-tool session name args)]
+                            (if (= "get_file_contents" name)
+                              (envelope {:content [{:type "text"
+                                                    :text (json/generate-string (:structuredContent result))}]})
+                              result)))]
+            (fact (github/snapshot! config t "owner" "repo" "main" ["src/a.clj" "src/new.clj"])
+                  => {:base-sha sha :originals {"src/a.clj" "old\n" "src/new.clj" nil}}
+                  (:status (github/execute! config proposal)) => :succeeded)))))))
+
+(facts "JSON text-block directories still require complete unambiguous metadata"
+  (doseq [listing [[{:path "src/a.clj"} {:path "src/a.clj"}]
+                   [{:type "file"}]
+                   (mapv #(hash-map :path (str "src/file" %)) (range 1000))]]
+    (with-fixture (fn [name args]
+                    (when (and (= "get_file_contents" name) (= "src" (get args "path")))
+                      {:content [{:type "text" :text (json/generate-string listing)}]}))
+      (fn [calls]
+        (fact (try (github/snapshot! config t "owner" "repo" "main" ["src/a.clj"])
+                   (catch Exception _ :rejected)) => :rejected
+              (some #(contains? (set write-tools) (first %)) @calls) => nil)))))
+
 (fact "approved writes use exact files and force a draft PR"
   (with-fixture (fn [& _] nil)
     (fn [calls]

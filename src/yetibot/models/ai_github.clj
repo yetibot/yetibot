@@ -11,7 +11,7 @@
 
 (defn- json-data [text]
   (when (string? text)
-    (try (json/parse-string text true) (catch Exception _ nil))))
+    (try (json/parse-string-strict text true) (catch Exception _ nil))))
 
 (defn- data! [result]
   (let [structured (:structuredContent result)
