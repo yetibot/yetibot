@@ -5,12 +5,15 @@
             [discljord.util :as discord-util]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as api]
+            [yetibot.commands.ai :as command-ai]
             [yetibot.commands.grok :as grok]
             [yetibot.core.chat :as chat]
             [yetibot.core.commands.grok :as legacy]
             [yetibot.core.commands.grokimage :as image]
             [yetibot.core.config :as config]
             [yetibot.core.hooks :as hooks]
+            [yetibot.core.models.help :as help]
+            [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-tools :as tools]
             [yetibot.test.support.ai-execution :as execution]
@@ -33,18 +36,22 @@
     (hooks/match-sub-cmds "hello\nworld" commands)
     => ["hello\nworld" #'grok/grok-cmd]
     (second (hooks/match-sub-cmds "agent do work" commands))
-    => #'legacy/grok-agent-cmd
+    => #'grok/grok-cmd
     (doseq [prompt ["--no-tools agent explain infrastructure"
                     "--provider local explain agent deployment"]]
       (fact (second (hooks/match-sub-cmds prompt commands))
             => #'grok/grok-cmd)))
   (let [[_ commands] (hooks/find-sub-cmds "gi")]
     (second (hooks/match-sub-cmds "a snowy mountain" commands))
-    => #'image/grokimage-cmd))
+    => #'image/grokimage-cmd)
+  (fact "Grok help advertises neither coding nor provider switching"
+    (some #(re-find #"grok agent|--provider" %)
+          (help/get-docs-for "grok")) => nil))
 
 (facts "Grok uses shared configuration, model flags and trusted actor identity"
   (let [captured (atom nil)]
     (with-redefs [config/get-config (constantly {:value {}})
+                  xai/config {:key "LEGACY_KEY"}
                   api/config (constantly {:providers [other provider]
                                           :default-provider "local"})
                   context/messages (fn [_ prompt]
@@ -58,35 +65,84 @@
       @captured => [provider "configured-grok"
                     [{:role "user" :content "Hi"}]
                     {:toolset "cloudflare_read" :actor actor}]
-      (:result/value (grok/grok-cmd
-                       {:match "--provider local --model other-model Hi"}))
-      => "Answer\n\nSent via other-model"
-      (take 2 @captured) => [other "other-model"]
+      (:result/value (command-ai/prompt-cmd {:match "Hi"})) => "Answer"
+      (take 2 @captured) => [other "local-model"]
+      (:result/value (grok/grok-cmd {:match "--model grok-custom Hi"}))
+      => "Answer\n\nSent via grok-custom"
+      (take 2 @captured) => [provider "grok-custom"]
+      (reset! captured nil)
+      (grok/grok-cmd {:match "--provider local Hi"})
+      => {:result/error grok/usage}
+      @captured => nil
       (:result/error (grok/grok-cmd {:match "--unknown hello"}))
       => grok/usage)))
 
-(fact "a sole provider is selected without requiring the name grok"
-  (with-redefs [config/get-config (constantly {:value {}})
-                api/config (constantly {:providers [other]})
-                context/messages (fn [_ prompt]
-                                   [{:role "user" :content prompt}])
-                tools/complete (fn [p model _ _]
-                                 {:result/value (str (:name p) "/" model)})]
-    (:result/value (grok/grok-cmd {:match "Hi"}))
-    => "local/local-model\n\nSent via local-model"))
+(facts "Grok never silently selects another configured provider"
+  (doseq [providers [[other] [other (assoc other :name "second")]]]
+    (let [calls (atom 0)]
+      (with-redefs [config/get-config (constantly {:value {}})
+                    xai/config {}
+                    api/config (constantly {:providers providers
+                                            :default-provider "local"})
+                    context/messages (fn [& _] (swap! calls inc))
+                    tools/complete (fn [& _] (swap! calls inc))]
+        (fact "a missing Grok provider fails before context or model calls"
+          (:result/error (grok/grok-cmd {:match "Hi"}))
+          => "AI provider grok is not configured. Add it to ai.providers."
+          @calls => 0)))))
 
-(facts "legacy fallback is only for absent shared configuration"
-  (let [legacy-calls (atom 0)]
+(facts "xai.key remains Grok even with an unrelated shared AI default"
+  (doseq [shared? [false true]]
+    (let [captured (atom nil)]
+      (with-redefs [config/get-config
+                    (constantly (if shared? {:value {}}
+                                  {:error :not-found}))
+                    xai/config {:key "XAI_ONLY"}
+                    legacy/grok-cmd
+                    (fn [_] {:result/error "Unexpected legacy command path"})
+                    api/config (constantly {:providers [other]
+                                            :default-provider "local"})
+                    context/messages (fn [_ prompt]
+                                       [{:role "user" :content prompt}])
+                    tools/complete (fn [p model messages options]
+                                     (reset! captured
+                                             [p model messages options])
+                                     {:result/value "Grok answer"})]
+        (fact "legacy credentials use Responses plus the shared tool runtime"
+          (:result/value
+            (grok/grok-cmd {:match "--toolset cloudflare_read Hi"}))
+          => "Grok answer\n\nSent via grok-4.7"
+          @captured
+          => [{:name "grok" :url "https://api.x.ai/v1" :key "XAI_ONLY"
+               :api "responses" :model "grok-4.7"
+               :native-tools ["web_search" "x_search"]}
+              "grok-4.7" [{:role "user" :content "Hi"}]
+              {:toolset "cloudflare_read" :actor nil}])))))
+
+(fact "invalid shared configuration does not fall back to xai.key"
+  (with-redefs [config/get-config (constantly {:error :invalid})
+                xai/config {:key "XAI_ONLY"}
+                api/config (fn [] (api/fail "AI configuration is invalid."))]
+    (grok/grok-cmd {:match "Hi"})
+    => {:result/error "AI configuration is invalid."}))
+
+(fact "xai.key compatibility still honors no-tools and model selection"
+  (let [captured (atom nil)]
     (with-redefs [config/get-config (constantly {:error :not-found})
-                  legacy/grok-cmd (fn [_] (swap! legacy-calls inc) :legacy)]
-      (grok/grok-cmd {:match "Hi"}) => :legacy
-      @legacy-calls => 1)
-    (with-redefs [config/get-config (constantly {:error :invalid})
-                  api/config (fn [] (api/fail "AI configuration is invalid."))
-                  legacy/grok-cmd (fn [_] (swap! legacy-calls inc))]
-      (grok/grok-cmd {:match "Hi"})
-      => {:result/error "AI configuration is invalid."}
-      @legacy-calls => 1)))
+                  xai/config {:key "XAI_ONLY"}
+                  context/messages (fn [_ prompt]
+                                     [{:role "user" :content prompt}])
+                  tools/complete (fn [& _]
+                                   (throw (Exception. "Unexpected MCP call")))
+                  api/complete (fn [p model _]
+                                 (reset! captured [p model])
+                                 {:result/value "No search answer"})]
+      (:result/value
+        (grok/grok-cmd {:match "--no-tools --model grok-custom Hi"}))
+      => "No search answer\n\nSent via grok-custom"
+      (get-in @captured [0 :name]) => "grok"
+      (get-in @captured [0 :native-tools]) => nil
+      (second @captured) => "grok-custom")))
 
 (facts "Discord progress is removed on success and safely handled failure"
   (doseq [failure? [false true]]

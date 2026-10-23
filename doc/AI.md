@@ -96,16 +96,21 @@ options.
 !grok --toolset cloudflare_read Which Cloudflare account is connected?
 !grok What are people on X saying about Clojure today? Include sources.
 !grok --model grok-4.7 --toolset cloudflare_read Summarize our account.
-!grok --provider local --model llama3.2 Explain this error.
+!ai --provider local --model llama3.2 Explain this error.
 !grok --no-tools Explain map and reduce without searching.
 ```
 
-`grok` prefers a provider named `grok` when present, otherwise it uses the
-shared default (or first/only provider). Explicit `--provider` and `--model`
-win.
+Plain `grok` uses the provider named `grok`, never the shared default or an
+unrelated sole provider. If no `grok` provider is configured, an existing
+`xai.key` supplies a Grok 4.7 Responses provider with native web/X search while
+still using the shared MCP runtime and policy. Without either configuration,
+`grok` returns a configuration error instead of silently using another model.
+`grok --model` selects a model on the Grok provider. `grok` rejects
+`--provider`: use `ai --provider` to select another provider, or plain `ai`
+for your shared default.
+
 Both commands use the same thread context, MCP connections, toolset selection
-and
-user/conversation/provider/model authorization. Discord `grok` retains its
+and user/conversation/provider/model authorization. Discord `grok` retains its
 threaded response and animated thinking indicator. Its footer names the selected
 model; it does not show a hardcoded cost estimate or encrypted reasoning.
 
@@ -137,10 +142,15 @@ queries as external disclosures too. A Cloudflare server is read-only only when
 its API token has Read permissions: allowing a tool named `execute` does not
 make that tool read-only.
 
-If the entire shared `:ai` configuration is absent, `grok` keeps its original
-core `xai.key` behavior. Invalid shared configuration fails rather than silently
-falling back. Image commands still use their separate `xai` configuration. This
-change does not replace the coding agent or add MCP auto-discovery.
+Existing `xai.key` credentials work whether or not shared `:ai` providers are
+configured. An explicitly configured `grok` provider takes precedence over
+`xai.key`. Invalid shared configuration fails rather than bypassing its policy.
+Image commands still use their separate `xai` configuration.
+
+The coding agent is separate: use `agent <prompt>` when that integration is
+configured. `grok agent <prompt>` is ordinary Grok chat text, not a coding-agent
+shortcut. Grok help does not advertise the coding agent. This change does not
+replace its existing Gemini backend or add MCP auto-discovery.
 
 See xAI's [function calling][xai-functions] and [agentic state][xai-state] docs.
 Mixed-tool behavior is covered by local HTTP/MCP fixtures; a live xAI/Cloudflare

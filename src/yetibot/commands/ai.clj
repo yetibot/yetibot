@@ -153,12 +153,20 @@
 (defn prepare-prompt
   "Pin provider/model and trusted policy context before any asynchronous work."
   ([args] (prepare-prompt args nil usage))
-  ([{:keys [match] :as args} preferred-provider prompt-usage]
+  ([args command-provider prompt-usage]
+   (prepare-prompt args command-provider prompt-usage ai/config))
+  ([{:keys [match] :as args} command-provider prompt-usage resolve-config]
    (let [options (parse-prompt match prompt-usage)
-         config (ai/config)
-         preferred (some #(when (= preferred-provider (:name %)) (:name %))
-                         (:providers config))
-         provider (ai/provider config (or (:provider options) preferred))
+         _ (when (and command-provider (:provider options))
+             (ai/fail prompt-usage))
+         config (resolve-config)
+         provider-name (or command-provider (:provider options))
+         _ (when (and command-provider
+                      (not-any? #(= provider-name (:name %))
+                                (:providers config)))
+             (ai/fail (str "AI provider " provider-name
+                           " is not configured. Add it to ai.providers.")))
+         provider (ai/provider config provider-name)
          model (or (:model options) (:model provider))]
      (when-not model
        (ai/fail (str "No default model configured for this provider. "
