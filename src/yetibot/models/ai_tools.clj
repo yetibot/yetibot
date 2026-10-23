@@ -195,21 +195,23 @@
                        :staged (atom nil) :secrets (keep identity (cons (:key provider) additional-secrets)))]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
-     (if (or (seq (:servers config))
-             (seq (get-in config [:toolset :native-tools])))
-       (do
-         (when-not (ai/tool-calling? provider)
-           (ai/fail "Tool calling is disabled for this provider. Use --no-tools."))
-         (let [local (native/tools config actor provider model)]
+     (let [local (when (or (ai/tool-calling? provider)
+                           (seq (get-in config [:toolset :native-tools])))
+                   (native/tools config actor provider model))]
+       (if (or (seq (:servers config)) (seq local))
+         (do
+           (when-not (ai/tool-calling? provider)
+             (ai/fail
+               "Tool calling is disabled for this provider. Use --no-tools."))
            (mcp/with-tools config
              (fn [reads]
                (let [tools (cond-> (into (vec reads) local)
                              (= "github-pr" (get-in config [:toolset :kind]))
                              (conj (staging-tool config actor provider model
                                                  reads)))]
-                 (run-tools provider model messages tools config))))))
-       ;; No function-calling requirement for existing installs.
-       (ai/complete provider model messages)))))
+                 (run-tools provider model messages tools config)))))
+         ;; Text-only providers and non-chat callers need no function support.
+         (ai/complete provider model messages))))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))]
@@ -219,12 +221,17 @@
             allowed (reduce #(update %1 (:name %2) (fnil into #{}) (:tools %2)) {} refs)]
         (assoc config
                :native-tools
-               (vec (distinct (mapcat :native-tools visible)))
+               (vec (distinct
+                      (mapcat #(if (native/trusted? actor)
+                                 (toolsets/native-tools {:toolset %})
+                                 (:native-tools %)) visible)))
                :servers
                (vec (keep #(when-let [names (get allowed (:name %))]
                              (assoc % :tools (vec (filter names (:tools %)))))
                           (:servers config)))))
-      config)))
+      (assoc config :native-tools
+             (when (native/trusted? actor)
+               toolsets/default-native-tools)))))
 
 (defn toolset-names [actor]
   (mapv :name (filter #(policy/visible? % actor)

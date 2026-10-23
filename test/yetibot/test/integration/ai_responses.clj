@@ -26,6 +26,10 @@
   {:type "function_call" :id (str "item-" call-id) :call_id call-id
    :name name :arguments arguments :status "completed"})
 
+(defn account-function-name [body]
+  (some #(when (string/ends-with? (:name % "") "__whoami") (:name %))
+        (:tools body)))
+
 (defn response [output]
   {:id "response-id" :status "completed" :output output})
 
@@ -120,7 +124,7 @@
       (if (= "function_call_output" (:type (last (:input body))))
         (response [(text-output "Yetibot account.")])
         (response (conj agentic-state
-                        (function-call (:name (last (:tools body)))
+                        (function-call (account-function-name body)
                                        "account-1" "{}")))))
     {:structuredContent {:name "Yetibot"} :content [] :isError false}
     (fn [provider requests calls]
@@ -170,7 +174,7 @@
       (fn [body]
         (if (= "function_call_output" (:type (last (:input body))))
           (response [(text-output "Grok account answer.")])
-          (response [(function-call (:name (last (:tools body)))
+          (response [(function-call (account-function-name body)
                                     "account-1" "{}")])))
       {:structuredContent {:name "Yetibot"} :content []}
       (fn [provider requests calls]

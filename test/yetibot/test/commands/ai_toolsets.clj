@@ -52,7 +52,8 @@
     (ai/toolsets-cmd chat/request) => []
     (ai/servers-cmd chat/request) => []
     (:value (chat/run-command chat/request "ai toolsets")) => ["github-pr"]
-    (:value (chat/run-command chat/request "ai servers")) => ["reader"]))
+    (:value (chat/run-command chat/request "ai servers"))
+    => ["reader" "yetibot"]))
 
 (fact "the real HTTP route cannot impersonate a chat user or access private tools"
   (let [connections (atom 0)

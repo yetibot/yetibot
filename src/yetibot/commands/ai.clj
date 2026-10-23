@@ -187,7 +187,7 @@
    ai --provider <name> <prompt> # ask a named provider using its default model
    ai --provider <name> --model <model> <prompt> # choose a provider and model
    ai --model <model> <prompt> # choose a model on the default provider
-   ai --no-tools <prompt> # answer without MCP or provider-native search"
+   ai --no-tools <prompt> # answer without native or MCP tools"
   {:yb/cat #{:ai}}
   [args]
   (safely #(autodraft/complete (prepare-prompt args) args complete-prompt)))

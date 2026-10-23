@@ -6,6 +6,7 @@
             [yetibot.core.models.help :as help]
             [yetibot.models.ai-history :as history]
             [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.util.ai-execution :as execution]))
 
 (defn- invalid! []
@@ -91,13 +92,18 @@
                       "Includes bot messages/commands, not just this thread.")
     :inputSchema (schema {:query text-property})}})
 
+(defn trusted? [actor]
+  (and execution/*sensitive* actor
+       (= actor (policy/actor execution/*event*))
+       (ai/nonblank-string? (get-in execution/*event* [:chat-source :room]))))
+
 (defn tools [config actor provider model]
-  (let [selected (get-in config [:toolset :native-tools])]
-    (when (seq selected)
-      (let [event execution/*event*
-            source (:chat-source event)]
-        (when-not (and actor (= actor (policy/actor event))
-                       (ai/nonblank-string? (:room source)))
+  (let [selected (toolsets/native-tools config)]
+    (when (and (seq selected)
+               (or (trusted? actor)
+                   (contains? (:toolset config) :native-tools)))
+      (let [source (:chat-source execution/*event*)]
+        (when-not (trusted? actor)
           (ai/fail "Native Yetibot tools require a trusted chat request."))
         (execution/sensitive!)
         (mapv

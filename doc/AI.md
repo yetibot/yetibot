@@ -123,7 +123,7 @@ There are two distinct tool paths:
   whole conversation; each continuation starts a fresh server-side budget.
   Native searches can incur charges in addition to model tokens.
 - **Host functions:** Grok returns structured function requests to Yetibot.
-  These can be MCP tools or the opt-in native Yetibot tools described below.
+  These can be MCP tools or the built-in Yetibot tools described below.
   Yetibot validates the complete batch, applies toolset policy and the call
   budget, executes permitted tools, and returns results. Grok never receives
   MCP authentication headers or executes these functions itself.
@@ -162,8 +162,9 @@ account is still needed to qualify your deployment and model's tool support.
 
 ## Native Yetibot tools
 
-Read-only local tools are available to both `ai` and `grok`. They are disabled
-unless a named toolset explicitly lists them in **its** `:native-tools`:
+Read-only local tools are **enabled by default** for both `ai` and `grok` in
+trusted Slack/Discord chat requests. No extra toolset, MCP server or opt-in
+configuration is needed. `!ai tools` lists them alongside existing MCP tools:
 
 - `help`: page through registered command topics or read an exact topic's docs.
   This never runs a command. Runtime aliases and their bodies are not exposed.
@@ -174,8 +175,14 @@ This is separate from `:native-tools ["web_search" "x_search"]` on a provider,
 which enables server-side xAI search. Local tools are host function calls; they
 need a function-calling model and use the same host call budget as MCP tools.
 
-Merge this example into your existing `:ai :mcp` configuration. It needs no MCP
-server process. Keep existing servers/toolsets if you also want external tools:
+Existing named toolset user/channel/provider/model restrictions still apply to
+the built-ins. Without named toolsets, anyone who can invoke `ai` or `grok` in
+trusted chat can use them for that stored channel. Requests without trusted
+chat provenance do not receive implicit native tools.
+
+Optional: use this native-only named toolset if you want explicit allowlists
+and a separate selection. Merge it into your existing `:ai :mcp` configuration;
+keep existing servers/toolsets if you also want external tools:
 
 ```clojure
 {:servers []
@@ -191,20 +198,24 @@ server process. Keep existing servers/toolsets if you also want external tools:
    :providers [{:name "grok" :models ["grok-4.7"]}]}]}
 ```
 
-Replace the example identities with yours. All native toolsets require explicit
-user, conversation, Slack/Discord adapter and provider/model allowlists. The
-conversation format is `<connection-id>/<raw-channel-id>`, as for GitHub
-policy. The `grok` provider can still come from the existing `xai.key`; sharing
-tools does not select the generic AI default model. Only `search` toolsets can
-include native tools. `yetibot` is reserved as their discovery source name.
+Replace the example identities with yours. An explicit nonempty `:native-tools`
+override requires user, conversation, Slack/Discord adapter and provider/model
+allowlists. The conversation format is `<connection-id>/<raw-channel-id>`.
+Only `search` toolsets accept explicit native overrides; other toolsets inherit
+the built-ins under their existing policy. Set `:native-tools []` on a search
+toolset to disable its built-ins, or use `--no-tools` for one request.
+`yetibot` is reserved as the built-in discovery source name.
+
+The `grok` provider can still come from `xai.key`; sharing tools does not select
+the generic AI default model.
 
 ```text
-!ai toolsets
 !ai servers
+!ai tools
 !ai tools yetibot
-!grok --toolset yetibot_read What Yetibot commands can help with this?
-!grok --toolset yetibot_read Summarize the recent launch discussion here.
-!ai --provider grok --toolset yetibot_read How many launch messages are here?
+!grok What Yetibot commands can help with this?
+!grok Summarize the recent launch discussion here.
+!ai --provider grok How many launch messages are here?
 ```
 
 Discovery hides tools from unauthorized users/conversations. The configured
@@ -213,16 +224,18 @@ default toolset, or first named toolset if none is configured, applies when
 
 ### History boundary and limits
 
-**Opting in permits sending stored channel messages to the allowed AI
-provider/model**, including commands and bot responses. Tell participants and
-choose the user/channel/provider policy accordingly. Existing human `history`
-access does not enable AI history automatically. Configured credentials are
-redacted from results, but this is not general-purpose secret detection.
+**Tool-enabled AI requests can send stored channel messages to the selected
+provider/model**, including commands and bot responses, without extra native
+configuration. Tell participants and choose user/channel/provider restrictions
+accordingly. Use `--no-tools` or a toolset's empty native override to opt out.
+Configured credentials are redacted from results, but this is not
+general-purpose secret detection.
 
 - Scope is fixed by the trusted incoming adapter event: its connection and
   stored room key. Arguments cannot select a user, room, connection or SQL.
-  Untrusted HTTP metadata, missing actors and disallowed identities/models fail
-  before tools or model calls. No arbitrary command execution is exposed.
+  Untrusted HTTP metadata and missing actors cannot enable native tools.
+  Disallowed named-toolset identities/models fail before tools or model calls.
+  No arbitrary command execution is exposed.
 - Slack history uses stored channel names, not raw IDs, and is channel-wide,
   including threads. Renamed/reused room names are not remapped to historical
   IDs; the existing schema cannot prove historical membership or distinguish
@@ -256,7 +269,7 @@ redacted from results, but this is not general-purpose secret detection.
 The native reader uses the existing history schema and needs no new core API or
 core dependency bump. Human `history` SQL correctness fixes are a separate core
 change and require a core release/dependency update to reach the deployed bot.
-Neither configuration nor deployment is changed by adding these tools.
+The default built-ins need no MCP configuration changes after deployment.
 
 ## MCP tools and web search
 
