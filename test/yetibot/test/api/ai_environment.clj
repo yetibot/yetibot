@@ -59,6 +59,25 @@
     (get-in normalized [:providers 0 :max-turns]) => "4"
     (settings/ai normalized) => normalized))
 
+(fact "native toolset environment keys normalize separately from providers"
+  (let [value (get-in
+                (explode {:yetibot-ai-mcp-toolsets-0-native-tools-0 "help"
+                          :yetibot-ai-mcp-toolsets-0-native-tools-1 "history"})
+                [:yetibot :ai :mcp])
+        normalized (settings/mcp value)]
+    (get-in normalized [:toolsets 0 :native-tools]) => ["help" "history"]
+    (settings/mcp normalized) => normalized))
+
+(fact "documented native-only EDN recipe requires no remote server"
+  (let [[_ example] (re-find
+                      #"(?s)## Native Yetibot tools.*?```clojure\n(.*?)```"
+                      (slurp "doc/AI.md"))
+        value (edn/read-string example)]
+    (s/valid? ::mcp/config value) => true
+    (:servers (toolsets/select value "yetibot_read")) => []
+    (get-in (toolsets/select value "yetibot_read") [:toolset :native-tools])
+    => ["help" "history" "history_count"]))
+
 (fact "flat EDN environment names remain byte-for-byte compatible"
   (let [value {:servers [{:name "local" :command "server" :tools ["search"]
                           :env {:http_proxy "http://proxy" :no_proxy "localhost"

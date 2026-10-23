@@ -7,6 +7,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-proposals :as proposals]
             [yetibot.models.ai-github :as github]
             [yetibot.util.ai-execution :as execution]))
@@ -28,7 +29,8 @@
 (defn- tool-entry [index tool config]
   (let [server-name (get-in tool [:session :server :name])
         suffix (string/replace (str server-name "__" (:name tool)) #"[^a-zA-Z0-9_-]" "_")
-        name (str "mcp_" index "_" suffix)
+        name (if (:native? tool) (str "yetibot_" (:name tool))
+               (str "mcp_" index "_" suffix))
         name (subs name 0 (min 64 (count name)))
         schema (:inputSchema tool)]
     (when-not (and (ai/nonblank-string? (:name tool)) (map? schema) (= "object" (:type schema))
@@ -54,10 +56,13 @@
       (when-not (map? parsed)
         (ai/fail "The AI provider sent invalid tool arguments. No tools from that response were run."))
       {:id id :entry (get entries name)
-       :arguments (if (get-in entries [name :tool :host-call])
-                    parsed
-                    (policy/arguments! (:toolset config)
-                                       (get-in entries [name :tool :name]) parsed))})))
+       :arguments
+       (if-let [validate (get-in entries [name :tool :validate-arguments])]
+         (validate parsed)
+         (if (get-in entries [name :tool :host-call])
+           parsed
+           (policy/arguments! (:toolset config)
+                              (get-in entries [name :tool :name]) parsed)))})))
 
 (defn- text-content [item]
   (case (:type item)
@@ -81,9 +86,17 @@
                                         (keep text-content)
                                         vec)))
         content (json/generate-string (clean-data result config))
-        content (if (> (count content) 20000)
-                  (str (subs content 0 20000) "\n[Tool result shortened to 20000 characters.]")
-                  content)]
+        content (if (<= (count content) 20000) content
+                  (if (:native? tool)
+                    ;; Credential replacement can expand a bounded page. Keep
+                    ;; native error replies valid JSON instead of cutting it.
+                    (json/generate-string
+                      {:isError true
+                       :structuredContent
+                       {:error "Native result exceeded the output limit."
+                        :truncated true}})
+                    (str (subs content 0 20000)
+                         "\n[Tool result shortened to 20000 characters.]")))]
     (with-meta {:role "tool" :tool_call_id id :content content}
       {::unknown-outcome unknown-outcome})))
 
@@ -127,7 +140,7 @@
                         (some actions requested-actions))
                 (ai/fail "The AI provider tried to repeat a tool call. No tools from that response were run."))
               (when (and (> (count parsed) 1)
-                         (some #(get-in % [:entry :tool :host-call]) parsed))
+                         (some #(get-in % [:entry :tool :exclusive?]) parsed))
                 (ai/fail "Stage changes in a separate, single-tool response."))
               (let [{:keys [replies attempted halted]}
                     (execute-batch parsed config)]
@@ -144,7 +157,7 @@
              :result/data (clean-data (assoc body :mcp {:tool-calls used}) config)}))))))
 
 (defn- staging-tool [config actor provider model reads]
-  {:name "stage_changes"
+  {:name "stage_changes" :exclusive? true
    :description (str "Propose small text-file additions/updates, without GitHub writes. "
                      "Call alone after reading the repository. The host snapshots "
                      "source, validates policy and asks the user to review/approve. "
@@ -182,25 +195,32 @@
                        :staged (atom nil) :secrets (keep identity [(:key provider)]))]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
-     (if (seq (:servers config))
+     (if (or (seq (:servers config))
+             (seq (get-in config [:toolset :native-tools])))
        (do
          (when-not (ai/tool-calling? provider)
            (ai/fail "Tool calling is disabled for this provider. Use --no-tools."))
-         (mcp/with-tools config
-           (fn [reads]
-             (let [tools (cond-> reads
-                           (= "github-pr" (get-in config [:toolset :kind]))
-                           (conj (staging-tool config actor provider model reads)))]
-               (run-tools provider model messages tools config)))))
+         (let [local (native/tools config actor provider model)]
+           (mcp/with-tools config
+             (fn [reads]
+               (let [tools (cond-> (into (vec reads) local)
+                             (= "github-pr" (get-in config [:toolset :kind]))
+                             (conj (staging-tool config actor provider model
+                                                 reads)))]
+                 (run-tools provider model messages tools config))))))
        ;; No function-calling requirement for existing installs.
        (ai/complete provider model messages)))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))]
     (if (seq (:toolsets config))
-      (let [refs (mapcat :servers (filter #(policy/visible? % actor) (:toolsets config)))
+      (let [visible (filter #(policy/visible? % actor) (:toolsets config))
+            refs (mapcat :servers visible)
             allowed (reduce #(update %1 (:name %2) (fnil into #{}) (:tools %2)) {} refs)]
-        (assoc config :servers
+        (assoc config
+               :native-tools
+               (vec (distinct (mapcat :native-tools visible)))
+               :servers
                (vec (keep #(when-let [names (get allowed (:name %))]
                              (assoc % :tools (vec (filter names (:tools %)))))
                           (:servers config)))))
@@ -212,18 +232,31 @@
 
 (defn server-names
   ([] (server-names nil))
-  ([actor] (mapv :name (:servers (listing-config actor)))))
+  ([actor]
+   (let [config (listing-config actor)]
+     (cond-> (mapv :name (:servers config))
+       (seq (:native-tools config)) (conj "yetibot")))))
 
 (defn tool-names
   ([server-name] (tool-names server-name nil))
   ([server-name actor]
    (let [config (listing-config actor)
-         config (if server-name
-                  (if-let [server (some #(when (= server-name (:name %)) %) (:servers config))]
-                    (assoc config :servers [server])
-                    (ai/fail "Unknown MCP server. Use ai servers to list configured servers."))
-                  config)]
-     (if-not (seq (:servers config))
-       "No MCP servers configured."
-       (mcp/with-tools config
-         #(mapv (fn [tool] (str (get-in tool [:session :server :name]) "/" (:name tool))) %))))))
+         local (mapv #(str "yetibot/" %) (:native-tools config))]
+     (if (and (= server-name "yetibot") (seq local))
+       local
+       (let [config
+             (if server-name
+               (if-let [server (some #(when (= server-name (:name %)) %)
+                                     (:servers config))]
+                 (assoc config :servers [server])
+                 (ai/fail (str "Unknown MCP server. Use ai servers to list "
+                               "configured servers.")))
+               config)
+             local (if server-name [] local)]
+         (if (and (empty? (:servers config)) (empty? local))
+           "No MCP servers configured."
+           (mcp/with-tools config
+             #(into (mapv (fn [tool]
+                            (str (get-in tool [:session :server :name]) "/"
+                                 (:name tool))) %)
+                    local))))))))

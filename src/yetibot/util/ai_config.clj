@@ -43,9 +43,9 @@
       (vector? (:toolsets value))
       (update :toolsets
               #(mapv (fn [t]
-                       (lift-fields t [:base-branches :allowed-paths
-                                       :denied-paths :write-server
-                                       :branch-prefix])) %)))))
+                       (lift-fields t [:native-tools :base-branches
+                                       :allowed-paths :denied-paths
+                                       :write-server :branch-prefix])) %)))))
 
 (defn ai [value]
   (let [value (lift-fields value [:default-provider])]
