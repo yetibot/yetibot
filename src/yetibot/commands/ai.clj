@@ -85,14 +85,14 @@
                              providers results)}))))
 
 (defn servers-cmd
-  "ai servers # list configured MCP server names"
+  "ai servers # list configured MCP and native tool sources"
   {:yb/cat #{:ai}}
   [args]
   (safely #(tools/server-names (policy/actor args))))
 
 (defn tools-cmd
-  "ai tools # list allowed tools from configured MCP servers
-   ai tools <server> # list allowed tools from one MCP server"
+  "ai tools # list allowed MCP and native tools
+   ai tools <server> # list allowed tools from one source"
   {:yb/cat #{:ai}}
   [{[_ server-name] :match :as args}]
   (safely #(tools/tool-names server-name (policy/actor args))))
