@@ -22,7 +22,7 @@
 (def toolset
   {:name "yetibot_read" :kind "search" :servers []
    :native-tools ["help" "history" "history_count"]
-   :users ["U1"] :conversations ["workspace/C1"] :adapters ["slack"]
+   :users ["U1"] :adapters ["slack"]
    :providers [{:name "grok" :models ["grok-4.7"]}]})
 (def config {:servers [] :toolsets [toolset] :max-tool-calls 4})
 (def implicit-config (update-in config [:toolsets 0] dissoc :native-tools))
@@ -219,7 +219,7 @@
   (fact (error-message #(toolsets/validate!
                          {:servers [] :native-tools ["history"]}))
         => (contains "Invalid AI toolsets"))
-  (doseq [t [(dissoc toolset :users) (dissoc toolset :conversations)
+  (doseq [t [(dissoc toolset :users)
              (dissoc toolset :adapters) (dissoc toolset :providers)
              (assoc toolset :native-tools ["exec"])
              (assoc toolset :native-tools ["history" "history"])
@@ -420,7 +420,7 @@
             settings (-> config
                          (assoc-in [:toolsets 0 :adapters] ["discord"])
                          (assoc-in [:toolsets 0 :conversations]
-                                   [":discord-prod/D1"]))
+                                   [":discord-prod/parent"]))
             result (run-calls settings [["history" {}]] request)]
         (fact (mapv :body (get-in result
                                  [:replies 0 :structuredContent :messages]))

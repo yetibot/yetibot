@@ -54,15 +54,15 @@
                        (and (strings? (:native-tools t))
                             (every? native-names (:native-tools t))
                             (every? #(strings? (get t %))
-                                    [:users :conversations :adapters])
+                                    [:users :adapters])
                             (every? #{"slack" "discord"} (:adapters t))
                             (seq (:providers t)))))
       (invalid!)))
-  (doseq [k [:users :conversations :adapters]]
+  (doseq [k [:users :adapters]]
     (when (and (contains? t k) (not (strings? (get t k)))) (invalid!)))
   (when (github? t)
     (when-not (and (every? #(strings? (get t %))
-                          [:users :conversations :adapters :repositories])
+                          [:users :adapters :repositories])
                    (every? #(re-matches #"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+" %)
                            (:repositories t))
                    (every? #{"slack" "discord"} (:adapters t)))
