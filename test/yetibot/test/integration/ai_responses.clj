@@ -48,7 +48,8 @@
       (fn [{:keys [path method body] :as request}]
         (swap! requests conj request)
         (if (= path "/v1/responses")
-          {:body (turn body)}
+          (let [result (turn body)]
+            (if (fn? result) {:stream result} {:body result}))
           (case method
             "GET" {:status 405}
             "DELETE" {:status 204}
@@ -73,6 +74,119 @@
                                            "Bearer CLOUDFLARE_SECRET"}}]}]
           (with-redefs [mcp/config (constantly config)]
             (f provider requests calls)))))))
+
+(defn write-event! [out event]
+  (.write ^java.io.OutputStream out
+          (.getBytes (str "data: " (json/generate-string event) "\n\n")
+                     "UTF-8"))
+  (.flush ^java.io.OutputStream out))
+
+(fact "real SSE progress arrives before completion, never executing deltas"
+  (let [release (promise) observed (promise) seen (atom [])
+        turns (atom 0) original (atom nil)]
+    (with-runtime
+      (fn [body]
+        (if (= 1 (swap! turns inc))
+          (let [output (conj agentic-state
+                             (function-call (account-function-name body)
+                                            "stream-call" "{}"))]
+            (reset! original output)
+            (fn [out]
+              (write-event! out {:type "response.web_search_call.searching"})
+              (write-event! out {:type "response.function_call_arguments.delta"
+                                 :delta "PRIVATE-ARGUMENTS"})
+              (write-event! out {:type "response.output_item.added"
+                                 :item (last output)})
+              (deref release 5000 nil)
+              (write-event! out {:type "response.completed"
+                                 :response (response output)})))
+          (fn [out]
+            (write-event! out {:type "response.output_text.delta"
+                               :delta "Verified streaming account answer."})
+            (write-event! out {:type "response.completed"
+                               :response
+                               (response [(text-output "Yetibot.")])}))))
+      {:structuredContent {:name "Yetibot"} :content []}
+      (fn [provider requests calls]
+        (let [result (future
+                       (tools/complete
+                         provider "grok-4.7" messages
+                         {:on-progress
+                          (fn [event]
+                            (swap! seen conj event)
+                            (when (= "Preparing a tool request" (:phase event))
+                              (deliver observed true)))}))]
+          (try
+            (fact (deref observed 3000 :timeout) => true
+                  @calls => [])
+            (finally (deliver release true)))
+          (let [value (deref result 5000 :timeout)
+                requests (filter #(= "/v1/responses" (:path %)) @requests)
+                next-body (:body (second requests))]
+            (fact
+              (:result/value value) => "Yetibot."
+              (get-in value [:result/data :mcp :tool-calls]) => 1
+              @calls => [{:name "whoami" :arguments {}}]
+              (mapv #(get-in % [:body :stream]) requests) => [true true]
+              (mapv #(get-in % [:body :store]) requests) => [false false]
+              (take-last (count @original) (butlast (:input next-body)))
+              => @original
+              (:call_id (last (:input next-body))) => "stream-call"
+              (boolean
+                (some #(re-find #"^Running mcp_.*__whoami$" (:phase % ""))
+                      @seen)) => true
+              (some #(re-find #"PRIVATE|opaque" (pr-str %)) @seen) => nil)))))))
+
+(facts "completed SSE batches still validate every call before execution"
+  (doseq [kind [:unknown :duplicate :over-budget]]
+    (let [seen (atom [])]
+      (with-runtime
+        (fn [body]
+          (let [call (function-call (account-function-name body) "one" "{}")
+                output (case kind
+                         :unknown [call (function-call "forbidden" "two" "{}")]
+                         :duplicate [call call]
+                         :over-budget [call
+                                       (function-call (:name call) "two" "{}")
+                                       (function-call (:name call) "three"
+                                                      "{}")])]
+            (fn [out]
+              (write-event! out {:type "response.output_item.added"
+                                 :item call})
+              (write-event! out {:type "response.completed"
+                                 :response (response output)}))))
+        {:content []}
+        (fn [provider _ calls]
+          (let [failed (try
+                         (tools/complete provider "grok-4.7" messages
+                                         {:on-progress #(swap! seen conj %)})
+                         false (catch Exception _ true))]
+            (fact failed => true
+                  @calls => []
+                  (some #(string/starts-with? (:phase % "") "Running") @seen)
+                  => nil)))))))
+
+(fact "real SSE disconnect before completion never runs an announced tool"
+  (with-runtime
+    (fn [body]
+      (fn [out]
+        (write-event! out {:type "response.output_item.added"
+                           :item (function-call (account-function-name body)
+                                                "uncommitted-call" "{}")})
+        (write-event! out {:type "response.function_call_arguments.done"
+                           :arguments "{}"})))
+    {:content []}
+    (fn [provider requests calls]
+      (let [result (try
+                     (tools/complete provider "grok-4.7" messages
+                                     {:on-progress identity})
+                     (catch Exception e (.getMessage e)))]
+        (fact
+          result
+          => "The AI provider returned an invalid or incomplete event stream."
+          @calls => []
+          (count (filter #(= "/v1/responses" (:path %)) @requests)) => 1
+          (boolean (some #(= "DELETE" (:method %)) @requests)) => true)))))
 
 (fact "real HTTP + MCP carries mixed native and local tool state"
   (let [turns (atom 0) first-output (atom nil)]
