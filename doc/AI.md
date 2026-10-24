@@ -561,6 +561,111 @@ entries, not Yetibot's full environment or its other API keys.
   in the model's instructions. No connection credentials are deliberately sent
   to the AI provider.
 
+### X (Twitter) search: read-only hosted MCP
+
+[X's official MCP server](https://docs.x.com/tools/mcp) is available at
+`https://api.x.com/mcp`. Its direct, app-only Bearer-token route uses Streamable
+HTTP and custom headers, which Yetibot's MCP client supports. It does not
+require hosting a server, installing `xurl`, or performing interactive OAuth
+in Yetibot.
+
+**Read-only does not mean anonymous or free.** Before configuring it:
+
+1. Create an app in the [X Developer Console](https://console.x.com) and obtain
+   its **App-only Bearer token** from its keys/tokens settings.
+2. Ensure the app has access and credits for the search endpoints you intend to
+   use. X API [billing](https://docs.x.com/x-api/getting-started/pricing) and
+   rate limits still apply; a Yetibot tool-call limit is not a spending cap.
+3. Discover the hosted server's tools with that token and select only the public
+   post-search tools you need. Inspect their descriptions and input schemas;
+   never copy the complete tool list, which can include write operations.
+
+An **xAI console API key is not an X Developer app token** and cannot
+authenticate this connection. Grok's
+[`x_search`](https://docs.x.ai/developers/tools/x-search) is a separate, billed
+xAI service. The existing `grok` command already enables that tool using
+`:yetibot :xai :key`; this MCP recipe instead lets a tool-capable
+`ai` provider, including a local model, search through the X API directly.
+
+For discovery, use an MCP client that supports Streamable HTTP and custom
+headers. For example, with Node.js **22.19.0 or newer** and
+[MCP Inspector's CLI][inspector-cli], set `X_APP_BEARER_TOKEN` securely in your
+shell, then run:
+
+[inspector-cli]:
+  https://github.com/modelcontextprotocol/inspector/tree/main/clients/cli
+
+```sh
+npx @modelcontextprotocol/inspector@2.12.0 --cli https://api.x.com/mcp \
+  --transport http --stored-auth-only \
+  --header "Authorization: Bearer ${X_APP_BEARER_TOKEN}" \
+  --method tools/list
+```
+
+This lists tools without invoking them. Run it on a trusted machine: the
+expanded header is a process argument; do not enable shell tracing or share
+credentials or diagnostic output. `--stored-auth-only` prevents an interactive
+OAuth fallback if the supplied token fails. Follow any `tools/list` pagination
+before concluding a tool is absent.
+
+The official hosted-server documentation does not specify exact post-search tool
+names. **The following is a template, not a ready-to-run allowlist:** replace
+`POST_SEARCH_TOOL_FROM_TOOLS_LIST` with an exact, reviewed name from your
+authenticated discovery, and replace the token placeholder. Names from a local
+X MCP implementation or X's OpenAPI spec are not proof of hosted tool names.
+
+Merge this connection into `:yetibot :ai :mcp :servers`, preserving any existing
+servers and provider settings:
+
+```clojure
+{:name "x"
+ :url "https://api.x.com/mcp"
+ :headers {"Authorization" "Bearer YOUR_X_APP_ONLY_BEARER_TOKEN"}
+ :tools ["POST_SEARCH_TOOL_FROM_TOOLS_LIST"]}
+```
+
+Prefer injecting the header through Yetibot's environment configuration rather
+than committing a token. For example, if X is server index **1** after an
+existing Exa connection, the equivalent connection settings are:
+
+```sh
+export YETIBOT_AI_MCP_SERVERS_1_NAME=x
+export YETIBOT_AI_MCP_SERVERS_1_URL=https://api.x.com/mcp
+export YETIBOT_AI_MCP_SERVERS_1_HEADERS_AUTHORIZATION=\
+"Bearer ${X_APP_BEARER_TOKEN}"
+export YETIBOT_AI_MCP_SERVERS_1_TOOLS_0=POST_SEARCH_TOOL_FROM_TOOLS_LIST
+```
+
+Choose an unused server index (use `0` if X is your only server), replace the
+allowlist placeholder, and restart Yetibot. EDN does not interpolate environment
+variables. Keep only the reviewed search tools in `:tools`; the app-only token
+provides no user context and cannot act as an X user.
+
+Verify discovery before making a potentially billable search:
+
+```text
+!ai servers
+!ai tools x
+!ai Search X for recent public posts about Clojure and cite the post URLs.
+```
+
+`ai tools x` lists only your configured allowlist, not all upstream tools; a
+missing or incorrect name fails discovery. A successful listing does not prove
+that your app can call a search endpoint. Complete the search round trip to
+verify endpoint access and the selected model's tool calling. This recipe has
+not been authenticated end-to-end against the hosted service.
+
+Flat configuration connects every configured server for a tool-enabled prompt,
+so an unavailable X connection can also block ordinary web search. Use
+[named toolsets](#named-toolsets-github-and-search) to select X separately from
+Exa/Tavily, and keep your existing web-search toolset as the default if desired.
+If you already use named toolsets, adding a server alone does not expose it: add
+an entry referencing server `x` and its reviewed tools to a `:kind "search"`
+toolset, then select that toolset with `!ai --toolset <name> <prompt>`.
+Without access restrictions, configured search is available to everyone who can
+run `ai`, using the shared app's credentials and API budget. Use a dedicated app
+and restrict chat access or the toolset's users/conversations as appropriate.
+
 ## Named toolsets: GitHub and search
 
 Toolsets separate connection settings from what a request may use. Only selected
