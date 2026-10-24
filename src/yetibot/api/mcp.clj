@@ -222,16 +222,20 @@
             (when-not public? v)))
         headers))
 
+(defn credentials
+  "Configured redaction values, including stripped Bearer tokens."
+  [config]
+  (->> (concat (:secrets config)
+               (mapcat #(concat [(:github-api-token %)] (vals (:env %))
+                                (header-credentials %))
+                       (concat (:servers config) (:redaction-servers config))))
+       (filter text?)
+       (mapcat #(vector % (string/replace % #"(?i)^Bearer\s+" "")))
+       (filter text?)
+       distinct
+       (sort-by count >)))
+
 (defn redact
   "Remove configured credentials from data before it reaches the model or chat."
   [text config]
-  (let [credentials (->> (concat (:secrets config)
-                                 (mapcat #(concat [(:github-api-token %)]
-                                                  (vals (:env %)) (header-credentials %))
-                                         (concat (:servers config) (:redaction-servers config))))
-                         (filter text?)
-                         (mapcat #(vector % (string/replace % #"(?i)^Bearer\s+" "")))
-                         (filter text?)
-                         distinct
-                         (sort-by count >))]
-    (reduce #(string/replace %1 %2 "[redacted]") text credentials)))
+  (reduce #(string/replace %1 %2 "[redacted]") text (credentials config)))

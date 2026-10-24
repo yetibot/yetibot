@@ -34,16 +34,25 @@
                            :method (.getRequestMethod exchange)
                            :headers (into {} (map (fn [[k v]] [(string/lower-case k) (first v)]) (.getRequestHeaders exchange)))
                            :body (when (seq raw) (json/parse-string raw true))}
-                  {:keys [status body headers sse] :or {status 200}} (handler request)
+                  {:keys [status body headers sse stream] :or {status 200}}
+                  (handler request)
                   payload (when body (json/generate-string body))
                   payload (if sse (str "event: message\ndata: " payload "\n\n") payload)]
-              (doseq [[k v] (merge (when payload {"Content-Type" (if sse "text/event-stream" "application/json")}) headers)]
+              (doseq [[k v] (merge (when (or payload stream)
+                                        {"Content-Type"
+                                         (if (or sse stream)
+                                           "text/event-stream"
+                                           "application/json")}) headers)]
                 (.set (.getResponseHeaders exchange) k v))
-              (if payload
+              (cond
+                stream
+                (do (.sendResponseHeaders exchange status 0)
+                    (with-open [out (.getResponseBody exchange)] (stream out)))
+                payload
                 (let [bytes (.getBytes payload "UTF-8")]
                   (.sendResponseHeaders exchange status (count bytes))
                   (with-open [out (.getResponseBody exchange)] (.write out bytes)))
-                (.sendResponseHeaders exchange status -1)))
+                :else (.sendResponseHeaders exchange status -1)))
             (finally (.close exchange))))))
     (.start server)
     (try (f (str "http://127.0.0.1:" (.getPort (.getAddress server))))

@@ -265,6 +265,8 @@ options.
 !grok --model grok-4.7 --toolset cloudflare_read Summarize our account.
 !ai --provider local --model llama3.2 Explain this error.
 !grok --no-tools Explain map and reduce without searching.
+!grok --no-thread Search X for recent Clojure discussions.
+!grok --no-thread --no-tools Explain transducers.
 ```
 
 Plain `grok` uses the provider named `grok`, never the shared default or an
@@ -277,9 +279,60 @@ still using the shared MCP runtime and policy. Without either configuration,
 for your shared default.
 
 Both commands use the same thread context, MCP connections, toolset selection
-and user/adapter/provider/model authorization. Discord `grok` retains its
-threaded response and animated thinking indicator. Its footer names the selected
-model; it does not show a hardcoded cost estimate or encrypted reasoning.
+and user/adapter/provider/model authorization. Discord `grok` creates a reply
+thread by default. Use `--no-thread` to skip thread creation and reply in the
+invoking channel. Inside an existing thread, it stays there: the flag never
+moves that conversation into its parent channel or changes history/tool scope.
+The flag is Grok-only, can combine with `--model`, `--toolset` or `--no-tools`,
+and must precede the prompt. Use `--` to begin a prompt with a literal flag.
+
+### Live Discord progress
+
+With a Responses provider, Discord `grok` streams into its temporary progress
+message automatically; no extra flag or configuration is needed:
+
+- Provider-exposed thinking text/summary deltas, when the model supplies them.
+  xAI documents reasoning summaries for Grok 4.7; this is not a promise of the
+  Grok app's complete private thinking trace.
+- Native web/X search activity and validated host function start/finish status.
+  Tool arguments, tool result bodies and opaque encrypted state are not shown.
+- A rolling draft-answer excerpt, updated as answer text arrives.
+
+Updates coalesce about every two seconds instead of posting a message per
+token. The view keeps the latest thinking/answer excerpts and three recent
+tool statuses, within Discord's message limit. Previews are provisional and
+may change; they are not tool authorization or evidence of publication.
+Mentions are disabled on preview creation/edits. The temporary view is deleted
+before posting the complete final answer and selected-model footer. A failed
+progress create/edit/delete does not discard the final answer.
+
+Configured provider/active-tool credentials are masked before previews reach
+Discord. Credential-sized edges are buffered to prevent leaks across chunks or
+rolling-window boundaries; very long configured secret values can suppress
+text previews. This is not comprehensive secret detection. Thinking previews
+can include supplied history or tool-derived private content, so use a channel
+appropriate for the request. Normal platform history/logging still applies.
+
+Only a completed provider response can reach host tool dispatch. Partial
+function-call events never execute tools, and the existing whole-batch policy,
+call budget, duplicate protection and uncertain-outcome handling still apply.
+Opaque reasoning/search output replays unchanged on subsequent model turns.
+A disconnect, malformed/incomplete stream or provider error fails without
+resampling the request. Native provider work may already have incurred charges.
+
+SSE accepts up to 4 MiB characters per event and 16 MiB wire bytes per model
+turn, with a checked 120-second read deadline. A blocking read may outlast that
+deadline until the existing socket timeout (120 seconds). JSON-only Responses
+proxies can still return a bounded completed response, without live deltas.
+Other adapters and Chat Completions providers retain ordinary final-answer
+delivery; host tool status can still appear in Discord. No live xAI/Discord
+qualification is implied by local fixtures.
+
+See xAI's [reasoning docs][xai-reasoning] and
+[streaming tool docs][xai-streaming-tools].
+
+[xai-reasoning]: https://docs.x.ai/developers/model-capabilities/text/reasoning
+[xai-streaming-tools]: https://docs.x.ai/developers/tools/streaming-and-sync
 
 There are two distinct tool paths:
 
