@@ -3,6 +3,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.api.ai-stream :as stream]
             [yetibot.core.config :refer [get-config]]
             [yetibot.util.ai-config :as settings])
   (:import [java.net URI]))
@@ -81,7 +82,7 @@
     (or (some #(when (= provider-name (:name %)) %) (:providers config))
         (fail "Unknown AI provider. Use ai providers to list available providers."))))
 
-(defn- request [method provider path params]
+(defn- request [method provider path params & [progress]]
   (try
     (let [gateway (when (cloudflare/provider-account provider)
                     (or (:gateway-id provider)
@@ -90,22 +91,34 @@
                           "default")))
           response (method
                     (str (string/replace (:url provider) #"/+$" "") path)
-                    (merge {:as :json
+                    (merge {:as (if progress :stream :json)
                             :throw-exceptions false
                             :conn-timeout 5000
                             :socket-timeout 120000
                             :redirect-strategy :none
                             :retry-handler (fn [& _] false)
                             :headers (cond->
-                                       (merge {"Accept" "application/json"}
+                                       (merge {"Accept" (if progress
+                                                          "text/event-stream"
+                                                          "application/json")}
                                               (cloudflare/gateway-headers
                                                 gateway))
                                        (:key provider)
                                        (assoc "Authorization" (str "Bearer " (:key provider))))}
-                           params))]
-      (when-not (<= 200 (:status response) 299)
-        (fail (str "AI provider " (:name provider) " returned HTTP " (:status response) ".")))
-      (:body response))
+                           (when progress {:save-request true}) params))
+          read! (fn [body]
+                  (when-not (<= 200 (:status response) 299)
+                    (fail (str "AI provider " (:name provider)
+                               " returned HTTP " (:status response) ".")))
+                  (if progress
+                    (stream/read-response
+                      body (get-in response [:headers "content-type"])
+                      (set (map :type (get-in params [:form-params :tools])))
+                      (:callback progress) (:config progress))
+                    body))]
+      (if progress
+        (cloudflare/consume-response response read!)
+        (read! (:body response))))
     (catch Exception e
       (if (:ai/error (ex-data e))
         (throw e)
@@ -128,6 +141,10 @@
   "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]
   (let [responses-api? (responses? provider)
+        progress (when (and responses-api? (fn? (:on-progress options)))
+                   {:callback (:on-progress options)
+                    :config (update (:progress-config options {}) :secrets
+                                    #(conj (vec %) (:key provider)))})
         options (if responses-api?
                   (assoc options :tools
                          (if (= "none" (:tool_choice options)) []
@@ -146,10 +163,11 @@
              (if responses-api? "/responses" "/chat/completions")
              {:content-type :json
               :form-params
-              (merge params
+              (merge (cond-> params progress (assoc :stream true))
                      (cond-> (select-keys options [:tools :tool_choice])
                        (= "omit" (:tool-choice provider))
-                       (dissoc :tool_choice)))})))
+                       (dissoc :tool_choice)))}
+             progress)))
 
 (defn message
   "Normalize only client-side function calls; native searches run at xAI."
@@ -187,12 +205,14 @@
       (into (conj messages {:role "assistant" :content content
                            :tool_calls tool_calls}) replies))))
 
-(defn complete [provider model messages]
-  (let [body (chat provider model messages {})
-        text (:content (message provider body))]
-    (when-not (nonblank-string? text)
-      (fail (str "AI provider " (:name provider) " returned no "
-                 (when (responses? provider) "completed ")
-                 "text response.")))
-    {:result/value text
-     :result/data body}))
+(defn complete
+  ([provider model messages] (complete provider model messages {}))
+  ([provider model messages options]
+   (let [body (chat provider model messages options)
+         text (:content (message provider body))]
+     (when-not (nonblank-string? text)
+       (fail (str "AI provider " (:name provider) " returned no "
+                  (when (responses? provider) "completed ")
+                  "text response.")))
+     {:result/value text
+      :result/data body})))

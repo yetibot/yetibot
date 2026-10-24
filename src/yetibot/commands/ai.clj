@@ -17,12 +17,14 @@
 (defn parse-prompt
   "Only leading flags are options. Use -- to start a prompt with a flag."
   ([args] (parse-prompt args usage))
-  ([args usage]
+  ([args usage] (parse-prompt args usage {}))
+  ([args usage switches]
    (loop [remaining (string/trim args) options {}]
      (cond
        (string/blank? remaining) (ai/fail usage)
        (string/starts-with? remaining "--")
-       (let [[flag rest-args] (string/split remaining #"\s+" 2)]
+       (let [[flag rest-args] (string/split remaining #"\s+" 2)
+             switch (get (assoc switches "--no-tools" :no-tools) flag)]
          (cond
            (= "--" flag)
            (if (string/blank? rest-args)
@@ -31,10 +33,10 @@
                (when (and (:toolset options) (:no-tools options))
                  (ai/fail usage))
                (assoc options :prompt rest-args)))
-           (= "--no-tools" flag)
-           (if (:no-tools options)
+           switch
+           (if (contains? options switch)
              (ai/fail usage)
-             (recur (or rest-args "") (assoc options :no-tools true)))
+             (recur (or rest-args "") (assoc options switch true)))
            :else
            (let [option ({"--provider" :provider "--model" :model
                           "--toolset" :toolset} flag)
@@ -169,8 +171,11 @@
   ([args] (prepare-prompt args nil usage))
   ([args command-provider prompt-usage]
    (prepare-prompt args command-provider prompt-usage ai/config))
-  ([{:keys [match] :as args} command-provider prompt-usage resolve-config]
-   (let [options (parse-prompt match prompt-usage)
+  ([args command-provider prompt-usage resolve-config]
+   (prepare-prompt args command-provider prompt-usage resolve-config {}))
+  ([{:keys [match] :as args} command-provider prompt-usage resolve-config
+    switches]
+   (let [options (parse-prompt match prompt-usage switches)
          _ (when (and command-provider (:provider options))
              (ai/fail prompt-usage))
          config (resolve-config)
@@ -190,10 +195,15 @@
             :actor (policy/actor args)))))
 
 (defn complete-prompt
-  [{:keys [provider model messages no-tools toolset actor]}]
+  [{:keys [provider model messages no-tools toolset actor on-progress]}]
   (if no-tools
-    (ai/complete (dissoc provider :native-tools) model messages)
-    (tools/complete provider model messages {:toolset toolset :actor actor})))
+    (if on-progress
+      (ai/complete (dissoc provider :native-tools) model messages
+                   {:on-progress on-progress})
+      (ai/complete (dissoc provider :native-tools) model messages))
+    (tools/complete provider model messages
+                    (cond-> {:toolset toolset :actor actor}
+                      on-progress (assoc :on-progress on-progress)))))
 
 (defn prompt-cmd
   "ai <prompt> # ask the default AI provider; includes the conversation in Slack/Discord threads

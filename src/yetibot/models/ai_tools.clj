@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
@@ -107,7 +108,14 @@
         (update state :replies conj
                 {:role "tool" :tool_call_id (:id call)
                  :content "This tool was not run because an earlier call had an unknown outcome."})
-        (let [reply (execute-call call config)]
+        (let [label (get-in call [:entry :name])
+              _ (stream/notify! (:on-progress config) config
+                                {:phase (str "Running " label)})
+              reply (execute-call call config)]
+          (stream/notify! (:on-progress config) config
+                          {:phase (str (if (::unknown-outcome (meta reply))
+                                         "Unknown outcome: " "Finished ")
+                                       label)})
           (-> state
               (update :replies conj reply)
               (update :attempted inc)
@@ -123,7 +131,13 @@
     (loop [messages (into [{:role "system" :content instructions}] messages)
            used 0 seen #{} actions #{} halted false]
       (let [body (ai/chat provider model messages
-                          {:tools definitions :tool_choice (if (and (< used limit) (not halted)) "auto" "none")})
+                          (cond->
+                            {:tools definitions
+                             :tool_choice (if (and (< used limit) (not halted))
+                                            "auto" "none")}
+                            (:on-progress config)
+                            (assoc :on-progress (:on-progress config)
+                                   :progress-config config)))
             message (ai/message provider body)
             calls (:tool_calls message)]
         (if (seq calls)
@@ -190,9 +204,13 @@
 
 (defn complete
   ([provider model messages] (complete provider model messages {}))
-  ([provider model messages {:keys [toolset actor additional-secrets]}]
+  ([provider model messages
+    {:keys [toolset actor additional-secrets on-progress]}]
    (let [config (assoc (toolsets/select (mcp/config) toolset)
-                       :staged (atom nil) :secrets (keep identity (cons (:key provider) additional-secrets)))]
+                       :on-progress on-progress :staged (atom nil)
+                       :secrets (keep identity
+                                      (cons (:key provider)
+                                            additional-secrets)))]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (let [local (when (or (ai/tool-calling? provider)
@@ -211,7 +229,11 @@
                                                  reads)))]
                  (run-tools provider model messages tools config)))))
          ;; Text-only providers and non-chat callers need no function support.
-         (ai/complete provider model messages))))))
+         (if on-progress
+           (clean-data (ai/complete provider model messages
+                                    {:on-progress on-progress
+                                     :progress-config config}) config)
+           (ai/complete provider model messages)))))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))]
