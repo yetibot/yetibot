@@ -74,12 +74,25 @@
       (let [config (ai/config)
             providers (if provider-name [(ai/provider config provider-name)] (:providers config))
             results (mapv (fn [provider]
-                            (safely #(hash-map :models (ai/models provider))))
+                            (safely #(let [models (ai/models provider)]
+                                       (cond-> {:models models}
+                                         (:catalog (meta models))
+                                         (assoc :catalog
+                                                (:catalog (meta models)))))))
                           providers)]
         {:result/data (zipmap (map :name providers) results)
          :result/value (mapv (fn [provider result]
                                (str (:name provider) ": "
                                     (or (:result/error result)
+                                        (when-let [catalog (:catalog result)]
+                                          (str (:coverage catalog) "\n"
+                                               (string/join
+                                                 "\n"
+                                                 (map #(str (:id %) " ["
+                                                            (name
+                                                              (:interface %))
+                                                            "]")
+                                                      (:models catalog)))))
                                         (when (seq (:models result))
                                           (string/join ", " (:models result)))
                                         "No models available.")))

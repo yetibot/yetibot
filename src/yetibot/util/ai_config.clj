@@ -51,9 +51,11 @@
   (let [value (lift-fields value [:default-provider :intent-router])]
     (cond-> value
       (map? (:intent-router value))
-      (update :intent-router lift-fields [:account-id :key-file :min-probability :github-toolset])
+      (update :intent-router lift-fields [:account-id :key-file :min-probability
+                                         :github-toolset :gateway-id])
       (vector? (:providers value))
       (update :providers
               #(mapv (fn [p]
                        (lift-fields p [:tool-calling :tool-choice
-                                       :native-tools :max-turns])) %)))))
+                                       :native-tools :max-turns
+                                       :gateway-id])) %)))))

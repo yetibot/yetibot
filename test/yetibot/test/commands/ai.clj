@@ -76,6 +76,22 @@
     (:result/value (ai/models-cmd {:match ["models local" "local"]}))
     => ["local: No models available."]))
 
+(fact "model discovery keeps Cloudflare coverage and API interfaces visible"
+  (let [catalog {:source :cloudflare-workers-ai
+                 :coverage
+                 "Workers AI only; not the third-party Gateway catalog"
+                 :models [{:id "@cf/cloudflare/clef" :interface :decision
+                           :task {:name "Text Generation"}}]}]
+    (with-redefs [api/config (constantly {:providers [hosted-provider]})
+                  api/models (constantly
+                               (with-meta ["@cf/cloudflare/clef"]
+                                 {:catalog catalog}))]
+      (let [result (ai/models-cmd {:match ["models hosted" "hosted"]})]
+        (get-in result [:result/data "hosted" :catalog]) => catalog
+        (:result/value result)
+        => [(str "hosted: " (:coverage catalog) "\n"
+                 "@cf/cloudflare/clef [decision]")]))))
+
 (facts "context is read for each request, without reusing previous prompts"
   (let [requests (atom [])]
     (with-redefs [api/config (constantly config)

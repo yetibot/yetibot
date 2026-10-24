@@ -2,6 +2,7 @@
   (:require [clj-http.client :as client]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
+            [yetibot.api.cloudflare :as cloudflare]
             [yetibot.core.config :refer [get-config]]
             [yetibot.util.ai-config :as settings])
   (:import [java.net URI]))
@@ -24,6 +25,8 @@
 (s/def ::url base-url?)
 (s/def ::key nonblank-string?)
 (s/def ::model nonblank-string?)
+(s/def ::gateway-id #(and (string? %)
+                          (re-matches #"[a-zA-Z0-9_-]{1,64}" %)))
 (s/def ::tool-calling #(or (boolean? %) (contains? #{"true" "false"} %)))
 (s/def ::tool-choice #{"standard" "omit"})
 (s/def ::api #{"chat-completions" "responses"})
@@ -39,7 +42,7 @@
   (s/and
     (s/keys :req-un [::name ::url]
             :opt-un [::key ::model ::tool-calling ::tool-choice ::api
-                     ::native-tools ::max-turns])
+                     ::native-tools ::max-turns ::gateway-id])
     #(or (= "responses" (:api %))
          (not (or (seq (:native-tools %)) (contains? % :max-turns))))))
 
@@ -80,7 +83,12 @@
 
 (defn- request [method provider path params]
   (try
-    (let [response (method
+    (let [gateway (when (cloudflare/provider-account provider)
+                    (or (:gateway-id provider)
+                        (when (string/starts-with?
+                                (str (get-in params [:form-params :model])) "@")
+                          "default")))
+          response (method
                     (str (string/replace (:url provider) #"/+$" "") path)
                     (merge {:as :json
                             :throw-exceptions false
@@ -88,7 +96,10 @@
                             :socket-timeout 120000
                             :redirect-strategy :none
                             :retry-handler (fn [& _] false)
-                            :headers (cond-> {"Accept" "application/json"}
+                            :headers (cond->
+                                       (merge {"Accept" "application/json"}
+                                              (cloudflare/gateway-headers
+                                                gateway))
                                        (:key provider)
                                        (assoc "Authorization" (str "Bearer " (:key provider))))}
                            params))]
@@ -102,11 +113,16 @@
         (fail (str "Could not reach AI provider " (:name provider) " or read its response."))))))
 
 (defn models [provider]
-  (let [body (request client/get provider "/models" {})
-        data (:data body)]
-    (when-not (and (sequential? data) (every? #(nonblank-string? (:id %)) data))
-      (fail (str "AI provider " (:name provider) " returned an invalid model list.")))
-    (vec (sort (distinct (map :id data))))))
+  (if (cloudflare/provider-account provider)
+    (let [catalog (cloudflare/catalog provider)]
+      (with-meta (mapv :id (:models catalog)) {:catalog catalog}))
+    (let [body (request client/get provider "/models" {})
+          data (:data body)]
+      (when-not (and (sequential? data)
+                     (every? #(nonblank-string? (:id %)) data))
+        (fail (str "AI provider " (:name provider)
+                   " returned an invalid model list.")))
+      (vec (sort (distinct (map :id data)))))))
 
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
