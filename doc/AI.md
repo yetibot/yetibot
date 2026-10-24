@@ -2,7 +2,8 @@
 
 `ai` works with OpenAI-compatible Chat Completions endpoints
 (`POST /chat/completions`) and xAI Responses (`POST /responses`), with model
-listing through `GET /models`. You can configure multiple providers, each with
+listing through `GET /models` or Cloudflare's Workers AI catalog. You can
+configure multiple providers, each with
 its own name, base URL, optional API key and default model. The `grok` shortcut
 shares this configuration and MCP tools. The existing `openai` command is
 unchanged and uses separate configuration.
@@ -69,6 +70,172 @@ Options go before the prompt and may appear in either order. `--model` alone
 uses the default provider. `ai models` queries every provider and labels each
 model list with the provider's name. A failure from one provider does not hide
 results from the others. `ai models <provider>` queries just that provider.
+
+## Cloudflare inference and model discovery
+
+Cloudflare inference is an AI provider, not a Cloudflare MCP server. Add an
+entry to your existing `:ai :providers` vector:
+
+```clojure
+{:name "cloudflare"
+ :url "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1"
+ :key "CLOUDFLARE_API_TOKEN"
+ :gateway-id "my-gateway"}
+```
+
+Replace `ACCOUNT_ID` with the account's 32-character hexadecimal ID. Scope the
+token to that account with Workers AI Read permission. Inference can consume
+account credits/allowances; a management-only AI Gateway token is insufficient.
+`:gateway-id` is optional. It sends `cf-aig-gateway-id` for this Cloudflare
+provider; Workers AI model IDs beginning with `@` use `default` when omitted.
+Third-party models without an explicit gateway use Cloudflare's account default.
+Arbitrary provider headers are not configurable.
+
+```text
+!ai models cloudflare
+!ai --provider cloudflare --model @cf/zai-org/glm-5.3 Say hello.
+!ai --provider cloudflare --model openai/gpt-4.1 Say hello.
+```
+
+Choose a chat-capable model supported by your account. There is no hardcoded
+model menu or mandatory default model: omit `:model` and select one per prompt,
+or add `:model` as your preferred default. Discovery does not choose a default.
+Changing the shared default provider does not reroute pinned `grok` calls.
+
+For this account REST base, `ai models` calls
+`GET /accounts/{account_id}/ai/models/search`, not `/ai/v1/models`. It retrieves
+up to 20 pages of 100 entries, deduplicates/sorts IDs, and retains task metadata
+in pipeline data under the provider's `:catalog`. The displayed coverage is
+**Workers AI only; third-party Gateway models not included**. This is not the
+complete AI Gateway catalog or proof that every returned model accepts chat,
+images, or tools. Clef/Clairic are labelled decision/extraction interfaces, not
+chat models. Other entries are labelled model-specific; inspect their task and
+documentation. Other providers retain standard `GET /models` discovery.
+
+Use supported third-party Gateway IDs explicitly with `--model`; their absence
+from this catalog does not mean they are unavailable. See Cloudflare's
+[Workers AI catalog][cf-models] and [Gateway REST documentation][cf-rest].
+Review Gateway logging and caching settings before sending private content.
+
+## Standalone Clef and Clairic
+
+`clef` returns decisions/probabilities; `clairic` extracts typed values.
+They use dedicated Workers AI APIs, not Chat Completions, and return data only:
+neither command invokes the automatic-PR router, enables it, calls MCP tools,
+or grants permission to edit repositories or publish changes.
+
+Both reuse the existing `:ai :intent-router` account and server-side token file,
+**even when `:enabled` is false**. Add this inside `:yetibot :ai`:
+
+```clojure
+{:intent-router
+ {:enabled false
+  :account-id "0123456789abcdef0123456789abcdef"
+  :key-file "/run/secrets/cloudflare-workers-ai-token"
+  :gateway-id "my-gateway"}}
+```
+
+Keep the token file absolute, readable only by the bot's service user, and out
+of version control. Use an account-scoped Workers AI Read token. These commands
+need no AI provider entry. Optional `:gateway-id` sends the routing header for
+that Gateway; it does not change the existing automatic intent classifier's
+transport or enabled state. To use prepaid Gateway credits, configure its
+Workers AI billing setting to Unified billing and supply its ID. Account/model
+access and billing still need live qualification. These settings also
+normalize from `YETIBOT_AI_INTENT_ROUTER_ACCOUNT_ID`,
+`YETIBOT_AI_INTENT_ROUTER_KEY_FILE`, and
+`YETIBOT_AI_INTENT_ROUTER_GATEWAY_ID`.
+
+### Decisions
+
+```text
+!echo service is down | clef Is this an unresolved outage?
+!clef Is this a receipt? https://example.com/receipt.png
+!echo down | clef --questions '{:x {:type :noul :instructions "Bad?"}}'
+```
+
+Plain questions produce an answer named `decision` with `P(yes)`. Supply state
+through a pipe or image, rather than asking Clef to classify its own question.
+`--questions` accepts one quoted EDN map with 1–64 questions. Each entry has
+`:type` and `:instructions`; instructions may be text or structured data.
+Question IDs contain letters, digits, `_`, `.`, or `-`, up to 100 characters.
+Supported types are:
+
+- `:noul`: yes/no probability. Optional `:criteria` describes true/false.
+- `:choice`: `:criteria` maps 2–255 option IDs to descriptions.
+- `:score`: `:criteria` is an ordered vector of 2–10 level descriptions.
+
+For example, a choice schema is:
+
+```clojure
+{:team {:type :choice
+        :instructions "Which team should review this?"
+        :criteria {:ops "Service incidents" :sales "Purchase questions"}}}
+```
+
+Pass it as a single quoted argument to `clef --questions`. State may follow the
+schema inline or arrive through a pipe. EDN is parsed as data, never evaluated.
+
+### Extraction and downstream data
+
+```text
+!echo total 42 | clairic --fields '{:amount :number}'
+!clairic --fields '{:amount :number}' https://example.com/receipt.png
+!echo 42 | clairic --fields '{:x :number}' | data $.answers.x.value
+```
+
+`--fields` accepts 1–64 fields, either shorthand (`:amount :number`) or full
+specifications (`:amount {:type :number :unit "USD" :decimals 2}`). Supported
+types are text, number, date, time, datetime, duration, list, estimate, and
+forecast. Lists require `:items` of text/number/date; estimates and forecasts
+require `:min`/`:max`. Cloudflare validates the remaining type-specific options.
+Field IDs start with a letter or `_`, use letters/digits/`_ . -`, and contain at
+most 64 characters. See the [Clairic schema][cf-clairic] for options and units.
+
+Piped text/collections supply state, not the question/schema. String collections
+join with newlines; other collections become structured Clef state or JSON text
+for Clairic. No conversation history is fetched implicitly; pipe `history` if
+that is the intended input. To forward a prior command's structured results,
+use `data` explicitly; ordinary piping forwards its readable value.
+
+Readable answers include probabilities/confidence where present. Long answer
+lines shorten to 160 characters with a notice. The complete response remains
+in `:result/data`, including answers, nulls, guesses, spans, distributions,
+usage, and truncation metadata. `data $.answers.x.value` selects the actual
+value, not a possibly incorrect `guess`. Truncated input produces a warning.
+Well-formed outputs can still be wrong; confidence is not execution approval.
+
+### Images and bounds
+
+Attach an image or include a direct image URL in the input or a plain Clef
+question, separated from surrounding text by whitespace. Inline URL recognition
+uses common image file extensions; extensionless URLs can arrive as image
+attachments. Yetibot downloads the image itself and sends embedded bytes,
+not merely a remote URL. Fetches require public HTTPS, no URL credentials,
+fragments, nonstandard ports, cookies, JVM proxies, retries, or redirects. Every
+resolved address is checked and DNS is pinned for the connection. The
+Cloudflare token is never forwarded to image hosts.
+
+PNG, JPEG, and WebP are supported: at most four images, 4 MiB each, 8 MiB total,
+and 16 megapixels each. URLs are limited to 4096 characters. Input state is
+limited to 60,000 characters; schemas/questions to 16,384. JSON responses are
+stream-bounded to 1 MiB. Image bodies have a 30-second read deadline and
+five-second connection/socket timeouts; Cloudflare uses a 60-second body read
+deadline/socket timeout and five-second connection timeout. A blocking read may
+outlast the deadline until its socket timeout; DNS uses the host resolver.
+
+Only explicitly supplied input and attachments are sent. That content can
+include private history or documents, and Cloudflare/Gateway logging settings
+apply. Original chat messages and upstream pipeline commands remain subject to
+normal bot history/logging. Known token strings are rejected in inputs/outputs;
+this is not comprehensive secret detection or prompt-injection protection.
+Provider error bodies and credential-file errors are not echoed to chat. Local
+fixtures verify these contracts; account billing/model availability still need
+live qualification after configuration.
+
+[cf-models]: https://developers.cloudflare.com/workers-ai/models/
+[cf-rest]: https://developers.cloudflare.com/ai-gateway/usage/rest-api/
+[cf-clairic]: https://developers.cloudflare.com/workers-ai/models/clairic/
 
 ## Grok and xAI Responses
 
