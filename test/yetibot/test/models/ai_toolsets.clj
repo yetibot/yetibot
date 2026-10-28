@@ -40,3 +40,26 @@
   (error? #(toolsets/select
              {:servers [{:name "writer" :tools ["push_files"]}]} nil))
   => true)
+
+(fact "name-only references inherit server restrictions or live discovery"
+  (let [inherited (update-in config [:toolsets 0 :servers 0] dissoc :tools)
+        selected (toolsets/select inherited nil)]
+    (mapv :name (:servers selected)) => ["web"]
+    (get-in selected [:servers 0 :tools]) => ["web_search" "other"]
+    (let [automatic (update-in inherited [:servers 0] dissoc :tools)
+          selected (toolsets/select automatic nil)]
+      (mapv :name (:servers selected)) => ["web"]
+      (contains? (first (:servers selected)) :tools) => false)
+    (let [automatic (update-in config [:servers 0] dissoc :tools)]
+      (get-in (toolsets/select automatic nil) [:servers 0 :tools])
+      => ["web_search"])))
+
+(fact "inherited names retain reserved GitHub validation"
+  (let [inherited (update-in config [:toolsets 0 :servers 0] dissoc :tools)]
+    (doseq [names [["push_files"] ["get_commit"]]]
+      (fact (error? #(toolsets/select
+                       (assoc-in inherited [:servers 0 :tools] names) nil))
+            => true))
+    (fact (error? #(toolsets/select
+                     (assoc-in inherited [:toolsets 0 :servers 0 :tools] nil)
+                     nil)) => true)))

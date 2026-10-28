@@ -87,10 +87,22 @@
             {:headers {"Mcp-Session-Id" "integration-session"}
              :body {:jsonrpc "2.0" :id (:id body) :result result}}))))))
 
-(fact "real OpenAI HTTP and MCP transports connect chat, policy, staging and approval"
-  (let [requests (atom []) pushed (atom false)]
+(defn- check-transports [discovery]
+  (let [requests (atom []) pushed (atom false)
+        handler (fixture-handler requests pushed)]
     (support/with-http-server
-      (fixture-handler requests pushed)
+      (fn [request]
+        (let [response (handler request)]
+          (if (and (= discovery :automatic)
+                   (#{"/read" "/write"} (:path request))
+                   (= "tools/list" (get-in request [:body :method])))
+            (update-in response [:body :result :tools] into
+                       (if (= "/read" (:path request))
+                         [(assoc (tool "push_files")
+                                 :annotations {:readOnlyHint true})
+                          (tool "unknown_operation")]
+                         [(tool "delete_repository")]))
+            response)))
       (fn [base]
         (let [provider {:name "local" :url (str base "/v1") :model "chat"}
               request chat/request
@@ -100,16 +112,27 @@
                  :providers [{:name "local" :models ["chat"]}]
                  :base-branches ["main"] :allowed-paths ["src/"]
                  :write-server "writer"
-                 :servers [{:name "reader" :tools reader-tools}]}
+                 :servers [(cond-> {:name "reader" :tools reader-tools}
+                             (not= discovery :explicit) (dissoc :tools))]}
               config {:default-toolset "search"
                       :toolsets [{:name "search" :kind "search"
-                                  :servers [{:name "web" :tools ["web_search"]}]} t]
+                                  :servers
+                                  [(cond-> {:name "web" :tools ["web_search"]}
+                                     (not= discovery :explicit)
+                                     (dissoc :tools))]} t]
                       :servers [{:name "web" :url (str base "/search") :tools ["web_search"]}
                                 {:name "reader" :url (str base "/read") :tools reader-tools
                                  :github-api-token "ancestry-secret"}
                                 {:name "writer" :url (str base "/write") :tools writer-tools
                                  :headers {"Authorization" "Bearer write-secret"}}
-                                {:name "offline" :url "http://127.0.0.1:9/mcp" :tools ["unused"]}]}]
+                                {:name "offline" :url "http://127.0.0.1:9/mcp"
+                                 :tools ["unused"]}]}
+              config (if (= discovery :automatic)
+                       (update config :servers
+                               #(mapv (fn [s]
+                                        (if (= "offline" (:name s)) s
+                                          (dissoc s :tools))) %))
+                       config)]
           (with-redefs [api/config (constantly {:providers [provider]})
                         mcp/config (constantly config)
                         context/messages (fn [_ prompt] [{:role "user" :content prompt}])
@@ -119,6 +142,13 @@
               (:value (chat/run-command request "ai --toolset search Search current news"))
               => "Source: https://source.test/news"
               (some #(= "/read" (:path %)) @requests) => nil)
+            (let [names (:value (chat/run-command request "ai tools"))]
+              (fact (some #{"web/web_search"} names) => "web/web_search"
+                    (some #{"reader/get_commit"} names)
+                    => "reader/get_commit"
+                    (some #(re-find #"push_files|unknown_operation" %) names)
+                    => nil
+                    (some #(= "/write" (:path %)) @requests) => nil))
             (let [result (chat/run-command request "ai --toolset github-pr Fix src/a.clj")
                   id (get-in result [:data :proposal])
                   p (proposals/review! id actor)]
@@ -131,11 +161,24 @@
                         [:data :status]) => :succeeded
                 (contains? (chat/run-command request (str "ai approve " id)) :error) => true
                 (count (filter #(= "push_files" (get-in % [:body :params :name])) @requests)) => 1
+                (some #(= "delete_repository"
+                          (get-in % [:body :params :name])) @requests) => nil
                 (get-in (last (filter #(= "create_pull_request" (get-in % [:body :params :name])) @requests))
                         [:body :params :arguments :draft]) => true
                 (every? #(not (re-find #"write-secret|ancestry-secret"
                                      (json/generate-string (:body %))))
-                        (filter #(= "/v1/chat/completions" (:path %)) @requests)) => true))))))))
+                        (filter #(= "/v1/chat/completions" (:path %))
+                                @requests))
+                => true
+                (some #(re-find #"push_files|create_|delete_repository|unknown_"
+                                (json/generate-string
+                                  (get-in % [:body :tools])))
+                      (filter #(= "/v1/chat/completions" (:path %)) @requests))
+                => nil))))))))
+
+(fact "real HTTP/MCP transports preserve discovery, policy and approved writes"
+  (doseq [discovery [:explicit :inherit :automatic]]
+    (check-transports discovery)))
 
 (fact "GitHub tools are discoverable and executable across channels and threads"
   (let [requests (atom [])

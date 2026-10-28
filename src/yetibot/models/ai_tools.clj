@@ -1,5 +1,5 @@
 (ns yetibot.models.ai-tools
-  "Provider-independent function calling over explicitly allowed MCP tools."
+  "Provider-independent function calling over policy-filtered MCP tools."
   (:require [cheshire.core :as json]
             [clojure.string :as string]
             [clojure.walk :as walk]
@@ -26,6 +26,34 @@
 
 (defn- clean-data [data config]
   (walk/postwalk #(if (string? %) (mcp/redact % config) %) data))
+
+(defn- model-tools [config tools]
+  (let [servers (into {} (map (juxt :name identity) (:servers config)))
+        scopes (if-let [t (:toolset config)] [t] (:toolsets config))
+        allowed
+        (filterv
+          (fn [tool]
+            (let [name (:name tool)
+                  server-name (get-in tool [:session :server :name])]
+              (if (seq scopes)
+                (some (fn [t]
+                        (and (toolsets/model-tool? t name)
+                             (some (fn [ref]
+                                     (let [server
+                                           (toolsets/reference-server
+                                             servers ref)]
+                                       (and (= server-name (:name ref))
+                                            (or (not (contains? server :tools))
+                                                (some #{name}
+                                                      (:tools server))))))
+                                   (:servers t)))) scopes)
+                (toolsets/model-tool? nil name)))) tools)
+        names (into {} (map (fn [[server tools]] [server (mapv :name tools)])
+                             (group-by #(get-in % [:session :server :name])
+                                       allowed)))]
+    ;; Calls use the same policy-narrowed catalog as model exposure/listing.
+    (mapv #(assoc-in % [:session :server :tools]
+                     (get names (get-in % [:session :server :name]))) allowed)))
 
 (defn- tool-entry [index tool config]
   (let [server-name (get-in tool [:session :server :name])
@@ -223,7 +251,8 @@
                "Tool calling is disabled for this provider. Use --no-tools."))
            (mcp/with-tools config
              (fn [reads]
-               (let [tools (cond-> (into (vec reads) local)
+               (let [reads (model-tools config reads)
+                     tools (cond-> (into reads local)
                              (= "github-pr" (get-in config [:toolset :kind]))
                              (conj (staging-tool config actor provider model
                                                  reads)))]
@@ -238,19 +267,30 @@
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))]
     (if (seq (:toolsets config))
-      (let [visible (filter #(policy/visible? % actor) (:toolsets config))
-            refs (mapcat :servers visible)
-            allowed (reduce #(update %1 (:name %2) (fnil into #{}) (:tools %2)) {} refs)]
-        (assoc config
+      (let [visible (filterv #(policy/visible? % actor) (:toolsets config))
+            servers (into {} (map (juxt :name identity) (:servers config)))
+            allowed (group-by :name
+                              (map #(toolsets/reference-server servers %)
+                                   (mapcat :servers visible)))]
+        (assoc config :toolsets visible
                :native-tools
                (vec (distinct
                       (mapcat #(if (native/trusted? actor)
                                  (toolsets/native-tools {:toolset %})
                                  (:native-tools %)) visible)))
                :servers
-               (vec (keep #(when-let [names (get allowed (:name %))]
-                             (assoc % :tools (vec (filter names (:tools %)))))
-                          (:servers config)))))
+               (vec
+                 (keep
+                   (fn [server]
+                     (when-let [choices (get allowed (:name server))]
+                       (if (some #(not (contains? % :tools)) choices)
+                         (dissoc server :tools)
+                         (let [names (set (mapcat :tools choices))
+                               order (if (contains? server :tools)
+                                       (:tools server)
+                                       (distinct (mapcat :tools choices)))]
+                           (assoc server :tools (vec (filter names order)))))))
+                   (:servers config)))))
       (assoc config :native-tools
              (when (native/trusted? actor)
                toolsets/default-native-tools)))))
@@ -287,5 +327,5 @@
            (mcp/with-tools config
              #(into (mapv (fn [tool]
                             (str (get-in tool [:session :server :name]) "/"
-                                 (:name tool))) %)
+                                 (:name tool))) (model-tools config %))
                     local))))))))

@@ -504,7 +504,28 @@ xAI Responses uses `function_call` and `function_call_output` items. Use
 `--no-tools` for a model that does not support this, or to skip all tools for
 one request.
 
-Add `:mcp` alongside `:providers` inside your `:ai` configuration. For example:
+Add `:mcp` alongside `:providers` inside your `:ai` configuration. A server
+needs only its name and connection; `:tools` is optional:
+
+```clojure
+{:mcp {:servers [{:name "devth" :url "https://devth.com/mcp"}]}}
+```
+
+Yetibot calls `tools/list` on each request and exposes the eligible tools with
+their advertised descriptions and input schemas. For devth this discovers
+`list_content`, `search_content`, `read_content` and `get_hit_count`. No
+handwritten list, schema or separate devth toolset is needed. Use
+`!ai tools devth` to inspect
+it, then `!ai Search Trevor's blog for Yetibot and cite the posts.`
+
+If you already use named toolsets, also append `{:name "devth"}` to the
+`:servers` of your existing default `"search"` toolset. Keep its current
+Cloudflare/Exa references and other toolsets unchanged. This name-only reference
+inherits the server's tool policy; it does not require `--toolset devth`.
+Unreferenced servers remain disconnected, so adding a public server never
+implicitly enables a GitHub connection.
+
+For reviewed subsets, keep an explicit `:tools` allowlist, as in these examples:
 
 ```clojure
 {:mcp
@@ -579,14 +600,24 @@ entries, not Yetibot's full environment or its other API keys.
 
 ### Access and limits
 
-- Every server needs a unique `:name` and an explicit, nonempty `:tools` list.
-  Only those tools are offered to the model, and calls to other names are rejected.
-  Tools with the same name on different servers remain separate.
+- Every server needs a unique `:name`. Omit `:tools` to discover its eligible
+  catalog, or provide a nonempty list to restrict it. Existing explicit lists
+  still exclude every unlisted tool. `nil` and empty lists are invalid settings.
+  Calls must belong to the request's discovered, policy-filtered catalog; an
+  invented tool name is rejected before transport. Tools with the same name on
+  different servers remain separate.
+- Discovery trusts the configured server's current and future eligible tools;
+  it is not a general read-only guarantee. Only add trusted servers. Use
+  explicit allowlists and least-privilege credentials when a catalog includes
+  operations you do not want exposed. Tool annotations do not grant GitHub
+  permissions.
 - Legacy search tools are available to everyone who can run `ai`. Named toolsets
   can restrict access by stable user IDs and adapters. GitHub tools require
-  a GitHub toolset with explicit access policy; raw GitHub mutations cannot be
-  exposed to the model. Connections use service credentials, not the chat user's
-  GitHub identity. Use least-privilege keys and command access controls too.
+  a GitHub toolset with explicit access policy. Discovery in GitHub toolsets
+  exposes only the host's supported read operations, never unknown operations or
+  raw GitHub mutations. Reserved GitHub names remain excluded from search.
+  Connections use service credentials, not the chat user's GitHub identity.
+  Use least-privilege keys and command access controls too.
 - Supports local stdio and remote **Streamable HTTP**, including JSON and SSE
   response bodies. Old standalone `/sse` transports, interactive OAuth sign-in,
   MCP prompts/resources and server-requested model sampling are not enabled.
@@ -595,9 +626,10 @@ entries, not Yetibot's full environment or its other API keys.
   Redirects are not followed, so use the exact endpoint, including any required
   trailing slash. Prefer HTTPS for remote servers.
 - Each prompt opens fresh sessions and closes them when finished, including on
-  failures. It discovers allowed tools before asking the model. If a server is
-  unavailable or a configured tool is missing, the request fails clearly; it does
-  not silently answer as if a search succeeded. `--no-tools` skips all connections.
+  failures. It discovers and filters tools before asking the model. If a server
+  is unavailable or a configured tool is missing, the request fails clearly;
+  it does not silently answer as if a search succeeded. `--no-tools` skips all
+  connections.
 - `:max-tool-calls` defaults to 6 and accepts 1–20. The limit includes every call
   across all servers and model turns. At the limit the model gets one final turn
   with tool use disabled. Repeated calls with identical arguments are rejected,
@@ -760,16 +792,14 @@ Replace the model, IDs, executable paths and token placeholders before use:
   :toolsets
   [{:name "search"
     :kind "search"
-    :servers [{:name "web" :tools ["web_search_exa"]}]}
+    :servers [{:name "web"}]}
    {:name "github-read"
     :kind "github-read"
     :users ["SLACK_USER_ID"]
     :adapters ["slack"]
     :repositories ["your-org/your-repo"]
     :providers [{:name "local" :models ["YOUR_TOOL_CAPABLE_MODEL"]}]
-    :servers [{:name "github-read"
-               :tools ["get_file_contents" "get_commit" "list_branches"
-                       "issue_read" "pull_request_read" "search_code"]}]}
+    :servers [{:name "github-read"}]}
    {:name "github-pr"
     :kind "github-pr"
     :users ["SLACK_USER_ID"]
@@ -781,9 +811,7 @@ Replace the model, IDs, executable paths and token placeholders before use:
     :denied-paths ["src/credentials/"]
     :branch-prefix "yetibot/ai-"
     :write-server "github-write"
-    :servers [{:name "github-read"
-               :tools ["get_file_contents" "get_commit" "list_branches"
-                       "issue_read" "pull_request_read" "search_code"]}]}]}}
+    :servers [{:name "github-read"}]}]}}
 ```
 
 The `github-pr` toolset must include `get_commit` and `get_file_contents` for
@@ -797,7 +825,13 @@ inferred from MCP headers or environment, redirects/retries are disabled, and
 unsupported/error responses stop the workflow. Only GitHub.com is supported.
 A `search` toolset cannot expose known GitHub tools; use a
 GitHub kind so repository and identity checks cannot be bypassed accidentally.
-All tool names must appear in their server's allowlist and its live `tools/list`.
+A name-only server reference inherits its connection's `:tools` restriction, or
+live discovery when that restriction is omitted. A reference may supply its own
+`:tools` to narrow access, never widen a connection's explicit allowlist. Every
+exposed tool must appear in live `tools/list`. Missing required snapshot or
+write capabilities fail closed; discovery does not change identity, repository,
+path, review, ancestry or approval checks. Writer-only connections stay hidden
+and connect for host-controlled execution, with the fixed write-tool subset.
 Only trusted administrators may configure tools: an arbitrary third-party tool
 named like a search function is not automatically safe or read-only.
 
@@ -810,7 +844,6 @@ export YETIBOT_AI_MCP_DEFAULT_TOOLSET=search
 export YETIBOT_AI_MCP_TOOLSETS_0_NAME=search
 export YETIBOT_AI_MCP_TOOLSETS_0_KIND=search
 export YETIBOT_AI_MCP_TOOLSETS_0_SERVERS_0_NAME=web
-export YETIBOT_AI_MCP_TOOLSETS_0_SERVERS_0_TOOLS_0=web_search_exa
 ```
 
 To configure tokens through the environment, the nested server keys are

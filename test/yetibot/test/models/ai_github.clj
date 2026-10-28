@@ -165,6 +165,28 @@
                 (count (filter #(= "REST ancestry" (first %)) @calls)) => 1
                 (string/includes? (pr-str result) "fake-ancestry-token") => false))))))
 
+(fact "automatic discovery requires credentials on the actual commit reader"
+  (let [t (assoc t :servers [{:name "reader"} {:name "fallback"}])
+        config (assoc config :toolsets [t]
+                      :servers [{:name "reader"}
+                                {:name "fallback"
+                                 :github-api-token "fallback-token"}
+                                {:name "writer" :tools write-tools}])
+        connections (atom [])]
+    (with-fixture (fn [& _] nil)
+      (fn [calls]
+        (with-redefs
+          [mcp/with-tools
+           (fn [settings f]
+             (swap! connections conj (mapv :name (:servers settings)))
+             (f [{:name "get_commit"
+                  :session {:server (first (:servers settings))}}]))]
+          (fact (:status (github/execute! config
+                                         (assoc proposal :toolset t)))
+                => :failed
+                @connections => [["reader" "fallback"]]
+                @calls => []))))))
+
 (facts "missing, mismatched or merge ancestry stops after the push without a PR"
   (doseq [data [{:sha new-sha}
                 {:sha new-sha :parents []}
