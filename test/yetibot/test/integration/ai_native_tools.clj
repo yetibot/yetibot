@@ -11,6 +11,12 @@
             [yetibot.core.db.history :as history]
             [yetibot.core.db.util :as db]
             [yetibot.core.models.help :as help]
+            [yetibot.core.commands.grokimage :as gi]
+            [yetibot.core.util.gemini :as gemini]
+            [yetibot.core.util.xai :as xai]
+            [yetibot.core.util.http :as http]
+            [yetibot.core.webapp.routes.images :as images]
+            [yetibot.models.imgflip :as imgflip]
             [yetibot.core.models.history :as stored-history]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -86,7 +92,10 @@
                          provider "grok-4.7" messages
                          {:actor (policy/actor request)})]
             {:result result :sent @sent
-             :replies (mapv #(json/parse-string (:content %) true)
+             :replies (mapv #(if (string/starts-with? (:content %)
+                                                     "This tool was not run")
+                              {:skipped true :reason (:content %)}
+                              (json/parse-string (:content %) true))
                             (filter #(= "tool" (:role %))
                                     (:messages (last @sent))))}))))))
 
@@ -452,3 +461,216 @@
                     :structuredContent
                     {:error "Native result exceeded the output limit."
                      :truncated true}}))))))
+
+(def media-config
+  (assoc-in config [:toolsets 0 :native-tools] ["meme" "gi"]))
+
+(fact "media defaults follow credentials, explicit lists and GitHub isolation"
+  (execution/in-event execution/request "ai tools"
+    (fn [request]
+      (let [actor (policy/actor request)
+            reads ["yetibot/help" "yetibot/history" "yetibot/history_count"]]
+        (doseq [meme? [false true] image? [false true]]
+          (with-redefs [imgflip/configured? meme?
+                        xai/config (if image? {:key "fake-image-key"} {})
+                        mcp/config (constantly nil)]
+            (fact (tools/tool-names "yetibot" actor)
+                  => (cond-> reads
+                       meme? (conj "yetibot/meme")
+                       image? (conj "yetibot/gi")))
+            (with-redefs [mcp/config (constantly config)]
+              (fact (tools/tool-names "yetibot" actor) => reads))))
+        (let [t (-> toolset (dissoc :native-tools)
+                    (assoc :kind "github-read" :repositories ["owner/repo"]
+                           :servers [{:name "reader" :tools ["get_commit"]}]))
+              cfg {:toolsets [t]
+                   :servers [{:name "reader" :tools ["get_commit"]}]}]
+          (with-redefs [imgflip/configured? true
+                        xai/config {:key "fake-image-key"}
+                        mcp/config (constantly cfg)]
+            (fact (tools/tool-names "yetibot" actor) => reads)))))))
+
+(fact "meme search is literal, bounded and returns usable template IDs"
+  (with-redefs [imgflip/configured? true
+                imgflip/search-via-scrape (constantly [])
+                imgflip/memes
+                (constantly {:data {:memes [{:id "181913649" :name "Drake"
+                                            :url "https://i.imgflip.com/a.jpg"}
+                                           {:id "2" :name "DRAKE copy"}
+                                           {:id "3" :name "Cat"}]}})]
+    (let [result (run-calls nil [["meme" {"action" "search" "query" "drake"
+                                          "limit" 1}]])]
+      (fact (get-in result [:replies 0 :structuredContent :templates])
+            => [{:id "181913649" :name "Drake"
+                 :url "https://i.imgflip.com/a.jpg"}]))
+    (fact (get-in (run-calls nil
+                   [["meme" {"action" "search" "query" "["}]])
+                  [:replies 0 :structuredContent :templates]) => [])))
+
+(fact "meme captions are data, not commands, and generated URLs reach the model"
+  (let [calls (atom [])]
+    (with-redefs [imgflip/configured? true
+                  imgflip/generate-meme
+                  (fn [& args]
+                    (swap! calls conj args)
+                    {:success true
+                     :data {:url "//i.imgflip.com/generated.jpg"}})]
+      (let [result (run-calls nil
+                     [["meme" {"action" "generate"
+                                "template_id" "181913649"
+                                "top" "no | cmd" "bottom" "yes `echo nope`"}]])]
+        (fact @calls => [["181913649" "no | cmd" "yes `echo nope`"]]
+              (get-in result [:replies 0 :structuredContent :url])
+              => "https://i.imgflip.com/generated.jpg")))))
+
+(fact "gi reuses generation and image storage without exposing binary data"
+  (let [calls (atom [])]
+    (with-redefs [xai/config {:key "fake-image-key"}
+                  xai/generate-image (fn [& args]
+                                       (swap! calls conj args)
+                                       (println "private-gi-debug")
+                                       "binary-image-not-for-model")
+                  images/store-image! (fn [_] "native-image")
+                  gemini/yetibot-base-url (constantly "https://yetibot.test")]
+      (let [captured (atom nil)
+            output (with-out-str
+                     (reset! captured
+                             (run-calls nil
+                               [["gi" {"prompt" "a yeti on a helicopter"}]])))
+            result @captured]
+        (fact output => ""
+              (ffirst @calls) => "a yeti on a helicopter"
+              (count @calls) => 1
+              (get-in result [:replies 0 :structuredContent :url])
+              => "https://yetibot.test/generated-images/native-image.png"
+              (string/includes? (json/generate-string (:replies result))
+                                "binary-image-not-for-model") => false)))))
+
+(fact "invalid media batches fail before any caption or paid image request"
+  (let [calls (atom [])]
+    (with-redefs [imgflip/configured? true
+                  xai/config {:key "fake-image-key"}
+                  gi/grokimage-cmd (fn [& args] (swap! calls conj args))
+                  imgflip/generate-meme (fn [& args] (swap! calls conj args))]
+      (doseq [[op args]
+              [["gi" {}] ["gi" {"prompt" ""}]
+               ["gi" {"prompt" "ok" "count" 100}]
+               ["gi" {"prompt" "ok" "chat_source" "elsewhere"}]
+               ["gi" {"prompt" (apply str (repeat 2001 "x"))}]
+               ["meme" {"action" "search" "query" ""}]
+               ["meme" {"action" "search" "query" "cat" "limit" 21}]
+               ["meme" {"action" "execute" "command" "rm -rf /"}]
+               ["meme" {"action" "generate" "template_id" "https://evil.test"
+                         "top" "x" "bottom" "y"}]
+               ["meme" {"action" "generate" "template_id" "1"
+                         "top" (apply str (repeat 1001 "x")) "bottom" "y"}]]]
+        (fact (error-message #(run-calls nil
+                               [["gi" {"prompt" "valid image"}] [op args]]))
+              => "Invalid arguments for native Yetibot media tool."))
+      (fact @calls => []))))
+
+(fact "configured credentials cannot become media prompts or captions"
+  (let [calls (atom [])]
+    (with-redefs [imgflip/configured? true
+                  imgflip/config {:password "private-imgflip-password"}
+                  xai/config {:key "private-image-key"}
+                  provider (assoc provider :key "private-model-key")
+                  gi/grokimage-cmd (fn [& args] (swap! calls conj args))]
+      (doseq [secret ["private-image-key" "private-imgflip-password"
+                      "private-model-key"]]
+        (fact (error-message #(run-calls nil
+                               [["gi" {"prompt" (str "render " secret)}]]))
+              => "Media arguments contain configured credentials."))
+      (fact @calls => []))))
+
+(fact "an uncertain image call is sanitized and halts the rest of the batch"
+  (let [captions (atom 0)]
+    (with-redefs [imgflip/configured? true
+                  xai/config {:key "private-image-key"}
+                  gi/grokimage-cmd
+                  (fn [_] (throw (Exception. "private-image-key timeout")))
+                  imgflip/generate-meme (fn [& _] (swap! captions inc))]
+      (let [result (run-calls nil
+                     [["gi" {"prompt" "a yeti"}]
+                      ["meme" {"action" "generate" "template_id" "1"
+                                 "top" "no" "bottom" "yes"}]])]
+        (fact @captions => 0
+              (get-in result [:replies 1 :skipped]) => true
+              (get-in result [:replies 0 :isError]) => true
+              (get-in result [:result :result/data :mcp :tool-calls]) => 1
+              (string/includes? (json/generate-string result)
+                                "private-image-key") => false
+              (get-in result [:sent 1 :options :tool_choice]) => "none")))))
+
+(fact "explicit unavailable media tools report setup errors without API calls"
+  (with-redefs [imgflip/configured? false xai/config {}
+                gi/grokimage-cmd (fn [& _]
+                                  (throw (AssertionError. "Paid call")))]
+    (fact (get-in (run-calls media-config [["gi" {"prompt" "a yeti"}]])
+                  [:replies 0 :isError]) => true)))
+
+(fact "JSON escaping cannot hide configured media credentials"
+  (let [secret "private-\"image\\password"
+        calls (atom 0)]
+    (with-redefs [imgflip/configured? true
+                  imgflip/config {:password secret}
+                  xai/config {:key "fake-image-key"}
+                  gi/grokimage-cmd (fn [_]
+                                    (swap! calls inc)
+                                    {:result/error "Unexpected generation"})
+                  imgflip/memes
+                  (constantly {:data {:memes [{:id "1"
+                                              :name (str "meme " secret)}]}})]
+      (fact (error-message #(run-calls nil
+                             [["gi" {"prompt" (str "render " secret)}]]))
+            => "Media arguments contain configured credentials."
+            (get-in (run-calls nil [["meme" {"action" "search"
+                                             "query" "meme"}]])
+                    [:replies 0 :structuredContent :templates 0 :name])
+            => "meme [redacted]"
+            @calls => 0))))
+
+(fact "meme transport uses HTTPS for configured credentials"
+  (let [urls (atom [])]
+    (with-redefs [imgflip/configured? true
+                  imgflip/config {:username "test" :password "fake-password"}
+                  http/get-json
+                  (fn [url]
+                    (swap! urls conj url)
+                    {:success true :data {:url "https://i.imgflip.com/a.jpg"}})]
+      (run-calls nil [["meme" {"action" "generate" "template_id" "1"
+                               "top" "top" "bottom" "bottom"}]])
+      (fact (count @urls) => 1
+            (string/starts-with? (first @urls)
+                                 "https://api.imgflip.com/caption_image?")
+            => true))))
+
+(fact "gi edits use attachments from the trusted incoming source"
+  (let [calls (atom [])
+        url "https://images.example/source.png"
+        request (assoc-in execution/request
+                          [:chat-source :raw-event :attachments]
+                          [{:url url :content-type "image/png"}])]
+    (with-redefs [xai/config {:key "fake-image-key"}
+                  xai/generate-image (fn [_ _ urls]
+                                       (swap! calls conj urls) "image-data")
+                  images/store-image! (fn [_] "edited")
+                  gemini/yetibot-base-url (constantly "https://yetibot.test")]
+      (let [result (run-calls nil [["gi" {"prompt" "make this a yeti"}]]
+                              request)]
+        (fact @calls => [[url]]
+              (get-in result [:replies 0 :structuredContent :url])
+              => "https://yetibot.test/generated-images/edited.png")))))
+
+(fact "media generation rechecks policy immediately before the side effect"
+  (let [authorizations (atom 0)
+        calls (atom 0)]
+    (with-redefs [xai/config {:key "fake-image-key"}
+                  policy/authorize! (fn [& _]
+                                      (when (> (swap! authorizations inc) 1)
+                                        (ai/fail "Policy changed.")))
+                  gi/grokimage-cmd (fn [_] (swap! calls inc))]
+      (fact (error-message #(run-calls media-config
+                             [["gi" {"prompt" "a yeti"}]]))
+            => "Policy changed."
+            @calls => 0))))

@@ -382,14 +382,20 @@ account is still needed to qualify your deployment and model's tool support.
 
 ## Native Yetibot tools
 
-Read-only local tools are **enabled by default** for both `ai` and `grok` in
-trusted Slack/Discord chat requests. No extra toolset, MCP server or opt-in
-configuration is needed. `!ai tools` lists them alongside existing MCP tools:
+Local tools are **enabled by default** for both `ai` and `grok` in trusted
+Slack/Discord chat requests. No extra toolset, MCP server or opt-in
+configuration is needed. Help and history are read-only; media tools appear
+automatically when their existing service credentials are configured.
+`!ai tools` lists them alongside existing MCP tools:
 
 - `help`: page through registered command topics or read an exact topic's docs.
   This never runs a command. Runtime aliases and their bodies are not exposed.
 - `history`: read recent messages or search by literal, case-insensitive text.
 - `history_count`: count messages, optionally matching the same literal text.
+- `meme`: search Imgflip templates and create captioned memes when Imgflip is
+  configured.
+- `gi`: create/edit images through the existing Grok image pipeline when
+  `xai.key` is configured. These are paid image-generation calls.
 
 This is separate from `:native-tools ["web_search" "x_search"]` on a provider,
 which enables server-side xAI search. Local tools are host function calls; they
@@ -420,9 +426,11 @@ keep existing servers/toolsets if you also want external tools:
 Replace the example identities with yours. An explicit nonempty `:native-tools`
 override requires user, Slack/Discord adapter and provider/model allowlists.
 Access does not depend on a channel or thread allowlist.
-Only `search` toolsets accept explicit native overrides; other toolsets inherit
-the built-ins under their existing policy. Set `:native-tools []` on a search
-toolset to disable its built-ins, or use `--no-tools` for one request.
+Only `search` toolsets accept explicit native overrides. GitHub toolsets inherit
+only the read-only built-ins, never the media tools. Explicit lists are not
+expanded automatically: add `"meme"` and/or `"gi"` to an existing list to allow
+them. Set `:native-tools []` on a search toolset to disable its built-ins, or
+use `--no-tools` for one request.
 `yetibot` is reserved as the built-in discovery source name.
 
 The `grok` provider can still come from `xai.key`; sharing tools does not select
@@ -440,6 +448,41 @@ the generic AI default model.
 Discovery hides tools from unauthorized users or adapters. The configured
 default toolset, or first named toolset if none is configured, applies when
 `--toolset` is omitted. `--no-tools` disables these tools too.
+
+### Memes and Grok images
+
+`meme` uses existing `imgflip.username` and `imgflip.password` settings. `gi`
+uses the existing `xai.key`, independently of the selected chat provider's key.
+Configure credentials normally and restart Yetibot; no MCP server is needed.
+Use `!ai tools yetibot` to see which tools are available. An explicit native
+allowlist remains authoritative even when both services are configured.
+
+Try `!grok Make a Drake meme about deploying on Friday.` or
+`!ai Generate a picture of Yetibot commuting by helicopter.` The model chooses
+the tool calls and captions/prompts; you do not write schemas. A successful
+call returns an image URL for the final answer, not binary image data.
+
+- `meme` searches with a literal query, returning up to 20 template IDs/names.
+  It checks the popular-template catalog, then at most one search page for an
+  unmatched query. Generation uses a template ID and top/bottom captions, each
+  at most 1000 characters; one caption may be empty. Captions are data, not
+  Yetibot commands. Existing Discord mention resolution is retained.
+- `gi` accepts a prompt of at most 2000 characters. It reuses image generation,
+  storage and current-message attachment/inline-image editing behavior from
+  the normal `gi` command. Arguments cannot choose another chat source,
+  provider, executable or arbitrary command.
+- These tools use shared service credentials. Imgflip captions/images are
+  publicly hosted; Grok prompts and input images go to xAI, and results are
+  served by Yetibot. Do not include private channel information unless it is
+  appropriate to send to those services and publish in an image.
+- Calls share the existing tool budget (default six); this is not a monetary
+  spending cap or a new per-user image quota. An uncertain generation failure
+  stops further calls in its batch and disables more tool use for that request.
+  The host does not automatically retry generation.
+- Known configured credentials are rejected in media arguments and redacted
+  from results. Error details and the GI utility's debug stdout are not sent
+  to the model or leaked through ordinary prompt logging. This is not general
+  secret detection. Existing identity/model restrictions still apply.
 
 ### History boundary and limits
 

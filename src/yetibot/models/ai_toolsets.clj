@@ -17,10 +17,7 @@
        (= (count xs) (count (distinct xs)))))
 
 (def default-native-tools ["help" "history" "history_count"])
-(def native-names (set default-native-tools))
-
-(defn native-tools [config]
-  (get (:toolset config) :native-tools default-native-tools))
+(def native-names (into (set default-native-tools) ["meme" "gi"]))
 
 (defn github? [toolset]
   (contains? #{"github-read" "github-pr"} (:kind toolset)))
