@@ -197,3 +197,80 @@
   (with-redefs [mcp/config (constantly nil)]
     (tools/server-names) => []
     (tools/tool-names nil) => "No MCP servers configured."))
+
+(def blog-names
+  ["list_content" "search_content" "read_content" "get_hit_count"])
+
+(fact "URL-only servers expose public tools but no reserved GitHub tools"
+  (let [server {:name "devth" :url "https://devth.com/mcp"}
+        config {:servers [server]}
+        catalog (mapv #(assoc support/search-tool :name %
+                              :annotations {:readOnlyHint true}
+                              :session {:server server})
+                      (concat blog-names ["get_commit" "push_files"]))
+        requests (atom []) calls (atom [])]
+    (with-redefs
+      [mcp/config (constantly config)
+       mcp/with-tools (fn [_ f] (f catalog))
+       mcp/call-tool (fn [session name arguments]
+                       (swap! calls conj [session name arguments])
+                       {:content [] :isError false})
+       ai/chat (fn [_ _ _ options]
+                 (swap! requests conj options)
+                 (if (= 1 (count @requests))
+                   (tool-response
+                     [(tool-call
+                        (some #(let [n (get-in % [:function :name])]
+                                 (when (string/ends-with? n "search_content")
+                                   n))
+                              (:tools options))
+                        "blog" "{\"query\":\"Yetibot\"}")])
+                   (answer "Found the blog.")))]
+      (fact
+        (tools/tool-names nil) => (mapv #(str "devth/" %) blog-names)
+        (:result/value (tools/complete provider "chat" messages))
+        => "Found the blog."
+        (count (:tools (first @requests))) => 4
+        (mapv second @calls) => ["search_content"]
+        (get-in @calls [0 0 :server :tools]) => blog-names))))
+
+(fact "discovery listings union only visible reference permissions"
+  (let [server {:name "shared" :url "https://shared.test/mcp"}
+        public {:name "search" :kind "search"
+                :servers [{:name "shared" :tools ["web_search"]}]}
+        private {:name "repo" :kind "github-read"
+                 :users ["U1"] :adapters ["slack"]
+                 :repositories ["owner/repo"]
+                 :servers [{:name "shared" :tools ["get_commit"]}]}
+        hidden (-> private (assoc :name "hidden" :users ["U2"])
+                   (assoc-in [:servers 0 :tools] ["get_file_contents"]))
+        names ["web_search" "get_commit" "get_file_contents" "push_files"]]
+    (with-redefs
+      [mcp/config (constantly {:servers [server]
+                              :toolsets [public private hidden]})
+       mcp/with-tools
+       (fn [_ f]
+         (f (mapv #(assoc support/search-tool :name %
+                          :session {:server server}) names)))]
+      (fact (tools/tool-names nil) => ["shared/web_search"]
+            (tools/tool-names nil {:user "U1" :adapter "slack"})
+            => ["shared/web_search" "shared/get_commit"]
+            (tools/tool-names nil {:user "U2" :adapter "slack"})
+            => ["shared/web_search" "shared/get_file_contents"]))))
+
+(fact "a forged discovered GitHub mutation never reaches its transport"
+  (let [server {:name "devth" :url "https://devth.com/mcp"}
+        calls (atom [])]
+    (with-redefs
+      [mcp/config (constantly {:servers [server]})
+       mcp/with-tools
+       (fn [_ f]
+         (f [(assoc support/search-tool :name "push_files"
+                    :session {:server server})]))
+       mcp/call-tool (fn [& args] (swap! calls conj args))
+       ai/chat (fn [& _]
+                 (tool-response
+                   [(tool-call "mcp_0_devth__push_files" "write" "{}")]))]
+      (fact (string? (error-message
+                       #(tools/complete provider "chat" messages))) => true
+            @calls => []))))

@@ -25,6 +25,24 @@
 (defn github? [toolset]
   (contains? #{"github-read" "github-pr"} (:kind toolset)))
 
+(defn model-tool?
+  "Reserved GitHub names keep their role policy, even during discovery."
+  [toolset tool-name]
+  (and (not (github-writes tool-name))
+       (if (github? toolset)
+         (boolean (github-reads tool-name))
+         (not (github-reads tool-name)))))
+
+(defn reference-server
+  "Inherit a server's tools unless the reference supplies a narrower list."
+  [servers ref]
+  (when-let [server (get servers (:name ref))]
+    (if (contains? ref :tools) (assoc server :tools (:tools ref)) server)))
+
+(defn- can-provide? [server tool-name]
+  (and server (or (not (contains? server :tools))
+                  (some #{tool-name} (:tools server)))))
+
 (defn- invalid! []
   (ai/fail "Invalid AI toolsets. Check names, references and access policy."))
 
@@ -40,13 +58,15 @@
          (= (count (:servers t)) (count (distinct (map :name (:servers t))))))
     (invalid!))
   (doseq [ref (:servers t)]
-    (let [server (get servers (:name ref))]
-      (when-not (and server (strings? (:tools ref))
-                     (every? (set (:tools server)) (:tools ref))
-                     (not-any? github-writes (:tools ref))
-                     (if (github? t)
-                       (every? github-reads (:tools ref))
-                       (not-any? github-reads (:tools ref))))
+    (let [server (get servers (:name ref))
+          resolved (reference-server servers ref)]
+      (when-not (and server
+                     (or (not (contains? ref :tools)) (strings? (:tools ref)))
+                     (or (not (contains? server :tools))
+                         (strings? (:tools server)))
+                     (or (not (contains? server :tools))
+                         (every? (set (:tools server)) (:tools ref)))
+                     (every? #(model-tool? t %) (:tools resolved)))
         (invalid!))))
   (when (contains? t :native-tools)
     (when-not (and (= "search" (:kind t)) (vector? (:native-tools t))
@@ -74,15 +94,18 @@
       (invalid!)))
   (when (= "github-pr" (:kind t))
     (let [writer (get servers (:write-server t))
-          commit-reader (first (filter #(some #{"get_commit"} (:tools %))
-                                       (:servers t)))
-          ancestry-token (:github-api-token (get servers (:name commit-reader)))]
+          readers (map #(reference-server servers %) (:servers t))
+          credentialed-reader?
+          (some #(and (can-provide? % "get_commit")
+                       (ai/nonblank-string? (:github-api-token %))) readers)]
       (when-not (and (seq (:providers t)) writer
-                     (every? (set (mapcat :tools (:servers t)))
+                     (every? (fn [name]
+                               (some #(can-provide? % name) readers))
                              ["get_commit" "get_file_contents"])
-                     (every? (set (:tools writer))
-                             ["create_branch" "push_files" "create_pull_request"])
-                     (ai/nonblank-string? ancestry-token)
+                     (every? #(can-provide? writer %)
+                             ["create_branch" "push_files"
+                              "create_pull_request"])
+                     credentialed-reader?
                      (strings? (:base-branches t))
                      (strings? (:allowed-paths t))
                      (or (not (contains? t :denied-paths))
@@ -122,8 +145,7 @@
           servers (into {} (map (juxt :name identity) (:servers config)))]
       (when-not t (ai/fail "Unknown AI toolset. Use ai toolsets to list available toolsets."))
       (assoc config :toolset t :redaction-servers (:servers config)
-             :servers (mapv #(assoc (get servers (:name %)) :tools (:tools %))
-                            (:servers t))))
+             :servers (mapv #(reference-server servers %) (:servers t))))
     (if toolset-name
       (ai/fail "No named AI toolsets configured.")
       config)))

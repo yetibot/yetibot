@@ -187,22 +187,23 @@
                           (UUID/randomUUID)))
             write-config (assoc config :servers
                                 [(assoc writer :tools writer-tools)])
-            token (:github-api-token
-                    (first (filter #(some #{"get_commit"} (:tools %))
-                                   (:servers selected))))
             timeout-ms (mcp/number-option (:timeout-ms config) 30000)]
-        (when-not (ai/nonblank-string? token)
-          (ai/fail "Configure a GitHub API read token before enabling PR writes."))
         (when-not (= t (:toolset p))
           (ai/fail "Tool policy changed. Generate a new proposal."))
         (mcp/with-tools selected
           (fn [reads]
-            (when-not (= base-sha (:sha (commit! reads owner repo base)))
-              (ai/fail "Base branch changed. Generate a new proposal."))
-            ;; Qualify API access before creating even an empty branch.
-            (ancestry! token owner repo base-sha timeout-ms)
-            (mcp/with-tools write-config
-              #(write-approved! reads % p branch state token timeout-ms)))))
+            (let [commit-reader (first (filter #(= "get_commit" (:name %))
+                                               reads))
+                  token (get-in commit-reader
+                                [:session :server :github-api-token])]
+              (when-not (ai/nonblank-string? token)
+                (ai/fail "Configure a GitHub API read token before PR writes."))
+              (when-not (= base-sha (:sha (commit! reads owner repo base)))
+                (ai/fail "Base branch changed. Generate a new proposal."))
+              ;; Qualify API access before creating even an empty branch.
+              (ancestry! token owner repo base-sha timeout-ms)
+              (mcp/with-tools write-config
+                #(write-approved! reads % p branch state token timeout-ms))))))
       @state
       (catch Exception e
         (assoc @state

@@ -13,13 +13,16 @@
 (def server {:name "search" :url "https://search.example/mcp" :tools ["web_search"]})
 (defn error-message [f] (try (f) (catch Exception e (.getMessage e))))
 
-(facts "MCP settings require explicit allowed tools and one trusted connection"
+(facts "MCP settings accept discovery or explicit tools on a trusted connection"
   (s/valid? ::mcp/config {:servers [server] :max-tool-calls "4" :timeout-ms "5000"}) => true
   (s/valid? ::mcp/config {:servers [{:name "local" :command "node" :args ["server.js"]
                                     :env {"API_KEY" "secret"} :tools ["search"]}]}) => true
   (s/valid? ::mcp/config {:servers []}) => true
+  (s/valid? ::mcp/config {:servers [(dissoc server :tools)]}) => true
+  (s/valid? ::mcp/config
+            {:servers [{:name "local" :command "node"}]}) => true
   (doseq [settings [{:servers [server server]}
-                    {:servers [(dissoc server :tools)]}
+                    {:servers [(assoc server :tools nil)]}
                     {:servers [(assoc server :tools [])]}
                     {:servers [(assoc server :tools ["search" "search"])]}
                     {:servers [(assoc server :command "sh")]}
@@ -84,6 +87,52 @@
             (some #(= "DELETE" (:method %)) @requests) => true
             (->> @requests (keep #(get-in % [:body :method])) frequencies)
             => {"initialize" 1 "notifications/initialized" 1 "tools/list" 2 "tools/call" 1}))))))
+
+(fact "URL-only discovery spans pages and binds calls to advertised tools"
+  (doseq [sse [false true]]
+    (let [requests (atom [])]
+      (support/with-http-server (support/rpc-handler requests sse)
+        (fn [base]
+          (mcp/with-tools
+            {:servers [{:name "devth" :url (str base "/mcp")}]}
+            (fn [tools]
+              (fact (mapv :name tools) => ["web_search" "delete_all"]
+                    (:isError (mcp/call-tool (:session (first tools))
+                                            "web_search" {})) => false
+                    (string? (error-message
+                               #(mcp/call-tool (:session (first tools))
+                                               "not_advertised" {}))) => true)))
+          (fact (count (filter #(= "tools/call"
+                                   (get-in % [:body :method])) @requests)) => 1
+                (some #(= "DELETE" (:method %)) @requests) => true))))))
+
+(fact "ambiguous discovered names fail closed and close the session"
+  (let [requests (atom []) rpc (support/rpc-handler requests false)
+        exposed? (atom false)]
+    (support/with-http-server
+      (fn [request]
+        (let [response (rpc request)]
+          (if (= "tools/list" (get-in request [:body :method]))
+            (assoc-in response [:body :result :tools] [support/search-tool])
+            response)))
+      (fn [base]
+        (fact
+          (error-message
+            #(mcp/with-tools {:servers [{:name "search" :url base}]}
+               (fn [_] (reset! exposed? true))))
+          => "Could not list allowed tools on MCP server search."
+          @exposed? => false
+          (some #(= "DELETE" (:method %)) @requests) => true)))))
+
+(fact "stdio MCP can discover tools without a hand-written allowlist"
+  (mcp/with-tools
+    {:servers [{:name "local" :command "node"
+                :args [(.getAbsolutePath
+                         (io/file "test/fixtures/mcp_server.mjs"))]}]}
+    (fn [tools]
+      (fact (some #{"web_search"} (map :name tools)) => "web_search"
+            (:isError (mcp/call-tool (:session (first tools))
+                                    "web_search" {"query" "news"})) => false))))
 
 (fact "a local stdio MCP server receives only explicit keys and the SDK's safe environment"
   (mcp/with-tools {:servers [{:name "local" :command "node"

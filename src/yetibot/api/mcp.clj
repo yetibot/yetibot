@@ -1,6 +1,6 @@
 (ns yetibot.api.mcp
-  "Short-lived MCP sessions for explicitly allowed tools. No model controls
-   connection settings, credentials, executable names or the allowed tool list."
+  "Short-lived MCP sessions for configured servers and discovered tools.
+   Models never control connections, credentials, executables or allowlists."
   (:require [cheshire.core :as json]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
@@ -49,8 +49,9 @@
 (s/def ::tools (s/and (s/coll-of text? :kind vector? :min-count 1 :max-count 64)
                     #(apply distinct? %)))
 (s/def ::server
-  (s/and (s/keys :req-un [::name ::tools]
-                 :opt-un [::url ::command ::args ::env ::headers ::github-api-token])
+  (s/and (s/keys :req-un [::name]
+                 :opt-un [::tools ::url ::command ::args ::env ::headers
+                          ::github-api-token])
          #(if (:url %) (not-any? (partial contains? %) [:command :args :env])
               (and (:command %) (not (contains? % :headers))))))
 (s/def ::servers (s/and (s/coll-of ::server :kind vector? :max-count 16)
@@ -184,9 +185,14 @@
             (when (contains? seen next-cursor) (fail "MCP tool discovery did not advance."))
             (recur next-cursor (conj seen next-cursor) tools (inc pages)))
           (let [by-name (into {} (map (juxt :name identity) tools))]
-            (when-not (every? #(contains? by-name %) (:tools server))
-              (fail "An allowed MCP tool was not advertised by its server. Check the configured tool names."))
-            (mapv by-name (:tools server))))))
+            (when-not (= (count tools) (count by-name))
+              (fail "MCP tool discovery returned duplicate names."))
+            (if (contains? server :tools)
+              (do
+                (when-not (every? #(contains? by-name %) (:tools server))
+                  (fail "An allowed MCP tool was not advertised."))
+                (mapv by-name (:tools server)))
+              tools)))))
     (catch Exception _ (fail (str "Could not list allowed tools on MCP server " (:name server) ".")))))
 
 (defn call-tool [{:keys [server client]} tool arguments]
@@ -201,14 +207,20 @@
                                           " failed or timed out. Its outcome is unknown; do not repeat it.")}]})))
 
 (defn with-tools
-  "Connect per request, expose only configured tools, and always close sessions."
+  "Discover per request, apply optional allowlists, and always close sessions."
   [config f]
   (let [sessions (atom [])]
     (try
       (doseq [server (:servers config)]
         (swap! sessions conj (connect! server (number-option (:timeout-ms config) 30000))))
-      (let [tools (vec (mapcat (fn [session] (map #(assoc % :session session) (list-tools session)))
-                               @sessions))]
+      (let [tools
+            (vec (mapcat
+                   (fn [session]
+                     (let [tools (list-tools session)
+                           session (assoc-in session [:server :tools]
+                                             (mapv :name tools))]
+                       (map #(assoc % :session session) tools)))
+                   @sessions))]
         (f tools))
       (finally (doseq [session (reverse @sessions)] (close! session))))))
 
