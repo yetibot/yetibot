@@ -1,10 +1,11 @@
 (ns yetibot.models.ai-native-tools
-  "Structured read-only capabilities, never a command interpreter."
+  "Structured native capabilities, never a command interpreter."
   (:require [cheshire.core :as json]
             [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.core.models.help :as help]
             [yetibot.models.ai-history :as history]
+            [yetibot.models.ai-media-tools :as media]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.util.ai-execution :as execution]))
@@ -92,13 +93,20 @@
                       "Includes bot messages/commands, not just this thread.")
     :inputSchema (schema {:query text-property})}})
 
+(defn names [config]
+  (let [t (:toolset config)
+        defaults (cond-> toolsets/default-native-tools
+                   (not (toolsets/github? t))
+                   (into (media/available-tools)))]
+    (get t :native-tools defaults)))
+
 (defn trusted? [actor]
   (and execution/*sensitive* actor
        (= actor (policy/actor execution/*event*))
        (ai/nonblank-string? (get-in execution/*event* [:chat-source :room]))))
 
 (defn tools [config actor provider model]
-  (let [selected (toolsets/native-tools config)]
+  (let [selected (names config)]
     (when (and (seq selected)
                (or (trusted? actor)
                    (contains? (:toolset config) :native-tools)))
@@ -108,14 +116,21 @@
         (execution/sensitive!)
         (mapv
           (fn [operation]
-            (assoc (get definitions operation)
+            (assoc (get (merge definitions media/definitions) operation)
                    :name operation :native? true
-                   :validate-arguments #(arguments! operation %)
+                   :validate-arguments
+                   #(if (contains? media/definitions operation)
+                      (media/arguments! config operation %)
+                      (arguments! operation %))
                    :host-call
                    (fn [args]
-                     ;; Recheck identity/model policy before every local read.
+                     (when-not (trusted? actor)
+                       (ai/fail "Native tools require a trusted chat request."))
                      (policy/authorize! (:toolset config) actor provider model)
-                     (if (= operation "help")
+                     (cond
+                       (contains? media/definitions operation)
+                       (media/call! config operation args source)
+                       (= operation "help")
                        {:structuredContent (help-result args)}
-                       (history/read! source operation args)))))
+                       :else (history/read! source operation args)))))
           selected)))))

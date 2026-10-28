@@ -7,7 +7,6 @@
     [clojure.string :as string]
     [clojure.spec.alpha :as s]
     [yetibot.core.spec :as yspec]
-    [clj-http.client :as client]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.util.http :refer [get-json map-to-query-string encode]]
     [clojure.core.memoize :as m]))
@@ -20,7 +19,7 @@
 
 (def config (:value (get-config ::config [:imgflip])))
 (def configured? config)
-(def endpoint "http://api.imgflip.com")
+(def endpoint "https://api.imgflip.com")
 
 (defn fetch-memes [] (get-json (str endpoint "/get_memes")))
 (defonce memes (m/ttl fetch-memes :ttl/threshold 3600000)) ; one hour memo
@@ -39,9 +38,6 @@
   (or
     (re-find p (:name meme))
     (re-find p (string/replace (:name meme) #"\s" ""))))
-
-(def res (client/get "https://imgflip.com/memesearch"
-                     {:query-params {:q "icahn" :page 1}}))
 
 ;; TODO: append results of search-via-scrape to cached (memes) or use a memo/ttl
 
