@@ -23,6 +23,8 @@
             [yetibot.models.imgflip :as imgflip]
             [yetibot.core.models.history :as stored-history]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-native-tools :as native]
+            [yetibot.models.ai-util-tools :as util]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
@@ -125,12 +127,13 @@
                         (fn [cfg f] (f (if (seq (:servers cfg)) [remote] [])))]
             (fact (tools/tool-names "yetibot" actor)
                   => ["yetibot/help" "yetibot/history"
-                      "yetibot/history_count"])
+                      "yetibot/history_count" "yetibot/util"])
             (fact (tools/tool-names nil actor)
                   => (vec (concat (when (seq (:servers settings))
                                     ["exa/search"])
                                   ["yetibot/help" "yetibot/history"
-                                   "yetibot/history_count"])))))))))
+                                   "yetibot/history_count"
+                                   "yetibot/util"])))))))))
 
 (fact "real listing commands preserve names and expose inert structured data"
   (with-redefs [mcp/config (constantly nil)
@@ -140,9 +143,11 @@
           data (execution/run-command execution/request
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
-            => ["yetibot/help" "yetibot/history" "yetibot/history_count"]
+            => ["yetibot/help" "yetibot/history" "yetibot/history_count"
+                "yetibot/util"]
             (mapv :id (get-in normal [:data :tools]))
-            => ["yetibot/help" "yetibot/history" "yetibot/history_count"]
+            => ["yetibot/help" "yetibot/history" "yetibot/history_count"
+                "yetibot/util"]
             (every? #(and (string? (:description %))
                           (= "object" (get-in % [:inputSchema :type])))
                     (get-in normal [:data :tools])) => true
@@ -160,7 +165,7 @@
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
     (let [result (execution/run-command execution/request
                    "ai tools | tail 3 | xargs ai tools")
-          ids ["yetibot/help" "yetibot/history" "yetibot/history_count"]]
+          ids ["yetibot/history" "yetibot/history_count" "yetibot/util"]]
       (mapv #(some-> % string/split-lines first) (:value result)) => ids
       (mapv :id (:data result)) => ids
       (every? #(and (string? %) (string/includes? % "Inputs:"))
@@ -174,7 +179,7 @@
         (with-redefs [mcp/config (constantly defaults)]
           (fact (tools/tool-names "yetibot" actor)
                 => ["yetibot/help" "yetibot/history"
-                    "yetibot/history_count"])
+                    "yetibot/history_count" "yetibot/util"])
           (fact (tools/server-names (assoc actor :user "U2")) => []))
         (with-redefs [mcp/config
                       (constantly (assoc-in config [:toolsets 0 :native-tools]
@@ -515,9 +520,10 @@
                         mcp/config (constantly nil)]
             (let [catalog (tools/tool-catalog "yetibot" actor)]
               (fact (:names catalog)
-                    => (cond-> reads
-                         meme? (conj "yetibot/meme")
-                         image? (conj "yetibot/gi"))
+                    => (conj (cond-> reads
+                               meme? (conj "yetibot/meme")
+                               image? (conj "yetibot/gi"))
+                             "yetibot/util")
                     (mapv :id (:tools catalog)) => (:names catalog)
                     (every? #(= "object" (get-in % [:inputSchema :type]))
                             (:tools catalog)) => true))
@@ -771,7 +777,7 @@
               (let [catalog (tools/tool-catalog "yetibot" actor)]
                 (fact (:names catalog)
                       => (into reads ["yetibot/clef" "yetibot/clairic"
-                                      "yetibot/wise"])
+                                      "yetibot/wise" "yetibot/util"])
                       (mapv :id (:tools catalog)) => (:names catalog)
                       (every? #(= "object" (get-in % [:inputSchema :type]))
                               (:tools catalog)) => true)))
@@ -868,6 +874,84 @@
                   (string/includes? (json/generate-string r)
                                     "fake-cloudflare-tool-token")
                   => false)))))))
+
+(defn util-args [op value]
+  {"operation" op "input_json" (json/generate-string value)})
+
+(facts "util executes in shared rounds, explicit selection stays authoritative"
+  (let [selected (assoc-in config [:toolsets 0 :native-tools] ["util"])
+        r (run-calls selected [["util" (util-args "sum" [1 2 3])]])]
+    (fact (get-in r [:replies 0 :structuredContent :result]) => 6)
+    (fact (get-in r [:result :result/data :mcp :tool-calls]) => 1))
+  (execution/in-event execution/request "ai tools util"
+    (fn [request]
+      (let [actor (policy/actor request)]
+        (doseq [selected [[] ["help"] ["util"]]]
+          (with-redefs [mcp/config
+                        (constantly (assoc-in config
+                                              [:toolsets 0 :native-tools]
+                                              selected))]
+            (fact (mapv :id (:tools (tools/tool-catalog nil actor)))
+                  => (mapv #(str "yetibot/" %) selected))))))))
+
+(facts "invalid util preflight blocks every effect and draws no randomness"
+  (let [paid (atom 0)]
+    (with-redefs [xai/config {:key "fake-image-key"}
+                  gi/grokimage-cmd (fn [& _] (swap! paid inc))]
+      (fact (error-message
+              #(run-calls nil [["gi" {"prompt" "a yeti"}]
+                                ["util" (util-args "sum" ["not a number"])]]))
+            => "Invalid arguments or bounds for native JSON utility.")
+      (fact @paid => 0)))
+  (let [calls (atom 0)]
+    (with-redefs [help/get-docs (fn [] (swap! calls inc) {})
+                  clojure.core/rand-int
+                  (fn [& _] (throw (AssertionError. "Preflight randomness")))]
+      (doseq [bad [(assoc (util-args "take" [1]) "count" 129)
+                   {"operation" "head" "input_json" "#=(do evil)"}
+                   (util-args "sum" [1 "no"])
+                   (util-args "flatten" [(vec (range 128)) [128]])]]
+        (fact (error-message
+                #(run-calls nil [["help" {}]
+                                  ["util" (util-args "random" [1 2])]
+                                  ["util" bad]]))
+              => "Invalid arguments or bounds for native JSON utility."))
+      (fact @calls => 0))))
+
+(facts "util shares duplicate and total call budgets before any effect"
+  (with-redefs [help/get-docs (constantly {})]
+    (let [r (run-calls nil [["util" (util-args "sum" [1 2])]
+                            ["help" {}]])]
+      (fact (get-in r [:replies 0 :structuredContent :result]) => 3)
+      (fact (get-in r [:result :result/data :mcp :tool-calls]) => 2)))
+  (with-redefs [help/get-docs
+                (fn [] (throw (AssertionError. "Help accessed")))]
+    (let [args (util-args "head" [1 2])]
+      (fact (error-message #(run-calls nil [["util" args] ["util" args]]))
+            => (contains "repeat a tool call"))
+      (fact (error-message
+              #(run-calls {:servers [] :max-tool-calls 1}
+                 [["help" {}] ["util" args]]))
+            => (contains "tool-call limit")))))
+
+(facts "util registry and host callbacks preserve caller provenance"
+  (let [cfg {:toolset (assoc toolset :native-tools ["util"])}]
+    (fact (error-message
+            #(native/tools cfg {:user "U1"} provider "grok-4.7"))
+          => "Native Yetibot tools require a trusted chat request.")
+    (execution/in-event execution/request "ai util"
+      (fn [request]
+        (let [actor (policy/actor request)
+              callback (:host-call (first (native/tools cfg actor provider
+                                                       "grok-4.7")))]
+          (fact (error-message #(native/tools cfg (assoc actor :user "U2")
+                                              provider "grok-4.7"))
+                => "Native Yetibot tools require a trusted chat request.")
+          (fact (:isError (util/call! cfg "util" (util-args "head" [1])
+                                     (assoc (:chat-source request)
+                                            :room "forged"))) => true)
+          (fact (get-in (callback (util-args "reverse" [1 2]))
+                        [:structuredContent :result]) => [2 1]))))))
 
 (fact "invalid inference schemas stop mixed batches before even Wise reads"
   (with-capabilities
