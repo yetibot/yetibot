@@ -2,6 +2,7 @@
   (:require [clojure.test :refer [deftest is testing use-fixtures]]
             [cheshire.core :as json]
             [clj-http.client :as http]
+            [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.commands.ai :as commands]
             [yetibot.models.ai-context :as context]
@@ -379,8 +380,8 @@
 (deftest bounds-cleanup-and-rejected-submission
   (let [{:keys [cache jobs current]} (fixture)]
     (doseq [ids [(vec (repeat (inc catalog/max-ids) "m"))
-                 [(apply str (repeat (inc catalog/max-id-bytes) \x))]
-                 (vec (repeat 1000 (apply str (repeat 300 \x))))]]
+                 [(string/join (repeat (inc catalog/max-id-bytes) \x))]
+                 (vec (repeat 1000 (string/join (repeat 300 \x))))]]
       (reset! (:state cache) {})
       (with-redefs [ai/models (constantly (complete ids))]
         (catalog/warm! cache)
@@ -419,7 +420,7 @@
       (try
         (binding [*request-marker* :must-not-inherit]
           (is (nil? (catalog/start!))))
-        (is (= true (deref entered 1000 :timeout)))
+        (is (true? (deref entered 1000 :timeout)))
         (is (nil? (deref marker 1000 :timeout)))
         (let [runtime @catalog/runtime]
           (catalog/start!)
