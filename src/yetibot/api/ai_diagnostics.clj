@@ -4,7 +4,8 @@
             [taoensso.timbre :as log]
             [yetibot.api.cloudflare :as cloudflare])
   (:import [com.fasterxml.jackson.core JsonFactory JsonToken]
-           [java.io InputStream]))
+           [java.io InputStream]
+           [java.util Locale]))
 
 (defn- tag [allowed value fallback]
   (if (or (keyword? value)
@@ -49,7 +50,9 @@
                          (:tool_choice form) :unrecognized))
      :item-types (vec (distinct (map item-kind items)))
      :opaque-state? (boolean
-                      (some #(and (map? %) (contains? % :encrypted_content))
+                      (some #(when (map? %)
+                               (let [value (:encrypted_content %)]
+                                 (and (string? value) (pos? (count value)))))
                             items))}))
 
 (defn- field [value key]
@@ -69,19 +72,36 @@
           "store" :other "include" :other "max_turns" :other}
          root :unrecognized)))
 
-(defn error-fields
-  "Inspect only three shallow, length-bounded scalars; never error messages.
-   Non-stream transport has already decoded JSON before this function runs."
-  [body]
-  (let [error (or (field body :error) body)]
+(defn- message-category [value]
+  ;; Skip oversized text entirely, not even a prefix. Only a host-owned keyword
+  ;; escapes this function; never retain the text, captures, tool names or codes.
+  (when (and (string? value) (<= (count value) 1024))
+    (let [text (.toLowerCase ^String value Locale/ROOT)]
+      (cond
+        (re-find #"\[invalid_client_tool_schema\]|\btool parameter root must be an object type\b"
+                 text) :invalid-tool-schema
+        (re-find #"\bmissing tool output\b|\bno tool output found for (?:function|tool) call\b"
+                 text) :missing-tool-output
+        (re-find #"\b(?:unsupported|unrecognized|unknown) parameter\b" text)
+        :unsupported-parameter
+        (re-find #"\b(?:context length exceeded|maximum context length|context window exceeded|context limit exceeded)\b"
+                 text) :context-limit
+        (re-find #"\b(?:model not found|model does not exist|does not exist or you do not have access|you do not have access to (?:this|the) model|access to (?:this|the) model (?:is )?denied)\b"
+                 text) :model-access))))
+
+(defn- candidate-fields [error]
+  (let [message (field error :message)]
     {:error-class
      (tag {"invalid_request_error" :invalid-request
            "authentication_error" :authentication
            "permission_error" :model-access
            "rate_limit_error" :rate-limit "server_error" :server}
-          (scalar (field error :type)) :unrecognized)
+          (scalar (field error :type))
+          (tag {"invalid-argument" :invalid-request}
+               (scalar (field error :code)) :unrecognized))
      :error-code
      (tag {"invalid_function_parameters" :invalid-tool-schema
+           "invalid_client_tool_schema" :invalid-tool-schema
            "invalid_tool_schema" :invalid-tool-schema
            "unsupported_parameter" :unsupported-parameter
            "unsupported_value" :unsupported-parameter
@@ -91,8 +111,29 @@
            "permission_denied" :model-access
            "insufficient_quota" :model-access
            "rate_limit_exceeded" :rate-limit}
-          (scalar (field error :code)) :unrecognized)
+          (scalar (field error :code))
+          (or (message-category (if (string? message) message
+                                 (field error :error)))
+              :unrecognized))
      :parameter (parameter (field error :param))}))
+
+(defn error-fields
+  "Inspect one root/error map and the first three vector :errors entries only.
+   Per candidate: type/code/param strings <=128 chars and one message (or error)
+   string <=1024 UTF-16 units. No recursion, sequence realization or text output.
+   Non-stream transport has already decoded JSON before this function runs."
+  [body]
+  (let [error (field body :error)
+        errors (field body :errors)
+        candidates (cons (if (map? error) error body)
+                         (when (vector? errors)
+                           (subvec errors 0 (min 3 (count errors)))))
+        fields (mapv candidate-fields candidates)]
+    (into {}
+          (for [key [:error-class :error-code :parameter]]
+            [key (or (some #(let [value (get % key)]
+                              (when (not= :unrecognized value) value)) fields)
+                     :unrecognized)]))))
 
 (defn safe-error-fields
   "Revalidate exception metadata; never merge arbitrary exception data."

@@ -79,6 +79,91 @@
       (fact (count logs) => 1)
       (fact (string/includes? (pr-str [record logs]) sentinel) => false))))
 
+(facts "historical Grok and Cloudflare validation text yields categories only"
+  (doseq [[body expected-class expected-code]
+          [[{:code "invalid-argument"
+             :error (str "Failed to start sampling: [invalid_client_tool_schema] "
+                         "yetibot_clef: tool parameter root must be an object type "
+                         sentinel)}
+            :invalid-request :invalid-tool-schema]
+           [{:errors [{:code 1000
+                       :message (str "Unsupported parameter: " sentinel)}]}
+            :unrecognized :unsupported-parameter]
+           [{"errors" [{"code" sentinel
+                         "message" (str "No tool output found for function call "
+                                        sentinel)}]}
+            :unrecognized :missing-tool-output]]]
+    (let [[error logs]
+          (capture
+            #(with-redefs [http/post (fn [& _] {:status 400 :body body})]
+               (failure (fn [] (ai/chat provider sentinel prompt {})))))
+          record (:ai/diagnostic (ex-data error))]
+      (fact (select-keys record [:error-class :error-code :parameter])
+            => {:error-class expected-class :error-code expected-code
+                :parameter :unrecognized})
+      (fact (count logs) => 1)
+      (fact (first logs) => ["ai-provider-diagnostic" record])
+      (fact (some #(re-find #"SECRET|123456|account|balance|yetibot_clef|1000"
+                            (pr-str %)) [(ex-data error) logs]) => nil)
+      (fact (.getCause error) => nil)
+      (fact (.getMessage error)
+            => (str "AI provider " sentinel " returned HTTP 400.")))))
+
+(facts "only known bounded validation phrases are classified"
+  (doseq [[message category]
+          [["tool parameter root must be an object type" :invalid-tool-schema]
+           ["Missing tool output" :missing-tool-output]
+           ["Unrecognized parameter: private_field" :unsupported-parameter]
+           ["This model's maximum context length is 8192 tokens" :context-limit]
+           ["Context length exceeded" :context-limit]
+           ["Model not found" :model-access]
+           ["The model does not exist or you do not have access to it"
+            :model-access]
+           [sentinel :unrecognized]
+           ["arbitrary tool schema model parameter context" :unrecognized]]]
+    (fact (:error-code (diagnostics/error-fields
+                        {:error {:message (str message " " sentinel)}}))
+          => category))
+  (fact (:error-code (diagnostics/error-fields
+                      {:error {:code "model_not_found"
+                               :message "Missing tool output"}}))
+        => :model-access)
+  (fact (:error-code (diagnostics/error-fields
+                      {:error {:code "invalid_client_tool_schema"}}))
+        => :invalid-tool-schema))
+
+(facts "text inspection skips oversized and nested values and stops at three errors"
+  (let [marker "[invalid_client_tool_schema]"
+        bounded (str marker (string/join (repeat (- 1024 (count marker)) "x")))
+        deep (reduce (fn [value _] {:message value}) marker (range 10000))]
+    (fact (:error-code (diagnostics/error-fields {:error {:message bounded}}))
+          => :invalid-tool-schema)
+    (doseq [body [{:error {:message (str bounded "x")}}
+                 {:error {:message (str (string/join (repeat 20000 "x")) marker)}}
+                 {:error {:message deep}}
+                 {:errors [{:message sentinel} {} {}
+                           {:message marker}]}
+                 {:errors {:message marker}}
+                 {:errors (repeat {:message marker})}]]
+      (fact (:error-code (diagnostics/error-fields body)) => :unrecognized))
+    (fact (:error-code (diagnostics/error-fields
+                        {:errors [{} {} {:message marker}]}))
+          => :invalid-tool-schema)))
+
+(facts "opaque state means a nonempty encrypted string, not key presence"
+  (doseq [item [{:type "reasoning"}
+                {:type "reasoning" :encrypted_content nil}
+                {:type "reasoning" :encrypted_content ""}
+                {:type "reasoning" :encrypted_content {:secret sentinel}}]]
+    (fact (:opaque-state? (diagnostics/context
+                           provider "/responses" {:input [item]} :follow-up))
+          => false))
+  (fact (:opaque-state? (diagnostics/context
+                         provider "/responses"
+                         {:input [{:type "reasoning"
+                                   :encrypted_content sentinel}]} :follow-up))
+        => true))
+
 (fact "host stage and bounded shape metadata never enter HTTP options"
   (let [wire (atom nil)
         messages [{:type "reasoning" :encrypted_content sentinel}
@@ -141,6 +226,14 @@
           [[(json/generate-string
               {:error {:code "invalid_function_parameters" :message sentinel}})
             :invalid-tool-schema]
+           [(json/generate-string
+              {:code "invalid-argument"
+               :error (str "[invalid_client_tool_schema] yetibot_clef: " sentinel)})
+            :invalid-tool-schema]
+           [(json/generate-string
+              {:errors [{:code 1000
+                         :message (str "Context length exceeded " sentinel)}]})
+            :context-limit]
            ["{malformed" :unrecognized]
            [(str (string/join (repeat 10000 "[")) sentinel) :unrecognized]
            [(string/join (repeat 20000 "x")) :unrecognized]]]
@@ -166,8 +259,8 @@
       (fact (<= @reads 16385) => true)
       (fact (get-in (ex-data error) [:ai/diagnostic :error-code]) => expected)
       (fact (count logs) => 1)
-      (fact (string/includes? (pr-str [(ex-data error) logs]) sentinel)
-            => false))))
+      (fact (some #(re-find #"SECRET|123456|account|balance|yetibot_clef|1000"
+                            (pr-str %)) [(ex-data error) logs]) => nil))))
 
 (facts "error-body read failure preserves HTTP error and cleanup"
   (doseq [exception [(IOException. sentinel)
