@@ -103,14 +103,14 @@
                  (args "list" (vec (repeat 129 1)))
                  (args "list" (nth (iterate vector 0) 9))
                  (args "list" (vec (repeat 128 (vec (repeat 9 0)))))
-                 (args "list" (apply str (repeat 12289 "x")))
-                 (args "list" (apply str (repeat 4096 "😀")))
-                 (args "letters" (apply str (repeat 129 "x")))
-                 (args "split" (apply str (repeat 128 "x,"))
+                 (args "list" (string/join (repeat 12289 "x")))
+                 (args "list" (string/join (repeat 4096 "😀")))
+                 (args "letters" (string/join (repeat 129 "x")))
+                 (args "split" (string/join (repeat 128 "x,"))
                        {"separator" ","})
                  (args "flatten" [(vec (range 128)) [128]])
                  (args "join" (vec (repeat 128 "x"))
-                       {"separator" (apply str (repeat 200 "y"))})]]
+                       {"separator" (string/join (repeat 200 "y"))})]]
       (fact (error? #(util/arguments! {} "util" bad)) => true))))
 
 (facts "reader and command-looking strings are inert JSON data"
@@ -164,9 +164,9 @@
     (fact (get-in (project {:secrets ["token"]} {"token" "anything"})
                   [:structuredContent :result])
           => {"[redacted]" "[redacted]"})
-    (fact (get-in (project config (apply str (repeat 1200 "private-token")))
+    (fact (get-in (project config (string/join (repeat 1200 "private-token")))
                   [:structuredContent :result])
-          => (apply str (repeat 1200 "[redacted]")))))
+          => (string/join (repeat 1200 "[redacted]")))))
 
 (facts "calls require real provenance and never claim paid uncertainty"
   (with-redefs [ai/config (constantly {})]
