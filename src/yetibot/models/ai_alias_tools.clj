@@ -128,15 +128,28 @@
 (defn- lookup [config name]
   ;; Do not query or echo credential-bearing names, even on misses.
   (when-not (public-name? config name) (invalid!))
-  (let [row (first (query! [(str "SELECT cmd_name, cmd FROM "
-                                (db/qualified-table-name "alias")
-                                " WHERE cmd_name = ? LIMIT 1") name]))]
+  (let [row (first
+              (query! [(str "SELECT cmd_name, "
+                            "CASE WHEN octet_length(cmd) <= 65536 "
+                            "THEN cmd ELSE NULL END AS cmd, "
+                            "(octet_length(cmd) > 65536) AS body_omitted FROM "
+                            (db/qualified-table-name "alias")
+                            " WHERE cmd_name = ? LIMIT 1") name]))]
     (if (and row (= name (:cmd-name row)))
-      (let [body (protect config (or (:cmd row) ""))]
+      (let [raw (or (:cmd row) "")
+            omitted? (or (true? (:body-omitted row))
+                         (> (count raw) 65536)
+                         (> (alength (.getBytes ^String raw "UTF-8")) 65536))
+            body (if omitted? "[definition omitted: size limit]"
+                     (protect config raw))]
         (loop [bounded (prefix body 2000)]
           (let [reply {:structuredContent
-                       (assoc base :found true :name name :body bounded
-                              :body_truncated (< (count bounded) (count body)))}]
+                       (cond->
+                         (assoc base :found true :name name :body bounded
+                                :body_truncated
+                                (or omitted?
+                                    (< (count bounded) (count body))))
+                         omitted? (assoc :body_omitted true))}]
             (if (<= (size reply) 12288) reply
                 (recur (prefix bounded (quot (count bounded) 2)))))))
       {:structuredContent (assoc base :found false :name name)})))
@@ -152,7 +165,9 @@
 (defn- listing [config args]
   (let [limit (get args "limit" 20)
         offset (get args "offset" 0)
-        rows (vec (query! [(str "SELECT cmd_name FROM "
+        rows (vec (query! [(str "SELECT CASE WHEN octet_length(cmd_name) "
+                               "<= 800 THEN cmd_name ELSE NULL END AS cmd_name "
+                               "FROM "
                                (db/qualified-table-name "alias")
                                " ORDER BY cmd_name COLLATE \"C\", id LIMIT ? OFFSET ?")
                           (inc limit) offset]))]

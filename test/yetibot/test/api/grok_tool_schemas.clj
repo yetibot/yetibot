@@ -2,6 +2,7 @@
   (:require [clj-http.client :as client]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.models.ai-alias-tools :as aliases]
             [yetibot.models.ai-inference-tools :as inference]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-util-tools :as util]
@@ -26,7 +27,7 @@
   ;; offline regression for that observed contract, not a live xAI test.
   (doseq [[operation definition]
           (merge inference/definitions wise/definitions models/definitions
-                 util/definitions)]
+                 util/definitions aliases/definitions)]
     (let [captured (atom nil)
           provider {:name "grok" :url "https://api.x.ai/v1"
                     :api "responses" :key "synthetic-key"

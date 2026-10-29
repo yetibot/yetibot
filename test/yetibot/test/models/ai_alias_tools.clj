@@ -80,7 +80,8 @@
         (fact (:has_more second-page) => false)
         (fact (:next_offset second-page) => nil)
         (fact (string/includes? (json/generate-string first-page) "do-not-leak") => false)
-        (fact (string/includes? (ffirst @reads) "SELECT cmd_name FROM") => true)
+        (fact (string/includes? (ffirst @reads)
+                                "octet_length(cmd_name)") => true)
         (fact (rest (first @reads)) => [3 0]))))
   (with-store [] (fn [_] (fact (get-in (call {}) [:structuredContent :names]) => []))))
 
@@ -100,6 +101,17 @@
           (fact (rest (first @reads)) => ["a.*"])
           (fact (get-in (call {"name" "a"}) [:structuredContent :found]) => false)
           (fact (get-in (call {"name" "missing"}) [:structuredContent :body]) => nil))))))
+
+(fact "oversized stored bodies are omitted, not fetched or partially exposed"
+  (with-store [{:cmd-name "large" :cmd nil :body-omitted true}]
+    (fn [reads]
+      (let [value (:structuredContent (call {"name" "large"}))
+            sql (ffirst @reads)]
+        (:found value) => true
+        (:body_omitted value) => true
+        (:body_truncated value) => true
+        (string/includes? sql "octet_length(cmd)") => true
+        (string/includes? sql "65536") => true))))
 
 (facts "strict argument preflight is pure and rejects scope, mutation and regex keys"
   (with-store []

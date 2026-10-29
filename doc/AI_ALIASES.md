@@ -21,8 +21,9 @@ wired into global command hooks when core loads them. AI reads have that same
 global storage scope, not history's current-channel scope, but require the
 trusted chat provenance and toolset authorization described below.
 
-The adapter queries only the alias table's public fields. Listing selects only
-`cmd_name`; lookup selects `cmd_name, cmd`. It never projects database IDs,
+The adapter queries only the alias table's public fields. Listing selects a
+byte-bounded `cmd_name`; lookup selects the name and a byte-bounded `cmd`,
+plus a host-owned size-limit flag. It never projects database IDs,
 author/user/account identifiers, timestamps, raw rows, or arbitrary metadata.
 It does not load `core.commands.alias`, whose loader wires executable hooks.
 Definitions describe stored data, not a guarantee of runtime dispatch semantics.
@@ -78,6 +79,8 @@ Results are JSON under `structuredContent`, always carrying `untrusted: true`,
 `read_only: true`, and `scope: "deployment-global"`. Listing returns `names`,
 `has_more`, `next_offset`, and `truncated`. Lookup returns `found` and the exact
 safe `name`; a found definition adds literal `body` and `body_truncated`.
+Oversized stored definitions also carry `body_omitted: true` and a static
+size-limit notice instead of any part of their body.
 Missing aliases return `found: false`. A sensitive lookup name yields a generic
 error without querying or echoing the name.
 
@@ -90,11 +93,13 @@ Hidden names are not disclosed through cursor text. Offsets are not snapshots:
 concurrent creates/removals can repeat or skip rows. Pagination stops with
 `truncated: true` if its next position would exceed the offset ceiling.
 
-Each query fetches at most 21 names or one full definition. Definitions are
-redacted in full **before** shortening to at most 2,000 UTF-16 units; replies
-are also bounded to 12,288 UTF-8 bytes of serialized JSON. Page size may be
-reduced to preserve that byte budget. These are output/row bounds, not a bound
-on the size of a stored text field or on all redaction work.
+Each query fetches at most 21 names or one definition. SQL omits names over
+800 stored bytes and entire bodies over 65,536 stored bytes before JDBC
+materializes them. Oversized definitions are never partially exposed.
+Returned definitions are redacted in full **before** shortening to at most
+2,000 UTF-16 units; replies are also bounded to 12,288 serialized UTF-8 bytes.
+Page size may be reduced to preserve that byte budget. These limits do not
+change the stored alias or claim to bound the entire database/table size.
 
 ## Authorization and safety boundary
 
