@@ -182,6 +182,14 @@
         (close! @holder)
         (fail (str "Could not connect to MCP server " (:name server) ". Check its connection and credentials."))))))
 
+(defn connect-with-config!
+  "Redact all configured MCP credentials before initialize text is bounded.
+   Delegate through the two-argument connection boundary for existing callers
+   and deterministic transport mocks. Bind only during this connection."
+  [server timeout-ms config]
+  (binding [*discovery-config* config]
+    (connect! server timeout-ms)))
+
 (defn- as-data [value]
   (json/parse-string (.writeValueAsString (McpJsonDefaults/getMapper) value) true))
 

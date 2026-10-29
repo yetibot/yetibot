@@ -5,6 +5,8 @@
             [yetibot.models.ai-mcp-catalog :as catalog]
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-toolsets :as toolsets]
+            [yetibot.test.support.mcp :as support]
             [yetibot.observers.ai-mcp-catalog :as observer]
             [yetibot.core.loader :as loader]))
 
@@ -85,7 +87,7 @@
       (is (empty? (get-in (catalog/snapshot cache config)
                           [:servers 0 :tools]))))))
 
-(deftest cache-is-data-only-secret-safe-and-policy-independent
+(deftest cache-is-data-only-secret-safe-and-scope-isolated
   (let [{:keys [cache jobs]} (fixture)
         server (assoc (first servers)
                       :headers {"Authorization" "Bearer private-token"})
@@ -101,9 +103,9 @@
       (drain! jobs)
       (is (not (.contains (pr-str @(:state cache)) "private-token")))
       (is (not (.contains (pr-str @(:state cache)) "host-call")))
-      (is (= "fresh" (get-in (catalog/snapshot
-                               cache (assoc-in config [:servers 0 :tools]
-                                               ["other"]))
+      (is (= "pending" (get-in (catalog/snapshot
+                                 cache (assoc-in config [:servers 0 :tools]
+                                                 ["other"]))
                               [:servers 0 :status])))
       (is (empty? (get-in (catalog/snapshot
                             cache (assoc-in config [:servers 0 :tools]
@@ -169,7 +171,8 @@
       (mcp/with-tools (assoc-in (assoc config :tolerant? true)
                                [:servers 0 :tools] ["not-allowed"])
         #(is (empty? %)))
-      (is (= 1 @listed)))))
+      ;; A different effective scope discovers once under its own key.
+      (is (= 2 @listed)))))
 
 (deftest actual-lazy-call-and-connect-failure-cleanup
   (let [closed (atom 0) calls (atom 0)
@@ -189,6 +192,10 @@
         (is (:isError result))
         (is (not (:unknownOutcome result)))
         (is (not (.contains (pr-str result) "secret")))))))
+
+(deftest native-only-reads-do-not-start-catalog-workers
+  (with-redefs [catalog/start! (fn [] (throw (Exception. "No workers")))]
+    (catalog/with-tools {:servers []} #(is (empty? %)))))
 
 (deftest lifecycle-is-import-inert-idempotent-and-stoppable
   (is (nil? @catalog/runtime))
@@ -240,7 +247,78 @@
       (is (= ["up/other"]
              (tools/tool-names nil {:user "U2" :adapter "slack"})))
       (is (= "No MCP servers configured." (tools/tool-names nil)))
-      (is (= 1 (count @(:state cache)))))))
+      (is (= 2 (count @(:state cache)))))))
+
+(deftest cross-server-instructions-redact-before-first-bound
+  (let [cache (catalog/new-cache (constantly 0) (fn [job] (job)))
+        requests (atom []) rpc (support/rpc-handler requests false)
+        secret "OTHER-CREDENTIAL-123456789"
+        prefix (apply str (repeat 19990 \x))]
+    (support/with-http-server
+      (fn [request]
+        (let [response (rpc request)]
+          (if (= "initialize" (get-in request [:body :method]))
+            (assoc-in response [:body :result :instructions]
+                      (str prefix secret " suffix"))
+            response)))
+      (fn [base]
+        (let [server {:name "up" :url base :tools ["web_search"]}
+              config {:servers [server]
+                      :redaction-servers
+                      [server {:name "other" :url "https://unused.test"
+                               :headers {"Authorization"
+                                         (str "Bearer " secret)}}]}
+              result (catalog/snapshot cache config)
+              text (get-in result [:servers 0 :instructions :text])]
+          (is (= "fresh" (get-in result [:servers 0 :status])))
+          (is (= (str prefix "[redacted]") text))
+          (is (true? (get-in result [:servers 0 :instructions :truncated])))
+          (is (not (.contains (pr-str @(:state cache)) "OTHER-CRED"))))))))
+
+(deftest scoped-large-server-prewarms-with-implicit-github-native-tools
+  (let [cache (catalog/new-cache (constantly 0) (fn [job] (job)))
+        requests (atom []) rpc (support/rpc-handler requests false)
+        scope ["get_commit" "get_file_contents" "list_branches"]
+        advertised (mapv #(assoc tool :name %)
+                         (concat scope (map #(str "extra_" %) (range 70))))]
+    (support/with-http-server
+      (fn [request]
+        (let [response (rpc request)]
+          (if (= "tools/list" (get-in request [:body :method]))
+            (assoc-in response [:body :result] {:tools advertised})
+            response)))
+      (fn [base]
+        (let [server {:name "github" :url base}
+              config {:servers [server]
+                      :toolsets [{:name "github-read" :kind "github-read"
+                                  :users ["U1"] :adapters ["slack"]
+                                  :repositories ["org/repo"]
+                                  :servers [{:name "github" :tools scope}]}]}
+              actor {:user "U1" :adapter "slack"}]
+          (with-redefs [catalog/shared-cache cache
+                        catalog/runtime (atom :running)
+                        catalog/start! (constantly nil)
+                        mcp/config (constantly config)
+                        native/trusted? (constantly true)]
+            (catalog/warm!)
+            (let [result (tools/tool-catalog nil actor)]
+              (is (= (into (mapv #(str "github/" %) scope)
+                           ["yetibot/help" "yetibot/history"
+                            "yetibot/history_count"])
+                     (:names result)))
+              (is (= "fresh" (get-in result [:discovery :servers 0 :status]))))
+            (mcp/with-tools (assoc (toolsets/select config "github-read")
+                                   :tolerant? true)
+              (fn [available]
+                (is (= scope (mapv :name available)))
+                (is (thrown? clojure.lang.ExceptionInfo
+                             (mcp/call-tool (:session (first available))
+                                            "extra_0" {})))))
+            (is (= 1 (count (filter #(= "tools/list"
+                                       (get-in % [:body :method]))
+                                    @requests))))
+            (is (not-any? #(= "tools/call" (get-in % [:body :method]))
+                          @requests))))))))
 
 (deftest instructions-are-public-inert-data-even-with-zero-tools
   (let [cache (catalog/new-cache (constantly 0) (fn [job] (job)))

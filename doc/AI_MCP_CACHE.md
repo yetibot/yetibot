@@ -17,11 +17,13 @@ threads or open connections. No core dependency changes are needed.
 
 The lifecycle starts one timer and a bounded four-worker daemon pool. The timer
 reads current application MCP config and schedules discovery immediately, then
-every 30 seconds. Thread creation does not inherit request thread locals, and
-jobs receive only MCP connection/redaction configuration, not an actor,
-conversation, provider config/key, callbacks, or native closures. First real
-use also starts the lifecycle, for applications embedding the tool API without
-`load-all`. That use may return a pending catalog.
+every 30 seconds. Named toolsets prewarm their configured read scopes rather
+than unrestricted raw servers or write-only connections. Thread creation does
+not inherit request thread locals, and jobs receive only MCP connection and
+redaction configuration, not an actor, conversation, provider config/key,
+callbacks, or native closures. First remote-tool use also starts the lifecycle
+for applications embedding the tool API without `load-all`. That use may return
+a pending catalog. Native-only calls need no catalog workers.
 
 `adapters/stop` and a JVM shutdown hook call `catalog/stop!`. Explicit
 `yetibot.models.ai-mcp-catalog/stop!` is available to embedding applications.
@@ -53,10 +55,12 @@ Defaults are implementation constants, not additional environment settings:
   executors; they do not sleep to advance freshness.
 
 The fingerprint is SHA-256 over the current connection, timeout, configured
-base server allowlist, and MCP credential redaction inventory. Changes cannot
-use an earlier connection's catalog. Discovery honors the configured base
-allowlist. Request/toolset-specific narrowing does not change the fingerprint:
-metadata can be shared, but reads intersect it with **current** allowlists,
+base server allowlist, effective request/toolset scope, and MCP credential
+redaction inventory. Changes cannot use an earlier connection's catalog.
+Discovery preserves the effective scope, intersected with any explicit base
+allowlist. Different scopes have separate entries: a large unrestricted
+catalog cannot suppress a small allowed subset. Identical scopes share public
+metadata, but reads still intersect it with **current** allowlists,
 actor-visible toolsets, and reserved GitHub policy. A tool absent from current
 configuration or advertisement cannot be restored by an older actor's entry.
 
@@ -65,8 +69,11 @@ hashed keys, and scheduling numbers/booleans/opaque tokens. It contains no MCP
 clients, transports, sessions, connection config, credentials, headers,
 functions, native closures, or exceptions. Known MCP credentials (including
 Bearer and JSON/unicode-escaped forms) are redacted before DTO storage and
-bounding. Tool names requiring redaction are rejected instead of creating an
-incorrect callable identity. Request/provider-specific redaction still happens
+bounding. Discovery supplies the complete MCP credential inventory to the
+connection helper before initialize instructions receive their first bound;
+a different server's credential cannot leak a prefix across that boundary.
+Tool names requiring redaction are rejected instead of creating an incorrect
+callable identity. Request/provider-specific redaction still happens
 at the model/public rendering boundaries.
 
 ## Request behavior and authorization
@@ -133,4 +140,7 @@ lein trampoline run -m clojure.main -e \
 ```
 
 Tests use fake clocks/executors, fake connections, and loopback HTTP fixtures.
-They make no live inference, paid/native execution, production, or bank calls.
+The shared HTTP fixture injects a fresh synchronous cache executor and skips
+catalog daemon startup, retaining real discovery, filtering, and lazy execution
+connections without cross-test state or background races. They make no live
+inference, paid/native execution, production, or bank calls.

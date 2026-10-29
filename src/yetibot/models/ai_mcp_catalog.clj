@@ -1,7 +1,8 @@
 (ns yetibot.models.ai-mcp-catalog
   "Bounded public discovery data, never sessions or execution authority."
   (:require [cheshire.core :as json]
-            [yetibot.api.mcp :as mcp])
+            [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-toolsets :as toolsets])
   (:import [java.security MessageDigest]
            [java.util.concurrent ArrayBlockingQueue Executors
             ScheduledExecutorService ThreadFactory ThreadPoolExecutor
@@ -87,8 +88,17 @@
             (:servers (metadata-config config)))
       server))
 
+(defn- effective-server [server config]
+  (let [base (configured-server server config)]
+    (if (contains? base :tools)
+      (assoc server :tools
+             (if (contains? server :tools)
+               (filterv (set (:tools base)) (:tools server))
+               (:tools base)))
+      server)))
+
 (defn- fingerprint [server config]
-  (let [value [(dissoc server :tools) (:timeout-ms config)
+  (let [value [(effective-server server config) (:timeout-ms config)
                (select-keys (configured-server server config) [:tools])
                (sort (mcp/credentials (metadata-config config)))]
         bytes (.digest (MessageDigest/getInstance "SHA-256")
@@ -96,10 +106,10 @@
     (apply str (map #(format "%02x" (bit-and 255 %)) bytes))))
 
 (defn- discover [server config]
-  (let [base (configured-server server config)
-        server (merge (dissoc server :tools) (select-keys base [:tools]))
-        session (mcp/connect! server
-                              (mcp/number-option (:timeout-ms config) 30000))]
+  (let [server (effective-server server config)
+        session (mcp/connect-with-config!
+                  server (mcp/number-option (:timeout-ms config) 30000)
+                  (metadata-config config))]
     (try
       (let [tools (mcp/list-tools session)
             config (metadata-config config)]
@@ -220,13 +230,23 @@
 (defonce shared-cache
   (new-cache #(quot (System/nanoTime) 1000000) submit!))
 
+(defn- warm-configs [config]
+  (toolsets/validate! config)
+  (if (seq (:toolsets config))
+    ;; Prewarm configured read scopes, not the unrestricted raw connection or
+    ;; write-only servers. No actor/policy state is conveyed to workers.
+    (mapv #(toolsets/select config (:name %)) (:toolsets config))
+    [config]))
+
 (defn warm! []
   ;; Serialize scheduling (not discovery IO) with stop, so an in-progress
   ;; timer tick cannot repopulate metadata after lifecycle shutdown.
   (locking runtime
     (when @runtime
-      (try (snapshot shared-cache (mcp/config))
-           (catch Exception _ nil)))))
+      (try
+        (doseq [config (warm-configs (mcp/config))]
+          (snapshot shared-cache config))
+        (catch Exception _ nil)))))
 
 (defn start!
   "Lifecycle entry point. Schedules startup discovery; never waits for IO."
@@ -260,7 +280,7 @@
 (defn with-tools
   "Request-only handles: policy may narrow them; cache cannot execute tools."
   [config f]
-  (start!)
+  (when (seq (:servers config)) (start!))
   (let [result (snapshot shared-cache config)
         tools
         (vec
