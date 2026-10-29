@@ -196,6 +196,11 @@
     (.setRemoveOnCancelPolicy true)))
 
 (defn- schedule-abort [^HttpUriRequest owner]
+  ;; Start before enqueueing an owner: schedule can otherwise retain its task
+  ;; when ThreadFactory startup throws or returns nil.
+  (.prestartCoreThread ^ScheduledThreadPoolExecutor abort-executor)
+  (when (zero? (.getPoolSize ^ScheduledThreadPoolExecutor abort-executor))
+    (throw (IllegalStateException. "Diagnostic abort worker unavailable.")))
   ;; Capture only this failed request's owner, never ambient request context.
   (.schedule ^ScheduledThreadPoolExecutor abort-executor
              ^Runnable (reify Runnable

@@ -9,7 +9,7 @@
   (:import [java.io ByteArrayInputStream IOException InputStream]
            [java.net SocketTimeoutException]
            [java.util.concurrent CountDownLatch ScheduledThreadPoolExecutor
-            TimeUnit]
+            ThreadFactory TimeUnit]
            [org.apache.http.concurrent Cancellable]
            [org.apache.http.client.methods HttpGet]))
 
@@ -404,6 +404,31 @@
         (fact (count @scheduled) => 2)
         (fact (.getRemoveOnCancelPolicy
                 ^ScheduledThreadPoolExecutor executor) => true)))))
+
+(facts "failed scheduler startup neither reads nor retains an HTTP owner"
+  (doseq [throw? [true false]]
+    (let [executor
+          (doto (ScheduledThreadPoolExecutor.
+                  1 (reify ThreadFactory
+                      (newThread [_ _]
+                        (when throw?
+                          (throw (SecurityException. sentinel)))
+                        nil)))
+            (.setRemoveOnCancelPolicy true))
+          reads (atom 0)
+          body (proxy [InputStream] []
+                 (read
+                   ([] (swap! reads inc) -1)
+                   ([_ _ _] (swap! reads inc) -1)))
+          owner (HttpGet. "https://example.test/v1/responses")]
+      (try
+        (with-redefs-fn {#'diagnostics/abort-executor executor}
+          (fn []
+            (fact (diagnostics/stream-error-fields body owner)
+                  => (diagnostics/error-fields nil))
+            (fact @reads => 0)
+            (fact (.size (.getQueue executor)) => 0)))
+        (finally (.shutdownNow executor))))))
 
 (fact "the single daemon scheduler does not inherit ambient thread locals"
   (let [executor ^ScheduledThreadPoolExecutor @#'diagnostics/abort-executor

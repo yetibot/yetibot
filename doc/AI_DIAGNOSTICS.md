@@ -73,7 +73,10 @@ non-2xx stream error inspection, a one-second timer aborts the saved clj-http
 remain too. One shared daemon scheduler carries only that owner, without
 inheriting thread locals or conveying dynamic bindings. Its timer is cancelled
 in `finally`, and cancelled tasks are removed from its queue. No timer is
-scheduled for successful responses or non-stream JSON responses.
+scheduled for successful responses or non-stream JSON responses. The worker
+must start before a failed request owner can enter its queue. If thread
+creation fails or returns no worker, inspection is skipped without reading
+or retaining that owner.
 
 Without an abortable owner, inspection is skipped unless the body's exact
 class is the in-memory `ByteArrayInputStream` (not an arbitrary subclass).
