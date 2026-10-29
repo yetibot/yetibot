@@ -71,7 +71,9 @@
     (when-not (and execution/*sensitive* actor
                    (= actor (policy/actor execution/*event*))
                    (some #{(:adapter actor)} (:adapters cfg))
-                   (some #{(:conversation actor)} (:conversations cfg))
+                   (some #{(:conversation actor)
+                           (str (:connection actor) "/*")}
+                         (:conversations cfg))
                    (or (not (contains? cfg :users))
                        (some #{(:user actor)} (:users cfg))))
       (fail! "Wise is not enabled for this user or conversation."))

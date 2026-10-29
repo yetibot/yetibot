@@ -131,3 +131,47 @@
           (set (keys (:properties schema)))
           => #{:action :account :days :limit}
           (count (:oneOf schema)) => 3)))
+
+(fact "Connection selectors allow channels, never unrelated trusted actors"
+  (let [request {:user {:id "DU1"}
+                 :chat-source {:adapter :discord :uuid :test-discord
+                               :raw-event {:author {:id "DU1"} :id "M1"
+                                           :channel-id "DC1"}}}
+        second-channel (assoc-in request [:chat-source :raw-event :channel-id]
+                                 "DC2")
+        settings {:adapters ["discord"]
+                  :conversations [":test-discord/*"]}
+        cases [[request settings true]
+               [second-channel settings true]
+               [(assoc-in request [:chat-source :uuid] :other) settings false]
+               [(assoc-in request [:chat-source :uuid] :test-discord-extra)
+                settings false]
+               [request (assoc settings :conversations ["*"]) false]
+               [request (assoc settings :conversations ["test-discord/*"])
+                false]
+               [request (assoc settings :users ["OTHER"]) false]
+               [request (assoc settings :users ["DU1"]) true]
+               [request (assoc settings :conversations [":test-discord/DC1"])
+                true]
+               [second-channel
+                (assoc settings :conversations [":test-discord/DC1"]) false]
+               [(assoc-in chat/request [:chat-source :uuid] :test-discord)
+                settings false]
+               [(assoc-in request [:chat-source :raw-event :author :id]
+                          "FORGED") settings false]]]
+    (doseq [[event config allowed?] cases]
+      (fixture/with-wise config
+        (fn [calls]
+          (chat/in-event event "wise synthetic connection policy"
+            (fn [{:keys [chat-source]}]
+              (fact (tools/available-tools) => (if allowed? ["wise"] [])
+                    (boolean
+                      (:isError (tools/call! {} "wise" {"action" "balance"}
+                                            chat-source))) => (not allowed?))))
+          (fact (boolean (seq @calls)) => allowed?))))
+    (fixture/with-wise settings
+      (fn [calls]
+        (fact (tools/available-tools) => []
+              (:isError (tools/call! {} "wise" {"action" "balance"}
+                                    (:chat-source request))) => true
+              @calls => [])))))
