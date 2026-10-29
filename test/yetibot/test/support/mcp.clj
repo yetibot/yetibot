@@ -1,6 +1,7 @@
 (ns yetibot.test.support.mcp
   (:require [cheshire.core :as json]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [yetibot.models.ai-mcp-catalog :as catalog])
   (:import [com.sun.net.httpserver HttpServer HttpHandler]
            [java.net InetSocketAddress]
            [java.util.concurrent Executors]))
@@ -55,8 +56,14 @@
                 :else (.sendResponseHeaders exchange status -1)))
             (finally (.close exchange))))))
     (.start server)
-    (try (f (str "http://127.0.0.1:" (.getPort (.getAddress server))))
-         (finally (.stop server 0) (.shutdownNow executor)))))
+    (try
+      ;; Keep the production snapshot/filter/lazy-call path, but make each
+      ;; loopback fixture deterministic and independent of catalog daemons.
+      (with-redefs [catalog/shared-cache
+                    (catalog/new-cache (constantly 0) (fn [job] (job)))
+                    catalog/start! (constantly nil)]
+        (f (str "http://127.0.0.1:" (.getPort (.getAddress server)))))
+      (finally (.stop server 0) (.shutdownNow executor)))))
 
 (defn rpc-handler [requests sse]
   (fn [request]

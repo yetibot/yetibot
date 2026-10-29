@@ -1,7 +1,6 @@
 (ns yetibot.commands.cf
   "Cloudflare shortcut: catalog discovery and bounded text-only inference."
-  (:require [clojure.string :as string]
-            [yetibot.api.ai :as api]
+  (:require [yetibot.api.ai :as api]
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
@@ -41,13 +40,12 @@
         (let [models (api/models provider)
               catalog (:catalog (meta models))]
           {:result/data catalog
+           :result/collection-path [:models]
            :result/value
-           (str (:coverage catalog) "\n"
-                (string/join
-                  "\n" (map #(str (:id %) " ["
-                                  (get-in % [:task :name] "unknown task")
-                                  "; " (name (:interface %)) "]")
-                            (:models catalog))))})))))
+           (mapv #(str (:id %) " ["
+                       (get-in % [:task :name] "unknown task")
+                       "; " (name (:interface %)) "]")
+                 (:models catalog))})))))
 
 (defn prompt-cmd
   "cf <prompt> # ask Cloudflare, text-only, no tools or implicit history

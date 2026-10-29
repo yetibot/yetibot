@@ -50,7 +50,9 @@ jobs:
         env:
           YETIBOT_DB_URL: postgresql://yetibot:yetibot@localhost:5432/yetibot
           CLOVERAGE_VERSION: 1.1.2
-        run: lein with-profile +test cloverage --codecov --runner midje
+        run: |
+          lein with-profile +test cloverage --codecov --runner midje
+          lein with-profile +test test yetibot.test.models.ai-mcp-catalog
 
       # - uses: codecov/codecov-action@v5
       #   with:

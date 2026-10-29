@@ -114,8 +114,8 @@ Changing the shared default provider does not reroute pinned `grok` calls.
 
 For this account REST base, `ai models` calls
 `GET /accounts/{account_id}/ai/models/search`, not `/ai/v1/models`. It retrieves
-up to 20 pages of 100 entries, deduplicates/sorts IDs, and retains task metadata
-in pipeline data under the provider's `:catalog`. The displayed coverage is
+up to 20 pages of 100 entries, deduplicates/sorts IDs, and retains bounded
+model metadata in pipeline data under the provider's `:catalog`. The coverage is
 **Workers AI only; third-party Gateway models not included**. This is not the
 complete AI Gateway catalog or proof that every returned model accepts chat,
 images, or tools. Clef/Clairic are labelled decision/extraction interfaces, not
@@ -123,8 +123,37 @@ chat models. Text Generation entries are labelled `chat`; other tasks and
 unknown tasks remain `model-specific`. Other providers retain standard
 `GET /models` discovery.
 
-`cf models` shows the **full Workers AI catalog**, with task/interface labels
-and structured pipeline metadata. `cf [--model <id>] [--toolset <name>] <prompt>`
+`cf models` shows the **full Workers AI catalog**, with concise task/interface
+labels. Its `:result/collection-path` links each label to a structured model
+record, so `!cf models | random | data show` shows the selected record, not
+just its display string. No coverage/header row enters the model collection.
+Records retain description, task, catalog UUID/source/timestamps/tags, known
+properties (including price, terms/license and deprecation when supplied),
+limits, and a compact schema summary. Prices retain the provider's exact units
+and currency; token defaults are not presented as maximum output limits.
+`function-calling` distinguishes explicit reported `supported: false` from
+`status: unknown`, or `status: advertised` when tools/tool_calls appear in the
+schema. Advertising a schema does not prove tool quality, successful follow-up
+serialization, or account entitlement. Missing metadata is not a negative
+capability or a zero price. For example, the official public
+[llama-3.1-8b-instruct-fp8 docs][cf-llama-fp8] advertise `tool_calls`.
+
+This projection follows the official
+[Workers AI model records][cf-model-records] and their `properties` array; it
+does not merge the third-party AI catalog or hardcode a model capability menu.
+Unknown fields and full schemas are omitted. Credentials are redacted before
+truncation; records are capped at 8,000 UTF-8 JSON bytes, strings at 2,000
+characters, containers at 32 entries and nesting at five levels. Oversized
+metadata sets `metadata-truncated`; omissions do not imply lack of support.
+
+[cf-llama-fp8]:
+  https://developers.cloudflare.com/workers-ai/models/llama-3.1-8b-instruct-fp8/
+[cf-model-records]: https://github.com/cloudflare/cloudflare-docs
+
+Public record fixtures are in that repository under
+`src/content/workers-ai-models/`; they are documentation, not live quotes.
+
+`cf [--model <id>] [--toolset <name>] <prompt>`
 uses the fixed `cloudflare` provider and only the supplied prompt, with no
 implicit history, child tools, native searches, or recursion. Each request is
 capped at 2048 output tokens on the wire (`max_tokens` for Workers AI Chat
@@ -642,14 +671,20 @@ raw provider bodies, headers, credentials, tool calls or reasoning state.
 Configured credentials are scanned as raw strings before outbound work; JSON
 strings are decoded and sensitive fields/credentials redacted before output
 truncation. Model listing pages the full catalog (default/max 20 entries) with
-`after`/`limit` and `next_after`, preserving task/interface labels; `cf models`
-at the command line returns the full catalog.
+`after`/`limit` and `next_after`, preserving the same whitelisted metadata.
+Pages stay below 12,000 UTF-8 JSON bytes, so a page may contain fewer than the
+requested number of entries. The cursor follows the last returned record;
+continue until `has_more` is false. `cf models` at the command line returns the
+full bounded catalog.
 
 ### Memes and Grok images
 
 `!ai tools` and `!ai tools <server>` list one tool per line, in catalog order:
-`server/name — short description`. Descriptions collapse whitespace and are
-limited to 120 characters; command punctuation is made literal for `xargs`.
+`` `server/name` — short description ``. Only the display ID is wrapped in
+backticks; structured `:id` and `:name` values remain raw. Descriptions are
+whitespace-collapsed and limited to 120 characters; command punctuation is
+made literal for `xargs`. Wrapped IDs and complete summary rows are accepted
+as selectors without evaluating their backticks as command substitutions.
 IDs stay unchanged, and no header rows interrupt collection pipelines.
 Each row stays paired with its projected metadata through collection commands.
 `!ai tools <server/name>` shows focused help: description, input names/types,

@@ -299,14 +299,18 @@
            (when-not (ai/tool-calling? provider)
              (ai/fail
                "Tool calling is disabled for this provider. Use --no-tools."))
-           (mcp/with-tools config
+           (mcp/with-tools (assoc config :tolerant? true)
              (fn [reads]
-               (let [reads (model-tools config reads)
+               (let [statuses (::mcp/statuses (meta reads))
+                     reads (model-tools config reads)
                      tools (cond-> (into reads local)
                              (= "github-pr" (get-in config [:toolset :kind]))
                              (conj (staging-tool config actor provider model
                                                  reads)))]
-                 (run-tools provider model messages tools config)))))
+                 (cond-> (run-tools provider model messages tools config)
+                   (seq statuses)
+                   (assoc-in [:result/data :mcp :servers]
+                             (clean-data statuses config)))))))
          ;; Text-only providers and non-chat callers need no function support.
          (if on-progress
            (clean-data (ai/complete provider model (host-messages messages)
@@ -390,6 +394,7 @@
                :name (mcp/metadata-redact name config)
                :description (:text description)
                :inputSchema nil}
+        entry (merge entry (select-keys tool [:truncated :omitted]))
         entry (cond-> entry
                 (:truncated description)
                 (assoc :truncated [:description]))]
@@ -422,7 +427,7 @@
       entry [:inputSchema :title :annotations])))
 
 (defn tool-catalog
-  "One discovery pass; public metadata only, with no native tool execution."
+  "Cached best-effort public metadata, with no native tool execution."
   ([server-name] (tool-catalog server-name nil))
   ([server-name actor]
    (let [config (listing-config actor)
@@ -457,27 +462,33 @@
                                               [:session :instructions]))))
                            (group-by #(get-in % [:session :server :name])
                                      remote)))]
-             {:names (if (and (empty? (:servers config)) (empty? local))
-                       "No MCP servers configured."
-                       ;; Preserve ordinary names/order, never credentials
-                       ;; reflected by a server in a tool's public name.
-                       (mapv :id entries))
-              :tools entries
-              :instructions
-              {:runner instructions
-               :servers
-               (mapv (fn [{:keys [server instructions]}]
-                       (cond-> {:server (mcp/metadata-redact server config)
-                                :status "UNTRUSTED/NOT APPLIED TO MODEL"
-                                :available (boolean instructions)}
-                         instructions
-                         (merge (mcp/metadata-text (:text instructions)
-                                                   config 20000))
-                         (:truncated instructions) (assoc :truncated true)))
-                     server-instructions)}
-              :skills {:supported false :items []}}))]
+             (cond->
+               {:names (if (and (empty? (:servers config)) (empty? local))
+                         "No MCP servers configured."
+                         ;; Preserve ordinary names/order, never credentials
+                         ;; reflected by a server in a tool's public name.
+                         (mapv :id entries))
+                :tools entries
+                :instructions
+                {:runner instructions
+                 :servers
+                 (mapv (fn [{:keys [server instructions]}]
+                         (cond-> {:server (mcp/metadata-redact server config)
+                                  :status "UNTRUSTED/NOT APPLIED TO MODEL"
+                                  :available (boolean instructions)}
+                           instructions
+                           (merge (mcp/metadata-text (:text instructions)
+                                                     config 20000))
+                           (:truncated instructions)
+                           (assoc :truncated true)))
+                       server-instructions)}
+                :skills {:supported false :items []}}
+               (::mcp/statuses (meta remote))
+               (assoc :discovery
+                      {:servers (::mcp/statuses (meta remote))}))))]
      (if (seq (:servers config))
-       (mcp/with-tools config catalog)
+       (mcp/with-tools (assoc config :tolerant? true :catalog? true)
+                       catalog)
        (catalog [])))))
 
 (defn tool-names

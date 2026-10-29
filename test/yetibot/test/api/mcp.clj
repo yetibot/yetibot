@@ -6,6 +6,7 @@
             [dec :as dec]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-mcp-catalog :as catalog]
             [yetibot.api.ai :as ai]
             [yetibot.commands.ai :as command]
             [yetibot.core.config :as config]
@@ -283,6 +284,36 @@
                                              :timeout-ms 200} identity))
             => "Could not connect to MCP server search. Check its connection and credentials."))))
 
+(fact "tolerant HTTP discovery isolates failures and never calls tools"
+  (let [requests (atom []) rpc (support/rpc-handler requests false)]
+    (support/with-http-server
+      (fn [request]
+        (if (= "/offline" (:path request))
+          {:status 401 :body {:error "private-server-details"}}
+          (rpc request)))
+      (fn [base]
+        (let [config {:servers [(assoc server :url (str base "/mcp"))
+                                {:name "offline" :url (str base "/offline")}]
+                      :timeout-ms 1000 :tolerant? true}]
+          (with-redefs [catalog/shared-cache
+                        (catalog/new-cache (constantly 0) (fn [job] (job)))
+                        catalog/start! (constantly nil)]
+            (mcp/with-tools config
+              (fn [tools]
+                (fact (mapv :name tools) => ["web_search"]
+                      (mapv :status (::mcp/statuses (meta tools)))
+                      => ["fresh" "unavailable"]
+                      (.contains (pr-str (meta tools))
+                                 "private-server-details") => false)))
+            (mcp/with-tools config
+              #(fact (mapv :name %) => ["web_search"]))
+            (fact
+              (count (filter #(= "tools/list" (get-in % [:body :method]))
+                             @requests)) => 2
+              (some #(= "tools/call" (get-in % [:body :method]))
+                    @requests) => nil
+              (some #(= "DELETE" (:method %)) @requests) => true)))))))
+
 (fact "the AI command can search a real local MCP server and then answer with its source link"
   (let [requests (atom []) rpc (support/rpc-handler requests false)]
     (support/with-http-server
@@ -299,7 +330,10 @@
                                                            :arguments "{\"query\":\"today's news\"}"}}]})}]}})
           (rpc request)))
       (fn [base]
-        (with-redefs [ai/config (constantly {:providers [{:name "local" :url (str base "/v1")
+        (with-redefs [catalog/shared-cache
+                      (catalog/new-cache (constantly 0) (fn [job] (job)))
+                      catalog/start! (constantly nil)
+                      ai/config (constantly {:providers [{:name "local" :url (str base "/v1")
                                                          :key "model-secret" :model "chat"}]})
                       mcp/config (constantly {:servers [(assoc server :url (str base "/mcp")
                                                                      :headers {"Authorization" "Bearer mcp-secret"})]})]
@@ -315,4 +349,10 @@
               (every? #(= "Bearer mcp-secret" (get-in % [:headers "authorization"])) mcp-requests) => true
               (boolean (re-find #"https://source.test/news"
                                 (-> model-requests last :body :messages last :content))) => true
-              (some #(= "DELETE" (:method %)) mcp-requests) => true)))))))
+              (some #(= "DELETE" (:method %)) mcp-requests) => true
+              ;; Discovery closes before inference; the actual call reconnects
+              ;; without repeating the fixture's two tools/list pages.
+              (count (filter #(= "tools/list" (get-in % [:body :method]))
+                             mcp-requests)) => 2
+              (count (filter #(= "initialize" (get-in % [:body :method]))
+                             mcp-requests)) => 2)))))))
