@@ -301,10 +301,11 @@
 (defn complete-prompt
   [{:keys [provider model messages no-tools toolset actor on-progress]}]
   (if no-tools
-    (if on-progress
-      (ai/complete (dissoc provider :native-tools) model messages
-                   {:on-progress on-progress})
-      (ai/complete (dissoc provider :native-tools) model messages))
+    (let [messages (tools/host-messages messages)]
+      (if on-progress
+        (ai/complete (dissoc provider :native-tools) model messages
+                     {:on-progress on-progress})
+        (ai/complete (dissoc provider :native-tools) model messages)))
     (tools/complete provider model messages
                     (cond-> {:toolset toolset :actor actor}
                       on-progress (assoc :on-progress on-progress)))))

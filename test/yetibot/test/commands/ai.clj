@@ -46,13 +46,17 @@
                 api/complete (fn [provider model messages] [(:name provider) model messages])]
     (ai/providers-cmd {}) => ["local" "hosted"]
     (ai/prompt-cmd {:match "hello"})
-    => ["hosted" "chat" [{:role "user" :content "hello"}]]
+    => ["hosted" "chat"
+        (tools/host-messages [{:role "user" :content "hello"}])]
     (ai/prompt-cmd {:match "--provider local hello"})
-    => ["local" "llama3" [{:role "user" :content "hello"}]]
+    => ["local" "llama3"
+        (tools/host-messages [{:role "user" :content "hello"}])]
     (ai/prompt-cmd {:match "--model other --provider local hello"})
-    => ["local" "other" [{:role "user" :content "hello"}]]
+    => ["local" "other"
+        (tools/host-messages [{:role "user" :content "hello"}])]
     (ai/prompt-cmd {:match "--model other hello"})
-    => ["hosted" "other" [{:role "user" :content "hello"}]]
+    => ["hosted" "other"
+        (tools/host-messages [{:role "user" :content "hello"}])]
     (ai/prompt-cmd {:match "--provider missing hello"})
     => {:result/error "Unknown AI provider. Use ai providers to list available providers."})
   (with-redefs [api/config (constantly {:providers [(dissoc local-provider :model)]})]
@@ -104,7 +108,8 @@
       (:result/value (ai/prompt-cmd {:match "first"})) => "answer"
       (:result/value (ai/prompt-cmd {:match "second"})) => "answer"
       (mapv :messages @requests)
-      => [[{:role "user" :content "first"}] [{:role "user" :content "second"}]])))
+      => [(tools/host-messages [{:role "user" :content "first"}])
+          (tools/host-messages [{:role "user" :content "second"}])])))
 
 (fact "a failed thread read does not send a prompt"
   (let [sent? (atom false)]
@@ -121,6 +126,20 @@
                 tools/complete (fn [& _] :tools)]
     (ai/prompt-cmd {:match "--no-tools hello"}) => :plain
     (ai/prompt-cmd {:match "hello"}) => :tools))
+
+(fact "no-tools preserves host orientation without advertising tool access"
+  (let [sent (atom nil)]
+    (with-redefs [api/config (constantly config)
+                  context/messages (fn [_ prompt]
+                                     [{:role "user" :content prompt}])
+                  tools/complete (fn [& _] (throw (AssertionError. "Tool loop")))
+                  api/complete (fn [_ _ msgs] (reset! sent msgs) :plain)]
+      (ai/prompt-cmd {:match "--no-tools yo"}) => :plain
+      (:role (first @sent)) => "system"
+      (boolean (re-find #"running inside Yetibot"
+                       (:content (first @sent)))) => true
+      (last @sent) => {:role "user" :content "yo"}
+      (count @sent) => 2)))
 
 (fact "no-tools also disables provider-native search"
   (with-redefs [api/config
