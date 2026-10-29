@@ -176,13 +176,55 @@ For example, a choice schema is:
 Pass it as a single quoted argument to `clef --questions`. State may follow the
 schema inline or arrive through a pipe. EDN is parsed as data, never evaluated.
 
-### Extraction and downstream data
+### Quick Clairic experiments (no schema)
 
-```text
-!echo total 42 | clairic --fields '{:amount :number}'
-!clairic --fields '{:amount :number}' https://example.com/receipt.png
-!echo 42 | clairic --fields '{:x :number}' | data $.answers.x.value
-```
+Start with `!clairic demo`. It makes a real Clairic request using built-in text
+`Balloon count: 3.`, then reports whether the extracted count is **3**.
+It deliberately ignores attachments and piped input so this is a repeatable
+text-only smoke test. It is not a canned answer or an image test.
+
+For your own input, start the request with one of these verbs. Yetibot builds
+the typed fields locally; there is no extra model call, provider, or credential.
+These are four small presets, not an arbitrary question-answering interface.
+
+| Request | Result field | Meaning |
+| --- | --- | --- |
+| `count …` or `how many …` | `count` | Integer count from text/images |
+| `rate …` | `rating` | Subjective estimate on a 0–10 grid, just for fun |
+| `read …` | `text` | Text extracted from the supplied source text |
+| `list …` | `items` | List of text extracted from the supplied source text |
+
+Try these as single-line commands:
+
+- Attach a meme, then send `!clairic count helicopters`.
+- Attach a meme, then send `!clairic rate how absurd this commute is`.
+- `!echo red balloon, blue balloon | clairic count balloons`
+- `!echo callsign TRASH PANDA ONE | clairic read the callsign`
+- `!echo pilots Raccoon and Goose | clairic list the pilots`
+- `!echo balloons: 2 | clairic count balloons | data $.answers.count.value`
+
+Direct HTTPS image URLs work after the request or through a pipe, just like
+attachments. Pipe source text separately from the request: the request itself
+is instructions, not input to count or extract. `read` and `list` extract source
+text; they do **not** invent captions, roasts, hazards, or image descriptions.
+Use `ai`/`grok` for creative writing and `clef` for yes/no probabilities.
+Image counts can still be wrong, and ratings are not calibrated measurements.
+
+Ratings display as `rating: 8/10`; the pipeline value remains a number at
+`$.answers.rating.value`. Counts use `$.answers.count.value`; read/list use
+`$.answers.text.value` and `$.answers.items.value`. Generated fields are visible
+at `$.request.fields`, alongside the unmodified inference answers and usage.
+Quick image commands warn when Cloudflare explicitly reports zero image tokens;
+`data $.usage.image_tokens` can help diagnose whether an image was processed.
+A successful text demo does not establish that image inference works.
+
+### Advanced extraction and downstream data
+
+Explicit fields still work unchanged:
+
+- `!echo total 42 | clairic --fields '{:amount :number}'`
+- `!clairic --fields '{:amount :number}' https://example.com/receipt.png`
+- `!echo 42 | clairic --fields '{:x :number}' | data $.answers.x.value`
 
 `--fields` accepts 1–64 fields, either shorthand (`:amount :number`) or full
 specifications (`:amount {:type :number :unit "USD" :decimals 2}`). Supported
@@ -207,8 +249,9 @@ Well-formed outputs can still be wrong; confidence is not execution approval.
 
 ### Images and bounds
 
-Attach an image or include a direct image URL in the input or a plain Clef
-question, separated from surrounding text by whitespace. Inline URL recognition
+Attach an image or include a direct image URL in the input, a plain Clef
+question, or a quick Clairic request, separated from surrounding text by
+whitespace. Inline URL recognition
 uses common image file extensions; extensionless URLs can arrive as image
 attachments. Yetibot downloads the image itself and sends embedded bytes,
 not merely a remote URL. Fetches require public HTTPS, no URL credentials,
