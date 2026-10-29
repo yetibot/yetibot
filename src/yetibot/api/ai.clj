@@ -5,6 +5,7 @@
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.ai-diagnostics :as diagnostics]
+            [yetibot.api.mcp :as mcp]
             [yetibot.core.config :refer [get-config]]
             [yetibot.util.ai-config :as settings])
   (:import [java.io File FileInputStream]
@@ -183,23 +184,35 @@
               {:ai/error true :ai/diagnostic record})))))))
 
 (defn models [provider]
-  (if (cloudflare/provider-account provider)
-    (let [catalog (cloudflare/catalog (resolve-provider provider))]
-      (with-meta (mapv :id (:models catalog))
-        {:catalog catalog :complete? (true? (:complete? (meta catalog)))}))
-    (let [body (request client/get provider "/models" {})
-          data (:data body)]
-      (when-not (and (sequential? data)
-                     (every? #(nonblank-string? (:id %)) data))
-        (fail (str "AI provider " (:name provider)
-                   " returned an invalid model list.")))
-      ;; Standard /models is an unpaginated list. Any unknown envelope
-      ;; (including pagination) cannot establish uniqueness. Listing and
-      ;; explicit provider requests still work without this readiness signal.
-      (with-meta (vec (sort (distinct (map :id data))))
-        {:complete? (and (every? #{:data :object} (keys body))
-                         (or (nil? (:object body))
-                             (= "list" (:object body))))}))))
+  ;; Resolve only this metadata request's provider. The request helper is
+  ;; idempotent for an already-resolved provider; no other key-file is opened.
+  (let [provider (resolve-provider provider)
+        models
+        (if (cloudflare/provider-account provider)
+          (let [catalog (cloudflare/catalog provider)]
+            (with-meta (mapv :id (:models catalog))
+              {:catalog catalog
+               :complete? (true? (:complete? (meta catalog)))}))
+          (let [body (request client/get provider "/models" {})
+                data (:data body)]
+            (when-not (and (sequential? data)
+                           (every? #(nonblank-string? (:id %)) data))
+              (fail (str "AI provider " (:name provider)
+                         " returned an invalid model list.")))
+            ;; Unknown envelopes cannot establish uniqueness. Listing and
+            ;; explicit requests still work without this readiness signal.
+            (with-meta (vec (sort (distinct (map :id data))))
+              {:complete? (and (every? #{:data :object} (keys body))
+                               (or (nil? (:object body))
+                                   (= "list" (:object body))))})))
+        redactions {:secrets [(:key provider)]}]
+    ;; Identity must survive redaction unchanged. Rewriting it would route a
+    ;; nonexistent ID; retaining it could persist reflected Authorization.
+    ;; Reject before returning either public model lists or cache observations.
+    (when-not (every? #(and (not (re-find #"[\s\p{Cc}\p{Cf}]" %))
+                           (= % (mcp/metadata-redact % redactions))) models)
+      (fail "AI provider returned an unsafe model identity."))
+    models))
 
 (defn- cloudflare-messages [messages]
   ;; Workers AI schemas can reject OpenAI-standard null/text-parts content.

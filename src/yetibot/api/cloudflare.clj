@@ -298,6 +298,12 @@
                        (every? #(and (map? %)
                                      (string? (:name %))
                                      (<= (count (:name %)) 200)
+                                     (not (re-find #"[\p{Cc}\p{Cf}]"
+                                                   (:name %)))
+                                     (= (:name %)
+                                        (mcp/metadata-redact
+                                          (:name %)
+                                          {:secrets [(:key provider)]}))
                                      (re-matches #"@[^\s/]+/[^\s/]+/[^\s]+"
                                                  (:name %))) batch))
           (fail! "Cloudflare returned an invalid model catalog."))

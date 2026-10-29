@@ -1,9 +1,11 @@
 (ns yetibot.models.ai-provider-catalog
   "Bounded model-ID observations. Reads never discover or resolve credentials."
-  (:require [yetibot.api.ai :as ai])
+  (:require [clojure.string :as string]
+            [yetibot.api.ai :as ai])
   (:import [java.security MessageDigest]
            [java.util.concurrent ArrayBlockingQueue Executors
-            ScheduledExecutorService ThreadFactory ThreadPoolExecutor TimeUnit]))
+            ScheduledExecutorService ThreadFactory ThreadPoolExecutor
+            TimeUnit]))
 
 (def freshness-ms 300000)
 (def max-entries 32)
@@ -20,9 +22,10 @@
   (let [value (mapv #(get provider %)
                     [:name :url :key :key-file :gateway-id :model :api
                      :tool-calling :tool-choice :native-tools :max-turns])]
-    (apply str (map #(format "%02x" (bit-and 255 %))
-                    (.digest (MessageDigest/getInstance "SHA-256")
-                             (.getBytes (pr-str value) "UTF-8"))))))
+    (string/join
+      (map #(format "%02x" (bit-and 255 %))
+           (.digest (MessageDigest/getInstance "SHA-256")
+                    (.getBytes (pr-str value) "UTF-8"))))))
 
 (defn- model-ids [models]
   (when-not (and (vector? models) (:complete? (meta models))
@@ -34,7 +37,8 @@
     (when (or (some #(> % max-id-bytes) sizes)
               (> (reduce + 0 sizes) max-entry-bytes))
       (throw (ex-info "Catalog limit." {}))))
-  ;; Strip metadata and keep only exact IDs, never provider-returned handles.
+  ;; ai/models rejects identities requiring credential/structural redaction
+  ;; inside the selected request. Strip metadata; retain exact IDs only.
   (set models))
 
 (defn- finish! [cache key token ids]
@@ -77,7 +81,8 @@
                        (when (= token (get-in @(:state cache) [key :token]))
                          (when-let [provider
                                     (some #(when (= key (fingerprint %)) %)
-                                          (:providers ((:current-config cache))))]
+                                          (:providers
+                                            ((:current-config cache))))]
                            (model-ids (ai/models provider))))
                        (catch Exception _ nil))]
              (finish! cache key token ids))))
@@ -108,12 +113,15 @@
       (ai/fail (str "Model catalogs are not ready, complete, or available. "
                     "Use --provider <name> with --model <exact-id>.")))
     (let [matches (keep (fn [[provider entry]]
-                          (when (contains? (:ids entry) model) (:name provider)))
+                          (when (contains? (:ids entry) model)
+                            (:name provider)))
                         (map vector providers entries))]
       (case (count matches)
         1 (first matches)
-        0 (ai/fail "No provider advertises that exact model ID. Use --provider <name>.")
-        (ai/fail "Model ID is ambiguous across providers. Use --provider <name>.")))))
+        0 (ai/fail (str "No provider advertises that exact model ID. "
+                        "Use --provider <name>."))
+        (ai/fail (str "Model ID is ambiguous across providers. "
+                      "Use --provider <name>."))))))
 
 (defonce runtime (atom nil))
 
@@ -154,7 +162,7 @@
                       (daemon-factory "yetibot-ai-model-discovery"))
             timer (Executors/newSingleThreadScheduledExecutor
                     (daemon-factory "yetibot-ai-model-catalog"))
-            hook (Thread. nil ^Runnable (fn [] (stop!))
+            hook (Thread. nil ^Runnable stop!
                           "yetibot-ai-model-shutdown" 0 false)]
         (reset! runtime {:workers workers :timer timer :hook hook})
         (.addShutdownHook (Runtime/getRuntime) hook)
