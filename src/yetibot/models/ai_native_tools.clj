@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.core.models.help :as help]
+            [yetibot.models.ai-alias-tools :as aliases]
             [yetibot.models.ai-history :as history]
             [yetibot.models.ai-inference-tools :as inference]
             [yetibot.models.ai-media-tools :as media]
@@ -105,13 +106,17 @@
                    (into (concat (media/available-tools)
                                  (inference/available-tools)
                                  (models/available-tools) wise-tools
-                                 (util/available-tools))))
+                                 (util/available-tools)
+                                 (aliases/available-tools))))
         selected (get t :native-tools defaults)]
     ;; Explicit selection never widens the financial reader's chat policy.
     (if (seq wise-tools) selected (filterv #(not= "wise" %) selected))))
 
 (defn- adapter [operation]
   (cond
+    (contains? aliases/definitions operation)
+    {:definition (get aliases/definitions operation)
+     :arguments aliases/arguments! :call aliases/call!}
     (contains? util/definitions operation)
     {:definition (get util/definitions operation)
      :arguments util/arguments! :call util/call!}

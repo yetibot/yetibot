@@ -76,7 +76,7 @@
       (native/names {:toolset (assoc toolset :native-tools ["help"])})
       => ["help"]
       (with-redefs [wise/available-tools (constantly [])]
-        (take-last 3 (native/names {})) => ["ai" "cf" "util"])
+        (take-last 4 (native/names {})) => ["ai" "cf" "util" "aliases"])
       @reads => 0))
   (with-redefs [ai/config (fn [] (ai/fail "not configured"))]
     (models/available-tools) => []))
