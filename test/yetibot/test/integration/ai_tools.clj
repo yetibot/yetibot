@@ -13,8 +13,8 @@
             [yetibot.test.support.mcp :as support])
   (:import [java.util Base64]))
 
-(def base-sha (apply str (repeat 40 "a")))
-(def commit-sha (apply str (repeat 40 "b")))
+(def base-sha (string/join (repeat 40 "a")))
+(def commit-sha (string/join (repeat 40 "b")))
 (def reader-tools ["get_commit" "get_file_contents"])
 (def writer-tools ["create_branch" "push_files" "create_pull_request"])
 
@@ -143,9 +143,10 @@
               => "Source: https://source.test/news"
               (some #(= "/read" (:path %)) @requests) => nil)
             (let [names (:value (chat/run-command request "ai tools"))]
-              (fact (some #{"web/web_search"} names) => "web/web_search"
-                    (some #{"reader/get_commit"} names)
-                    => "reader/get_commit"
+              (fact (some #{"web/web_search — web_search"} names)
+                    => "web/web_search — web_search"
+                    (some #{"reader/get_commit — get_commit"} names)
+                    => "reader/get_commit — get_commit"
                     (some #(re-find #"push_files|unknown_operation" %) names)
                     => nil
                     (some #(= "/write" (:path %)) @requests) => nil))
@@ -216,9 +217,9 @@
                                     [{:role "user" :content prompt}])]
                 (fact
                   (:value (chat/run-command request "ai toolsets")) => ["repo"]
-                  (some #{"reader/get_commit"}
+                  (some #{"reader/get_commit — get_commit"}
                         (:value (chat/run-command request "ai tools")))
-                  => "reader/get_commit"
+                  => "reader/get_commit — get_commit"
                   (:value (chat/run-command request
                                            "ai --toolset repo Read owner/repo"))
                   => "Commit loaded."

@@ -106,15 +106,116 @@
   [args]
   (safely #(tools/server-names (policy/actor args))))
 
+(defn- help-text [redact value limit]
+  (let [text (-> (str (or value ""))
+                 (string/replace #"\s+" " ")
+                 (string/replace #"@(?=everyone\b|here\b)" "@\u200b")
+                 (string/replace #"<(?=[@!])" "<\u200b")
+                 string/trim
+                 redact)]
+    (if (> (count text) limit)
+      (str (subs text 0 (dec limit)) "…")
+      text)))
+
+(defn- schema-field [schema field]
+  (get schema field (get schema (name field))))
+
+(defn- parameter-name [field]
+  (if (keyword? field) (subs (str field) 1) field))
+
+(defn- tool-summary [redact {:keys [id description]}]
+  ;; Xargs parses its first row to classify the command. Keep prose literal.
+  (str id " — " (if (string/blank? description)
+                   "No description provided."
+                   (help-text redact
+                     (string/escape description
+                                    {\| \¦ \` \’ \$ \＄ \" \”}) 120))))
+
+(defn- tool-detail [redact {:keys [id description inputSchema]}]
+  (let [short-text (partial help-text redact)
+        properties (schema-field inputSchema :properties)
+        required (set (schema-field inputSchema :required))
+        parameters (sort-by (fn [[field _]]
+                              [(not (required (parameter-name field)))
+                               (parameter-name field)]) properties)
+        variants (schema-field inputSchema :oneOf)]
+    (string/join
+      "\n"
+      (concat
+        [id (if (string/blank? description) "No description provided."
+              (short-text description 500)) "Inputs:"]
+        (if (seq parameters)
+          (map (fn [[field schema]]
+                 (let [field (parameter-name field)
+                       type (schema-field schema :type)
+                       enum (schema-field schema :enum)
+                       description (schema-field schema :description)]
+                   (str "  " (short-text field 60)
+                        (when (required field) " (required)") ": "
+                        (short-text (if (vector? type)
+                                     (string/join " | " type)
+                                     (or type "any")) 80)
+                        (when (seq enum)
+                          (str " [" (short-text (string/join ", " enum) 100)
+                               "]"))
+                        (when (seq description)
+                          (str " — " (short-text description 120))))))
+               (take 20 parameters))
+          ["  No parameter details advertised."])
+        (when (> (count parameters) 20)
+          ["  … Use data show for the full schema."])
+        (when (seq variants)
+          [(str "Required alternatives: "
+                (short-text
+                  (string/join
+                    "; "
+                    (map (fn [variant]
+                           (let [action (schema-field
+                                          (schema-field variant :properties)
+                                          :action)
+                                 label (first (schema-field action :enum))]
+                             (str (when label (str label ": "))
+                                  (string/join ", "
+                                    (schema-field variant :required)))))
+                         variants)) 500))])))))
+
 (defn tools-cmd
-  "ai tools # list allowed MCP and native tools
-   ai tools <server> # list allowed tools from one source"
+  "ai tools # list allowed tools with short descriptions
+   ai tools <server> # list allowed tools from one source
+   ai tools <server/tool> # inspect one tool; list rows also work
+   ai tools <tool> # inspect a unique tool name"
   {:yb/cat #{:ai}}
-  [{[_ server-name] :match :as args}]
+  [{[_ selector] :match :as args}]
   (safely
-    #(let [catalog (tools/tool-catalog server-name (policy/actor args))]
-       {:result/value (:names catalog)
-        :result/data (dissoc catalog :names)})))
+    (fn []
+      (let [selector (when selector
+                       (not-empty
+                         (string/trim
+                           (first (string/split selector #" — " 2)))))
+            actor (policy/actor args)
+            servers (when selector (tools/server-names actor))
+            server (some #{selector} servers)
+            source (or server
+                       (some #(when (string/starts-with? selector (str % "/"))
+                                %)
+                             (sort-by count > servers)))
+            catalog (tools/tool-catalog source actor)
+            redactions (mcp/config)
+            redact #(mcp/metadata-redact % redactions)]
+        (if (and selector (not server))
+          (let [matches (filterv #(or (= selector (:id %))
+                                     (= selector (:name %))) (:tools catalog))]
+            (case (count matches)
+              0 (ai/fail (str "Unknown or unavailable AI tool or server. "
+                             "Use ai tools to list tools."))
+              1 {:result/value (tool-detail redact (first matches))
+                 :result/data (first matches)}
+              (ai/fail "Tool name is ambiguous. Use its server/name ID.")))
+          {:result/value (if (string? (:names catalog)) (:names catalog)
+                            (mapv (partial tool-summary redact)
+                                  (:tools catalog)))
+           :result/data (dissoc catalog :names)
+           :result/collection-path [:tools]})))))
 
 (defn toolsets-cmd
   "ai toolsets # list toolsets available to you in this conversation"
@@ -226,5 +327,5 @@
   #"^approve\s+(\S+)\s*$" approve-cmd
   #"^cancel\s+(\S+)\s*$" cancel-cmd
   #"^servers\s*$" servers-cmd
-  #"^tools(?:\s+(\S+))?\s*$" tools-cmd
+  #"(?s)^tools(?:\s+(.+?))?\s*$" tools-cmd
   #"(?s)^.*$" prompt-cmd)

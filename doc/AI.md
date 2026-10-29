@@ -594,8 +594,10 @@ the generic AI default model.
 !ai servers
 !ai tools
 !ai tools yetibot
-!ai tools | data show
-!ai tools yetibot | data show
+!ai tools yetibot/cf
+!ai tools cf
+!ai tools | tail 3 | xargs ai tools
+!ai tools yetibot/cf | data show
 !grok What Yetibot commands can help with this?
 !grok Summarize the recent launch discussion here.
 !ai --provider grok How many launch messages are here?
@@ -645,10 +647,25 @@ at the command line returns the full catalog.
 
 ### Memes and Grok images
 
-Normal `!ai tools` and `!ai tools <server>` output remains the ordered list
-of `server/name` IDs. Pipe either command to `data show` to inspect structured
-`:tools` entries: `:id`, `:server`, `:name`, `:description`, `:inputSchema`, and
-advertised public `:title`/`:annotations` (standard annotation hints only).
+`!ai tools` and `!ai tools <server>` list one tool per line, in catalog order:
+`server/name — short description`. Descriptions collapse whitespace and are
+limited to 120 characters; command punctuation is made literal for `xargs`.
+IDs stay unchanged, and no header rows interrupt collection pipelines.
+Each row stays paired with its projected metadata through collection commands.
+`!ai tools <server/name>` shows focused help: description, input names/types,
+required fields, enum choices and conditional required alternatives. A unique
+bare tool name works too; ambiguous names require the qualified ID. Exact
+server names retain their existing source-filter meaning.
+
+A complete summary row can be passed back to the command, so this works:
+`!ai tools | tail 3 | xargs ai tools`. Each lookup discovers only its source
+when the ID identifies one. No tool callbacks or model inference execute.
+
+Pipe a tool lookup to `data show` for that tool's full projected metadata only.
+The default/server lists still retain their aggregate structured data for
+advanced inspection: `:tools` entries contain `:id`, `:server`, `:name`,
+`:description`, `:inputSchema`, and advertised public `:title`/`:annotations`
+(standard annotation hints only).
 Native metadata comes from the existing definitions, not from running help,
 history, media, inference, or Wise tools. The same visibility and allowlist
 rules apply to both outputs, including Wise's chat restrictions.
@@ -665,7 +682,8 @@ Configured credentials (including JSON-escaped copies) are redacted before
 text truncation. Connection settings, client/session internals, callbacks and
 private metadata are not included.
 
-`:skills` honestly reports `{:supported false :items []}`: listing does not
+`:skills` in aggregate data honestly reports
+`{:supported false :items []}`: listing does not
 invent per-tool skills or fetch/apply MCP prompts or resources. Each listing
 uses one discovery/session pass and closes sessions normally. Listing does not
 call tool host functions, read bank data, or make model/inference requests;

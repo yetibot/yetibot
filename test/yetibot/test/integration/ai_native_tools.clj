@@ -139,9 +139,10 @@
     (let [normal (execution/run-command execution/request "ai tools yetibot")
           data (execution/run-command execution/request
                                       "ai tools yetibot | data show")]
-      (fact (:value normal)
+      (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
             => ["yetibot/help" "yetibot/history" "yetibot/history_count"]
-            (mapv :id (get-in normal [:data :tools])) => (:value normal)
+            (mapv :id (get-in normal [:data :tools]))
+            => ["yetibot/help" "yetibot/history" "yetibot/history_count"]
             (every? #(and (string? (:description %))
                           (= "object" (get-in % [:inputSchema :type])))
                     (get-in normal [:data :tools])) => true
@@ -149,6 +150,21 @@
             (boolean (re-find #"NOT APPLIED|:runner" (str (:value data))))
             => true
             (:tools (tools/tool-catalog nil)) => []))))
+
+(fact "default native tool rows stay authorized through tail and xargs"
+  (with-redefs [mcp/config (constantly nil)
+                ai/chat (fn [& _] (throw (AssertionError. "No model calls")))
+                ai/complete (fn [& _] (throw (AssertionError. "No inference")))
+                mcp/call-tool
+                (fn [& _] (throw (AssertionError. "No tool call")))
+                help/get-docs (fn [] (throw (AssertionError. "No help read")))]
+    (let [result (execution/run-command execution/request
+                   "ai tools | tail 3 | xargs ai tools")
+          ids ["yetibot/help" "yetibot/history" "yetibot/history_count"]]
+      (mapv #(some-> % string/split-lines first) (:value result)) => ids
+      (mapv :id (:data result)) => ids
+      (every? #(and (string? %) (string/includes? % "Inputs:"))
+              (:value result)) => true)))
 
 (facts "implicit built-ins respect named policy and explicit opt-out"
   (execution/in-event execution/request "ai tools"
