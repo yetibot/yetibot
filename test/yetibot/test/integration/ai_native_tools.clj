@@ -143,8 +143,8 @@
           data (execution/run-command execution/request
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
-            => ["yetibot/help" "yetibot/history" "yetibot/history_count"
-                "yetibot/util" "yetibot/aliases"]
+            => ["`yetibot/help`" "`yetibot/history`" "`yetibot/history_count`"
+                "`yetibot/util`" "`yetibot/aliases`"]
             (mapv :id (get-in normal [:data :tools]))
             => ["yetibot/help" "yetibot/history" "yetibot/history_count"
                 "yetibot/util" "yetibot/aliases"]

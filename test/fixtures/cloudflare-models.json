@@ -1,0 +1,54 @@
+[
+  {
+    "id": "fixture-catalog-id",
+    "name": "@cf/meta/llama-3.1-8b-instruct-fp8",
+    "description": "Llama 3.1 8B quantized to FP8 precision",
+    "source": 1,
+    "task": {"id": "text-task", "name": "Text Generation"},
+    "created_at": "2024-07-25 17:28:43.328",
+    "tags": [],
+    "properties": [
+      {"property_id": "context_window", "value": "32000"},
+      {"property_id": "price", "value": [
+        {"unit": "per M input tokens", "price": 0.152,
+         "currency": "USD"},
+        {"unit": "per M output tokens", "price": 0.287,
+         "currency": "USD"}
+      ]},
+      {"property_id": "terms", "value": "https://example.test/LICENSE"}
+    ],
+    "schema": {
+      "input": {"oneOf": [
+        {"properties": {
+          "messages": {"type": "array"},
+          "tools": {"type": "array"},
+          "max_tokens": {"type": "integer", "default": 256,
+                         "description": "Maximum tokens to generate"}
+        }}
+      ]},
+      "output": {"properties": {
+        "response": {"type": "string"},
+        "tool_calls": {"type": "array"}
+      }}
+    }
+  },
+  {
+    "name": "@cf/cloudflare/clef-flash",
+    "description": "Fixture decision model",
+    "task": {"name": "Text Generation"},
+    "properties": [
+      {"property_id": "context_window", "value": "24576"},
+      {"property_id": "vision", "value": "true"}
+    ]
+  },
+  {
+    "name": "@cf/vendor/future-model",
+    "description": "A catalog record, not an entitlement",
+    "task": {"name": "Text Generation"},
+    "deprecated": false,
+    "deprecation_date": null,
+    "properties": [
+      {"property_id": "function_calling", "value": "false"}
+    ]
+  }
+]

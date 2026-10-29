@@ -164,7 +164,7 @@
                   mcp/call-tool (fn [& _]
                                   (throw (Exception. "no host calls")))]
       (let [result (ai/tools-cmd {:match ["tools" nil]})]
-        (:result/value result) => ["search/web_search — Search the web"]
+        (:result/value result) => ["`search/web_search` — Search the web"]
         (get-in result [:result/data :tools])
         => [{:id "search/web_search" :server "search" :name "web_search"
              :description "Search the web" :inputSchema {:type "object"}}]
@@ -227,9 +227,9 @@
   (with-inspection
     (fn []
       (:result/value (ai/tools-cmd {:match ["tools search" "search"]}))
-      => ["search/a — First tool" "search/b — Second tool"
-          "search/c — Find ’cf expensive’ ¦ docs across lines"
-          "search/d — Fourth tool"])))
+      => ["`search/a` — First tool" "`search/b` — Second tool"
+          "`search/c` — Find ’cf expensive’ ¦ docs across lines"
+          "`search/d` — Fourth tool"])))
 
 (fact "trailing whitespace still selects the default list"
   (with-inspection
@@ -240,7 +240,8 @@
 (facts "tool details accept IDs, unique names and decorated list rows"
   (with-inspection
     (fn []
-      (doseq [query ["search/b" "b" "search/b — Second tool"]]
+      (doseq [query ["search/b" "b" "search/b — Second tool"
+                     "`search/b`" "`search/b` — Second tool"]]
         (let [result (ai/tools-cmd {:match [(str "tools " query) query]})]
           (fact (:result/value result)
                 => (str "search/b\nSecond tool\nInputs:\n"
@@ -283,11 +284,11 @@
                        (assoc-in [:chat-source :raw-event :user] "U2"))]
         (with-redefs [mcp/config (constantly settings)]
           (let [result (execution/run-command execution/request
-                         "ai tools search | tail 3 | xargs ai tools")]
+                         "ai tools | tail 3 | xargs ai tools")]
             (mapv #(some-> % string/split-lines first) (:value result))
-            => ["search/b" "search/c" "search/d"]
+            => ["search/c" "search/d" "other/a"]
             (mapv :id (:data result))
-            => ["search/b" "search/c" "search/d"])
+            => ["search/c" "search/d" "other/a"])
           (boolean (re-find #"Unknown or unavailable AI tool or server"
                      (str (:error (execution/run-command denied
                                     "ai tools search"))))) => true)))))
@@ -303,7 +304,7 @@
         (with-redefs [mcp/with-tools (fn [_ f] (f [tool]))]
           (let [result (ai/tools-cmd {:match ["tools" nil]})
                 row (first (:result/value result))]
-            (count row) => (+ (count "search/brief — ") 120)
+            (count row) => (+ (count "`search/brief` — ") 120)
             (string/ends-with? row "…") => true
             (string/includes? row "\n") => false
             (string/includes? row "@everyone") => false

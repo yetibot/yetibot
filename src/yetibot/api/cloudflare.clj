@@ -2,7 +2,8 @@
   "Bounded Cloudflare JSON transport; no model-selected hosts or credentials."
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [yetibot.api.mcp :as mcp])
   (:import [java.io InputStream ByteArrayOutputStream]
            [java.net URI]
            [org.apache.http.client.methods HttpUriRequest]))
@@ -165,6 +166,120 @@
                 #"/client/v4/accounts/([a-fA-F0-9]{32})/ai/v1/?"
                 (.getPath uri))))))
 
+(def catalog-fields
+  [:id :catalog-id :description :task :interface :metadata-source
+   :properties :limits :function-calling :schema-summary :source :created_at
+   :updated_at :tags :author :deprecated :deprecation_date :replacement
+   :pricing :license :metadata-truncated])
+
+(def property-ids
+  #{"context_window" "max_input_tokens" "max_output_tokens" "max_tokens"
+    "price" "terms" "info" "license" "vision" "function_calling"
+    "supports_function_calling" "tool_calls" "tools" "streaming"
+    "json_mode" "batch" "lora" "deprecated" "deprecation_date"
+    "deprecation" "replacement" "experimental"})
+
+(defn model-metadata
+  "Bounded whitelist for remote model records, never credentials or schemas.
+   Redact before truncation; omissions/truncation are not capability negatives."
+  [record config]
+  (let [changed (atom false)
+        sensitive (re-pattern
+                    (str "(?i)authorization|password|token|secret|key|"
+                         "api[-_]?key|key[-_]?file|account([-_]?id)?"))
+        clean (fn clean [value depth]
+                (cond
+                  (> depth 5) (do (reset! changed true) nil)
+                  (string? value)
+                  (let [text (mcp/metadata-redact value config)]
+                    (if (> (count text) 2000)
+                      (do (reset! changed true) (subs text 0 2000)) text))
+                  (map? value)
+                  (let [entries (remove
+                                  #(re-matches sensitive (name (key %)))
+                                  value)]
+                    (when (> (count entries) 32) (reset! changed true))
+                    (into {} (map (fn [[k v]] [k (clean v (inc depth))])
+                                  (take 32 (sort-by (comp str key) entries)))))
+                  (sequential? value)
+                  (do (when (> (count value) 32) (reset! changed true))
+                      (mapv #(clean % (inc depth)) (take 32 value)))
+                  (or (nil? value) (boolean? value) (keyword? value)) value
+                  (number? value)
+                  (when (Double/isFinite (double value)) value)
+                  :else nil))
+        record (clean (select-keys record catalog-fields) 0)]
+    (loop [result (cond-> record @changed (assoc :metadata-truncated true))
+           optional [:license :pricing :tags :author :task :description
+                     :schema-summary :properties :updated_at :created_at
+                     :replacement :deprecation_date :deprecated :catalog-id
+                     :source :limits]]
+      (if (<= (alength (.getBytes (json/generate-string result) "UTF-8"))
+              8000) result
+        (recur (assoc (dissoc result (first optional))
+                      :metadata-truncated true) (rest optional))))))
+
+(defn- schema-fields [schema]
+  (->> (tree-seq map? #(concat (:oneOf %) (:anyOf %)) schema)
+       (keep :properties) (apply merge)))
+
+(defn- project-model [record provider]
+  (let [properties (filterv #(property-ids (:property_id %))
+                            (:properties record))
+        values (into {} (map (juxt :property_id :value) properties))
+        input (schema-fields (get-in record [:schema :input]))
+        output (schema-fields (get-in record [:schema :output]))
+        support (some #(when (contains? values %) [% (get values %)])
+                      ["function_calling" "supports_function_calling"
+                       "tool_calls" "tools"])
+        boolean-value ({true true false false "true" true "false" false}
+                       (second support))
+        function-calling
+        (cond
+          (some? boolean-value)
+          {:supported boolean-value :status :reported
+           :source (str "properties." (first support))}
+          (or (:tool_calls output) (:tools input))
+          {:status :advertised
+           :source (if (:tool_calls output) "schema.output.tool_calls"
+                     "schema.input.tools")}
+          :else {:status :unknown :source "ai/models/search"})
+        interface (cond
+                    (string/starts-with? (:name record) "@cf/cloudflare/clef")
+                    :decision
+                    (string/starts-with? (:name record)
+                                         "@cf/cloudflare/clairic") :extraction
+                    (= "Text Generation" (get-in record [:task :name])) :chat
+                    :else :model-specific)
+        limits (into {}
+                     (keep (fn [id]
+                             (when (contains? values id)
+                               [(keyword id)
+                                {:value (get values id) :unit "tokens"
+                                 :source (str "properties." id)}])))
+                     ["context_window" "max_input_tokens"
+                      "max_output_tokens" "max_tokens"])
+        token-parameters
+        (into {} (keep (fn [id]
+                         (when-let [field (get input id)]
+                           [id (assoc (select-keys field
+                                                  [:type :default :minimum
+                                                   :maximum :description])
+                                      :unit "tokens"
+                                      :source
+                                      (str "schema.input." (name id)))]))
+                       [:max_tokens :max_output_tokens :max_input_tokens]))]
+    (model-metadata
+      (merge (select-keys record catalog-fields)
+             {:id (:name record) :catalog-id (:id record)
+              :interface interface :metadata-source "ai/models/search"
+              :properties properties :limits limits
+              :function-calling function-calling
+              :schema-summary {:input-fields (sort (map name (keys input)))
+                               :output-fields (sort (map name (keys output)))
+                               :token-parameters token-parameters}})
+      {:secrets [(:key provider)]})))
+
 (defn catalog [provider]
   (let [account (provider-account provider)]
     (loop [page 1 records []]
@@ -180,6 +295,7 @@
         (when-not (and (vector? batch) (<= (count batch) 100)
                        (every? #(and (map? %)
                                      (string? (:name %))
+                                     (<= (count (:name %)) 200)
                                      (re-matches #"@[^\s/]+/[^\s/]+/[^\s]+"
                                                  (:name %))) batch))
           (fail! "Cloudflare returned an invalid model catalog."))
@@ -192,19 +308,6 @@
              :coverage
              "Workers AI only; third-party Gateway models not included"
              :models (->> records
-                          (map #(hash-map
-                                  :id (:name %) :task (:task %)
-                                  :interface
-                                  (cond
-                                    (string/starts-with? (:name %)
-                                                        "@cf/cloudflare/clef")
-                                    :decision
-                                    (string/starts-with?
-                                      (:name %) "@cf/cloudflare/clairic")
-                                    :extraction
-                                    (= "Text Generation"
-                                       (get-in % [:task :name]))
-                                    :chat
-                                    :else :model-specific)))
+                          (map #(project-model % provider))
                           (reduce #(assoc %1 (:id %2) %2) {})
                           vals (sort-by :id) vec)}))))))
