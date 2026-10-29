@@ -7,6 +7,7 @@
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.cf :as cli]
+            [yetibot.core.commands.echo :as echo]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-native-tools :as native]
@@ -368,10 +369,9 @@
           (get-in @calls [0 2])
           => [{:role "user" :content "supplied prompt"}]
           (get-in @calls [0 3 :tools]) => []
-          (boolean (:result/error
-                     (cli/prompt-cmd
-                       (assoc request :match "--provider child forbidden"))))
-          => true
+          (get-in (cli/prompt-cmd
+                    (assoc request :match "--provider child forbidden"))
+                  [:result/data :isError]) => true
           (mapv :interface (:models (:result/data (cli/models-cmd request))))
           => [:chat :decision :extraction :model-specific])))))
 
@@ -394,3 +394,92 @@
       (get-in @seen [0 1])
       => [{:role "user" :content "only supplied text"}]
       (get-in @seen [0 2 :max-output-tokens]) => 2048)))
+
+(defn with-cf-private-fixture [f]
+  (let [file (java.io.File/createTempFile "cf-private-token" ".txt")
+        token "cf-sensitive-fixture-token"
+        posts (atom 0)
+        p (-> cloudflare (dissoc :key)
+              (assoc :key-file (.getAbsolutePath file)))]
+    (try
+      (spit file token)
+      (with-redefs
+        [ai/config (constantly (assoc settings :providers [parent child p]))
+         mcp/config (constantly {:servers [] :toolsets [toolset]})
+         cf/catalog (constantly catalog)
+         http/post
+         (fn [& _]
+           (swap! posts inc)
+           {:status 200 :body {:choices [{:message {:content "answer"}}]}})]
+        (f {:file file :token token :posts posts}))
+      (finally (.delete file)))))
+
+(defn private-error! [result forbidden unknown?]
+  ;; Inspect interpreted output/data, not just the direct CF handler result.
+  (fact (string? (:value result)) => true)
+  (fact (contains? result :error) => false)
+  (fact (get-in result [:data :isError]) => true)
+  (fact (get-in result [:data :unknownOutcome]) => unknown?)
+  (doseq [text forbidden]
+    (fact (string/includes? (pr-str (select-keys result [:value :error :data]))
+                            text) => false)))
+
+(facts "CF human rejections never decorate errors with the evaluated prompt"
+  (with-cf-private-fixture
+    (fn [{:keys [file token posts]}]
+      (let [path (.getAbsolutePath file)
+            private "PRIVATE-CF-CONTEXT"]
+        (doseq [command [(str "cf " private " " token)
+                         (str "cf " private " " path)
+                         (str "cf --invalid " private " " token)
+                         (str "cf --model " private " " token)]]
+          (private-error! (execution/run-command execution/request command)
+                          [token path private] false))
+        (with-redefs [ai/config
+                      (fn [] (throw (ex-info (str token " " path) {})))]
+          (private-error!
+            (execution/run-command execution/request
+                                   (str "cf " private " " token))
+            [token path private] false)
+          (private-error! (execution/run-command execution/request "cf models")
+                          [token path] false))
+        (with-redefs [mcp/config (constantly {:toolsets [] :servers []})]
+          (private-error!
+            (execution/run-command execution/request
+                                   (str "cf " private " " token))
+            [token path private] false))
+        @posts => 0))))
+
+(fact "CF does not echo secrets supplied only by an earlier pipeline stage"
+  (with-cf-private-fixture
+    (fn [{:keys [token posts]}]
+      (let [echoes (atom 0)]
+        (with-redefs [echo/echo-cmd
+                      (fn [_]
+                        (swap! echoes inc)
+                        {:result/value token})]
+          (private-error!
+            (execution/run-command execution/request
+                                   "echo private-fixture | cf | echo later")
+            [token "private-fixture"] false)
+          @echoes => 1
+          @posts => 0)))))
+
+(fact "uncertain paid CF CLI outcomes retain safe data and stop the pipeline"
+  (with-cf-private-fixture
+    (fn [{:keys [posts]}]
+      (let [echoes (atom 0)]
+        (with-redefs
+          [http/post (fn [& _]
+                       (swap! posts inc)
+                       (throw (Exception. "PRIVATE-POST-ERROR")))
+           echo/echo-cmd (fn [_]
+                           (swap! echoes inc)
+                           {:result/value "must not run"})]
+          (private-error!
+            (execution/run-command
+              execution/request
+              "cf PRIVATE-PAID-PROMPT | echo later | echo again")
+            ["PRIVATE-PAID-PROMPT" "PRIVATE-POST-ERROR"] true)
+          @posts => 1
+          @echoes => 0)))))

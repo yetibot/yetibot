@@ -11,11 +11,29 @@
 
 (def usage "Usage: cf [--model <model>] [--toolset <name>] <prompt>")
 
+(defn- failure [args unknown?]
+  ;; Core decorates :result/error with the entire evaluated command. Return
+  ;; only static human text and safe structured flags, never that error path.
+  ;; Keep failure short-circuiting, especially after an uncertain paid POST.
+  (when-let [skip (:skip-next-n args)]
+    (reset! skip (count (:next-cmds args))))
+  (let [message (if unknown?
+                  (str "Cloudflare outcome could not be confirmed; "
+                       "do not repeat this paid request.")
+                  (str "Cloudflare request failed. Check options, access, "
+                       "configuration and chat model eligibility."))]
+    {:result/value message
+     :result/data {:isError true :unknownOutcome (boolean unknown?)
+                   :error message}}))
+
+(defn- safely [args f]
+  (try (f) (catch Exception _ (failure args false))))
+
 (defn models-cmd
   "cf models # list the full Workers AI catalog with task/interface labels"
   {:yb/cat #{:ai}}
-  [_]
-  (ai/safely
+  [args]
+  (safely args
     (fn []
       (let [provider (api/provider (api/config) "cloudflare")]
         (when-not (cloudflare/provider-account provider)
@@ -37,7 +55,7 @@
    cf --toolset <name> <prompt> # enforce a configured provider/model policy"
   {:yb/cat #{:ai}}
   [{:keys [match chat-source] :as args}]
-  (ai/safely
+  (safely args
     (fn []
       (let [options (ai/parse-prompt match usage)
             _ (when (:provider options) (api/fail usage))
@@ -49,7 +67,7 @@
                      chat-source)
             data (:structuredContent result)]
         (if (:isError result)
-          {:result/error (:error data) :result/data data}
+          (failure args (:unknownOutcome result))
           {:result/value (:text data) :result/data data})))))
 
 (cmd-hook #"cf"
