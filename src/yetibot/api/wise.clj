@@ -211,14 +211,27 @@
     (fail! "Wise returned an unexpected currency."))
   (money (:value amount)))
 
+(defn- instant [value]
+  (try
+    (when (string? value) (Instant/parse value))
+    (catch Exception _ nil)))
+
 (defn- transactions! [b token deadline start end]
+  ;; Wise need not echo accountId. Balance identity is bound to this fixed
+  ;; official request path, built only from authorized selected metadata.
   (let [body (get! token deadline
                    (str "/profiles/" (::profile b) "/balance-statements/"
                         (:id b) "/statement.json")
                    {:currency (:currency b) :intervalStart (str start)
-                    :intervalEnd (str end) :type "COMPACT"})]
-    (when-not (and (= (:id b) (get-in body [:query :accountId]))
-                   (= (:currency b) (get-in body [:query :currency])))
+                    :intervalEnd (str end) :type "COMPACT"})
+        query (:query body)]
+    (when-not (and (map? query)
+                   (= (::profile b) (id (:profileId query)))
+                   (= (:currency b) (:currency query))
+                   (= start (instant (:intervalStart query)))
+                   (= end (instant (:intervalEnd query)))
+                   (or (not (contains? query :accountId))
+                       (= (id (:id b)) (id (:accountId query)))))
       (fail! "Wise statement did not match the configured balance."))
     (mapv
       (fn [tx]
