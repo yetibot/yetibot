@@ -22,7 +22,7 @@ included or retained by this change.
   :accounts [{:name "group" :group-id 67517099}]
   :default-account "group"
   :adapters ["discord"]
-  :conversations ["benson-dc-yetibot/DISCORD_CHANNEL_ID"]
+  :conversations [":my-discord/DISCORD_CHANNEL_ID"]
   ;; Optional additional restriction; omit to allow users in allowed chats.
   :users ["DISCORD_USER_ID"]}}
 ```
@@ -47,13 +47,23 @@ most 10 targets may be configured. The first target is the default unless
 from commands or tool arguments.
 
 **Conversation IDs are canonical `connection/channel` strings.** The
-connection is the adapter's configured `:name` (`adapter/uuid` returns that
-name), not the raw Discord guild ID or Slack workspace ID unless deliberately
-configured that way. The channel is the raw platform channel ID. For example,
-`benson-dc-yetibot/DISCORD_CHANNEL_ID` is valid when `benson-dc-yetibot` is that
-Discord adapter's configured name; replace the channel placeholder with the
-actual channel ID. Slack uses the same `configured-name/SLACK_CHANNEL_ID`
-shape. A room display name or a bare channel ID is not sufficient.
+connection is the string value of `adapter/uuid`, not an SSH hostname, room
+name, Discord guild ID or Slack workspace ID. A keyword UUID keeps its leading
+colon: an adapter configured under `:adapters {:my-discord ...}` uses
+`":my-discord/DISCORD_CHANNEL_ID"`. Replace the placeholder with the raw
+platform channel ID. String UUIDs have no added colon. Slack uses the same
+UUID/channel shape. A room display name or bare channel ID is not sufficient.
+
+To deliberately allow **every channel and thread on one connection**, use
+`:conversations [":my-discord/*"]`. This also covers future channels on that
+connection, but not another connection or a platform excluded by `:adapters`.
+This is a literal connection selector, not a pattern language: bare `"*"`
+does not grant access. Exact channel entries remain supported.
+
+Omitting `:users` allows **all human users** in the selected conversations.
+With a connection-wide selector, that includes every human who can interact
+with the bot on that connection. Only choose this for financial data you are
+willing to disclose to that whole audience; a user allowlist still narrows it.
 
 Both `:adapters` and `:conversations` are required nonempty vectors. Adapters
 are `"slack"` or `"discord"`. If present, `:users` must also be nonempty and
