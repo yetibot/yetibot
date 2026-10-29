@@ -3,7 +3,9 @@
             [clj-http.client :as http]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
+            [taoensso.timbre :as log]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.cf :as cli]
@@ -139,7 +141,8 @@
           => [{:role "user" :content "Only this text"}]
           (:max_output_tokens (second @wire)) => 2048
           (:tools (second @wire)) => []
-          (:tool_choice (second @wire)) => "none")))))
+          (:tool_choice (second @wire)) => "none"
+          (contains? (second @wire) ::diagnostics/stage) => false)))))
 
 (facts "Cloudflare chat eligibility is checked before paid inference"
   (in-request
@@ -350,7 +353,9 @@
   (let [result (run-batch [["ai" ask]] false)]
     (:effects result) => [:paid]
     (get-in result [:result :result/data :mcp :tool-calls]) => 1
-    (count (:turns result)) => 2))
+    (count (:turns result)) => 2
+    (mapv #(get-in % [:options ::diagnostics/stage]) (:turns result))
+    => [:initial :follow-up]))
 
 (facts "statically invalid mixed batches have zero effects"
   (doseq [invalid [(assoc ask "provider" "absent")
@@ -507,3 +512,82 @@
             ["PRIVATE-PAID-PROMPT" "PRIVATE-POST-ERROR"] true)
           @posts => 1
           @echoes => 0)))))
+
+(fact "safe diagnostics survive private child failure without retrying"
+  (let [logs (atom []) posts (atom []) effects (atom [])
+        secret "PRIVATE-DIAGNOSTIC account balance USD 123456.78"
+        calls [["ai" ask] ["wise" {"action" "balance"}]
+               ["cf" {"action" "ask" "prompt" secret}]]]
+    (log/with-config
+      (assoc log/*config* :level :trace :middleware []
+             :appenders
+             {:capture {:enabled? true :async? false
+                        :fn #(swap! logs conj (:vargs %))}})
+      (in-request
+        (fn [request]
+          (with-redefs
+            [mcp/config (constantly {:servers [] :toolsets [toolset]
+                                     :max-tool-calls 3})
+             wise/available-tools (constantly ["wise"])
+             wise/arguments! (fn [_ _ args] args)
+             wise/call! (fn [& _] (swap! effects conj :wise))
+             cf/catalog (fn [_] (swap! effects conj :catalog) catalog)
+             http/post
+             (fn [url options]
+               (swap! posts conj [url options])
+               (if (= 1 (count @posts))
+                 {:status 200
+                  :body
+                  {:choices
+                   [{:message
+                     {:tool_calls
+                      (mapv
+                        (fn [i [name args]]
+                          {:id (str i) :type "function"
+                           :function
+                           {:name (str "yetibot_" name)
+                            :arguments (json/generate-string args)}})
+                        (range) calls)}}]}}
+                 {:status 400
+                  :body {:error {:message secret
+                                 :code "invalid_function_parameters"
+                                 :param "tools"}}}))]
+            (let [error (try
+                          (tools/complete parent "p" []
+                                          {:actor (policy/actor request)})
+                          (catch Exception e e))
+                  records (mapv second
+                                (filter #(= "ai-provider-diagnostic"
+                                            (first %)) @logs))]
+              (get-in (ex-data error) [:ai/diagnostic :stage]) => :follow-up
+              (mapv :stage records) => [:delegation :follow-up]
+              (mapv :tool-choice records) => [:none :none]
+              (mapv :error-code records)
+              => [:invalid-tool-schema :invalid-tool-schema]
+              @effects => []
+              (count @posts) => 3
+              (get-in @posts [1 1 :form-params :tools]) => []
+              (get-in @posts [1 1 :form-params :max_output_tokens]) => 2048
+              (get-in @posts [2 1 :form-params :tool_choice]) => "none"
+              (every? #(not (contains? (second %) ::diagnostics/stage))
+                      @posts) => true
+              (string/includes? (pr-str [@logs (ex-data error)]) secret)
+              => false
+              (some #(re-find #"child-token|Only this text|123456|balance"
+                              (pr-str %)) @logs) => nil)))))))
+
+(fact "initial parent failure retains actual stage, count and choice"
+  (in-request
+    (fn [request]
+      (with-redefs
+        [mcp/config (constantly {:servers [] :toolsets [toolset]})
+         wise/available-tools (constantly [])
+         http/post (fn [& _] {:status 400 :body {}})]
+        (let [error (try (tools/complete parent "p" []
+                                         {:actor (policy/actor request)})
+                         (catch Exception e e))
+              record (:ai/diagnostic (ex-data error))]
+          (:stage record) => :initial
+          (:tool-choice record) => :auto
+          (:tool-count record) => 2
+          (:item-count record) => 1)))))

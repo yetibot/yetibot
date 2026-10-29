@@ -2,14 +2,18 @@
   "Bounded Responses SSE. Only completed envelopes reach tool dispatch."
   (:require [cheshire.core :as json]
             [clojure.string :as string]
+            [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.mcp :as mcp])
   (:import [java.io BufferedReader InputStream InputStreamReader]
            [java.nio.charset StandardCharsets CodingErrorAction]))
 
-(defn- fail! []
-  (throw (ex-info
-           "The AI provider returned an invalid or incomplete event stream."
-           {:ai/error true})))
+(defn- fail!
+  ([] (fail! nil))
+  ([body]
+   (throw (ex-info
+            "The AI provider returned an invalid or incomplete event stream."
+            {:ai/error true
+             :ai/error-fields (diagnostics/error-fields body)}))))
 
 (defn clip [^String text limit]
   (let [end (min (.length text) (max 0 limit))
@@ -143,7 +147,7 @@
                 (contains? #{"response.completed" "response.done"} kind)
                 (completed (:response event))
                 (contains? #{"error" "response.failed" "response.incomplete"}
-                           kind) (fail!)
+                           kind) (fail! (or (:response event) event))
                 :else
                 (do
                   (cond

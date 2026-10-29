@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -194,10 +195,11 @@
         definitions (mapv :definition entries)
         limit (mcp/number-option (:max-tool-calls config) 6)]
     (loop [messages (into [{:role "system" :content instructions}] messages)
-           used 0 seen #{} actions #{} halted false]
+           used 0 seen #{} actions #{} halted false stage :initial]
       (let [body (ai/chat provider model messages
                           (cond->
-                            {:tools definitions
+                            {::diagnostics/stage stage
+                             :tools definitions
                              :tool_choice (if (and (< used limit) (not halted))
                                             "auto" "none")}
                             (:on-progress config)
@@ -228,7 +230,8 @@
                    :result/data {:proposal (:id p) :mcp {:tool-calls (+ used attempted)}}}
                   (recur (ai/continue-messages provider messages body replies)
                          (long (+ used attempted)) (into seen (map :id calls))
-                         (into actions requested-actions) halted)))))
+                         (into actions requested-actions) halted
+                         :follow-up)))))
           (let [text (:content message)]
             (when-not (ai/nonblank-string? text)
               (ai/fail (str "AI provider " (:name provider) " returned no text response.")))
@@ -307,7 +310,8 @@
          ;; Text-only providers and non-chat callers need no function support.
          (if on-progress
            (clean-data (ai/complete provider model (host-messages messages)
-                                    {:on-progress on-progress
+                                    {::diagnostics/stage :initial
+                                     :on-progress on-progress
                                      :progress-config config}) config)
            (ai/complete provider model (host-messages messages))))))))
 

@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tool-policy :as policy]
@@ -247,7 +248,8 @@
                 (let [result (ai/complete
                                (assoc p :native-tools []) model
                                [{:role "user" :content (get args "prompt")}]
-                               {:tools [] :tool_choice "none"
+                               {::diagnostics/stage :delegation
+                                :tools [] :tool_choice "none"
                                 :max-output-tokens
                                 (get args "max_output_tokens" 2048)})]
                   {:structuredContent
