@@ -120,7 +120,7 @@ pipeline's selected structured data, not just its displayed label. For example:
 
 ```text
 !cf models | random | gemma Render every returned field with clear headings.
-!cf models | random | ai --no-tools Format all fields with their values and units.
+!cf models | random | ai --no-tools Format all fields and units.
 !cf models | head 2 | grok --no-tools Compare these model records.
 !ai tools | head | ai --no-tools Explain this tool's full input schema.
 ```
@@ -146,8 +146,9 @@ limits are 64 KiB of serialized UTF-8, depth 12, 2,048 nodes, and 128 entries
 per container. The final redacted data message is limited to 12 KiB. Known
 selected provider/MCP credentials and sensitive structured fields are redacted
 before that final limit, including literal copies in rendered alias text. This
-is conservative filtering, not universal secret or PII detection. Only the selected provider credential may be resolved, after
-normal tool authorization; preparation reads no credential files or catalogs.
+is conservative filtering, not universal secret or PII detection. Only the
+selected provider credential may be resolved, after normal tool authorization;
+preparation reads no credential files or catalogs.
 
 Unsupported or over-limit input stops the pipeline before inference with a
 static error asking you to select less data. There is no silent truncation or
