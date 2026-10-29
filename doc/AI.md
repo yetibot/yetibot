@@ -233,6 +233,79 @@ Provider error bodies and credential-file errors are not echoed to chat. Local
 fixtures verify these contracts; account billing/model availability still need
 live qualification after configuration.
 
+### Clef and Clairic in the AI tool catalog
+
+The same inference APIs are also native tools in the existing `ai` catalog;
+there is no additional MCP server or command-interpreter bridge. When the
+account ID and absolute token-file path above are configured, `clef` and
+`clairic` are automatically available to trusted chat requests using ordinary
+(non-GitHub) toolsets. Discovery checks configuration only: it does not read
+the token, fetch images, or run inference. The token is read only on execution.
+The router may remain `:enabled false`; neither tool enables automatic routing
+or repository writes. Configuration is not proof of token/model/billing access.
+
+An explicit `:native-tools` allowlist remains authoritative. Add the exact names
+`"clef"` and/or `"clairic"` to the selected toolset when using one; an empty
+allowlist disables them. GitHub toolsets do **not** acquire inference tools by
+default. Existing user, adapter, provider/model, and trusted-event policies
+still apply. These tools are grounded classification/extraction capabilities,
+not creative text or image generation, and their answers never grant authority.
+
+For a tool-capable configured chat model:
+
+```text
+!ai Classify this with Clef: is "service is down" an unresolved outage?
+!ai Extract the amount as a number with Clairic from "total USD 42".
+!ai Use Clairic to extract amount:number and date:date from this receipt.
+```
+
+Attach the receipt to the last message. These are ordinary executable `ai`
+prompts, not new `ai classify` or `ai extract` subcommands. The chat model
+chooses whether to invoke an available tool. Its structured arguments are:
+
+- `clef`: `question` (plain yes/no, returned as `decision`) **or** `questions`
+  (1–64 named specifications), plus `input` and/or images. Typed questions use
+  `type` (`noul`, `choice`, `score`) and `instructions`. Choice requires a
+  `criteria` map of 2–255 named descriptions; score requires 2–10 ordered
+  descriptions. Native instructions/descriptions are bounded plain strings.
+- `clairic`: `fields` (1–64 named specifications), plus `input` and/or images.
+  Each specification has `type`: text, number, date, time, datetime, duration,
+  list, estimate, or forecast, plus optional `instructions` (up to 2,000
+  characters) describing what to extract. There is **no boolean type**. Number
+  supports `unit` and `decimals` (0–6); duration units are seconds, minutes,
+  hours, days, weeks, months or years. List requires `items` of
+  text/number/date.
+  Estimate and forecast require matching numeric or strict ISO-date
+  `min`/`max` bounds in increasing order. This is a bounded API-schema subset,
+  not the standalone CLI or an unmerged plain-English Clairic feature.
+
+Both accept an optional `images` array of explicit public HTTPS URLs, including
+extensionless URLs. Only image attachments on the actual incoming trusted event
+are added automatically: the model cannot supply chat identity, an event,
+provider/host, account, token, headers, or secret-file path. URLs embedded in
+`input` remain text; use `images` for fetching. The existing image-loader
+safeguards and limits above apply, including at most four images total, 4 MiB
+each and 8 MiB combined. All arguments and attachment URLs are checked before
+any image fetch or inference. No arbitrary conversation/history is read.
+
+The native catalog limits **all serialized arguments together to 16,384 JSON
+characters** (including schema and escaping); native `input` is at most 12,000
+characters, unlike the standalone command's 60,000-character input allowance.
+Results expose only typed answers, confidence/null metadata where present,
+model and truncation flags. Provider extras, raw requests, image bytes/base64,
+and error bodies are excluded. Strings/lists may be shortened with
+`output_truncated`; sanitized structured content is bounded to 18,000 JSON
+characters, below the shared catalog's 20,000-character reply cap. Known raw
+Cloudflare, provider and MCP credential values are rejected from arguments and
+redacted structurally from results, including quotes/backslashes.
+
+Input and current attachments leave the chat for Cloudflare; Gateway logging,
+caching, privacy and paid usage apply. Private-output logging safeguards are
+required. Validation/image failures occur before inference; after an attempted
+inference, a failure has `isError` and `unknownOutcome` because a charge or
+successful request cannot be ruled out. Neither tool retries paid inference
+automatically. Mocked local tests are not a live billing/model smoke test.
+
 [cf-models]: https://developers.cloudflare.com/workers-ai/models/
 [cf-rest]: https://developers.cloudflare.com/ai-gateway/usage/rest-api/
 [cf-clairic]: https://developers.cloudflare.com/workers-ai/models/clairic/
@@ -383,9 +456,9 @@ account is still needed to qualify your deployment and model's tool support.
 ## Native Yetibot tools
 
 Local tools are **enabled by default** for both `ai` and `grok` in trusted
-Slack/Discord chat requests. No extra toolset, MCP server or opt-in
-configuration is needed. Help and history are read-only; media tools appear
-automatically when their existing service credentials are configured.
+Slack/Discord chat requests. Help and history need no extra toolset, MCP server
+or opt-in configuration. Media and inference tools appear when their services
+are configured; Wise additionally requires account and chat allowlists.
 `!ai tools` lists them alongside existing MCP tools:
 
 - `help`: page through registered command topics or read an exact topic's docs.
@@ -396,15 +469,21 @@ automatically when their existing service credentials are configured.
   configured.
 - `gi`: create/edit images through the existing Grok image pipeline when
   `xai.key` is configured. These are paid image-generation calls.
+- `clef`: classify supplied input or current attachments with Cloudflare.
+- `clairic`: extract typed fields from supplied input or current attachments.
+  Both inference tools use the configured account/token described above.
+- `wise`: read configured balances, transactions or period totals only from
+  explicitly allowed chats. See [Wise configuration and limits](WISE.md).
 
 This is separate from `:native-tools ["web_search" "x_search"]` on a provider,
 which enables server-side xAI search. Local tools are host function calls; they
 need a function-calling model and use the same host call budget as MCP tools.
 
-Existing named toolset user/channel/provider/model restrictions still apply to
-the built-ins. Without named toolsets, anyone who can invoke `ai` or `grok` in
-trusted chat can use them for that stored channel. Requests without trusted
-chat provenance do not receive implicit native tools.
+Existing named toolset user/adapter/provider/model restrictions still apply.
+Wise always enforces its separate account and conversation policy as well.
+Without named toolsets, trusted chat can use the other configured defaults;
+history remains scoped to the requesting stored channel. Requests without
+trusted chat provenance do not receive implicit native tools.
 
 Optional: use this native-only named toolset if you want explicit allowlists
 and a separate selection. Merge it into your existing `:ai :mcp` configuration;
@@ -425,12 +504,14 @@ keep existing servers/toolsets if you also want external tools:
 
 Replace the example identities with yours. An explicit nonempty `:native-tools`
 override requires user, Slack/Discord adapter and provider/model allowlists.
-Access does not depend on a channel or thread allowlist.
+Named toolset selection does not require a channel or thread allowlist; Wise
+still requires its own allowed conversations.
 Only `search` toolsets accept explicit native overrides. GitHub toolsets inherit
-only the read-only built-ins, never the media tools. Explicit lists are not
-expanded automatically: add `"meme"` and/or `"gi"` to an existing list to allow
-them. Set `:native-tools []` on a search toolset to disable its built-ins, or
-use `--no-tools` for one request.
+only `help`, `history` and `history_count`, never media, inference or Wise.
+Explicit lists are not expanded automatically: add `"meme"`, `"gi"`, `"clef"`,
+`"clairic"` or `"wise"` to an existing list to allow them. Explicit inclusion
+cannot bypass Wise's account/chat restrictions. Set `:native-tools []` on a
+search toolset to disable its built-ins, or use `--no-tools` for one request.
 `yetibot` is reserved as the built-in discovery source name.
 
 The `grok` provider can still come from `xai.key`; sharing tools does not select
