@@ -93,6 +93,11 @@ does not prove account entitlement, chat compatibility, tool support, or tool
 quality. Cloudflare observations cover its full advertised Workers AI catalog,
 not third-party Gateway models; use an explicit provider for unlisted IDs.
 
+Cloudflare's pagination total can exceed the number of returned models.
+Discovery traverses the entire reported page range, including short or empty
+intermediate pages, and checks stable page metadata. It neither invents missing
+models nor requires the visible record count to equal that larger total.
+
 Startup schedules nonblocking background discovery, refreshed on a 30-second
 timer with five-minute monotonic freshness and bounded failure backoff. Imports
 start no workers or network requests. Metadata jobs reuse `ai models`' configured

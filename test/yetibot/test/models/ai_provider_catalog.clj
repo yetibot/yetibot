@@ -360,7 +360,9 @@
       (is (= 3 (count @gets)))
       (is (every? #(or (.endsWith % "/ai/models/search")
                        (.endsWith % "/models")) @gets)))
-    (doseq [info [{:page 1 :per_page 100 :total_count 2}
+    ;; Counts may include filtered records, but cannot under-report the
+    ;; advertised records. Unknown or contradictory pagination stays unsafe.
+    (doseq [info [{:page 1 :per_page 100 :total_count 0}
                   {:total_pages "2"} {:page 1 :per_page 1}
                   {:total_pages 0} {:unknown "pagination"}]]
       (reset! (:state cache) {})
