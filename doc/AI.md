@@ -52,8 +52,10 @@ export YETIBOT_AI_PROVIDERS_1_MODEL=llama3.2
   file containing a nonblank token, at most 8192 bytes. Surrounding whitespace
   is trimmed; the token itself must be printable ASCII without whitespace or
   header newlines. `:key` and `:key-file` are mutually exclusive. Credentials
-  are resolved privately for selected requests, never passive discovery.
-  Missing/invalid files fail closed without exposing paths or token contents.
+  are resolved privately for selected requests, including background metadata
+  requests to that provider's configured model-list endpoint. Configuration and
+  prompt preparation never open every provider's key-file. Missing/invalid files
+  fail closed without exposing paths or token contents.
 - If `:default-provider` is omitted, the first provider is used.
 - A provider's `:model` is optional for listing models. Prompts need either this
   default or a `--model` argument. Use model IDs supported by your server.
@@ -70,13 +72,41 @@ export YETIBOT_AI_PROVIDERS_1_MODEL=llama3.2
 !ai --provider local Write a short poem about snow.
 !ai --provider local --model llama3.2 Explain this error.
 !ai --model gpt-4o-mini Summarize this text.
+!ai --model @cf/meta/llama-3.1-8b-instruct-fp8 Say hello.
 !ai -- --provider is literal text in this prompt.
 ```
 
-Options go before the prompt and may appear in either order. `--model` alone
-uses the default provider. `ai models` queries every provider and labels each
-model list with the provider's name. A failure from one provider does not hide
-results from the others. `ai models <provider>` queries just that provider.
+Options go before the prompt and may appear in either order. Without `--model`,
+the existing default-provider/default-model behavior is unchanged. Explicit
+`--provider` (and pinned commands such as `grok`) is authoritative: it does not
+wait for or consult model catalogs. With only one configured provider, `--model`
+continues to pass the ID through to that provider.
+
+With multiple configured providers, `--model <exact-id>` alone routes only when
+exactly one provider advertises that **exact, case-sensitive ID**, and fresh,
+complete model-ID observations exist for **every current configured provider**.
+There are no substring/vendor-prefix guesses or fallback to the default provider.
+Collisions are errors. On cold startup, failed/unknown/incomplete discovery,
+stale observations, or configuration changes, specify `--provider <name>`; no
+inference request is sent while automatic routing is uncertain. Catalog presence
+does not prove account entitlement, chat compatibility, tool support, or tool
+quality. Cloudflare observations cover its full advertised Workers AI catalog,
+not third-party Gateway models; use an explicit provider for unlisted IDs.
+
+Startup schedules nonblocking background discovery, refreshed on a 30-second
+timer with five-minute monotonic freshness and bounded failure backoff. Imports
+start no workers or network requests. Metadata jobs reuse `ai models`' configured
+GET paths only; they never send prompts or paid inference POSTs, follow redirects,
+or retry a failed HTTP request. The cache retains IDs and freshness/status only,
+not credentials, clients, headers, or execution handles. It is bounded to 32
+providers, 8,192 IDs per provider, 512 UTF-8 bytes per ID, and 256 KiB of ID bytes
+per provider; over-limit catalogs cannot establish uniqueness. Configured
+credential references are resolved only inside each selected metadata request.
+
+`ai models` queries every provider and labels each model list with the provider's
+name. A failure from one provider does not hide results from the others.
+`ai models <provider>` queries just that provider. These listing commands do not
+bypass automatic routing's all-provider completeness requirement.
 
 ## Cloudflare inference and model discovery
 

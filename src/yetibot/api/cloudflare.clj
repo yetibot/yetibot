@@ -284,7 +284,7 @@
 
 (defn catalog [provider]
   (let [account (provider-account provider)]
-    (loop [page 1 records []]
+    (loop [page 1 records [] complete? true]
       (when (> page 20)
         (fail! "Cloudflare model catalog exceeded 20 pages."))
       (let [body (request! http/get
@@ -298,18 +298,45 @@
                        (every? #(and (map? %)
                                      (string? (:name %))
                                      (<= (count (:name %)) 200)
+                                     (not (re-find #"[\p{Cc}\p{Cf}]"
+                                                   (:name %)))
+                                     (= (:name %)
+                                        (mcp/metadata-redact
+                                          (:name %)
+                                          {:secrets [(:key provider)]}))
                                      (re-matches #"@[^\s/]+/[^\s/]+/[^\s]+"
                                                  (:name %))) batch))
           (fail! "Cloudflare returned an invalid model catalog."))
         (let [records (into records batch)
+              ;; Listing remains compatible with existing pagination. Routing
+              ;; additionally needs proof this was not a partial/unknown page.
+              complete? (and complete?
+                             (or (nil? info)
+                                 (and (map? info)
+                                      (every? #{:page :per_page :count
+                                                :total_pages :total_count}
+                                              (keys info))
+                                      (every? #(and (integer? %) (<= 0 %))
+                                              (vals info))
+                                      (or (nil? (:page info)) (= page (:page info)))
+                                      (or (nil? (:per_page info)) (= 100 (:per_page info)))
+                                      (or (nil? (:count info)) (= (count batch) (:count info))))))
               more? (if (number? (:total_pages info))
                       (< page (:total_pages info))
                       (= 100 (count batch)))]
-          (if more? (recur (inc page) records)
-            {:source :cloudflare-workers-ai
-             :coverage
-             "Workers AI only; third-party Gateway models not included"
-             :models (->> records
-                          (map #(project-model % provider))
-                          (reduce #(assoc %1 (:id %2) %2) {})
-                          vals (sort-by :id) vec)}))))))
+          (if more? (recur (inc page) records complete?)
+            (with-meta
+              {:source :cloudflare-workers-ai
+               :coverage
+               "Workers AI only; third-party Gateway models not included"
+               :models (->> records
+                            (map #(project-model % provider))
+                            (reduce #(assoc %1 (:id %2) %2) {})
+                            vals (sort-by :id) vec)}
+              {:complete? (and complete?
+                               (or (nil? (:total_count info))
+                                   (= (count records) (:total_count info)))
+                               (or (nil? (:total_pages info))
+                                   (= page (:total_pages info))
+                                   (and (empty? records)
+                                        (zero? (:total_pages info)))))})))))))

@@ -52,7 +52,7 @@ jobs:
           CLOVERAGE_VERSION: 1.1.2
         run: |
           lein with-profile +test cloverage --codecov --runner midje
-          lein with-profile +test test yetibot.test.models.ai-mcp-catalog
+          lein with-profile +test test yetibot.test.models.ai-mcp-catalog yetibot.test.models.ai-provider-catalog
 
       # - uses: codecov/codecov-action@v5
       #   with:
