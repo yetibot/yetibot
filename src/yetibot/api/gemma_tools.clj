@@ -5,6 +5,10 @@
 
 (def error-message "AI provider returned an unsupported tool response.")
 
+(def ^:private number-pattern
+  (re-pattern (str "-?(?:0|[1-9][0-9]*)"
+                   "(?:\\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")))
+
 (defn unsupported! []
   ;; Never attach output, parser internals or the original exception.
   (throw (ex-info error-message {:ai/error true})))
@@ -21,7 +25,7 @@
     (if (= i (.length text)) true
       (let [c (.charAt text i)]
         (cond
-          (= (int c) 0) false
+          (zero? (int c)) false
           (Character/isHighSurrogate c)
           (and (< (inc i) (.length text))
                (Character/isLowSurrogate (.charAt text (inc i)))
@@ -57,7 +61,8 @@
               (identifier! [] (match! #"[A-Za-z_][A-Za-z0-9_]{0,127}"))
               (literal-string! []
                 (take! "<|\"|>")
-                (let [start @position end (.indexOf ^String text "<|\"|>" start)]
+                (let [start @position
+                      end (.indexOf ^String text "<|\"|>" start)]
                   (when (or (neg? end) (> (- end start) 16384))
                     (unsupported!))
                   (let [value (subs text start end)]
@@ -68,11 +73,14 @@
                       (unsupported!))
                     (reset! position (+ end 5)) value)))
               (number! []
-                (let [spelling (match! #"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")]
+                (let [spelling (match! number-pattern)]
                   (when (> (count spelling) 64) (unsupported!))
                   (let [n (bigdec spelling)]
-                    (when (or (> (Math/abs (long (.scale ^java.math.BigDecimal n))) 308)
-                              (> (.abs ^java.math.BigDecimal n) 1000000000000000M)
+                    (when (or (> (Math/abs
+                                   (long (.scale ^java.math.BigDecimal n)))
+                                 308)
+                              (> (.abs ^java.math.BigDecimal n)
+                                 1000000000000000M)
                               (not (Double/isFinite (double n))))
                       (unsupported!))
                     (if (re-find #"[.eE]" spelling) n (long n)))))

@@ -18,7 +18,7 @@
 (defn error [f]
   (try (f) nil (catch Exception e [(.getMessage e) (ex-data e) (.getCause e)])))
 
-(fact "wire normalization fixes the screenshot and persists exactly the same IDs"
+(fact "wire normalization fixes the screenshot and preserves call IDs"
   (let [result (turn provider model options (body screenshot))
         message (ai/message provider result)
         calls (:tool_calls message)
@@ -36,7 +36,7 @@
     (:tool_call_id (second continuation)) => id
     (ai/continue-messages provider [] result replies) => continuation))
 
-(fact "ordinary structured tool calls are authoritative even with native content"
+(fact "structured tool calls are authoritative even with native content"
   (let [result (assoc-in (body screenshot) [:choices 0 :message :tool_calls]
                         [{:id "official" :type "function"
                           :function {:name "fixture" :arguments "{}"}}])]
@@ -48,17 +48,19 @@
                  [(assoc provider :url "https://example.test/v1") model]]]
     (fact (turn p m options (body screenshot)) => (body screenshot))))
 
-(facts "no-tools, length-limited and malformed control are explicit safe failures"
+(facts "no-tools, length-limited and malformed control fail safely"
   (doseq [[p opts response]
           [[provider {} (body screenshot)]
            [provider (assoc options :tools []) (body screenshot)]
            [provider (assoc options :tool_choice "none") (body screenshot)]
            [(assoc provider :tool-calling false) options (body screenshot)]
-           [provider options (assoc-in (body screenshot) [:choices 0 :finish_reason] "length")]
+           [provider options
+            (assoc-in (body screenshot) [:choices 0 :finish_reason] "length")]
            [provider options (body (str screenshot " trailing"))]
            [provider options (body "<|tool_call>call:yetibot_ai{bad:")]
            [provider options (body "<|tool_call")]
-           [provider options (body "<|channel>thought\nPRIVATE-THOUGHT<channel|>")]
+           [provider options
+            (body "<|channel>thought\nPRIVATE-THOUGHT<channel|>")]
            [provider options (body "<|tool_response>response:fixture{}")]]]
     (fact (error #(turn p model opts response))
           => [gemma/error-message {:ai/error true} nil])))

@@ -5,7 +5,10 @@
 
 ;; Verbatim user-visible screenshot regression: this was returned as an answer.
 (def screenshot
-  "<|tool_call>call:yetibot_ai{action:<|\"|>ask<|\"|>,model:<|\"|>@cf/deepseek-ai/deepseek-r1-distill-qwen-32b<|\"|>,prompt:<|\"|>What is the capital of France?<|\"|>,provider:<|\"|>cloudflare<|\"|>}<tool_call|>")
+  (str "<|tool_call>call:yetibot_ai{action:<|\"|>ask<|\"|>,model:<|\"|>"
+       "@cf/deepseek-ai/deepseek-r1-distill-qwen-32b<|\"|>,prompt:<|\"|>"
+       "What is the capital of France?<|\"|>,provider:<|\"|>cloudflare<|\"|>}"
+       "<tool_call|>"))
 
 (defn envelope [arguments]
   (str "<|tool_call>call:fixture" arguments "<tool_call|>"))
@@ -25,18 +28,22 @@
                    "prompt" "What is the capital of France?"
                    "provider" "cloudflare"}}])
 
-(fact "nested data, literal punctuation and multiple complete calls are supported"
+(fact "nested data, literal punctuation and multiple calls are supported"
   (gemma/parse-calls
-    (str " \n" (envelope "{x:{yes:true,no:false,empty:null,n:-2.5e1},a:[1,{},[],<|\"|>a \"quote\" \\ slash, } [ : <|\"|>]}")
+    (str " \n" (envelope
+                (str "{x:{yes:true,no:false,empty:null,n:-2.5e1},"
+                     "a:[1,{},[],<|\"|>a \"quote\" \\ slash, } [ : <|\"|>]}"))
          "\n" (envelope "{}") " <|tool_response>\t"))
   => [{:name "fixture"
        :arguments {"x" {"yes" true "no" false "empty" nil "n" -25M}
                    "a" [1 {} [] "a \"quote\" \\ slash, } [ : "]}}
       {:name "fixture" :arguments {}}])
 
-(fact "Unicode and numeric bounds preserve inert values without decoding escapes"
-  (gemma/parse-calls (envelope "{text:<|\"|>Paris 🗼 \\u0041<|\"|>,n:1000000000000000}"))
-  => [{:name "fixture" :arguments {"text" "Paris 🗼 \\u0041" "n" 1000000000000000}}])
+(fact "Unicode and numeric bounds preserve values without decoding escapes"
+  (gemma/parse-calls
+    (envelope "{text:<|\"|>Paris 🗼 \\u0041<|\"|>,n:1000000000000000}"))
+  => [{:name "fixture"
+       :arguments {"text" "Paris 🗼 \\u0041" "n" 1000000000000000}}])
 
 (facts "no substring extraction, malformed control, readers or key ambiguity"
   (doseq [text [(str "Here is an example: " screenshot)
@@ -63,13 +70,18 @@
     (fact (rejected? text) => true)))
 
 (facts "all parser resource limits fail closed with static errors"
-  (doseq [text [(str screenshot (apply str (repeat 65536 " ")))
-               (envelope (str "{x:<|\"|>" (apply str (repeat 16385 "a")) "<|\"|>}"))
-               (envelope (str "{x:<|\"|>" (apply str (repeat 16384 "界")) "<|\"|>,y:<|\"|>"
-                              (apply str (repeat 16384 "界")) "<|\"|>}"))
-               (envelope (str "{x:" (apply str (repeat 17 "[")) "0"
-                              (apply str (repeat 17 "]")) "}"))
-               (envelope (str "{" (string/join "," (map #(str "k" % ":0") (range 129))) "}"))
+  (doseq [text [(str screenshot (string/join (repeat 65536 " ")))
+               (envelope (str "{x:<|\"|>" (string/join (repeat 16385 "a"))
+                              "<|\"|>}"))
+               (envelope (str "{x:<|\"|>" (string/join (repeat 16384 "界"))
+                              "<|\"|>,y:<|\"|>"
+                              (string/join (repeat 16384 "界")) "<|\"|>}"))
+               (envelope (str "{x:" (string/join (repeat 17 "[")) "0"
+                              (string/join (repeat 17 "]")) "}"))
+               (envelope (str "{"
+                              (string/join "," (map #(str "k" % ":0")
+                                                    (range 129)))
+                              "}"))
                (envelope (str "{x:[" (string/join "," (repeat 4096 "0")) "]}"))
-               (apply str (repeat 21 (envelope "{}")))]]
+               (string/join (repeat 21 (envelope "{}")))]]
     (fact (rejected? text) => true)))
