@@ -39,6 +39,19 @@
     (fn [request]
       (aliases/call! (or cfg config) "aliases" args (:chat-source request)))))
 
+(facts "Unicode control names stay hidden and cannot reach the store"
+  (let [bad ["bad\u0085alias" "bad\u009balias"
+             "bad\\u0085alias" "bad\\u009balias"]]
+    (with-store (mapv #(hash-map :cmd-name % :cmd "echo safe") bad)
+      (fn [reads]
+        (get-in (call {}) [:structuredContent :names]) => []
+        (doseq [name bad]
+          (fact (:isError (call {"name" name})) => true))
+        (count @reads) => 1))
+    (doseq [name (take 2 bad)]
+      (fact (error? #(aliases/arguments! config "aliases" {"name" name}))
+            => true))))
+
 (facts "discovery and definitions are separate read-only native capabilities"
   (with-store []
     (fn [reads]

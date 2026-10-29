@@ -40,7 +40,7 @@
   (when (contains? args "name")
     (let [n (get args "name")]
       (when-not (and (ai/nonblank-string? n) (<= (count n) 200)
-                     (not (re-find #"\p{Cntrl}" n))
+                     (not (re-find #"\p{Cc}" n))
                      (not (contains? args "limit"))
                      (not (contains? args "offset")))
         (invalid!))))
@@ -110,7 +110,7 @@
 (defn- public-name? [config n]
   (and (ai/nonblank-string? n) (<= (count n) 200)
        (let [detected (detection-text n)]
-         (and (not (re-find #"\p{Cntrl}" detected))
+         (and (not (re-find #"\p{Cc}" detected))
               (not (re-find sensitive-name detected))
               (= n (protect config n))))))
 
