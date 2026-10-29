@@ -61,6 +61,21 @@
     (.getMessage error)
     => (str "AI provider " sentinel " returned HTTP 400.")))
 
+(fact "non-2xx JSON strings yield closed tags without exposing their body"
+  (let [body (json/generate-string
+               {:error {:type "invalid_request_error" :param "messages"
+                        :message
+                        (str "Type mismatch of '/messages/2/content', "
+                             "'string' not in 'null'. " sentinel)}})
+        record (diagnostics/error-fields body)]
+    (:error-class record) => :invalid-request
+    (:error-code record) => :invalid-message-content
+    (:parameter record) => :messages
+    (string/includes? (pr-str record) sentinel) => false
+    (:error-class (diagnostics/error-fields (str body
+                                                (string/join (repeat 17000 " ")))))
+    => :unrecognized))
+
 (facts "unknown, huge and nested fields never become diagnostic values"
   (doseq [body [nil sentinel
                {:error {:type sentinel :code sentinel :param sentinel

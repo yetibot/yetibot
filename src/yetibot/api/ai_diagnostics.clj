@@ -82,6 +82,12 @@
   (when (and (string? value) (<= (count value) 1024))
     (let [text (.toLowerCase ^String value Locale/ROOT)]
       (cond
+        (and (re-find #"type mismatch of [\x27\x22]/messages/[0-9]+/content"
+                      text)
+             (re-find (re-pattern
+                        (str "'(?:array|null)' not in 'string'|"
+                             "'string' not in 'null'")) text))
+        :invalid-message-content
         (re-find
           (re-pattern
             (str "\\[invalid_client_tool_schema\\]|"
@@ -135,14 +141,28 @@
               :unrecognized))
      :parameter (parameter (field error :param))}))
 
+(declare shallow-json?)
+
+(defn- decoded-error-body [body]
+  ;; clj-http may leave non-2xx JSON undecoded despite :as :json. Do not alter
+  ;; transport decoding: inspect only small, shallow error strings here.
+  (if-not (string? body) body
+    (try
+      (when (<= (count body) 16384)
+        (let [bytes (.getBytes ^String body "UTF-8")]
+          (when (and (<= (alength bytes) 16384) (shallow-json? bytes))
+            (json/parse-string body))))
+      (catch Exception _ nil))))
+
 (defn error-fields
   "Inspect one root/error map and the first three vector :errors entries only.
    Per candidate: type/code/param strings <=128 chars and one message (or error)
    string <=1024 UTF-16 units. No recursion, sequence realization or text
-   output. Non-stream transport has already decoded JSON before this
-   function runs."
+   output. Undecoded non-2xx JSON strings are limited to16KiB/depth8;
+   successful response decoding remains unchanged."
   [body]
-  (let [error (field body :error)
+  (let [body (decoded-error-body body)
+        error (field body :error)
         errors (field body :errors)
         candidates (cons (if (map? error) error body)
                          (when (vector? errors)
@@ -162,7 +182,7 @@
               {:error-class #{:invalid-request :authentication :model-access
                               :rate-limit :server}
                :error-code #{:invalid-tool-schema :unsupported-parameter
-                             :missing-tool-output :context-limit :model-access
+                             :invalid-message-content :missing-tool-output :context-limit :model-access
                              :rate-limit}
                :parameter #{:tools :input :messages :model :token-limit
                             :tool-choice :other}}]

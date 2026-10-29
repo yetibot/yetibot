@@ -194,6 +194,18 @@
                    " returned an invalid model list.")))
       (vec (sort (distinct (map :id data)))))))
 
+(defn- cloudflare-messages [messages]
+  ;; Workers AI schemas can reject OpenAI-standard null/text-parts content.
+  ;; Flatten text only; never silently discard an image or an unknown part.
+  (mapv (fn [{:keys [content] :as message}]
+          (cond
+            (nil? content) (assoc message :content "")
+            (and (vector? content)
+                 (every? #(and (map? %) (= "text" (:type %))
+                               (string? (:text %))) content))
+            (assoc message :content (string/join "\n" (map :text content)))
+            :else message)) messages))
+
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]
@@ -220,7 +232,9 @@
                   :include ["reasoning.encrypted_content"]
                   :max_turns (Long/parseLong
                                (str (or (:max-turns provider) 6)))}
-                 {:model model :messages messages})]
+                 {:model model
+                  :messages (if (cloudflare/provider-account provider)
+                              (cloudflare-messages messages) messages)})]
     (request client/post provider
              (if responses-api? "/responses" "/chat/completions")
              {:content-type :json
