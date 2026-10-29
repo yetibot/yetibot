@@ -1,6 +1,7 @@
 (ns yetibot.models.ai-mcp-catalog
   "Bounded public discovery data, never sessions or execution authority."
   (:require [cheshire.core :as json]
+            [clojure.string :as string]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets])
   (:import [java.security MessageDigest]
@@ -103,7 +104,7 @@
                (sort (mcp/credentials (metadata-config config)))]
         bytes (.digest (MessageDigest/getInstance "SHA-256")
                        (.getBytes (pr-str value) "UTF-8"))]
-    (apply str (map #(format "%02x" (bit-and 255 %)) bytes))))
+    (string/join (map #(format "%02x" (bit-and 255 %)) bytes))))
 
 (defn- discover [server config]
   (let [server (effective-server server config)
@@ -163,8 +164,7 @@
                  (let [state
                        (if (and (not old) (>= (count state) max-entries))
                          (dissoc state
-                                 (first (first (sort-by
-                                                 (comp :touched val) state))))
+                                 (ffirst (sort-by (comp :touched val) state)))
                          state)]
                    (reset! claimed true)
                    (assoc state key
@@ -258,7 +258,7 @@
                       (daemon-factory "yetibot-mcp-discovery"))
             timer (Executors/newSingleThreadScheduledExecutor
                     (daemon-factory "yetibot-mcp-catalog"))
-            hook (Thread. nil ^Runnable (fn [] (stop!))
+            hook (Thread. nil ^Runnable stop!
                           "yetibot-mcp-shutdown" 0 false)]
         (reset! runtime {:workers workers :timer timer :hook hook})
         (.addShutdownHook (Runtime/getRuntime) hook)

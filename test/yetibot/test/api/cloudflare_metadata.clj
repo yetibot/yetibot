@@ -5,7 +5,7 @@
 
 (fact "oversized required metadata terminates with a safe static failure"
   (let [sentinel "HOSTILE-METADATA-SENTINEL"
-        text (apply str (repeat 2000 "界"))
+        text (string/join (repeat 2000 "界"))
         hostile {:id text :metadata-source text
                  :function-calling {:status text :source sentinel}}
         work (future

@@ -72,7 +72,7 @@
 
 (fact "projection redacts before shortening and drops unknown remote fields"
   (let [record (assoc (first records)
-                     :description (str (apply str (repeat 1995 "x"))
+                     :description (str (string/join (repeat 1995 "x"))
                                        "fixture-key suffix")
                      :headers {:authorization "private"}
                      :properties [{:property_id "unknown" :value "private"}

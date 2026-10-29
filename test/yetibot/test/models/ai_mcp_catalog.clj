@@ -1,5 +1,6 @@
 (ns yetibot.test.models.ai-mcp-catalog
   (:require [clojure.test :refer [deftest is testing]]
+            [clojure.string :as string]
             [yetibot.api.mcp :as mcp]
             [yetibot.api.ai :as ai]
             [yetibot.models.ai-mcp-catalog :as catalog]
@@ -131,7 +132,7 @@
     (with-redefs [mcp/connect! (fn [s _] {:server s})
                   mcp/list-tools
                   (constantly [(assoc tool
-                                      :description (apply str (repeat 21000 \x))
+                                      :description (string/join (repeat 21000 \x))
                                       :inputSchema {:type "object"
                                                     :bad (Object.)})])
                   mcp/close! (constantly nil)]
@@ -253,7 +254,7 @@
   (let [cache (catalog/new-cache (constantly 0) (fn [job] (job)))
         requests (atom []) rpc (support/rpc-handler requests false)
         secret "OTHER-CREDENTIAL-123456789"
-        prefix (apply str (repeat 19990 \x))]
+        prefix (string/join (repeat 19990 \x))]
     (support/with-http-server
       (fn [request]
         (let [response (rpc request)]
