@@ -150,7 +150,8 @@
                           {:ai/error true :ai/failure :http
                            :ai/error-fields
                            (if progress
-                             (diagnostics/stream-error-fields body)
+                             (diagnostics/stream-error-fields
+                               body (get-in response [:request :http-req]))
                              (diagnostics/error-fields body))})))
                     (if progress
                       (stream/read-response

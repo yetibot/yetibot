@@ -6,8 +6,11 @@
             [taoensso.timbre :as log]
             [yetibot.api.ai :as ai]
             [yetibot.api.ai-diagnostics :as diagnostics])
-  (:import [java.io ByteArrayInputStream IOException]
+  (:import [java.io ByteArrayInputStream IOException InputStream]
            [java.net SocketTimeoutException]
+           [java.util.concurrent CountDownLatch ScheduledThreadPoolExecutor
+            TimeUnit]
+           [org.apache.http.concurrent Cancellable]
            [org.apache.http.client.methods HttpGet]))
 
 (def sentinel "SECRET-SENTINEL account balance USD 123456.78")
@@ -289,6 +292,165 @@
           (fact (get-in (ex-data error) [:ai/diagnostic :error-code])
                 => :unrecognized)
           (fact (count logs) => 1))))))
+
+(fact "blocking error reads stop on owner abort, before body close"
+  (let [owner (HttpGet. "https://example.test/v1/responses")
+        released (CountDownLatch. 1)
+        reads (atom 0)
+        closed (atom nil)
+        body (proxy [InputStream] []
+               (read
+                 ([] -1)
+                 ([buffer offset length]
+                  (swap! reads inc)
+                  (.await released 5 TimeUnit/SECONDS)
+                  (throw (IOException. "synthetic blocked read"))))
+               (close [] (reset! closed (.isAborted owner))))]
+    (.setCancellable owner
+                     (reify Cancellable
+                       (cancel [_] (.countDown released) true)))
+    (with-redefs [http/post (fn [& _]
+                             {:status 400 :body body
+                              :request {:http-req owner}})]
+      (let [start (System/nanoTime)
+            [error logs]
+            (capture
+              #(failure
+                 (fn []
+                   (ai/chat (assoc provider :api "responses") sentinel prompt
+                            {:on-progress identity}))))
+            elapsed-ms (/ (- (System/nanoTime) start) 1000000.0)]
+        (fact elapsed-ms => (fn [ms] (< ms 2500)))
+        (fact @reads => 1)
+        (fact @closed => true)
+        (fact (.getCount released) => 0)
+        (fact (.size (.getQueue
+                       ^ScheduledThreadPoolExecutor
+                       @#'diagnostics/abort-executor)) => 0)
+        (fact (.getMessage error)
+              => (str "AI provider " sentinel " returned HTTP 400."))
+        (fact (select-keys (:ai/diagnostic (ex-data error))
+                           [:failure :status :error-code])
+              => {:failure :http :status 400 :error-code :unrecognized})
+        (fact (count logs) => 1)))))
+
+(fact "ownerless potentially blocking bodies are closed but never read"
+  (let [reads (atom 0)
+        closed (atom false)
+        body (proxy [InputStream] []
+               (read
+                 ([] -1)
+                 ([buffer offset length]
+                  (swap! reads inc)
+                  (.await (CountDownLatch. 1) 5 TimeUnit/SECONDS)
+                  -1))
+               (close [] (reset! closed true)))]
+    (with-redefs [http/post (fn [& _] {:status 400 :body body})]
+      (let [start (System/nanoTime)
+            [error _]
+            (capture
+              #(failure
+                 (fn []
+                   (ai/chat (assoc provider :api "responses") sentinel prompt
+                            {:on-progress identity}))))]
+        (fact (/ (- (System/nanoTime) start) 1000000.0)
+              => (fn [ms] (< ms 2500)))
+        (fact @reads => 0)
+        (fact @closed => true)
+        (fact (get-in (ex-data error) [:ai/diagnostic :error-code])
+              => :unrecognized)))))
+
+(fact "ownerless in-memory errors retain safe classification"
+  (let [body (ByteArrayInputStream.
+               (.getBytes "{\"error\":{\"code\":\"missing_tool_output\"}}"
+                          "UTF-8"))]
+    (with-redefs [http/post (fn [& _] {:status 400 :body body})]
+      (let [[error _]
+            (capture
+              #(failure
+                 (fn []
+                   (ai/chat (assoc provider :api "responses") sentinel prompt
+                            {:on-progress identity}))))]
+        (get-in (ex-data error) [:ai/diagnostic :error-code])
+        => :missing-tool-output))))
+
+(facts "diagnostic guards cancel and leave no queued tasks after quick errors"
+  (let [scheduled (atom [])
+        schedule @#'diagnostics/schedule-abort
+        executor @#'diagnostics/abort-executor]
+    (with-redefs-fn
+      {#'diagnostics/schedule-abort
+       (fn [owner]
+         (let [guard (schedule owner)]
+           (swap! scheduled conj guard)
+           guard))}
+      (fn []
+        (doseq [broken? [false true]]
+          (let [owner (HttpGet. "https://example.test/v1/responses")
+                wire "{\"error\":{\"code\":\"missing_tool_output\"}}"
+                body (proxy [ByteArrayInputStream]
+                       [(.getBytes wire "UTF-8")]
+                       (read [buffer offset length]
+                         (if broken? (throw (IOException. "synthetic"))
+                           (proxy-super read buffer offset length))))]
+            (fact (:error-code
+                    (diagnostics/stream-error-fields body owner))
+                  => (if broken? :unrecognized :missing-tool-output))
+            ;; Diagnostic inspection never aborts a quick owner itself.
+            (fact (.isAborted owner) => false)
+            (fact (.isCancelled (last @scheduled)) => true)
+            (fact (.size (.getQueue
+                           ^ScheduledThreadPoolExecutor executor)) => 0)))
+        (fact (count @scheduled) => 2)
+        (fact (.getRemoveOnCancelPolicy
+                ^ScheduledThreadPoolExecutor executor) => true)))))
+
+(fact "the single daemon scheduler does not inherit ambient thread locals"
+  (let [executor ^ScheduledThreadPoolExecutor @#'diagnostics/abort-executor
+        ambient (InheritableThreadLocal.)
+        seen (promise)]
+    (.set ambient sentinel)
+    (try
+      (let [thread (.newThread
+                     (.getThreadFactory executor)
+                     (reify Runnable
+                       (run [_] (deliver seen (.get ambient)))))]
+        (.start thread)
+        (.join thread 1000)
+        (fact (.isDaemon thread) => true)
+        (fact (.getCorePoolSize executor) => 1)
+        (fact (deref seen 1000 :not-run) => nil))
+      (finally (.remove ambient)))))
+
+(fact "success paths and ownerless memory errors never schedule abort guards"
+  (let [scheduled (atom 0)
+        answer {:status "completed" :output []}
+        wire (str "data: "
+                  (json/generate-string
+                    {:type "response.completed" :response answer}) "\n\n")]
+    (with-redefs-fn
+      {#'diagnostics/schedule-abort (fn [_] (swap! scheduled inc))}
+      (fn []
+        (with-redefs [http/post (fn [& _] {:status 200 :body answer})]
+          (fact (ai/chat (assoc provider :api "responses") sentinel prompt {})
+                => answer))
+        (let [owner (HttpGet. "https://example.test/v1/responses")]
+          (with-redefs [http/post
+                        (fn [& _]
+                          {:status 200
+                           :body (ByteArrayInputStream.
+                                   (.getBytes wire "UTF-8"))
+                           :request {:http-req owner}})]
+            (fact (ai/chat (assoc provider :api "responses") sentinel prompt
+                           {:on-progress identity}) => answer)
+            (fact (.isAborted owner) => true)))
+        (fact (:error-code
+                (diagnostics/stream-error-fields
+                  (ByteArrayInputStream.
+                    (.getBytes "{\"error\":{\"code\":\"model_not_found\"}}"
+                               "UTF-8"))))
+              => :model-access)
+        (fact @scheduled => 0)))))
 
 (fact "transport exceptions never carry request objects or stacks forward"
   (let [[error logs]

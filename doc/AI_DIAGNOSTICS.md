@@ -31,14 +31,17 @@ The map contains only these host-owned fields:
   `:unrecognized`, taken after existing provider-specific transformations.
 - `:item-types`: distinct finite categories among the first 256 input items:
   message, reasoning, function call/output, web/X search, or unrecognized.
-  `:opaque-state?` reports only encrypted-state field presence in those items.
+  `:opaque-state?` reports only a nonempty string `encrypted_content` value
+  in those items, not mere field presence.
 - `:failure`: `:http`, `:stream`, or `:transport`; `:status` is an integer
   from 100 through 599, or `:unrecognized`.
 - `:error-class`: invalid request, authentication, model access, rate limit,
-  server, or unrecognized, from exact public error-type matches.
+  server, or unrecognized, from exact public error-type matches or the known
+  Grok `invalid-argument` code.
 - `:error-code`: invalid tool schema, unsupported parameter, missing tool
   output, context limit, model/access, rate limit, or unrecognized, from exact
-  public error-code matches. No message-text inference is performed.
+  public error-code matches, then bounded known validation phrases when no
+  recognized code matches. Only fixed categories escape this inspection.
 - `:parameter`: tools, input, messages, model, token limit, tool choice,
   other known public parameter, or unrecognized. Only the public root family
   is emitted, never an index, subfield, or provider-supplied parameter text.
@@ -53,18 +56,33 @@ account ID, exception, or stack is logged by this capture.
 
 Non-stream requests deliberately retain their existing `:as :json` transport.
 That transport has already decoded the body before diagnostic inspection.
-The new inspection does not serialize or walk it: it accesses only the error
-container and three shallow scalar fields, each limited to 128 characters.
+The inspection does not serialize or recursively walk it: it examines one
+root/error map and at most three entries of a vector `errors` container (as
+used by Cloudflare). Per candidate, `type`, `code`, and `param` strings are
+limited to 128 UTF-16 units; one `message` (or fallback `error`) string is
+limited to 1024 UTF-16 units. Oversized strings are skipped, not truncated.
+Exact codes take precedence over recognized validation phrases in that
+candidate. It emits categories only, never inspected text or regex captures.
 This change does **not** impose new byte/depth bounds on the inherited
 non-stream JSON decoding. Changing that transport requires separate review.
 
 Existing streaming HTTP errors get best-effort JSON inspection capped at
-16 KiB plus one detection byte, with nesting depth at most eight. A
-one-second cooperative read budget is checked between reads; a blocking read
-remains bounded by the existing socket timeout, not by that shorter budget.
+16 KiB plus one detection byte, with nesting depth at most eight. Only for
+non-2xx stream error inspection, a one-second timer aborts the saved clj-http
+`HttpUriRequest` owner to unblock socket reads; the cooperative read checks
+remain too. One shared daemon scheduler carries only that owner, without
+inheriting thread locals or conveying dynamic bindings. Its timer is cancelled
+in `finally`, and cancelled tasks are removed from its queue. No timer is
+scheduled for successful responses or non-stream JSON responses.
+
+Without an abortable owner, inspection is skipped unless the body's exact
+class is the in-memory `ByteArrayInputStream` (not an arbitrary subclass).
 Unread, malformed, oversized, deep, interrupted, or timed-out error bodies
 produce unrecognized categories. Cleanup still aborts the HTTP owner before
-closing the body, without draining an unbounded remainder.
+closing the body, without draining an unbounded remainder. The timer is an
+abort-backed guard, not a real-time JVM guarantee: scheduler pauses and the
+HTTP owner's abort implementation can delay cancellation. Existing success
+transport, socket timeouts, wire options, and stream budgets are unchanged.
 
 SSE error events reuse the same shallow classifier after existing bounded
 SSE parsing. EOF, malformed streams, and other failures keep their existing
@@ -86,5 +104,7 @@ later tools and is never automatically retried.
 
 Tests use fake HTTP responses, synthetic secret/financial sentinels, and
 local fixtures only. No live provider diagnosis or production mutation is
-required. A provider that supplies only prose error messages will deliberately
-remain unrecognized; absence of a category is not evidence of a root cause.
+required. Known bounded Grok and Cloudflare validation phrases can produce
+categories even without structured codes. Arbitrary prose remains
+unrecognized; presence or absence of a category is not evidence of a root
+cause.

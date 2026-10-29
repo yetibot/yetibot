@@ -4,8 +4,11 @@
             [taoensso.timbre :as log]
             [yetibot.api.cloudflare :as cloudflare])
   (:import [com.fasterxml.jackson.core JsonFactory JsonToken]
-           [java.io InputStream]
-           [java.util Locale]))
+           [java.io ByteArrayInputStream InputStream]
+           [java.util Locale]
+           [java.util.concurrent ScheduledThreadPoolExecutor ThreadFactory
+            TimeUnit]
+           [org.apache.http.client.methods HttpUriRequest]))
 
 (defn- tag [allowed value fallback]
   (if (or (keyword? value)
@@ -181,19 +184,46 @@
           (if (> depth 8) false (recur depth)))
         true))))
 
+(defonce ^:private abort-executor
+  (doto
+    (ScheduledThreadPoolExecutor.
+      1
+      (reify ThreadFactory
+        (newThread [_ runnable]
+          ;; No inherited thread locals or Clojure dynamic binding conveyance.
+          (doto (Thread. nil runnable "ai-diagnostic-abort" 0 false)
+            (.setDaemon true)))))
+    (.setRemoveOnCancelPolicy true)))
+
+(defn- schedule-abort [^HttpUriRequest owner]
+  ;; Capture only this failed request's owner, never ambient request context.
+  (.schedule ^ScheduledThreadPoolExecutor abort-executor
+             ^Runnable (reify Runnable
+                         (run [_] (.abort owner)))
+             1000 TimeUnit/MILLISECONDS))
+
 (defn stream-error-fields
-  "Best effort only: 16 KiB, depth 8, one-second cooperative read budget.
-   Existing socket timeout still bounds blocking reads. Caller owns cleanup."
-  [body]
-  (try
-    (if (and (instance? InputStream body)
-             (not (.isInterrupted (Thread/currentThread))))
-      (let [bytes (cloudflare/read-bytes body 16384 1000)]
-        (if (shallow-json? bytes)
-          (error-fields (json/parse-string (String. ^bytes bytes "UTF-8")))
-          (error-fields nil)))
-      (error-fields nil))
-    (catch Exception _ (error-fields nil))))
+  "Best-effort error inspection: 16 KiB, depth 8, abort after one second.
+   Without an abortable owner, read only an exact in-memory byte stream.
+   Caller owns abort-before-close cleanup. Never use for success bodies."
+  ([body] (stream-error-fields body nil))
+  ([body owner]
+   (try
+     (let [owner (when (instance? HttpUriRequest owner) owner)]
+       (if (and (instance? InputStream body)
+                (or owner (= ByteArrayInputStream (class body)))
+                (not (.isInterrupted (Thread/currentThread))))
+         (let [guard (when owner (schedule-abort owner))]
+           (try
+             (let [bytes (cloudflare/read-bytes body 16384 1000)]
+               (if (shallow-json? bytes)
+                 (error-fields
+                   (json/parse-string (String. ^bytes bytes "UTF-8")))
+                 (error-fields nil)))
+             (finally
+               (when guard (.cancel guard false)))))
+         (error-fields nil)))
+     (catch Exception _ (error-fields nil)))))
 
 (defn status [value]
   (if (and (integer? value) (<= 100 value 599)) value :unrecognized))
