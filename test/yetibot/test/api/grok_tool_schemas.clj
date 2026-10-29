@@ -3,6 +3,7 @@
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
             [yetibot.models.ai-inference-tools :as inference]
+            [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-wise-tools :as wise]))
 
 (defn- complete-object? [schema]
@@ -23,7 +24,7 @@
   ;; yetibot_clef; removing the three new tools returned HTTP 200. This is an
   ;; offline regression for that observed contract, not a live xAI test.
   (doseq [[operation definition]
-          (merge inference/definitions wise/definitions)]
+          (merge inference/definitions wise/definitions models/definitions)]
     (let [captured (atom nil)
           provider {:name "grok" :url "https://api.x.ai/v1"
                     :api "responses" :key "synthetic-key"

@@ -18,7 +18,7 @@
 
 (def default-native-tools ["help" "history" "history_count"])
 (def native-names
-  (into (set default-native-tools) ["meme" "gi" "clef" "clairic" "wise"]))
+  (into (set default-native-tools) ["meme" "gi" "clef" "clairic" "wise" "ai" "cf"]))
 
 (defn github? [toolset]
   (contains? #{"github-read" "github-pr"} (:kind toolset)))

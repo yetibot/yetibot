@@ -6,7 +6,8 @@
             [yetibot.api.ai-stream :as stream]
             [yetibot.core.config :refer [get-config]]
             [yetibot.util.ai-config :as settings])
-  (:import [java.net URI]))
+  (:import [java.io File FileInputStream]
+           [java.net URI]))
 
 (defn nonblank-string? [value]
   (and (string? value) (not (string/blank? value))))
@@ -25,6 +26,8 @@
 (s/def ::name (s/and nonblank-string? #(not (re-find #"\s" %))))
 (s/def ::url base-url?)
 (s/def ::key nonblank-string?)
+(s/def ::key-file
+  #(and (nonblank-string? %) (.isAbsolute (File. ^String %))))
 (s/def ::model nonblank-string?)
 (s/def ::gateway-id #(and (string? %)
                           (re-matches #"[a-zA-Z0-9_-]{1,64}" %)))
@@ -42,8 +45,9 @@
 (s/def ::provider
   (s/and
     (s/keys :req-un [::name ::url]
-            :opt-un [::key ::model ::tool-calling ::tool-choice ::api
+            :opt-un [::key ::key-file ::model ::tool-calling ::tool-choice ::api
                      ::native-tools ::max-turns ::gateway-id])
+    #(not (and (contains? % :key) (contains? % :key-file)))
     #(or (= "responses" (:api %))
          (not (or (seq (:native-tools %)) (contains? % :max-turns))))))
 
@@ -73,18 +77,41 @@
       ;; Spec error details can contain API keys. Never return or log them.
       (fail (if (= :not-found error)
               "AI is not configured. Configure ai.providers first."
-              "AI configuration is invalid. Check provider names, URLs and defaults.")))
+              (str "AI configuration is invalid. Check provider names, "
+                   "URLs and defaults."))))
     (settings/ai value)))
 
 (defn provider [config provider-name]
   (let [provider-name (or provider-name (:default-provider config)
                           (:name (first (:providers config))))]
     (or (some #(when (= provider-name (:name %)) %) (:providers config))
-        (fail "Unknown AI provider. Use ai providers to list available providers."))))
+        (fail (str "Unknown AI provider. Use ai providers to list "
+                   "available providers.")))))
+
+(defn resolve-provider
+  "Resolve only a selected request's configured credential, never discovery.
+   References and inline keys are mutually exclusive. Never echo file details."
+  [provider]
+  (if-not (contains? provider :key-file) provider
+    (try
+      (when (contains? provider :key) (throw (Exception.)))
+      (let [file (File. ^String (:key-file provider))]
+        (when-not (and (.isAbsolute file) (.isFile file) (.canRead file))
+          (throw (Exception.)))
+        (let [token (with-open [input (FileInputStream. file)]
+                      (string/trim
+                        (String. ^bytes (cloudflare/read-bytes input 8192)
+                                 "UTF-8")))]
+          (when-not (re-matches #"[\x21-\x7e]{1,8192}" token)
+            (throw (Exception.)))
+          (-> provider (dissoc :key-file) (assoc :key token))))
+      (catch Exception _
+        (fail "AI provider credentials are unavailable or invalid.")))))
 
 (defn- request [method provider path params & [progress]]
   (try
-    (let [gateway (when (cloudflare/provider-account provider)
+    (let [provider (resolve-provider provider)
+          gateway (when (cloudflare/provider-account provider)
                     (or (:gateway-id provider)
                         (when (string/starts-with?
                                 (str (get-in params [:form-params :model])) "@")
@@ -104,7 +131,9 @@
                                               (cloudflare/gateway-headers
                                                 gateway))
                                        (:key provider)
-                                       (assoc "Authorization" (str "Bearer " (:key provider))))}
+                                       (assoc "Authorization"
+                                              (str "Bearer "
+                                                   (:key provider))))}
                            (when progress {:save-request true}) params))
           read! (fn [body]
                   (when-not (<= 200 (:status response) 299)
@@ -123,11 +152,12 @@
       (if (:ai/error (ex-data e))
         (throw e)
         ;; Neither exception messages nor response bodies are safe to echo.
-        (fail (str "Could not reach AI provider " (:name provider) " or read its response."))))))
+        (fail (str "Could not reach AI provider " (:name provider)
+                   " or read its response."))))))
 
 (defn models [provider]
   (if (cloudflare/provider-account provider)
-    (let [catalog (cloudflare/catalog provider)]
+    (let [catalog (cloudflare/catalog (resolve-provider provider))]
       (with-meta (mapv :id (:models catalog)) {:catalog catalog}))
     (let [body (request client/get provider "/models" {})
           data (:data body)]
@@ -140,7 +170,12 @@
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]
-  (let [responses-api? (responses? provider)
+  (when (and (contains? options :max-output-tokens)
+             (not (and (integer? (:max-output-tokens options))
+                       (<= 1 (:max-output-tokens options) 2048))))
+    (fail "AI output token limit must be an integer from 1 to 2048."))
+  (let [provider (resolve-provider provider)
+        responses-api? (responses? provider)
         progress (when (and responses-api? (fn? (:on-progress options)))
                    {:callback (:on-progress options)
                     :config (update (:progress-config options {}) :secrets
@@ -163,7 +198,15 @@
              (if responses-api? "/responses" "/chat/completions")
              {:content-type :json
               :form-params
-              (merge (cond-> params progress (assoc :stream true))
+              (merge (cond-> params
+                       progress (assoc :stream true)
+                       (:max-output-tokens options)
+                       (assoc (cond
+                                responses-api? :max_output_tokens
+                                (cloudflare/provider-account provider)
+                                :max_tokens
+                                :else :max_completion_tokens)
+                              (:max-output-tokens options)))
                      (cond-> (select-keys options [:tools :tool_choice])
                        (= "omit" (:tool-choice provider))
                        (dissoc :tool_choice)))}

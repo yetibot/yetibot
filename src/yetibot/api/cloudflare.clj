@@ -199,8 +199,12 @@
                                     (string/starts-with? (:name %)
                                                         "@cf/cloudflare/clef")
                                     :decision
-                                    (= "@cf/cloudflare/clairic" (:name %))
+                                    (string/starts-with?
+                                      (:name %) "@cf/cloudflare/clairic")
                                     :extraction
+                                    (= "Text Generation"
+                                       (get-in % [:task :name]))
+                                    :chat
                                     :else :model-specific)))
                           (reduce #(assoc %1 (:id %2) %2) {})
                           vals (sort-by :id) vec)}))))))
