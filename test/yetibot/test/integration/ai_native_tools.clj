@@ -11,6 +11,7 @@
             [yetibot.commands.ai]
             [yetibot.commands.grok]
             [yetibot.core.config :as settings]
+            [yetibot.core.commands.collections]
             [yetibot.core.db.history :as history]
             [yetibot.core.db.util :as db]
             [yetibot.core.models.help :as help]
@@ -130,6 +131,24 @@
                                     ["exa/search"])
                                   ["yetibot/help" "yetibot/history"
                                    "yetibot/history_count"])))))))))
+
+(fact "real listing commands preserve names and expose inert structured data"
+  (with-redefs [mcp/config (constantly nil)
+                ai/chat (fn [& _] (throw (AssertionError. "No model calls")))
+                help/get-docs (fn [] (throw (AssertionError. "No help read")))]
+    (let [normal (execution/run-command execution/request "ai tools yetibot")
+          data (execution/run-command execution/request
+                                      "ai tools yetibot | data show")]
+      (fact (:value normal)
+            => ["yetibot/help" "yetibot/history" "yetibot/history_count"]
+            (mapv :id (get-in normal [:data :tools])) => (:value normal)
+            (every? #(and (string? (:description %))
+                          (= "object" (get-in % [:inputSchema :type])))
+                    (get-in normal [:data :tools])) => true
+            (boolean (re-find #"inputSchema" (str (:value data)))) => true
+            (boolean (re-find #"NOT APPLIED|:runner" (str (:value data))))
+            => true
+            (:tools (tools/tool-catalog nil)) => []))))
 
 (facts "implicit built-ins respect named policy and explicit opt-out"
   (execution/in-event execution/request "ai tools"
@@ -478,10 +497,14 @@
           (with-redefs [imgflip/configured? meme?
                         xai/config (if image? {:key "fake-image-key"} {})
                         mcp/config (constantly nil)]
-            (fact (tools/tool-names "yetibot" actor)
-                  => (cond-> reads
-                       meme? (conj "yetibot/meme")
-                       image? (conj "yetibot/gi")))
+            (let [catalog (tools/tool-catalog "yetibot" actor)]
+              (fact (:names catalog)
+                    => (cond-> reads
+                         meme? (conj "yetibot/meme")
+                         image? (conj "yetibot/gi"))
+                    (mapv :id (:tools catalog)) => (:names catalog)
+                    (every? #(= "object" (get-in % [:inputSchema :type]))
+                            (:tools catalog)) => true))
             (with-redefs [mcp/config (constantly config)]
               (fact (tools/tool-names "yetibot" actor) => reads))))
         (let [t (-> toolset (dissoc :native-tools)
@@ -729,9 +752,13 @@
             (with-redefs [mcp/config (constantly nil)
                           clef/credential!
                           (fn [& _] (throw (AssertionError. "Token read")))]
-              (fact (tools/tool-names "yetibot" actor)
-                    => (into reads ["yetibot/clef" "yetibot/clairic"
-                                    "yetibot/wise"])))
+              (let [catalog (tools/tool-catalog "yetibot" actor)]
+                (fact (:names catalog)
+                      => (into reads ["yetibot/clef" "yetibot/clairic"
+                                      "yetibot/wise"])
+                      (mapv :id (:tools catalog)) => (:names catalog)
+                      (every? #(= "object" (get-in % [:inputSchema :type]))
+                              (:tools catalog)) => true)))
             (doseq [selected [["clairic"] []]]
               (with-redefs [mcp/config
                             (constantly

@@ -150,6 +150,10 @@
     (finally
       (when scheduler (.dispose ^Scheduler scheduler)))))
 
+(declare metadata-text)
+
+(def ^:dynamic ^:private *discovery-config* nil)
+
 (defn connect! [server timeout-ms]
   (let [holder (atom nil)]
     (try
@@ -164,8 +168,16 @@
                        (.build))
             session (assoc resources :server server :client client)]
         (reset! holder session)
-        (.initialize client)
-        session)
+        (let [result (.initialize client)
+              text (.instructions result)]
+          ;; Keep only public bounded text, never the initialize result itself.
+          (cond-> session
+            (text? text)
+            (assoc :instructions
+                   (assoc (metadata-text
+                            text (or *discovery-config*
+                                     {:servers [server]}) 20000)
+                          :status "UNTRUSTED/NOT APPLIED TO MODEL")))))
       (catch Exception _
         (close! @holder)
         (fail (str "Could not connect to MCP server " (:name server) ". Check its connection and credentials."))))))
@@ -210,19 +222,29 @@
   "Discover per request, apply optional allowlists, and always close sessions."
   [config f]
   (let [sessions (atom [])]
-    (try
-      (doseq [server (:servers config)]
-        (swap! sessions conj (connect! server (number-option (:timeout-ms config) 30000))))
-      (let [tools
-            (vec (mapcat
-                   (fn [session]
-                     (let [tools (list-tools session)
-                           session (assoc-in session [:server :tools]
-                                             (mapv :name tools))]
-                       (map #(assoc % :session session) tools)))
-                   @sessions))]
-        (f tools))
-      (finally (doseq [session (reverse @sessions)] (close! session))))))
+    (binding [*discovery-config* config]
+      (try
+        (doseq [server (:servers config)]
+          (swap! sessions conj
+                 (connect! server
+                           (number-option (:timeout-ms config) 30000))))
+        (let [tools
+              (vec (mapcat
+                     (fn [session]
+                       (let [tools (list-tools session)
+                             session (assoc-in session [:server :tools]
+                                               (mapv :name tools))]
+                         (map #(assoc % :session session) tools)))
+                     @sessions))]
+          ;; Metadata also covers servers advertising zero eligible tools.
+          (f (with-meta tools
+               {::instructions
+                (mapv #(cond-> {:server (get-in % [:server :name])}
+                         (:instructions %)
+                         (assoc :instructions (:instructions %)))
+                      @sessions)})))
+        (finally
+          (doseq [session (reverse @sessions)] (close! session)))))))
 
 (defn- header-credentials [{:keys [headers tools]}]
   (keep (fn [[k v]]
@@ -251,3 +273,30 @@
   "Remove configured credentials from data before it reaches the model or chat."
   [text config]
   (reduce #(string/replace %1 %2 "[redacted]") text (credentials config)))
+
+(defn metadata-redact
+  "Redact known credentials, including JSON-escaped copies, before bounding."
+  [text config]
+  (letfn [(character-pattern [c]
+            (let [encoded (json/generate-string (str c))
+                  escaped (subs encoded 1 (dec (count encoded)))
+                  variants (cond-> [(str c) escaped]
+                             (= c \/) (conj "\\/"))]
+              (str "(?:"
+                   (string/join "|" (map #(java.util.regex.Pattern/quote %)
+                                          (distinct variants)))
+                   "|(?i:"
+                   (java.util.regex.Pattern/quote
+                     (format "\\u%04x" (int c))) "))")))]
+    (reduce
+      (fn [text secret]
+        ;; Per-character alternatives handle mixed raw/JSON/unicode escapes.
+        (string/replace text
+                        (re-pattern (string/join (map character-pattern secret)))
+                        "[redacted]"))
+      text (credentials config))))
+
+(defn metadata-text [text config maximum]
+  (let [text (metadata-redact text config)]
+    (cond-> {:text (subs text 0 (min maximum (count text)))}
+      (> (count text) maximum) (assoc :truncated true))))

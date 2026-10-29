@@ -564,6 +564,8 @@ the generic AI default model.
 !ai servers
 !ai tools
 !ai tools yetibot
+!ai tools | data show
+!ai tools yetibot | data show
 !grok What Yetibot commands can help with this?
 !grok Summarize the recent launch discussion here.
 !ai --provider grok How many launch messages are here?
@@ -574,6 +576,33 @@ default toolset, or first named toolset if none is configured, applies when
 `--toolset` is omitted. `--no-tools` disables these tools too.
 
 ### Memes and Grok images
+
+Normal `!ai tools` and `!ai tools <server>` output remains the ordered list
+of `server/name` IDs. Pipe either command to `data show` to inspect structured
+`:tools` entries: `:id`, `:server`, `:name`, `:description`, `:inputSchema`, and
+advertised public `:title`/`:annotations` (standard annotation hints only).
+Native metadata comes from the existing definitions, not from running help,
+history, media, inference, or Wise tools. The same visibility and allowlist
+rules apply to both outputs, including Wise's chat restrictions.
+
+The data also includes `:instructions`: `:runner` is the shared tool-runner
+instruction text. `:servers` records whether each selected MCP server supplied
+initialize instructions; any supplied text is labelled
+`UNTRUSTED/NOT APPLIED TO MODEL`. Server instructions are inspection data only:
+they are **never** added to model prompts. Descriptions/instruction text is
+bounded to 20,000 characters; schema/annotation data to 32,768 serialized
+characters, 4,096 nodes and depth 32. `:truncated` and `:omitted` make limits
+explicit; an omitted schema is `nil`, not a usable replacement schema.
+Configured credentials (including JSON-escaped copies) are redacted before
+text truncation. Connection settings, client/session internals, callbacks and
+private metadata are not included.
+
+`:skills` honestly reports `{:supported false :items []}`: listing does not
+invent per-tool skills or fetch/apply MCP prompts or resources. Each listing
+uses one discovery/session pass and closes sessions normally. Listing does not
+call tool host functions, read bank data, or make model/inference requests;
+connecting to configured MCP servers for initialize and discovery is still
+required for remote metadata.
 
 `meme` uses existing `imgflip.username` and `imgflip.password` settings. `gi`
 uses the existing `xai.key`, independently of the selected chat provider's key.

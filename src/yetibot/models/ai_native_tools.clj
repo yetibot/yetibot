@@ -118,6 +118,13 @@
     {:definition (get wise/definitions operation)
      :arguments wise/arguments! :call wise/call!}))
 
+(defn definition
+  "Public capability metadata without constructing executable host callbacks."
+  [operation]
+  (select-keys (or (:definition (adapter operation))
+                   (get definitions operation))
+               [:description :inputSchema :title :annotations]))
+
 (defn trusted? [actor]
   (and execution/*sensitive* actor
        (= actor (policy/actor execution/*event*))

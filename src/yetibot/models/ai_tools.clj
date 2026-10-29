@@ -268,7 +268,8 @@
            (ai/complete provider model messages)))))))
 
 (defn- listing-config [actor]
-  (let [config (toolsets/validate! (mcp/config))]
+  (let [config (toolsets/validate! (mcp/config))
+        config (assoc config :redaction-servers (:servers config))]
     (if (seq (:toolsets config))
       (let [visible (filterv #(policy/visible? % actor) (:toolsets config))
             servers (into {} (map (juxt :name identity) (:servers config)))
@@ -277,10 +278,9 @@
                                    (mapcat :servers visible)))]
         (assoc config :toolsets visible
                :native-tools
-               (vec (distinct
-                      (mapcat #(if (native/trusted? actor)
-                                 (native/names {:toolset %})
-                                 (:native-tools %)) visible)))
+               (when (native/trusted? actor)
+                 (vec (distinct
+                        (mapcat #(native/names {:toolset %}) visible))))
                :servers
                (vec
                  (keep
@@ -292,7 +292,7 @@
                                order (if (contains? server :tools)
                                        (:tools server)
                                        (distinct (mapcat :tools choices)))]
-                           (assoc server :tools (vec (filter names order)))))))
+                           (assoc server :tools (filterv names order))))))
                    (:servers config)))))
       (assoc config :native-tools
              (when (native/trusted? actor)
@@ -309,26 +309,130 @@
      (cond-> (mapv :name (:servers config))
        (seq (:native-tools config)) (conj "yetibot")))))
 
+(defn- public-data [value config]
+  ;; Only JSON data is admissible. Never serialize functions or host objects,
+  ;; even if a malformed server puts them inside a schema or annotation.
+  (let [remaining (atom 4096)]
+    (letfn [(clean [x depth]
+              (when (or (> depth 32) (neg? (swap! remaining dec)))
+                (throw (ex-info "Metadata exceeds structural limits." {})))
+              (cond
+                (string? x) (mcp/metadata-redact x config)
+                (or (nil? x) (boolean? x) (number? x)) x
+                (map? x)
+                (into {} (map (fn [[k v]]
+                                (when-not (or (string? k) (keyword? k))
+                                  (throw (ex-info "Non-JSON key." {})))
+                                (let [spelling (if (keyword? k)
+                                                 (subs (str k) 1) k)
+                                      text (mcp/metadata-redact spelling
+                                                                config)]
+                                  [(if (= text spelling) k text)
+                                   (clean v (inc depth))])) x))
+                (vector? x) (mapv #(clean % (inc depth)) x)
+                :else (throw (ex-info "Non-JSON metadata." {}))))]
+      (clean value 0))))
+
+(defn- catalog-entry [tool server config]
+  (let [name (:name tool)
+        description (mcp/metadata-text
+                      (or (:description tool) "") config 20000)
+        entry {:id (mcp/metadata-redact (str server "/" name) config)
+               :server (mcp/metadata-redact server config)
+               :name (mcp/metadata-redact name config)
+               :description (:text description)
+               :inputSchema nil}
+        entry (cond-> entry
+                (:truncated description)
+                (assoc :truncated [:description]))]
+    (reduce
+      (fn [entry field]
+        (if-not (contains? tool field)
+          entry
+          (try
+            (let [value (case field
+                          :title (:text (mcp/metadata-text
+                                          (:title tool) config 20000))
+                          :annotations
+                          (select-keys (:annotations tool)
+                                       [:title :readOnlyHint :destructiveHint
+                                        :idempotentHint :openWorldHint])
+                          (get tool field))
+                  value (public-data value config)]
+              (if (> (count (json/generate-string value)) 32768)
+                (update entry :omitted (fnil conj [])
+                        {:field field :reason "Exceeds 32768 characters."})
+                (cond-> (assoc entry field value)
+                  (and (= field :title)
+                       (:truncated (mcp/metadata-text
+                                     (:title tool) config 20000)))
+                  (update :truncated (fnil conj []) :title))))
+            (catch Exception _
+              (update entry :omitted (fnil conj [])
+                      {:field field
+                       :reason "Unsupported or excessive metadata."})))))
+      entry [:inputSchema :title :annotations])))
+
+(defn tool-catalog
+  "One discovery pass; public metadata only, with no native tool execution."
+  ([server-name] (tool-catalog server-name nil))
+  ([server-name actor]
+   (let [config (listing-config actor)
+         local (mapv #(assoc (native/definition %) :name %)
+                     (:native-tools config))
+         native-only? (and (= server-name "yetibot") (seq local))
+         config (if native-only?
+                  (assoc config :servers [])
+                  (if server-name
+                    (if-let [server (some #(when (= server-name (:name %)) %)
+                                          (:servers config))]
+                      (assoc config :servers [server])
+                      (ai/fail (str "Unknown MCP server. Use ai servers to "
+                                    "list configured servers.")))
+                    config))
+         local (if (and server-name (not native-only?)) [] local)
+         catalog
+         (fn [remote]
+           (let [remote-tools (model-tools config remote)
+                 entries (into (mapv #(catalog-entry
+                                        % (get-in % [:session :server :name])
+                                        config) remote-tools)
+                               (map #(catalog-entry % "yetibot" config)
+                                    local))
+                 server-instructions
+                 (or (::mcp/instructions (meta remote))
+                     (mapv (fn [[server tools]]
+                             (cond-> {:server server}
+                               (get-in (first tools) [:session :instructions])
+                               (assoc :instructions
+                                      (get-in (first tools)
+                                              [:session :instructions]))))
+                           (group-by #(get-in % [:session :server :name])
+                                     remote)))]
+             {:names (if (and (empty? (:servers config)) (empty? local))
+                       "No MCP servers configured."
+                       ;; Preserve ordinary names/order, never credentials
+                       ;; reflected by a server in a tool's public name.
+                       (mapv :id entries))
+              :tools entries
+              :instructions
+              {:runner instructions
+               :servers
+               (mapv (fn [{:keys [server instructions]}]
+                       (cond-> {:server (mcp/metadata-redact server config)
+                                :status "UNTRUSTED/NOT APPLIED TO MODEL"
+                                :available (boolean instructions)}
+                         instructions
+                         (merge (mcp/metadata-text (:text instructions)
+                                                   config 20000))
+                         (:truncated instructions) (assoc :truncated true)))
+                     server-instructions)}
+              :skills {:supported false :items []}}))]
+     (if (seq (:servers config))
+       (mcp/with-tools config catalog)
+       (catalog [])))))
+
 (defn tool-names
   ([server-name] (tool-names server-name nil))
   ([server-name actor]
-   (let [config (listing-config actor)
-         local (mapv #(str "yetibot/" %) (:native-tools config))]
-     (if (and (= server-name "yetibot") (seq local))
-       local
-       (let [config
-             (if server-name
-               (if-let [server (some #(when (= server-name (:name %)) %)
-                                     (:servers config))]
-                 (assoc config :servers [server])
-                 (ai/fail (str "Unknown MCP server. Use ai servers to list "
-                               "configured servers.")))
-               config)
-             local (if server-name [] local)]
-         (if (and (empty? (:servers config)) (empty? local))
-           "No MCP servers configured."
-           (mcp/with-tools config
-             #(into (mapv (fn [tool]
-                            (str (get-in tool [:session :server :name]) "/"
-                                 (:name tool))) (model-tools config %))
-                    local))))))))
+   (:names (tool-catalog server-name actor))))

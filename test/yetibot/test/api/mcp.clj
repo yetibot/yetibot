@@ -1,6 +1,7 @@
 (ns yetibot.test.api.mcp
   (:require [cheshire.core :as json]
             [clojure.spec.alpha :as s]
+            [clojure.string :as string]
             [clojure.java.io :as io]
             [dec :as dec]
             [midje.sweet :refer [fact facts =>]]
@@ -55,6 +56,13 @@
   => "[redacted] and [redacted] and [redacted]"
   (mcp/redact "answer" {:servers [(assoc server :headers {"Authorization" "Bearer "})]}) => "answer")
 
+(fact "metadata redaction handles mixed JSON escapes before truncation"
+  (let [settings {:secrets ["quote\"/secret"]}]
+    (fact (mcp/metadata-redact "quote\\\"\\/secr\\u0065t" settings)
+          => "[redacted]"
+          (mcp/metadata-text "prefix quote\"/secret suffix" settings 12)
+          => {:text "prefix [reda" :truncated true})))
+
 (facts "public GitHub transport controls are not mistaken for credentials"
   (let [s (assoc server :tools ["get_commit"]
                         :headers {"Authorization" "Bearer private-token"
@@ -87,6 +95,61 @@
             (some #(= "DELETE" (:method %)) @requests) => true
             (->> @requests (keep #(get-in % [:body :method])) frequencies)
             => {"initialize" 1 "notifications/initialized" 1 "tools/list" 2 "tools/call" 1}))))))
+
+(fact "initialize instructions are bounded data, never applied instructions"
+  (let [requests (atom []) rpc (support/rpc-handler requests false)
+        secret "private-token"]
+    (support/with-http-server
+      (fn [request]
+        (let [response (rpc request)]
+          (if (= "initialize" (get-in request [:body :method]))
+            (assoc-in response [:body :result :instructions]
+                      (str secret (string/join (repeat 25000 "x"))))
+            response)))
+      (fn [base]
+        (mcp/with-tools
+          {:servers [(assoc server :url base
+                                   :headers {"Authorization"
+                                             (str "Bearer " secret)})]}
+          (fn [tools]
+            (let [instruction (get-in (first tools)
+                                      [:session :instructions])]
+              (fact (:status instruction) => "UNTRUSTED/NOT APPLIED TO MODEL"
+                    (:truncated instruction) => true
+                    (count (:text instruction)) => 20000
+                    (.contains (str instruction) secret) => false))))
+        (fact (->> @requests (keep #(get-in % [:body :method]))
+                   frequencies)
+              => {"initialize" 1 "notifications/initialized" 1
+                  "tools/list" 2}
+              (some #(= "DELETE" (:method %)) @requests) => true)))))
+
+(fact "empty discovery retains initialize metadata and closes its one session"
+  (let [requests (atom []) rpc (support/rpc-handler requests false)]
+    (support/with-http-server
+      (fn [request]
+        (let [response (rpc request)]
+          (case (get-in request [:body :method])
+            "initialize"
+            (assoc-in response [:body :result :instructions] "Not a prompt")
+            "tools/list" (assoc response :body {:jsonrpc "2.0"
+                                              :id (get-in request [:body :id])
+                                              :result {:tools []}})
+            response)))
+      (fn [base]
+        (mcp/with-tools {:servers [(dissoc (assoc server :url base) :tools)]}
+          (fn [tools]
+            (fact tools => []
+                  (::mcp/instructions (meta tools))
+                  => [{:server "search"
+                       :instructions
+                       {:text "Not a prompt"
+                        :status "UNTRUSTED/NOT APPLIED TO MODEL"}}])))
+        (fact (->> @requests (keep #(get-in % [:body :method]))
+                   frequencies)
+              => {"initialize" 1 "notifications/initialized" 1
+                  "tools/list" 1}
+              (some #(= "DELETE" (:method %)) @requests) => true)))))
 
 (fact "URL-only discovery spans pages and binds calls to advertised tools"
   (doseq [sse [false true]]
