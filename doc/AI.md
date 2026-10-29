@@ -113,6 +113,48 @@ name. A failure from one provider does not hide results from the others.
 `ai models <provider>` queries just that provider. These listing commands do not
 bypass automatic routing's all-provider completeness requirement.
 
+## Piped structured input
+
+`ai`, `grok`, and aliases expanding to those commands receive the current
+pipeline's selected structured data, not just its displayed label. For example:
+
+```text
+!cf models | random | gemma Render every returned field with clear headings.
+!cf models | random | ai --no-tools Format all fields with their values and units.
+!cf models | head 2 | grok --no-tools Compare these model records.
+!ai tools | head | ai --no-tools Explain this tool's full input schema.
+```
+
+The existing `gemma` alias need not change. `data show` is optional. Aligned
+collection data takes precedence over the enclosing API response, so `random`
+and `head` pass only the chosen records, not unselected records. Plain piped
+text, including multiline text, is also supported. The ordinary appended display
+label is removed from the prompt; explicit inline substitutions retain their
+existing semantics. A pipe-only AI request responds to the supplied input.
+
+Input is snapshotted before asynchronous work, then attached as a separate
+**untrusted user-data** JSON message before the current request. It grants no
+tool access, command execution, or write authority. Tools remain policy-bound;
+`--no-tools` still disables them. Delegated children do not implicitly inherit
+piped data, parent history, or tools. Formatting supplied metadata requires no
+additional catalog fetch or child-model invocation.
+
+Only JSON-compatible values are accepted. Keywords become strings while
+preserving namespaces; object keys must remain unique. Nested false/null values,
+arrays, objects, strings, and finite bounded numbers are preserved. Snapshot
+limits are 64 KiB of serialized UTF-8, depth 12, 2,048 nodes, and 128 entries
+per container. The final redacted data message is limited to 12 KiB. Known
+selected provider/MCP credentials and sensitive structured fields are redacted
+before that final limit, including literal copies in rendered alias text. This
+is conservative filtering, not universal secret or PII detection. Only the selected provider credential may be resolved, after
+normal tool authorization; preparation reads no credential files or catalogs.
+
+Unsupported or over-limit input stops the pipeline before inference with a
+static error asking you to select less data. There is no silent truncation or
+reader/eval fallback. Select `random`, `head`, or a smaller subset rather than
+sending a large catalog. Existing upstream truncation markers remain data;
+formatting a record does not prove account entitlement or model quality.
+
 ## Cloudflare inference and model discovery
 
 Cloudflare inference is an AI provider, not a Cloudflare MCP server. Add an
