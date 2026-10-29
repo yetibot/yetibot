@@ -48,8 +48,18 @@
       (fn [{:keys [path method body] :as request}]
         (swap! requests conj request)
         (if (= path "/v1/responses")
-          (let [result (turn body)]
-            (if (fn? result) {:stream result} {:body result}))
+          ;; xAI rejects a selection directive with no advertised tools.
+          ;; Validate before dispatching the fixture turn, unlike an always-200
+          ;; mock that lets an impossible final follow-up appear successful.
+          (if (and (empty? (:tools body))
+                   (contains? body :tool_choice))
+            {:status 400
+             :body {:error
+                    {:type "invalid_request_error"
+                     :message (str "A tool_choice was set on the request "
+                                   "but no tools were specified.")}}}
+            (let [result (turn body)]
+              (if (fn? result) {:stream result} {:body result})))
           (case method
             "GET" {:status 405}
             "DELETE" {:status 204}
@@ -371,7 +381,7 @@
                   => "The outcome is unknown."
                   @attempts => 1
                   (:tools (last-turn requests)) => []
-                  (:tool_choice (last-turn requests)) => "none")))))))
+                  (contains? (last-turn requests) :tool_choice) => false)))))))
 
 (fact "at the MCP budget, the final Responses turn cannot perform native search"
   (let [turns (atom 0)]
@@ -389,6 +399,6 @@
           (fact (:result/value result) => "Done."
                 (count @calls) => 2
                 (:tools body) => []
-                (:tool_choice body) => "none"
+                (contains? body :tool_choice) => false
                 (mapv :call_id (take-last 2 (:input body)))
                 => ["one" "two"]))))))

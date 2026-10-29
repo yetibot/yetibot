@@ -235,7 +235,10 @@
                                 :else :max_completion_tokens)
                               (:max-output-tokens options)))
                      (cond-> (select-keys options [:tools :tool_choice])
-                       (= "omit" (:tool-choice provider))
+                       ;; Responses rejects tool_choice even "none" when no
+                       ;; tools remain. Empty tools still disable every tool.
+                       (or (= "omit" (:tool-choice provider))
+                           (and responses-api? (empty? (:tools options))))
                        (dissoc :tool_choice)))}
              progress (::diagnostics/stage options :initial))))
 

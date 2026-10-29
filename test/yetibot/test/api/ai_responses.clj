@@ -64,6 +64,17 @@
           (assoc function :type "function")]
       (:tool_choice @captured) => "auto")))
 
+(fact "disabling Responses tools omits tool choice without an override"
+  (let [captured (atom nil)]
+    (with-redefs [client/post (fn [_ options]
+                               (reset! captured (:form-params options))
+                               {:status 200 :body answer})]
+      (ai/chat provider "grok-4.7" []
+               {:tools [{:type "function" :function {:name "not-offered"}}]
+                :tool_choice "none"})
+      (:tools @captured) => []
+      (contains? @captured :tool_choice) => false)))
+
 (fact "disabling tools removes definitions, even for tool-choice omit providers"
   (let [captured (atom nil)]
     (with-redefs [client/post (fn [_ options]
