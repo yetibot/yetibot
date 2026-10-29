@@ -22,10 +22,12 @@
   [callback chat-source user event-type yetibot-user event-info]
   (let [sensitive (atom false)
         ;; Filter before existing middleware/appenders can inspect source. Keep
-        ;; only the separately sanitized proposal state-transition audit events.
+        ;; only closed provider diagnostics and sanitized proposal audit events.
         privacy (fn [data]
                   (when (or (not @sensitive)
-                            (= "yetibot.models.ai-proposals" (:?ns-str data)))
+                            (contains? #{"yetibot.models.ai-proposals"
+                                         "yetibot.api.ai-diagnostics"}
+                                       (:?ns-str data)))
                     data))]
     (binding [*event* {:chat-source chat-source :user user
                       :event-type event-type :body (:body event-info)}

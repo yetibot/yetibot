@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.ai-stream :as stream]
+            [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.core.config :refer [get-config]]
             [yetibot.util.ai-config :as settings])
   (:import [java.io File FileInputStream]
@@ -108,52 +109,78 @@
       (catch Exception _
         (fail "AI provider credentials are unavailable or invalid.")))))
 
-(defn- request [method provider path params & [progress]]
-  (try
-    (let [provider (resolve-provider provider)
-          gateway (when (cloudflare/provider-account provider)
-                    (or (:gateway-id provider)
-                        (when (string/starts-with?
-                                (str (get-in params [:form-params :model])) "@")
-                          "default")))
-          response (method
-                    (str (string/replace (:url provider) #"/+$" "") path)
-                    (merge {:as (if progress :stream :json)
-                            :throw-exceptions false
-                            :conn-timeout 5000
-                            :socket-timeout 120000
-                            :redirect-strategy :none
-                            :retry-handler (fn [& _] false)
-                            :headers (cond->
-                                       (merge {"Accept" (if progress
-                                                          "text/event-stream"
-                                                          "application/json")}
-                                              (cloudflare/gateway-headers
-                                                gateway))
-                                       (:key provider)
-                                       (assoc "Authorization"
-                                              (str "Bearer "
-                                                   (:key provider))))}
-                           (when progress {:save-request true}) params))
-          read! (fn [body]
-                  (when-not (<= 200 (:status response) 299)
-                    (fail (str "AI provider " (:name provider)
-                               " returned HTTP " (:status response) ".")))
-                  (if progress
-                    (stream/read-response
-                      body (get-in response [:headers "content-type"])
-                      (set (map :type (get-in params [:form-params :tools])))
-                      (:callback progress) (:config progress))
-                    body))]
-      (if progress
-        (cloudflare/consume-response response read!)
-        (read! (:body response))))
-    (catch Exception e
-      (if (:ai/error (ex-data e))
-        (throw e)
-        ;; Neither exception messages nor response bodies are safe to echo.
-        (fail (str "Could not reach AI provider " (:name provider)
-                   " or read its response."))))))
+(defn- request [method provider path params & [progress stage]]
+  (let [context (diagnostics/context provider path (:form-params params) stage)
+        status (atom :unrecognized)]
+    (try
+      (let [provider (resolve-provider provider)
+            gateway (when (cloudflare/provider-account provider)
+                      (or (:gateway-id provider)
+                          (when (string/starts-with?
+                                  (str (get-in params [:form-params :model]))
+                                  "@")
+                            "default")))
+            response (method
+                      (str (string/replace (:url provider) #"/+$" "") path)
+                      (merge {:as (if progress :stream :json)
+                              :throw-exceptions false
+                              :conn-timeout 5000
+                              :socket-timeout 120000
+                              :redirect-strategy :none
+                              :retry-handler (fn [& _] false)
+                              :headers (cond->
+                                         (merge
+                                           {"Accept" (if progress
+                                                       "text/event-stream"
+                                                       "application/json")}
+                                           (cloudflare/gateway-headers
+                                             gateway))
+                                         (:key provider)
+                                         (assoc "Authorization"
+                                                (str "Bearer "
+                                                     (:key provider))))}
+                             (when progress {:save-request true}) params))
+            _ (reset! status (diagnostics/status (:status response)))
+            read! (fn [body]
+                    (when-not (<= 200 (:status response) 299)
+                      (throw
+                        (ex-info
+                          (str "AI provider " (:name provider)
+                               " returned HTTP " (:status response) ".")
+                          {:ai/error true :ai/failure :http
+                           :ai/error-fields
+                           (if progress
+                             (diagnostics/stream-error-fields
+                               body (get-in response [:request :http-req]))
+                             (diagnostics/error-fields body))})))
+                    (if progress
+                      (stream/read-response
+                        body (get-in response [:headers "content-type"])
+                        (set (map :type (get-in params [:form-params :tools])))
+                        (:callback progress) (:config progress))
+                      body))]
+        (if progress
+          (cloudflare/consume-response response read!)
+          (read! (:body response))))
+      (catch Exception e
+        (let [data (ex-data e)
+              record (merge
+                       context
+                       {:failure (cond
+                                   (= :http (:ai/failure data)) :http
+                                   (and progress (integer? @status)
+                                        (<= 200 @status 299)) :stream
+                                   :else :transport)
+                        :status @status}
+                       (diagnostics/safe-error-fields (:ai/error-fields data)))]
+          (diagnostics/emit! record)
+          ;; Preserve human errors, but never retain the original exception.
+          (throw
+            (ex-info
+              (if (:ai/error data) (.getMessage e)
+                (str "Could not reach AI provider " (:name provider)
+                     " or read its response."))
+              {:ai/error true :ai/diagnostic record})))))))
 
 (defn models [provider]
   (if (cloudflare/provider-account provider)
@@ -210,7 +237,7 @@
                      (cond-> (select-keys options [:tools :tool_choice])
                        (= "omit" (:tool-choice provider))
                        (dissoc :tool_choice)))}
-             progress)))
+             progress (::diagnostics/stage options :initial))))
 
 (defn message
   "Normalize only client-side function calls; native searches run at xAI."
