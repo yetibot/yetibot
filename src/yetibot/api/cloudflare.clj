@@ -282,9 +282,19 @@
                                :token-parameters token-parameters}})
       {:secrets [(:key provider)]})))
 
+(defn- catalog-page-count [info]
+  (let [pages (:total_pages info)
+        total (:total_count info)]
+    (when (or (integer? pages) (integer? total))
+      ;; The API can count non-advertised records in total_count. Enumerate
+      ;; the entire advertised page range, even after a short/empty page.
+      (max 1 (if (and (integer? pages) (pos? pages)) pages 0)
+           (if (and (integer? total) (pos? total))
+             (quot (+' total 99) 100) 0)))))
+
 (defn catalog [provider]
   (let [account (provider-account provider)]
-    (loop [page 1 records [] complete? true]
+    (loop [page 1 records [] complete? true expected-info nil]
       (when (> page 20)
         (fail! "Cloudflare model catalog exceeded 20 pages."))
       (let [body (request! http/get
@@ -308,9 +318,13 @@
                                                  (:name %))) batch))
           (fail! "Cloudflare returned an invalid model catalog."))
         (let [records (into records batch)
+              pagination (select-keys info
+                                      [:per_page :total_pages :total_count])
               ;; Listing remains compatible with existing pagination. Routing
               ;; additionally needs proof this was not a partial/unknown page.
               complete? (and complete?
+                             (or (nil? expected-info)
+                                 (= expected-info pagination))
                              (or (nil? info)
                                  (and (map? info)
                                       (every? #{:page :per_page :count
@@ -318,13 +332,17 @@
                                               (keys info))
                                       (every? #(and (integer? %) (<= 0 %))
                                               (vals info))
-                                      (or (nil? (:page info)) (= page (:page info)))
-                                      (or (nil? (:per_page info)) (= 100 (:per_page info)))
-                                      (or (nil? (:count info)) (= (count batch) (:count info))))))
-              more? (if (number? (:total_pages info))
-                      (< page (:total_pages info))
+                                      (or (nil? (:page info))
+                                          (= page (:page info)))
+                                      (or (nil? (:per_page info))
+                                          (= 100 (:per_page info)))
+                                      (or (nil? (:count info))
+                                          (= (count batch) (:count info))))))
+              more? (if-let [pages (catalog-page-count info)]
+                      (< page pages)
                       (= 100 (count batch)))]
-          (if more? (recur (inc page) records complete?)
+          (if more?
+            (recur (inc page) records complete? (or expected-info pagination))
             (with-meta
               {:source :cloudflare-workers-ai
                :coverage
@@ -335,8 +353,7 @@
                             vals (sort-by :id) vec)}
               {:complete? (and complete?
                                (or (nil? (:total_count info))
-                                   (= (count records) (:total_count info)))
+                                   (<= (count records) (:total_count info)))
                                (or (nil? (:total_pages info))
-                                   (= page (:total_pages info))
-                                   (and (empty? records)
-                                        (zero? (:total_pages info)))))})))))))
+                                   (pos? (:total_pages info))
+                                   (empty? records)))})))))))
