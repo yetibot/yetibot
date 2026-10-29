@@ -97,10 +97,13 @@ file, URL, source or executable lookup.
 
 Range integers are between -1,000,000 and 1,000,000, inclusive. The default
 step is 1; zero steps fail. A step pointing away from the end gives `[]`.
-A range exceeding 128 members fails instead of clipping. Numeric operations
-use normal JVM/Clojure numeric semantics, including floating-point rounding.
-Inputs and numeric results must have finite double representations; arithmetic
-overflow to a nonfinite value fails during preflight.
+A range exceeding 128 members fails instead of clipping. Integers remain
+exact, and decimals are parsed as BigDecimal, so `0.1 + 0.2` gives `0.3`.
+Numeric tokens are at most 200 characters; decimals have at most 128 digits
+of precision and scale from -308 through 308. These bounds reject extreme
+exponents before arithmetic can allocate enormous intermediate values.
+Inputs and numeric results must also have finite double representations;
+arithmetic overflow to a nonfinite value fails during preflight.
 
 ## Bounds, preflight and credentials
 

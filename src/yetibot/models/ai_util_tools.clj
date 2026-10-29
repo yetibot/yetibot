@@ -85,8 +85,22 @@
                             (recur (assoc out k (read-value (inc depth))))))))
                     "VALUE_STRING" (.getText parser)
                     ("VALUE_NUMBER_INT" "VALUE_NUMBER_FLOAT")
-                    (let [n (.getNumberValue parser)]
-                      (when-not (finite? n) (invalid!)) n)
+                    (let [decimal? (= "VALUE_NUMBER_FLOAT"
+                                      (.name (.currentToken parser)))
+                          _ (when (> (count (.getText parser)) 200)
+                              (invalid!))
+                          n (if decimal? (.getDecimalValue parser)
+                                (.getNumberValue parser))]
+                      (when-not
+                        (and (finite? n)
+                             (or (not decimal?)
+                                 (and (<= (.precision ^java.math.BigDecimal n)
+                                          128)
+                                      (<= -308
+                                          (.scale ^java.math.BigDecimal n)
+                                          308))))
+                        (invalid!))
+                      n)
                     "VALUE_TRUE" true
                     "VALUE_FALSE" false
                     "VALUE_NULL" nil

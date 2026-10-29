@@ -39,7 +39,7 @@
              ["unique" [1 1 2] nil [1 2]]
              ["list" {"a" 1} nil [{"a" 1}]]
              ["count" [1 2] nil 2]
-             ["sum" [1 2.5] nil 3.5]
+             ["sum" [1 2.5] nil 3.5M]
              ["sort" ["b" "a"] nil ["a" "b"]]
              ["sortnum" [3 1 2] nil [1 2 3]]
              ["grep" ["a.*" "abc"] {"query" ".*"} ["a.*"]]
@@ -57,6 +57,14 @@
              ["list" nil nil [nil]]
              ["droplast" [] nil []]]]
       (fact (result op input options) => expected))))
+
+(fact "decimal data stays exact and extreme scales reject before arithmetic"
+  (with-redefs [ai/config (constantly {})]
+    (json/generate-string (result "sum" [0.1M 0.2M])) => "0.3"
+    (doseq [text ["[1e-1000,1]" "[1e-2147483647,1]"]]
+      (fact (error? #(util/arguments! {}
+                        "util" {"operation" "sum" "input_json" text}))
+            => true))))
 
 (facts "random work is runtime only, bounded and preserves membership"
   (with-redefs [ai/config (constantly {})]
