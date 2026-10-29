@@ -141,7 +141,7 @@
           => [{:role "user" :content "Only this text"}]
           (:max_output_tokens (second @wire)) => 2048
           (:tools (second @wire)) => []
-          (:tool_choice (second @wire)) => "none"
+          (contains? (second @wire) :tool_choice) => false
           (contains? (second @wire) ::diagnostics/stage) => false)))))
 
 (facts "Cloudflare chat eligibility is checked before paid inference"
@@ -561,7 +561,7 @@
                                             (first %)) @logs))]
               (get-in (ex-data error) [:ai/diagnostic :stage]) => :follow-up
               (mapv :stage records) => [:delegation :follow-up]
-              (mapv :tool-choice records) => [:none :none]
+              (mapv :tool-choice records) => [:omitted :none]
               (mapv :error-code records)
               => [:invalid-tool-schema :invalid-tool-schema]
               @effects => []
