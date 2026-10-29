@@ -1,10 +1,10 @@
 # Read-only AI alias discovery
 
-The native `yetibot/aliases` capability lets an authorized AI tool caller discover
-alias names and inspect a stored definition. It does **not** execute aliases,
-create or update them, remove them, expand placeholders, recursively resolve
-other aliases, dispatch commands, or install learned policy. Reading metadata
-never grants an execution capability.
+The native `yetibot/aliases` capability lets an authorized AI tool caller
+discover alias names and inspect a stored definition. It does **not** execute
+aliases, create or update them, remove them, expand placeholders, recursively
+resolve other aliases, dispatch commands, or install learned policy. Reading
+metadata never grants an execution capability.
 
 ## Actual storage and visibility
 
@@ -14,12 +14,12 @@ This adapter was checked against the pinned `yetibot/core` dependency
 
 Aliases are **deployment-global within the configured database and table
 prefix**. Core's `alias` table has `cmd-name`, `cmd`, and author `user-id`, plus
-`id` and `created-at`. There is no per-room, per-user, per-adapter, workspace, or
-account visibility column. Human `alias` listing calls `find-all` without user or
-channel filtering; human exact lookup queries `cmd-name` equality. Aliases are
-wired into global command hooks when core loads them. AI reads have that same
-global storage scope, not history's current-channel scope, but require the
-trusted chat provenance and toolset authorization described below.
+`id` and `created-at`. There is no per-room, per-user, per-adapter, workspace,
+or account visibility column. Human `alias` listing calls `find-all` without
+user or channel filtering; human exact lookup queries `cmd-name` equality.
+Aliases are wired into global command hooks when core loads them. AI reads
+have that same global storage scope, not history's current-channel scope, but
+require the trusted chat provenance and toolset authorization described below.
 
 The adapter queries only the alias table's public fields. Listing selects a
 byte-bounded `cmd_name`; lookup selects the name and a byte-bounded `cmd`,
@@ -37,11 +37,11 @@ A help-only toolset therefore does not acquire alias-definition access.
 ## Discovery and selection
 
 `aliases` is appended to **non-GitHub implicit native defaults**. For example,
-a trusted `ai tools yetibot` discovery can list `yetibot/aliases` without reading
-any aliases. Explicit `:native-tools` vectors remain authoritative, including
-`[]` and `["help"]`; include `"aliases"` explicitly to enable it there.
-The existing explicit-native configuration requirements still apply: users,
-adapters, and allowed providers/models must be specified.
+a trusted `ai tools yetibot` discovery can list `yetibot/aliases` without
+reading any aliases. Explicit `:native-tools` vectors remain authoritative,
+including `[]` and `["help"]`; include `"aliases"` explicitly to enable it
+there. The existing explicit-native configuration requirements still apply:
+users, adapters, and allowed providers/models must be specified.
 
 GitHub toolsets retain exactly their existing three implicit native tools:
 `help`, `history`, and `history_count`. Alias support does not broaden GitHub or
@@ -53,10 +53,11 @@ Only these JSON keys are accepted:
 
 | Key | Meaning | Bound |
 | --- | --- | --- |
-| `name` | Exact literal stored name for lookup | Nonblank, no controls, at most 200 UTF-16 units |
+| `name` | Exact literal stored name for lookup | See below |
 | `limit` | Listing page size; default 20 | Integer 1–20 |
 | `offset` | Listing position; default 0 | Integer 0–1,000,000 |
 
+The `name` must be nonblank, have no controls, and use at most 200 UTF-16 units.
 Lookup cannot be combined with `limit` or `offset`. No scope overrides, regex,
 command, mutation, author, or arbitrary query keys are accepted. Even names such
 as `a.*` are literal equality parameters, never regular expressions.
@@ -140,8 +141,9 @@ name is omitted entirely or rejected on lookup, not returned as a redacted ID.
 This is intentionally lossy: harmless aliases with sensitive-looking names or
 bodies may be hidden/redacted. It is **not a general secret or PII detector**.
 Unknown unlabeled credentials/identifiers, arbitrary encodings (including
-base64/URL encoding), nested escape layers, split/obfuscated/transformed secrets,
-and novel token formats may not be detected. Do not store secrets in aliases
-or enable this reader where global alias definitions should not reach the
-selected provider. No claim is made that every arbitrary alias body is safe to
-publish. Tests use a fake alias store only; no production aliases were queried.
+base64/URL encoding), nested escape layers, split/obfuscated/transformed
+secrets, and novel token formats may not be detected. Do not store secrets in
+aliases or enable this reader where global alias definitions should not reach
+the selected provider. No claim is made that every arbitrary alias body is
+safe to publish. Tests use a fake alias store only; no production aliases
+were queried.

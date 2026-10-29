@@ -777,7 +777,8 @@
               (let [catalog (tools/tool-catalog "yetibot" actor)]
                 (fact (:names catalog)
                       => (into reads ["yetibot/clef" "yetibot/clairic"
-                                      "yetibot/wise" "yetibot/util" "yetibot/aliases"])
+                                      "yetibot/wise" "yetibot/util"
+                                      "yetibot/aliases"])
                       (mapv :id (:tools catalog)) => (:names catalog)
                       (every? #(= "object" (get-in % [:inputSchema :type]))
                               (:tools catalog)) => true)))
