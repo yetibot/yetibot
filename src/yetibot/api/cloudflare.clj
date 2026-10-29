@@ -216,8 +216,10 @@
                      :source :limits]]
       (if (<= (alength (.getBytes (json/generate-string result) "UTF-8"))
               8000) result
-        (recur (assoc (dissoc result (first optional))
-                      :metadata-truncated true) (rest optional))))))
+        (if (seq optional)
+          (recur (assoc (dissoc result (first optional))
+                        :metadata-truncated true) (rest optional))
+          (fail! "Cloudflare model metadata exceeded its size limit."))))))
 
 (defn- schema-fields [schema]
   (->> (tree-seq map? #(concat (:oneOf %) (:anyOf %)) schema)
