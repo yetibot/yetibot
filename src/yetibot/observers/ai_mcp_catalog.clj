@@ -3,14 +3,17 @@
   (:require [robert.hooke :as hooke]
             [yetibot.core.adapters :as adapters]
             [yetibot.core.loader :as loader]
-            [yetibot.models.ai-mcp-catalog :as catalog]))
+            [yetibot.models.ai-mcp-catalog :as catalog]
+            [yetibot.models.ai-provider-catalog :as providers]))
 
 (defn after-commands [f & args]
   (let [result (apply f args)]
     (catalog/start!)
+    (providers/start!)
     result))
 
 (defn before-stop [f & args]
+  (providers/stop!)
   (catalog/stop!)
   (apply f args))
 

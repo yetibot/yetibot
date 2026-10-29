@@ -3,6 +3,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
             [yetibot.models.ai-tools :as tools]
             [yetibot.api.mcp :as mcp]
@@ -303,7 +304,12 @@
          _ (when (and command-provider (:provider options))
              (ai/fail prompt-usage))
          config (resolve-config)
-         provider-name (or command-provider (:provider options))
+         provider-name (or command-provider (:provider options)
+                           (when (and (:model options)
+                                      (> (count (:providers config)) 1))
+                             (provider-catalog/infer-provider
+                               provider-catalog/shared-cache config
+                               (:model options))))
          _ (when (and command-provider
                       (not-any? #(= provider-name (:name %))
                                 (:providers config)))
@@ -334,7 +340,7 @@
   "ai <prompt> # ask the default AI provider; includes the conversation in Slack/Discord threads
    ai --provider <name> <prompt> # ask a named provider using its default model
    ai --provider <name> --model <model> <prompt> # choose a provider and model
-   ai --model <model> <prompt> # choose a model on the default provider
+   ai --model <model> <prompt> # infer a unique provider by exact advertised model ID
    ai --no-tools <prompt> # answer without native or MCP tools"
   {:yb/cat #{:ai}}
   [args]

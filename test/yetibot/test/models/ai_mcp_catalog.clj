@@ -4,6 +4,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.api.ai :as ai]
             [yetibot.models.ai-mcp-catalog :as catalog]
+            [yetibot.models.ai-provider-catalog :as providers]
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -203,6 +204,8 @@
   (let [started (atom 0) stopped (atom 0)]
     (with-redefs [catalog/start! #(swap! started inc)
                   catalog/stop! #(swap! stopped inc)
+                  providers/start! (constantly nil)
+                  providers/stop! (constantly nil)
                   loader/find-and-load-namespaces (constantly :loaded)]
       ;; Exercise the actual core hook wiring without loading every command.
       (is (= :loaded (loader/load-commands)))

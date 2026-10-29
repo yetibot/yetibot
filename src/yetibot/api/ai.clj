@@ -90,7 +90,7 @@
                    "available providers.")))))
 
 (defn resolve-provider
-  "Resolve only a selected request's configured credential, never discovery.
+  "Resolve only a selected request's credential (including metadata discovery).
    References and inline keys are mutually exclusive. Never echo file details."
   [provider]
   (if-not (contains? provider :key-file) provider
@@ -185,14 +185,21 @@
 (defn models [provider]
   (if (cloudflare/provider-account provider)
     (let [catalog (cloudflare/catalog (resolve-provider provider))]
-      (with-meta (mapv :id (:models catalog)) {:catalog catalog}))
+      (with-meta (mapv :id (:models catalog))
+        {:catalog catalog :complete? (true? (:complete? (meta catalog)))}))
     (let [body (request client/get provider "/models" {})
           data (:data body)]
       (when-not (and (sequential? data)
                      (every? #(nonblank-string? (:id %)) data))
         (fail (str "AI provider " (:name provider)
                    " returned an invalid model list.")))
-      (vec (sort (distinct (map :id data)))))))
+      ;; Standard /models is an unpaginated list. Any unknown envelope
+      ;; (including pagination) cannot establish uniqueness. Listing and
+      ;; explicit provider requests still work without this readiness signal.
+      (with-meta (vec (sort (distinct (map :id data))))
+        {:complete? (and (every? #{:data :object} (keys body))
+                         (or (nil? (:object body))
+                             (= "list" (:object body))))}))))
 
 (defn- cloudflare-messages [messages]
   ;; Workers AI schemas can reject OpenAI-standard null/text-parts content.

@@ -79,8 +79,8 @@
     => ["local" "other"
         (tools/host-messages [{:role "user" :content "hello"}])]
     (ai/prompt-cmd {:match "--model other hello"})
-    => ["hosted" "other"
-        (tools/host-messages [{:role "user" :content "hello"}])]
+    => {:result/error (str "Model catalogs are not ready, complete, or available. "
+                          "Use --provider <name> with --model <exact-id>.")}
     (ai/prompt-cmd {:match "--provider missing hello"})
     => {:result/error "Unknown AI provider. Use ai providers to list available providers."})
   (with-redefs [api/config (constantly {:providers [(dissoc local-provider :model)]})]
