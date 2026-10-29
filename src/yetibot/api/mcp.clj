@@ -207,7 +207,7 @@
               tools)))))
     (catch Exception _ (fail (str "Could not list allowed tools on MCP server " (:name server) ".")))))
 
-(defn call-tool [{:keys [server client]} tool arguments]
+(defn- call-connected-tool [{:keys [server client]} tool arguments]
   (when-not (some #{tool} (:tools server))
     (fail "This MCP tool is not allowed by the server configuration."))
   (try
@@ -218,7 +218,23 @@
                                :text (str "The tool call on " (:name server)
                                           " failed or timed out. Its outcome is unknown; do not repeat it.")}]})))
 
-(defn with-tools
+(defn call-tool [{:keys [server lazy? timeout-ms] :as session}
+                 tool arguments]
+  (when-not (some #{tool} (:tools server))
+    (fail "This MCP tool is not allowed by the server configuration."))
+  (if-not lazy?
+    (call-connected-tool session tool arguments)
+    ;; Cache reads never connect. Only an authorized actual call opens a new
+    ;; session; schema discovery is not repeated and calls are never retried.
+    (if-let [connected (try (connect! server timeout-ms)
+                            (catch Exception _ nil))]
+      (try (call-connected-tool connected tool arguments)
+           (finally (close! connected)))
+      {:isError true
+       :content [{:type "text"
+                  :text "This MCP server is unavailable. No call was made."}]})))
+
+(defn- with-strict-tools
   "Discover per request, apply optional allowlists, and always close sessions."
   [config f]
   (let [sessions (atom [])]
@@ -245,6 +261,14 @@
                       @sessions)})))
         (finally
           (doseq [session (reverse @sessions)] (close! session)))))))
+
+(defn with-tools
+  "Strict discovery by default. Tolerant mode uses bounded public metadata
+   and lazy request-scoped connections; failures cannot hide native tools."
+  [config f]
+  (if (:tolerant? config)
+    ((requiring-resolve 'yetibot.models.ai-mcp-catalog/with-tools) config f)
+    (with-strict-tools config f)))
 
 (defn- header-credentials [{:keys [headers tools]}]
   (keep (fn [[k v]]
