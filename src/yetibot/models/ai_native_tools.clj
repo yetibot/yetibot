@@ -7,6 +7,7 @@
             [yetibot.models.ai-history :as history]
             [yetibot.models.ai-inference-tools :as inference]
             [yetibot.models.ai-media-tools :as media]
+            [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -101,13 +102,17 @@
         defaults (cond-> toolsets/default-native-tools
                    (not (toolsets/github? t))
                    (into (concat (media/available-tools)
-                                 (inference/available-tools) wise-tools)))
+                                 (inference/available-tools)
+                                 (models/available-tools) wise-tools)))
         selected (get t :native-tools defaults)]
     ;; Explicit selection never widens the financial reader's chat policy.
     (if (seq wise-tools) selected (filterv #(not= "wise" %) selected))))
 
 (defn- adapter [operation]
   (cond
+    (contains? models/definitions operation)
+    {:definition (get models/definitions operation)
+     :arguments models/arguments! :call models/call!}
     (contains? media/definitions operation)
     {:definition (get media/definitions operation)
      :arguments media/arguments! :call media/call!}

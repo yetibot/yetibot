@@ -238,13 +238,23 @@
   ([provider model messages
     {:keys [toolset actor additional-secrets on-progress]}]
    (let [config (assoc (toolsets/select (mcp/config) toolset)
-                       :on-progress on-progress :staged (atom nil)
-                       :secrets (keep identity
-                                      (cons (:key provider)
-                                            additional-secrets)))]
+                       :on-progress on-progress :staged (atom nil))]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
-     (let [local (when (or (ai/tool-calling? provider)
+     (when (and (seq (get-in config [:toolset :native-tools]))
+                (not (native/trusted? actor)))
+       (ai/fail "Native Yetibot tools require a trusted chat request."))
+     (let [provider (ai/resolve-provider provider)
+           config (assoc config :secrets
+                         (mapcat
+                           (fn [secret]
+                             (let [encoded (json/generate-string secret)]
+                               [secret (subs encoded 1
+                                             (dec (count encoded)))]))
+                           (filter ai/nonblank-string?
+                                   (cons (:key provider)
+                                         additional-secrets))))
+           local (when (or (ai/tool-calling? provider)
                            (seq (get-in config [:toolset :native-tools])))
                    (native/tools config actor provider model))]
        (if (or (seq (:servers config)) (seq local))

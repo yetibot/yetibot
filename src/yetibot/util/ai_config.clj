@@ -56,6 +56,7 @@
       (vector? (:providers value))
       (update :providers
               #(mapv (fn [p]
-                       (lift-fields p [:tool-calling :tool-choice
-                                       :native-tools :max-turns
-                                       :gateway-id])) %)))))
+                       (cond-> (lift-fields p [:tool-calling :tool-choice
+                                              :native-tools :max-turns
+                                              :gateway-id :key-file])
+                         (map? (:key p)) (dissoc :key))) %)))))

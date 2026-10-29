@@ -47,6 +47,13 @@ export YETIBOT_AI_PROVIDERS_1_MODEL=llama3.2
   fragments. Use HTTPS for remote providers.
 - `:key` is optional, for local servers that do not need authentication. When
   present, it is sent as a Bearer token. Keep keys out of version control.
+- Alternatively use `:key-file "/absolute/private/token-file"` (environment:
+  `YETIBOT_AI_PROVIDERS_0_KEY_FILE`). It must be an absolute, readable regular
+  file containing a nonblank token, at most 8192 bytes. Surrounding whitespace
+  is trimmed; the token itself must be printable ASCII without whitespace or
+  header newlines. `:key` and `:key-file` are mutually exclusive. Credentials
+  are resolved privately for selected requests, never passive discovery.
+  Missing/invalid files fail closed without exposing paths or token contents.
 - If `:default-provider` is omitted, the first provider is used.
 - A provider's `:model` is optional for listing models. Prompts need either this
   default or a `--model` argument. Use model IDs supported by your server.
@@ -79,7 +86,8 @@ entry to your existing `:ai :providers` vector:
 ```clojure
 {:name "cloudflare"
  :url "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1"
- :key "CLOUDFLARE_API_TOKEN"
+ :key-file "/run/secrets/cloudflare-workers-ai-token"
+ :model "@cf/zai-org/glm-4.7-flash"
  :gateway-id "my-gateway"}
 ```
 
@@ -93,8 +101,10 @@ Arbitrary provider headers are not configurable.
 
 ```text
 !ai models cloudflare
-!ai --provider cloudflare --model @cf/zai-org/glm-5.3 Say hello.
-!ai --provider cloudflare --model openai/gpt-4.1 Say hello.
+!cf models
+!cf Say hello.
+!cf --model @cf/qwen/qwen3-30b-a3b-fp8 Say hello.
+!ai --provider cloudflare --no-tools Say hello.
 ```
 
 Choose a chat-capable model supported by your account. There is no hardcoded
@@ -109,8 +119,25 @@ in pipeline data under the provider's `:catalog`. The displayed coverage is
 **Workers AI only; third-party Gateway models not included**. This is not the
 complete AI Gateway catalog or proof that every returned model accepts chat,
 images, or tools. Clef/Clairic are labelled decision/extraction interfaces, not
-chat models. Other entries are labelled model-specific; inspect their task and
-documentation. Other providers retain standard `GET /models` discovery.
+chat models. Text Generation entries are labelled `chat`; other tasks and
+unknown tasks remain `model-specific`. Other providers retain standard
+`GET /models` discovery.
+
+`cf models` shows the **full Workers AI catalog**, with task/interface labels
+and structured pipeline metadata. `cf [--model <id>] [--toolset <name>] <prompt>`
+uses the fixed `cloudflare` provider and only the supplied prompt, with no
+implicit history, child tools, native searches, or recursion. Each request is
+capped at 2048 output tokens on the wire (`max_tokens` for Workers AI Chat
+Completions). Only catalogued `chat` interfaces are accepted; Clef, Clairic,
+image, audio, embedding and unknown interfaces are denied before inference.
+Catalog discovery is not evidence of inference entitlement or billing access.
+Use normal `ai` for its existing conversation/tool behavior.
+
+Reuse an existing intent-router token by configuring the **same absolute
+`:key-file` path** on the provider. There is no implicit credential/account
+inheritance and no token copy into EDN. Append this provider without changing
+`:default-provider`, existing provider order, or router enablement. The model
+above is a recommendation, not a hardcoded menu or inference-access claim.
 
 Use supported third-party Gateway IDs explicitly with `--model`; their absence
 from this catalog does not mean they are unavailable. See Cloudflare's
@@ -515,6 +542,9 @@ are configured; Wise additionally requires account and chat allowlists.
 - `clef`: classify supplied input or current attachments with Cloudflare.
 - `clairic`: extract typed fields from supplied input or current attachments.
   Both inference tools use the configured account/token described above.
+- `ai`: list configured providers/models or ask a bounded text-only child.
+- `cf`: list Workers AI models or ask a bounded text-only Cloudflare child.
+  These appear only when their respective AI provider configuration exists.
 - `wise`: read configured balances, transactions or period totals only from
   explicitly allowed chats. See [Wise configuration and limits](WISE.md).
 
@@ -550,9 +580,9 @@ override requires user, Slack/Discord adapter and provider/model allowlists.
 Named toolset selection does not require a channel or thread allowlist; Wise
 still requires its own allowed conversations.
 Only `search` toolsets accept explicit native overrides. GitHub toolsets inherit
-only `help`, `history` and `history_count`, never media, inference or Wise.
-Explicit lists are not expanded automatically: add `"meme"`, `"gi"`, `"clef"`,
-`"clairic"` or `"wise"` to an existing list to allow them. Explicit inclusion
+only `help`, `history` and `history_count`, never media, inference, delegation
+or Wise. Explicit lists are not expanded automatically: add `"meme"`, `"gi"`,
+`"clef"`, `"clairic"`, `"wise"`, `"ai"` or `"cf"` to allow them. Explicit inclusion
 cannot bypass Wise's account/chat restrictions. Set `:native-tools []` on a
 search toolset to disable its built-ins, or use `--no-tools` for one request.
 `yetibot` is reserved as the built-in discovery source name.
@@ -574,6 +604,44 @@ the generic AI default model.
 Discovery hides tools from unauthorized users or adapters. The configured
 default toolset, or first named toolset if none is configured, applies when
 `--toolset` is omitted. `--no-tools` disables these tools too.
+
+### Bounded text delegation (`ai` and `cf`)
+
+These are adapters in the existing shared native/MCP catalog, not separate
+servers, command interpreters, or agent frameworks. `ai` supports actions
+`providers`, `models`, and `ask`; `cf` supports `models` and `ask` with the
+provider fixed to `cloudflare`. Optional `provider` selects only a configured
+provider for `ai`. `ask` accepts `prompt`, optional `model`, and optional
+`max_output_tokens` (integer 1–2048, default 2048). It cannot accept URLs,
+headers, credentials, token paths, user identities, tools, or skills.
+
+The current toolset's user/adapter and provider/model policy governs child
+selection too. Include allowed child provider/models in that policy; selecting
+an allowed parent model does not grant access to other providers. Trusted
+adapter identity is rechecked before credential resolution and network work.
+Each child is one existing host tool call, counts against the existing parent
+budget, and calls the direct provider API once, **never** the agent/tool loop.
+All child tool/native search lists are empty. Responses uses
+`max_output_tokens`; generic Chat Completions uses `max_completion_tokens`.
+The child sees only its supplied prompt, not automatic history, files, or bank
+results. Parent models must not send unrelated private data in that prompt.
+
+Static validation of the **whole batch** precedes any effects. Unknown
+provider, denied provider/model, malformed or oversized arguments invalidate
+the entire batch without executing any call. Cloudflare catalog/interface
+eligibility is changing remote state: its read-only metadata GET happens
+inside the host call, before the paid POST, not during pure preflight. Such
+runtime failures may follow earlier successful calls. Transport/output failure
+after an attempted paid request is an unknown outcome: no retry, later batch
+calls (including Wise/CF) are skipped, and further parent tools are disabled.
+
+Child results contain only bounded untrusted text plus provider/model, not
+raw provider bodies, headers, credentials, tool calls or reasoning state.
+Configured credentials are scanned as raw strings before outbound work; JSON
+strings are decoded and sensitive fields/credentials redacted before output
+truncation. Model listing pages the full catalog (default/max 20 entries) with
+`after`/`limit` and `next_after`, preserving task/interface labels; `cf models`
+at the command line returns the full catalog.
 
 ### Memes and Grok images
 
