@@ -15,6 +15,30 @@
 (def hosted-provider {:name "hosted" :url "https://example.com/v1" :key "secret" :model "chat"})
 (def config {:providers [local-provider hosted-provider] :default-provider "hosted"})
 
+(fact "empty discovery gives a useful status instead of a blank reply"
+  (with-redefs [mcp/config (constantly {})
+                tools/tool-catalog
+                (fn [& _]
+                  {:names [] :tools []
+                   :discovery {:servers [{:server "search"
+                                          :status "pending"}]}})]
+    (let [result (ai/tools-cmd {:match ["tools" nil]})]
+      (:result/value result)
+      => (str "Tool discovery is refreshing in the background. "
+              "No allowed tools are available yet.")
+      (get-in result [:result/data :tools]) => [])))
+
+(fact "inline-code tool names cannot reopen backticks or pipe syntax"
+  (let [id "search/a`b|c"]
+    (with-redefs [mcp/config (constantly {})
+                  tools/tool-catalog
+                  (fn [& _] {:names [id] :tools [{:id id :description ""}]})]
+      (let [result (ai/tools-cmd {:match ["tools" nil]})
+            row (first (:result/value result))]
+        (count (filter #{\`} row)) => 2
+        (string/includes? row "|") => false
+        (get-in result [:result/data :tools 0 :id]) => id))))
+
 (facts "leading options and multiline prompts"
   (ai/parse-prompt "hello\nworld --model literal")
   => {:prompt "hello\nworld --model literal"}

@@ -125,7 +125,9 @@
 
 (defn- tool-summary [redact {:keys [id description]}]
   ;; Xargs parses its first row to classify the command. Keep prose literal.
-  (str "`" id "` — " (if (string/blank? description)
+  (str "`" (string/escape id {\` \’ \| \¦ \newline \space
+                             \return \space})
+       "` — " (if (string/blank? description)
                    "No description provided."
                    (help-text redact
                      (string/escape description
@@ -179,6 +181,17 @@
                                     (schema-field variant :required)))))
                          variants)) 500))])))))
 
+(defn- empty-catalog-text [catalog]
+  (let [servers (get-in catalog [:discovery :servers])]
+    (cond
+      (some #(or (= "pending" (:status %)) (:refreshing %)) servers)
+      (str "Tool discovery is refreshing in the background. "
+           "No allowed tools are available yet.")
+      (some #(= "unavailable" (:status %)) servers)
+      (str "This MCP source is temporarily unavailable. "
+           "Other tool sources are unaffected.")
+      :else "No allowed tools are currently advertised.")))
+
 (defn tools-cmd
   "ai tools # list allowed tools with short descriptions
    ai tools <server> # list allowed tools from one source
@@ -215,9 +228,12 @@
               1 {:result/value (tool-detail redact (first matches))
                  :result/data (first matches)}
               (ai/fail "Tool name is ambiguous. Use its server/name ID.")))
-          {:result/value (if (string? (:names catalog)) (:names catalog)
-                            (mapv (partial tool-summary redact)
-                                  (:tools catalog)))
+          {:result/value (cond
+                           (string? (:names catalog)) (:names catalog)
+                           (seq (:tools catalog))
+                           (mapv (partial tool-summary redact)
+                                 (:tools catalog))
+                           :else (empty-catalog-text catalog))
            :result/data (dissoc catalog :names)
            :result/collection-path [:tools]})))))
 

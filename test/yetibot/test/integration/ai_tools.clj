@@ -143,10 +143,10 @@
               => "Source: https://source.test/news"
               (some #(= "/read" (:path %)) @requests) => nil)
             (let [names (:value (chat/run-command request "ai tools"))]
-              (fact (some #{"web/web_search — web_search"} names)
-                    => "web/web_search — web_search"
-                    (some #{"reader/get_commit — get_commit"} names)
-                    => "reader/get_commit — get_commit"
+              (fact (some #{"`web/web_search` — web_search"} names)
+                    => "`web/web_search` — web_search"
+                    (some #{"`reader/get_commit` — get_commit"} names)
+                    => "`reader/get_commit` — get_commit"
                     (some #(re-find #"push_files|unknown_operation" %) names)
                     => nil
                     (some #(= "/write" (:path %)) @requests) => nil))
@@ -217,9 +217,9 @@
                                     [{:role "user" :content prompt}])]
                 (fact
                   (:value (chat/run-command request "ai toolsets")) => ["repo"]
-                  (some #{"reader/get_commit — get_commit"}
+                  (some #{"`reader/get_commit` — get_commit"}
                         (:value (chat/run-command request "ai tools")))
-                  => "reader/get_commit — get_commit"
+                  => "`reader/get_commit` — get_commit"
                   (:value (chat/run-command request
                                            "ai --toolset repo Read owner/repo"))
                   => "Commit loaded."
