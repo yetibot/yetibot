@@ -20,10 +20,26 @@
 (defn tool-response [calls] {:choices [{:message {:role "assistant" :content nil :tool_calls calls}}]})
 (defn first-name [options] (get-in options [:tools 0 :function :name]))
 
-(fact "without MCP settings, the existing completion path is unchanged"
+(fact "runner instructions orient the model inside Yetibot"
+  (doseq [phrase ["running inside Yetibot" "not a Unix shell"
+                  "Do not invent flags" "chat interface" "simple greetings"]]
+    (fact (string/includes? tools/instructions phrase) => true)))
+
+(fact "plain parent completion also carries host context"
+  (let [sent (atom nil)]
+    (with-redefs [mcp/config (constantly nil)
+                  ai/complete (fn [_ _ msgs] (reset! sent msgs) :plain)]
+      (tools/complete provider "chat" messages) => :plain
+      (:role (first @sent)) => "system"
+      (string/includes? (:content (first @sent)) "running inside Yetibot")
+      => true
+      (vec (rest @sent)) => messages)))
+
+(fact "without MCP settings, host context preserves the original conversation"
   (with-redefs [mcp/config (constantly nil)
                 ai/complete (fn [p m msgs] [p m msgs])]
-    (tools/complete provider "chat" messages) => [provider "chat" messages]))
+    (tools/complete provider "chat" messages)
+    => [provider "chat" (tools/host-messages messages)]))
 
 (fact "the model can choose not to call any tools"
   (let [requests (atom []) called? (atom false)]
