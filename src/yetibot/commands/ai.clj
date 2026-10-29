@@ -111,7 +111,10 @@
    ai tools <server> # list allowed tools from one source"
   {:yb/cat #{:ai}}
   [{[_ server-name] :match :as args}]
-  (safely #(tools/tool-names server-name (policy/actor args))))
+  (safely
+    #(let [catalog (tools/tool-catalog server-name (policy/actor args))]
+       {:result/value (:names catalog)
+        :result/data (dissoc catalog :names)})))
 
 (defn toolsets-cmd
   "ai toolsets # list toolsets available to you in this conversation"

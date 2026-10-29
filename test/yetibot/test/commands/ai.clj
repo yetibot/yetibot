@@ -129,10 +129,36 @@
                 api/complete (fn [provider _ _] (:native-tools provider))]
     (ai/prompt-cmd {:match "--no-tools hello"}) => nil))
 
+(fact "tool listing preserves names and adds inert structured metadata"
+  (let [server {:name "search" :url "https://secret.test/mcp"}
+        calls (atom 0)
+        tool {:name "web_search" :description "Search the web"
+              :inputSchema {:type "object"}
+              :session {:server server}}]
+    (with-redefs [mcp/config (constantly {:servers [server]})
+                  mcp/with-tools (fn [_ f]
+                                   (swap! calls inc) (f [tool]))
+                  api/chat (fn [& _] (throw (Exception. "no inference")))
+                  mcp/call-tool (fn [& _]
+                                  (throw (Exception. "no host calls")))]
+      (let [result (ai/tools-cmd {:match ["tools" nil]})]
+        (:result/value result) => ["search/web_search"]
+        (get-in result [:result/data :tools])
+        => [{:id "search/web_search" :server "search" :name "web_search"
+             :description "Search the web" :inputSchema {:type "object"}}]
+        (get-in result [:result/data :instructions :runner])
+        => tools/instructions
+        (get-in result [:result/data :skills])
+        => {:supported false :items []}
+        @calls => 1))))
+
 (facts "tool inspection commands handle configuration errors safely"
   (with-redefs [mcp/config (constantly nil)]
     (ai/servers-cmd {}) => []
-    (ai/tools-cmd {:match ["tools" nil]}) => "No MCP servers configured.")
+    (:result/value (ai/tools-cmd {:match ["tools" nil]}))
+    => "No MCP servers configured."
+    (get-in (ai/tools-cmd {:match ["tools" nil]}) [:result/data :skills])
+    => {:supported false :items []})
   (with-redefs [mcp/config (fn [] (mcp/fail "Tool configuration is invalid."))]
     (ai/servers-cmd {}) => {:result/error "Tool configuration is invalid."}
     (ai/tools-cmd {:match ["tools" nil]}) => {:result/error "Tool configuration is invalid."}))
