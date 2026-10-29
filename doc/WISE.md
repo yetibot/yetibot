@@ -176,6 +176,14 @@ AI API calls are made by this reader. HTTP 401 reports token rejection; HTTP
 malformed JSON, inconsistent statement identity/currency and oversized results
 fail safely without exposing raw bank bodies.
 
+Statement balance identity is bound to the fixed official request URL built
+only from authorized selected profile/balance metadata, never a caller or
+response-selected destination. Returned query profile, currency and start/end
+instants must match that request; equivalent timestamp offsets are accepted.
+Wise need not echo `accountId`; if present, it must be a valid positive ID
+matching the selected balance. Missing or inconsistent required query fields
+fail closed, without substituting another balance.
+
 Execution uses a shared 20-second request budget, connection/pool waits capped
 at 3 seconds and socket waits capped at 5 seconds. The remaining budget is
 recomputed before each request, body read and after JSON parsing. Blocking

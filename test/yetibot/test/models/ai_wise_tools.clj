@@ -54,7 +54,7 @@
                 => (throws Exception))))
       (fact @calls => []))))
 
-(fact "Native results use the same guarded reader and remain projected"
+(fact "Native transactions accept real-shaped statements and stay projected"
   (fixture/with-wise {}
     (fn [_]
       (in-chat
@@ -67,6 +67,37 @@
                   (get-in r [:structuredContent :untrusted]) => true
                   (count (get-in r [:structuredContent :transactions])) => 1
                   (string/includes? (str r) "PRIVATE") => false)))))))
+
+(fact "Native summary accepts real-shaped statements without accountId"
+  (fixture/with-wise {}
+    (fn [calls]
+      (in-chat
+        (fn [{:keys [chat-source]}]
+          (let [r (tools/call! {} "wise" {"action" "summary"} chat-source)]
+            (fact (:isError r) => nil
+                  (get-in r [:structuredContent :totals])
+                  => [{:currency "USD" :transaction-count 2
+                       :credits "10.00" :debits "3.21" :net "6.79"
+                       :fees "0.04"}]
+                  (string/includes? (str r) "PRIVATE") => false
+                  (fixture/statement-urls @calls)
+                  => [fixture/statement-url])))))))
+
+(fact "Native malformed statement identity returns only the generic error"
+  (doseq [action ["transactions" "summary"]]
+    (fixture/with-wise {}
+      (fn [calls]
+        (fixture/with-statement-query #(dissoc % :intervalStart)
+          (fn []
+            (in-chat
+              (fn [{:keys [chat-source]}]
+                (fact (tools/call! {} "wise" {"action" action} chat-source)
+                      => {:isError true
+                          :structuredContent
+                          {:error
+                           (str "Wise read failed. "
+                                "Check access and configuration.")}})))))
+        (fact (fixture/statement-urls @calls) => [fixture/statement-url])))))
 
 (fact "Native visibility fails closed for malformed config and chat identities"
   (doseq [settings [{:accounts nil} {:accounts []}

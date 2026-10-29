@@ -11,7 +11,7 @@
             [yetibot.test.support.ai-execution :as chat])
   (:import [java.io ByteArrayInputStream]
            [java.io InputStream]
-           [java.time Instant]
+           [java.time Instant ZoneOffset]
            [org.apache.http.client.methods HttpGet]))
 
 (def settings
@@ -21,6 +21,20 @@
 (defn response [body]
   {:status 200 :body (ByteArrayInputStream.
                        (.getBytes (json/generate-string body) "UTF-8"))})
+
+(defn statement-query [options]
+  (merge {:profileId 11 :currency "USD"}
+         (select-keys (:query-params options) [:intervalStart :intervalEnd])
+         {:addStamp false :splitRefundFees true :timezone "UTC"
+          :type "COMPACT"}))
+
+(defn statement-urls [calls]
+  (mapv first (filter #(string/includes? (first %) "balance-statements")
+                      calls)))
+
+(def statement-url
+  (str "https://api.wise.com/2026Q4/profiles/11/"
+       "balance-statements/301/statement.json"))
 
 (defn reply [url options]
   (cond
@@ -35,7 +49,7 @@
                 :name "PRIVATE OTHER ACCOUNT"}])
     (string/includes? url "/balance-statements/301/")
     (response
-      {:query {:accountId 301 :currency "USD"}
+      {:query (statement-query options)
        :accountHolder {:name "PRIVATE NAME"} :bankDetails {:iban "PRIVATE IBAN"}
        :transactions
        [{:date (str (.minusSeconds (Instant/now) 86400)) :type "DEBIT"
@@ -81,7 +95,7 @@
               (some #(string/includes? (first %) "balance-statements") @calls)
               => nil)))))
 
-(fact "Wise transactions return newest-first, projected and bounded data"
+(fact "Real-shaped statements return projected, bounded transactions"
   (with-wise {}
     (fn [calls]
       (let [r (run "wise transactions --days 365 --limit 1")]
@@ -94,11 +108,9 @@
               (get-in r [:data :has-more]) => true
               (string/includes? (str r) "PRIVATE") => false
               (string/includes? (str r) "wise-fixture-token") => false
-              (count (filter #(string/includes? (first %)
-                                                "balance-statements/301/")
-                             @calls)) => 1)))))
+              (statement-urls @calls) => [statement-url])))))
 
-(fact "Wise summary uses exact decimal totals over the complete period"
+(fact "Real-shaped statements give exact summary totals over the full period"
   (with-wise {}
     (fn [_]
       (let [r (run "wise summary --days 365")
@@ -184,6 +196,77 @@
     (with-redefs [reply (fn [url options] (f original url options))]
       (thunk))))
 
+(defn with-statement-query [alter-query thunk]
+  (override-reply
+    (fn [original url options]
+      (if (string/includes? url "balance-statements")
+        (response {:query (alter-query (statement-query options))
+                   :transactions []})
+        (original url options)))
+    thunk))
+
+(fact "Required statement identity fields fail closed without fallback"
+  (doseq [alter-query
+          (concat
+            [(constantly nil) (constantly []) (constantly "PRIVATE QUERY")]
+            (for [field [:profileId :currency :intervalStart :intervalEnd]]
+              #(dissoc % field))
+            (for [[field values]
+                  {:profileId [nil 0 -11 22 11.5 "bad" "11.0" {}]
+                   :currency [nil "EUR" "usd" 11 {}]
+                   :intervalStart [nil "bad" 11 {}
+                                   "2000-01-01T00:00:00Z"]
+                   :intervalEnd [nil "bad" 11 {}
+                                 "2000-01-01T00:00:00Z"]}
+                  value values]
+              #(assoc % field value)))]
+    (doseq [action ["transactions" "summary"]]
+      (with-wise {}
+        (fn [calls]
+          (with-statement-query alter-query
+            (fn []
+              (let [r (run (str "wise " action))]
+                (fact (some? (:error r)) => true
+                      (string/includes?
+                        (str r)
+                        "Wise statement did not match the configured balance.")
+                      => true
+                      (string/includes? (str r) "PRIVATE QUERY") => false
+                      (:data r) => nil
+                      (statement-urls @calls) => [statement-url])))))))))
+
+(fact "Optional accountId must identify the selected balance when present"
+  (doseq [value [nil 0 -301 302 "302" "bad" "301.0" 301.5 {}]]
+    (with-wise {}
+      (fn [calls]
+        (with-statement-query #(assoc % :accountId value)
+          (fn []
+            (fact (some? (:error (run "wise transactions"))) => true
+                  (statement-urls @calls) => [statement-url]))))))
+  (doseq [value [301 "301"]]
+    (with-wise {}
+      (fn [calls]
+        (with-statement-query #(assoc % :accountId value)
+          (fn []
+            (fact (:error (run "wise summary")) => nil
+                  (statement-urls @calls) => [statement-url])))))))
+
+(fact "Statement identity accepts digit profile IDs and equivalent instants"
+  (with-wise {}
+    (fn [calls]
+      (with-statement-query
+        (fn [query]
+          (reduce (fn [q field]
+                    (update q field
+                            #(str (.atOffset (Instant/parse %)
+                                             (ZoneOffset/ofHours -5)))))
+                  (assoc query :profileId "11" :unknownFlag true)
+                  [:intervalStart :intervalEnd]))
+        (fn []
+          (fact (:error (run "wise transactions")) => nil
+                (:error (run "wise summary")) => nil
+                (statement-urls @calls) => [statement-url statement-url]))))))
+
 (fact "Credentials are redacted before descriptions are truncated"
   (with-wise {}
     (fn [_]
@@ -191,7 +274,7 @@
         (fn [original url options]
           (if (string/includes? url "balance-statements")
             (response
-              {:query {:accountId 301 :currency "USD"}
+              {:query (statement-query options)
                :transactions
                [{:date (str (.minusSeconds (Instant/now) 100))
                  :type "CREDIT" :amount {:value 1M :currency "USD"}
@@ -251,7 +334,7 @@
 
 (fact "Malformed and oversized streams are bounded and closed"
   (doseq [payload ["not JSON PRIVATE BANK wise-fixture-token"
-                   (str "[" (apply str (repeat 2097152 " ")) "]")]]
+                   (str "[" (string/join (repeat 2097152 " ")) "]")]]
     (with-wise {}
       (fn [_]
         (let [closed (atom false)
@@ -305,7 +388,7 @@
 
 (fact "Missing and invalid token files fail safely before any API call"
   (doseq [token [nil "" "short" "invalid token with spaces"
-                 (apply str (repeat 4097 "x"))]]
+                 (string/join (repeat 4097 "x"))]]
     (let [file (java.io.File/createTempFile "wise-invalid-" ".key")]
       (try
         (if (nil? token) (.delete file) (spit file token))
@@ -324,8 +407,7 @@
       (override-reply
         (fn [original url options]
           (if (string/includes? url "balance-statements")
-            (response {:query {:accountId 301 :currency "USD"}
-                       :transactions []})
+            (response {:query (statement-query options) :transactions []})
             (original url options)))
         (fn []
           (let [r (run "wise summary")]
@@ -343,38 +425,67 @@
           (fn []
             (fact (some? (:error (run "wise transactions"))) => true
                   (count @calls) => 1))))))
-  (doseq [body [{:query {:accountId 302 :currency "USD"} :transactions []}
-                {:query {:accountId 301 :currency "EUR"} :transactions []}
-                {:query {:accountId 301 :currency "USD"} :transactions {}}
-                {:query {:accountId 301 :currency "USD"}
-                 :transactions (vec (repeat 10001 {}))}]]
+  (doseq [body [{:query {:accountId 302} :transactions []}
+                {:query {:currency "EUR"} :transactions []}
+                {:transactions {}}
+                {:transactions (vec (repeat 10001 {}))}]]
     (with-wise {}
       (fn [calls]
         (override-reply
           (fn [original url options]
             (if (string/includes? url "balance-statements")
-              (response body) (original url options)))
+              (response (update body :query
+                                #(merge (statement-query options) %)))
+              (original url options)))
           (fn []
             (fact (some? (:error (run "wise transactions"))) => true
                   (every? #(not (string/includes? (first %)
                                                  "balance-statements/302"))
                           @calls) => true)))))))
 
+(fact "Bad rows are rejected after valid real-shaped statement identity"
+  (doseq [bad-row [{:date "bad"} {:date "2000-01-01T00:00:00Z"}
+                   {:type "OTHER"} {:details {:description {}}}
+                   {:amount {:value "1.00" :currency "USD"}}
+                   {:amount {:value 1M :currency "EUR"}}
+                   {:totalFees {:value 0M :currency "EUR"}}]]
+    (with-wise {}
+      (fn [calls]
+        (override-reply
+          (fn [original url options]
+            (if (string/includes? url "balance-statements")
+              (response
+                {:query (statement-query options)
+                 :transactions
+                 [(merge {:date (get-in options [:query-params :intervalEnd])
+                          :type "CREDIT"
+                          :amount {:value 1M :currency "USD"}}
+                         bad-row)]})
+              (original url options)))
+          (fn []
+            (let [r (run "wise transactions")]
+              (fact (some? (:error r)) => true
+                    (string/includes? (str r) "configured balance") => false
+                    (:data r) => nil
+                    (statement-urls @calls) => [statement-url]))))))))
+
 (fact "Global newest-first limits and exact decimal totals span group balances"
   (with-wise {:accounts [{:name "team" :group-id 42 :profile-id 11}]}
     (fn [calls]
       (let [now (Instant/now)]
         (override-reply
-          (fn [_ url _]
+          (fn [_ url options]
             (if (string/ends-with? url "/balances")
               (response
                 [{:id 301 :groupId 42 :currency "USD"
                   :amount {:value 0.10000001M :currency "USD"}}
                  {:id 303 :groupId 42 :currency "USD"
-                  :amount {:value 0.20000002M :currency "USD"}}])
+                  :amount {:value 0.20000002M :currency "USD"}}
+                 {:id 302 :groupId 99 :currency "USD"
+                  :amount {:value 999M :currency "USD"}}])
               (let [first? (string/includes? url "/301/")]
                 (response
-                  {:query {:accountId (if first? 301 303) :currency "USD"}
+                  {:query (statement-query options)
                    :transactions
                    [{:date (str (.minusSeconds now (if first? 100 10)))
                      :type "CREDIT"
@@ -391,5 +502,41 @@
                     (get-in r [:data :transactions 0 :amount]) => "0.20000002"
                     (get-in s [:data :totals 0 :credits]) => "0.30000003"
                     (get-in s [:data :totals 0 :net]) => "0.30000003"
+                    (statement-urls @calls)
+                    => [statement-url
+                        (string/replace statement-url "/301/" "/303/")
+                        statement-url
+                        (string/replace statement-url "/301/" "/303/")]
                     (some #(string/ends-with? (first %) "/profiles") @calls)
                     => nil))))))))
+
+(fact "Group summary keeps currency totals separate"
+  (with-wise {:accounts [{:name "team" :group-id 42 :profile-id 11}]}
+    (fn [calls]
+      (override-reply
+        (fn [_ url options]
+          (if (string/ends-with? url "/balances")
+            (response
+              [{:id 301 :groupId 42 :currency "USD"
+                :amount {:value 1M :currency "USD"}}
+               {:id 303 :groupId 42 :currency "EUR"
+                :amount {:value 2M :currency "EUR"}}])
+            (let [currency (get-in options [:query-params :currency])]
+              (response
+                {:query (assoc (statement-query options) :currency currency)
+                 :transactions
+                 [{:date (get-in options [:query-params :intervalEnd])
+                   :type "CREDIT"
+                   :amount {:value (if (= currency "USD") 0.1M 0.2M)
+                            :currency currency}}]}))))
+        (fn []
+          (let [r (run "wise summary")]
+            (fact (:error r) => nil
+                  (get-in r [:data :totals])
+                  => [{:currency "EUR" :transaction-count 1 :credits "0.20"
+                       :debits "0.00" :net "0.20" :fees "0.00"}
+                      {:currency "USD" :transaction-count 1 :credits "0.10"
+                       :debits "0.00" :net "0.10" :fees "0.00"}]
+                  (statement-urls @calls)
+                  => [statement-url
+                      (string/replace statement-url "/301/" "/303/")])))))))
