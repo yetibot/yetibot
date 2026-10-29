@@ -65,7 +65,7 @@
                {:error {:type (str "invalid_request_error-" sentinel)
                         :code (str "invalid_function_parameters-" sentinel)
                         :param (str "tools-" sentinel)}}
-               {:error {:type (apply str (repeat 20000 "x"))
+               {:error {:type (string/join (repeat 20000 "x"))
                         :code [sentinel] :param {:secret sentinel}}}
                {:error (reduce (fn [v _] {:error v}) sentinel (range 10000))}]]
     (let [[error logs]
@@ -82,16 +82,17 @@
 (facts "historical Grok and Cloudflare validation text yields categories only"
   (doseq [[body expected-class expected-code]
           [[{:code "invalid-argument"
-             :error (str "Failed to start sampling: [invalid_client_tool_schema] "
-                         "yetibot_clef: tool parameter root must be an object type "
+             :error (str "Failed to start sampling: "
+                         "[invalid_client_tool_schema] yetibot_clef: "
+                         "tool parameter root must be an object type "
                          sentinel)}
             :invalid-request :invalid-tool-schema]
            [{:errors [{:code 1000
                        :message (str "Unsupported parameter: " sentinel)}]}
             :unrecognized :unsupported-parameter]
            [{"errors" [{"code" sentinel
-                         "message" (str "No tool output found for function call "
-                                        sentinel)}]}
+                        "message" (str "No tool output found for function call "
+                                       sentinel)}]}
             :unrecognized :missing-tool-output]]]
     (let [[error logs]
           (capture
@@ -132,14 +133,16 @@
                       {:error {:code "invalid_client_tool_schema"}}))
         => :invalid-tool-schema))
 
-(facts "text inspection skips oversized and nested values and stops at three errors"
+(facts
+  "text inspection skips oversized and nested values and stops at three errors"
   (let [marker "[invalid_client_tool_schema]"
         bounded (str marker (string/join (repeat (- 1024 (count marker)) "x")))
         deep (reduce (fn [value _] {:message value}) marker (range 10000))]
     (fact (:error-code (diagnostics/error-fields {:error {:message bounded}}))
           => :invalid-tool-schema)
     (doseq [body [{:error {:message (str bounded "x")}}
-                 {:error {:message (str (string/join (repeat 20000 "x")) marker)}}
+                 {:error {:message (str (string/join (repeat 20000 "x"))
+                                        marker)}}
                  {:error {:message deep}}
                  {:errors [{:message sentinel} {} {}
                            {:message marker}]}
@@ -152,9 +155,9 @@
 
 (facts "opaque state means a nonempty encrypted string, not key presence"
   (doseq [item [{:type "reasoning"}
-                {:type "reasoning" :encrypted_content nil}
-                {:type "reasoning" :encrypted_content ""}
-                {:type "reasoning" :encrypted_content {:secret sentinel}}]]
+               {:type "reasoning" :encrypted_content nil}
+               {:type "reasoning" :encrypted_content ""}
+               {:type "reasoning" :encrypted_content {:secret sentinel}}]]
     (fact (:opaque-state? (diagnostics/context
                            provider "/responses" {:input [item]} :follow-up))
           => false))
@@ -228,7 +231,8 @@
             :invalid-tool-schema]
            [(json/generate-string
               {:code "invalid-argument"
-               :error (str "[invalid_client_tool_schema] yetibot_clef: " sentinel)})
+               :error (str "[invalid_client_tool_schema] yetibot_clef: "
+                           sentinel)})
             :invalid-tool-schema]
            [(json/generate-string
               {:errors [{:code 1000

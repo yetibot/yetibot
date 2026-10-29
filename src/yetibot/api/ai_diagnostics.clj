@@ -27,8 +27,8 @@
                "function_call_output" :function-call-output
                "web_search_call" :web-search "x_search_call" :x-search}
         item-kind #(if (and (map? %) (nil? (:type %))
-                            (contains? #{"system" "user" "assistant" "tool"}
-                                       (:role %)))
+                           (contains? #{"system" "user" "assistant" "tool"}
+                                      (:role %)))
                      :message (tag kinds (:type %) :unrecognized))]
     {:stage (tag {:initial :initial :follow-up :follow-up
                   :delegation :delegation} stage :unrecognized)
@@ -74,20 +74,35 @@
 
 (defn- message-category [value]
   ;; Skip oversized text entirely, not even a prefix. Only a host-owned keyword
-  ;; escapes this function; never retain the text, captures, tool names or codes.
+  ;; escapes this function; never retain the text, captures, tool names or
+  ;; codes.
   (when (and (string? value) (<= (count value) 1024))
     (let [text (.toLowerCase ^String value Locale/ROOT)]
       (cond
-        (re-find #"\[invalid_client_tool_schema\]|\btool parameter root must be an object type\b"
-                 text) :invalid-tool-schema
-        (re-find #"\bmissing tool output\b|\bno tool output found for (?:function|tool) call\b"
-                 text) :missing-tool-output
+        (re-find
+          (re-pattern
+            (str "\\[invalid_client_tool_schema\\]|"
+                 "\\btool parameter root must be an object type\\b"))
+          text) :invalid-tool-schema
+        (re-find
+          (re-pattern
+            (str "\\bmissing tool output\\b|"
+                 "\\bno tool output found for (?:function|tool) call\\b"))
+          text) :missing-tool-output
         (re-find #"\b(?:unsupported|unrecognized|unknown) parameter\b" text)
         :unsupported-parameter
-        (re-find #"\b(?:context length exceeded|maximum context length|context window exceeded|context limit exceeded)\b"
-                 text) :context-limit
-        (re-find #"\b(?:model not found|model does not exist|does not exist or you do not have access|you do not have access to (?:this|the) model|access to (?:this|the) model (?:is )?denied)\b"
-                 text) :model-access))))
+        (re-find
+          (re-pattern
+            (str "\\b(?:context length exceeded|maximum context length|"
+                 "context window exceeded|context limit exceeded)\\b"))
+          text) :context-limit
+        (re-find
+          (re-pattern
+            (str "\\b(?:model not found|model does not exist|"
+                 "does not exist or you do not have access|"
+                 "you do not have access to (?:this|the) model|"
+                 "access to (?:this|the) model (?:is )?denied)\\b"))
+          text) :model-access))))
 
 (defn- candidate-fields [error]
   (let [message (field error :message)]
@@ -120,8 +135,9 @@
 (defn error-fields
   "Inspect one root/error map and the first three vector :errors entries only.
    Per candidate: type/code/param strings <=128 chars and one message (or error)
-   string <=1024 UTF-16 units. No recursion, sequence realization or text output.
-   Non-stream transport has already decoded JSON before this function runs."
+   string <=1024 UTF-16 units. No recursion, sequence realization or text
+   output. Non-stream transport has already decoded JSON before this
+   function runs."
   [body]
   (let [error (field body :error)
         errors (field body :errors)
