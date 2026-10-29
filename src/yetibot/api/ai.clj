@@ -1,15 +1,18 @@
 (ns yetibot.api.ai
-  (:require [clj-http.client :as client]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as client]
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.mcp :as mcp]
+            [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
             [yetibot.util.ai-config :as settings])
   (:import [java.io File FileInputStream]
-           [java.net URI]))
+           [java.net URI]
+           [java.util UUID]))
 
 (defn nonblank-string? [value]
   (and (string? value) (not (string/blank? value))))
@@ -226,6 +229,39 @@
             (assoc message :content (string/join "\n" (map :text content)))
             :else message)) messages))
 
+(defn- gemma-model? [provider model]
+  (and (cloudflare/provider-account provider)
+       (= "@cf/google/gemma-4-26b-a4b-it" model)
+       (not (responses? provider))))
+
+(defn- normalize-gemma
+  "Normalize once, at the wire boundary, so replay uses the very same IDs.
+   Structured calls are authoritative. Never interpret prose or other models."
+  [provider model options body]
+  (let [choice (get-in body [:choices 0])
+        message (:message choice)]
+    (if (and (gemma-model? provider model)
+             (not (seq (:tool_calls message)))
+             (gemma/control-output? (:content message)))
+      (do
+        (when-not (and (tool-calling? provider) (seq (:tools options))
+                       (not= "none" (:tool_choice options))
+                       (contains? #{nil "stop" "tool_calls"}
+                                  (:finish_reason choice)))
+          (gemma/unsupported!))
+        (let [calls (gemma/parse-calls (:content message))]
+          (assoc-in body [:choices 0 :message]
+                    (assoc message :content nil :tool_calls
+                           (mapv (fn [{:keys [name arguments]}]
+                                   {:id (str "gemma-" (UUID/randomUUID))
+                                    :type "function"
+                                    :function
+                                    {:name name
+                                     :arguments
+                                     (json/generate-string arguments)}})
+                                 calls)))))
+      body)))
+
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]
@@ -255,7 +291,9 @@
                  {:model model
                   :messages (if (cloudflare/provider-account provider)
                               (cloudflare-messages messages) messages)})]
-    (request client/post provider
+    (normalize-gemma
+      provider model options
+      (request client/post provider
              (if responses-api? "/responses" "/chat/completions")
              {:content-type :json
               :form-params
@@ -274,7 +312,7 @@
                        (or (= "omit" (:tool-choice provider))
                            (and responses-api? (empty? (:tools options))))
                        (dissoc :tool_choice)))}
-             progress (::diagnostics/stage options :initial))))
+             progress (::diagnostics/stage options :initial)))))
 
 (defn message
   "Normalize only client-side function calls; native searches run at xAI."
