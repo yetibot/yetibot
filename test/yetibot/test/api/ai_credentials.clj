@@ -2,6 +2,7 @@
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.spec.alpha :as s]
+            [clojure.string :as string]
             [dec :refer [explode]]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
@@ -45,6 +46,11 @@
   (get-in (settings/ai {:providers [(assoc provider :key {:file "/tmp/t"})]})
           [:providers 0 :key-file]) => "/tmp/t")
 
+(facts "malformed nested keys must not become anonymous providers"
+  (doseq [key [{} {:unexpected "token"} {:file nil}]]
+    (fact (s/valid? ::ai/config {:providers [(assoc provider :key key)]})
+          => false)))
+
 (fact "exploded KEY_FILE normalizes idempotently without reading the file"
   (let [expanded (get-in
                    (explode
@@ -70,7 +76,7 @@
     (try
       (with-redefs [http/post (fn [& _] (swap! calls inc))]
         (doseq [token ["" "   " "token\nHeader: secret"
-                       (apply str (repeat 8193 "x"))]]
+                       (string/join (repeat 8193 "x"))]]
           (spit file token)
           (fact (error #(ai/complete p "chat" messages))
                 => "AI provider credentials are unavailable or invalid."))
@@ -122,7 +128,7 @@
         p (assoc provider :name "cloudflare"
                  :key-file (.getAbsolutePath file)
                  :url (str "https://api.cloudflare.com/client/v4/accounts/"
-                           (apply str (repeat 32 "a")) "/ai/v1"))]
+                           (string/join (repeat 32 "a")) "/ai/v1"))]
     (try
       (spit file "private-token")
       (with-redefs

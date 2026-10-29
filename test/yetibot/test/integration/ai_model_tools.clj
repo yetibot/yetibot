@@ -23,7 +23,7 @@
 (def cloudflare
   {:name "cloudflare" :model "@cf/vendor/chat" :key "cf-token"
    :url (str "https://api.cloudflare.com/client/v4/accounts/"
-             (apply str (repeat 32 "a")) "/ai/v1")})
+             (string/join (repeat 32 "a")) "/ai/v1")})
 (def settings {:providers [parent child cloudflare]
                :default-provider "child"})
 (def toolset
@@ -98,7 +98,7 @@
                         (assoc ask "max_output_tokens" 2049)
                         (assoc ask "max_output_tokens" "1")
                         (assoc ask "prompt" "")
-                        (assoc ask "prompt" (apply str (repeat 12001 "x")))
+                        (assoc ask "prompt" (string/join (repeat 12001 "x")))
                         {"action" "models" "model" "c"}
                         {"action" "providers" "provider" "child"}
                         {"action" "ask" "prompt" "ok" "after" "x"}]]
@@ -205,7 +205,7 @@
              (fn [& _]
                {:result/value
                 (json/generate-string
-                  {"answer" (str token (apply str (repeat 13000 "x")))
+                  {"answer" (str token (string/join (repeat 13000 "x")))
                    "authorization" "unknown-sensitive-value"})})]
             (let [result (:structuredContent
                            (models/call! config "ai" ask
@@ -230,6 +230,30 @@
                 (get decoded "authorization") => "[redacted]"
                 (string/includes? text "quoted") => false)))
           (finally (.delete file)))))))
+
+(fact "mixed JSON escapes cannot carry credentials through child prose"
+  (in-request
+    (fn [request]
+      (with-redefs [ai/complete
+                    (fn [& _]
+                      {:result/value "Prose: child\\u002dtoken tail"})]
+        (get-in (models/call! config "ai" ask (:chat-source request))
+                [:structuredContent :text])
+        => "Prose: [redacted] tail"))))
+
+(fact "escaped credential input is rejected before child inference"
+  (in-request
+    (fn [request]
+      (let [calls (atom 0)]
+        (with-redefs [ai/complete (fn [& _] (swap! calls inc)
+                                   {:result/value "unexpected"})]
+          (let [result (models/call!
+                         config "ai"
+                         (assoc ask "prompt" "Prose: child\\u002dtoken tail")
+                         (:chat-source request))]
+            (:isError result) => true
+            (:unknownOutcome result) => false
+            @calls => 0))))))
 
 (facts "catalog pages expose labels but never secret provider configuration"
   (in-request

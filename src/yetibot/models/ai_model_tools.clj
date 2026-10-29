@@ -27,7 +27,7 @@
 
 (defn- credential-input! [config value]
   ;; Inspect raw strings, not JSON-escaped representations of credentials.
-  (when (some #(and (string? %) (not= % (mcp/redact % config)))
+  (when (some #(and (string? %) (not= % (mcp/metadata-redact % config)))
               (tree-seq coll? seq value))
     (ai/fail "AI delegation input contains configured credentials.")))
 
@@ -152,13 +152,7 @@
          "key[-_]?file|account[-_]?id)$")))
 
 (defn- safe-text [text config]
-  (let [redact (fn [text]
-                 (reduce
-                   (fn [s secret]
-                     (let [encoded (json/generate-string secret)]
-                       (string/replace s (subs encoded 1 (dec (count encoded)))
-                                       "[redacted]")))
-                   (mcp/redact text config) (mcp/credentials config)))
+  (let [redact #(mcp/metadata-redact % config)
         ;; Decode whole JSON responses before redaction, so escaped credentials
         ;; and credential-valued fields cannot evade a raw substring scan.
         parsed (try (json/parse-string text) (catch Exception _ ::plain))]
@@ -245,9 +239,9 @@
                (model-page p models catalog args redactions)}
               (do
                 (when (and (cf/provider-account p)
-                           (not (some #(and (= model (:id %))
-                                            (= :chat (:interface %)))
-                                      (:models catalog))))
+                           (not-any? #(and (= model (:id %))
+                                           (= :chat (:interface %)))
+                                     (:models catalog)))
                   (ai/fail "Model is not a catalogued chat interface."))
                 (reset! attempted? true)
                 (let [result (ai/complete

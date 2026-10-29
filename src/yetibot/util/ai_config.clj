@@ -56,7 +56,11 @@
       (vector? (:providers value))
       (update :providers
               #(mapv (fn [p]
-                       (cond-> (lift-fields p [:tool-calling :tool-choice
-                                              :native-tools :max-turns
-                                              :gateway-id :key-file])
-                         (map? (:key p)) (dissoc :key))) %)))))
+                       (let [normalized
+                             (lift-fields p [:tool-calling :tool-choice
+                                             :native-tools :max-turns
+                                             :gateway-id :key-file])]
+                         (cond-> normalized
+                           (and (map? (:key p))
+                                (contains? normalized :key-file))
+                           (dissoc :key)))) %)))))
