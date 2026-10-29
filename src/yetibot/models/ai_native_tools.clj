@@ -5,7 +5,9 @@
             [yetibot.api.ai :as ai]
             [yetibot.core.models.help :as help]
             [yetibot.models.ai-history :as history]
+            [yetibot.models.ai-inference-tools :as inference]
             [yetibot.models.ai-media-tools :as media]
+            [yetibot.models.ai-wise-tools :as wise]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.util.ai-execution :as execution]))
@@ -95,10 +97,26 @@
 
 (defn names [config]
   (let [t (:toolset config)
+        wise-tools (wise/available-tools)
         defaults (cond-> toolsets/default-native-tools
                    (not (toolsets/github? t))
-                   (into (media/available-tools)))]
-    (get t :native-tools defaults)))
+                   (into (concat (media/available-tools)
+                                 (inference/available-tools) wise-tools)))
+        selected (get t :native-tools defaults)]
+    ;; Explicit selection never widens the financial reader's chat policy.
+    (if (seq wise-tools) selected (filterv #(not= "wise" %) selected))))
+
+(defn- adapter [operation]
+  (cond
+    (contains? media/definitions operation)
+    {:definition (get media/definitions operation)
+     :arguments media/arguments! :call media/call!}
+    (contains? inference/definitions operation)
+    {:definition (get inference/definitions operation)
+     :arguments inference/arguments! :call inference/call!}
+    (contains? wise/definitions operation)
+    {:definition (get wise/definitions operation)
+     :arguments wise/arguments! :call wise/call!}))
 
 (defn trusted? [actor]
   (and execution/*sensitive* actor
@@ -116,21 +134,23 @@
         (execution/sensitive!)
         (mapv
           (fn [operation]
-            (assoc (get (merge definitions media/definitions) operation)
-                   :name operation :native? true
-                   :validate-arguments
-                   #(if (contains? media/definitions operation)
-                      (media/arguments! config operation %)
-                      (arguments! operation %))
-                   :host-call
-                   (fn [args]
-                     (when-not (trusted? actor)
-                       (ai/fail "Native tools require a trusted chat request."))
-                     (policy/authorize! (:toolset config) actor provider model)
-                     (cond
-                       (contains? media/definitions operation)
-                       (media/call! config operation args source)
-                       (= operation "help")
-                       {:structuredContent (help-result args)}
-                       :else (history/read! source operation args)))))
+            (let [capability (adapter operation)]
+              (assoc (or (:definition capability) (get definitions operation))
+                     :name operation :native? true
+                     :validate-arguments
+                     #(if-let [validate (:arguments capability)]
+                        (validate config operation %)
+                        (arguments! operation %))
+                     :host-call
+                     (fn [args]
+                       (when-not (trusted? actor)
+                         (ai/fail
+                           "Native tools require a trusted chat request."))
+                       (policy/authorize! (:toolset config) actor
+                                          provider model)
+                       (if-let [call (:call capability)]
+                         (call config operation args source)
+                         (if (= operation "help")
+                           {:structuredContent (help-result args)}
+                           (history/read! source operation args)))))))
           selected)))))

@@ -4,7 +4,10 @@
             [clojure.string :as string]
             [midje.sweet :refer [fact facts => contains]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.clef :as clef]
+            [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
+            [yetibot.api.wise :as wise]
             [yetibot.commands.ai]
             [yetibot.commands.grok]
             [yetibot.core.config :as settings]
@@ -22,6 +25,7 @@
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.test.commands.wise :as wise-fixture]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.test.support.mcp :as support]))
 
@@ -674,3 +678,163 @@
                              [["gi" {"prompt" "a yeti"}]]))
             => "Policy changed."
             @calls => 0))))
+
+(defn with-capabilities [f]
+  (wise-fixture/with-wise {}
+    (fn [wise-calls]
+      (let [file (java.io.File/createTempFile "native-inference-" ".key")
+            original settings/get-config
+            inference-calls (atom [])]
+        (try
+          (spit file "fake-cloudflare-tool-token")
+          (with-redefs
+            [settings/get-config
+             (fn [spec path]
+               (if (= path [:ai])
+                 {:value {:intent-router
+                          {:enabled false
+                           :account-id (apply str (repeat 32 "a"))
+                           :key-file (.getAbsolutePath file)}}}
+                 (original spec path)))
+             imgflip/configured? false xai/config {}
+             cf/infer!
+             (fn [_ _ operation payload]
+               (swap! inference-calls conj [operation payload])
+               {:model operation
+                :answers
+                (into {} (for [[id field] (or (:questions payload)
+                                              (:fields payload))]
+                           [id (if (= "clef" operation)
+                                 {:type "noul" :noul 0.98}
+                                 {:type (:type field) :value 42})]))
+                :private-provider-extra "DO NOT EXPOSE"})]
+            (f {:wise wise-calls :inference inference-calls}))
+          (finally (.delete file)))))))
+
+(def native-decision
+  {"question" "Is this an outage?" "input" "Service is down."})
+(def native-extraction
+  {"fields" {"amount" {"type" "number" "decimals" 6
+                       "instructions" "Extract the total in USD."}}
+   "input" "Total USD 42."})
+
+(fact "configured inference and Wise discovery is passive and allowlist-bound"
+  (with-capabilities
+    (fn [{:keys [wise inference]}]
+      (execution/in-event execution/request "ai tools yetibot"
+        (fn [request]
+          (let [actor (policy/actor request)
+                reads ["yetibot/help" "yetibot/history"
+                       "yetibot/history_count"]]
+            (with-redefs [mcp/config (constantly nil)
+                          clef/credential!
+                          (fn [& _] (throw (AssertionError. "Token read")))]
+              (fact (tools/tool-names "yetibot" actor)
+                    => (into reads ["yetibot/clef" "yetibot/clairic"
+                                    "yetibot/wise"])))
+            (doseq [selected [["clairic"] []]]
+              (with-redefs [mcp/config
+                            (constantly
+                              (assoc-in config [:toolsets 0 :native-tools]
+                                        selected))]
+                (fact (tools/tool-names nil actor)
+                      => (if (seq selected) ["yetibot/clairic"]
+                           "No MCP servers configured."))))
+            (let [t (-> toolset (dissoc :native-tools)
+                        (assoc :kind "github-read"
+                               :repositories ["owner/repo"]
+                               :servers [{:name "reader"
+                                          :tools ["get_commit"]}]))]
+              (with-redefs [mcp/config
+                            (constantly
+                              {:toolsets [t]
+                               :servers [{:name "reader"
+                                          :tools ["get_commit"]}]})]
+                (fact (tools/tool-names "yetibot" actor) => reads))))))
+      (fact @wise => [] @inference => []))))
+
+(fact "all three adapters execute in one budgeted model-tool roundtrip"
+  (with-capabilities
+    (fn [{:keys [wise inference]}]
+      (let [r (run-calls nil [["clef" native-decision]
+                              ["clairic" native-extraction]
+                              ["wise" {"action" "balance"}]])]
+        (fact (get-in r [:replies 0 :structuredContent
+                        :answers :decision :noul]) => 0.98
+              (get-in r [:replies 1 :structuredContent
+                        :answers :amount :value]) => 42
+              (get-in r [:replies 2 :structuredContent :balances])
+              => [{:currency "USD" :available "12.34"}]
+              (get-in r [:result :result/data :mcp :tool-calls]) => 3
+              (count @inference) => 2
+              (get-in @inference [1 1 :fields :amount :instructions])
+              => "Extract the total in USD."
+              (count @wise) => 3
+              (string/includes? (json/generate-string r) "DO NOT EXPOSE")
+              => false
+              (string/includes? (json/generate-string r) "PRIVATE") => false
+              (string/includes? (json/generate-string r)
+                                "fake-cloudflare-tool-token") => false)))))
+
+(fact "invalid Wise requests stop mixed batches before any paid inference"
+  (with-capabilities
+    (fn [{:keys [wise inference]}]
+      (fact (error-message
+              #(run-calls nil [["clef" native-decision]
+                                ["wise" {"action" "balance"
+                                         "account" "unconfigured"}]]))
+            => "That Wise account is not configured."
+            @inference => [] @wise => []))))
+
+(fact "Wise conversation policy also narrows explicit native discovery"
+  (with-capabilities
+    (fn [{:keys [wise inference]}]
+      (let [cfg (wise/config)]
+        (with-redefs [wise/config
+                      (constantly (assoc cfg :conversations ["workspace/C2"]))]
+          (execution/in-event execution/request "ai tools yetibot"
+            (fn [request]
+              (let [actor (policy/actor request)]
+                (doseq [cfg [nil (assoc-in config
+                                          [:toolsets 0 :native-tools]
+                                          ["clef" "wise"])]]
+                  (with-redefs [mcp/config (constantly cfg)]
+                    (fact (some #{"yetibot/wise"}
+                                (tools/tool-names "yetibot" actor)) => nil))))))
+          (fact (some? (error-message
+                         #(run-calls nil
+                            [["clef" native-decision]
+                             ["wise" {"action" "balance"}]]))) => true)))
+      (fact @wise => [] @inference => []))))
+
+(fact "uncertain paid inference halts later Wise reads without automatic retry"
+  (with-capabilities
+    (fn [{:keys [wise]}]
+      (let [attempts (atom 0)]
+        (with-redefs [cf/infer!
+                      (fn [& _]
+                        (swap! attempts inc)
+                        (throw (Exception. "fake-cloudflare-tool-token")))]
+          (let [r (run-calls nil [["clef" native-decision]
+                                  ["wise" {"action" "balance"}]])]
+            (fact @attempts => 1 @wise => []
+                  (get-in r [:replies 0 :isError]) => true
+                  (get-in r [:replies 1 :skipped]) => true
+                  (get-in r [:sent 1 :options :tool_choice]) => "none"
+                  (get-in r [:result :result/data :mcp :tool-calls]) => 1
+                  (string/includes? (json/generate-string r)
+                                    "fake-cloudflare-tool-token")
+                  => false)))))))
+
+(fact "invalid inference schemas stop mixed batches before even Wise reads"
+  (with-capabilities
+    (fn [{:keys [wise inference]}]
+      (doseq [field [{"type" "number" "decimals" 7}
+                     {"type" "estimate" "min" "alpha" "max" "omega"}
+                     {"type" "duration" "unit" "USD"}]]
+        (fact (error-message
+                #(run-calls nil
+                   [["wise" {"action" "balance"}]
+                    ["clairic" {"fields" {"x" field} "input" "Value 42"}]]))
+              => "Invalid arguments for native structured inference tool."))
+      (fact @wise => [] @inference => []))))
