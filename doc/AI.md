@@ -205,6 +205,29 @@ unknown tasks remain `model-specific`. Other providers retain standard
 labels. Its `:result/collection-path` links each label to a structured model
 record, so `!cf models | random | data show` shows the selected record, not
 just its display string. No coverage/header row enters the model collection.
+For a compact overview or a smaller listing:
+
+```text
+!cf models --categories
+!cf models --category text-generation
+!cf models --category text-to-image | random | data show
+!cf models --category text-generation | grep gemma | head | data show
+```
+
+Categories come from Cloudflare's task names, not guesses about model IDs or
+capabilities. The overview lists category IDs and model counts, sorted by ID;
+use one of those IDs with `--category` (case-insensitive). Missing or unusable
+task names appear under `uncategorized`. The overview's structured collection
+contains category records (`id`, `name`, `count`), not hidden model records.
+Filtering keeps the complete matching model records and their original order.
+The bare `cf models` listing is unchanged. A task category is not an inference
+interface: Text Generation can include decision/extraction models as well as
+chat models. Check each model's interface label before choosing it for chat.
+Invalid catalog options return usage before configuration or discovery;
+unmatched categories return a static hint. Neither falls through to inference,
+and a catalog error stops the remaining pipeline. These are metadata-only
+commands; they do not send inference requests.
+
 Records retain description, task, catalog UUID/source/timestamps/tags, known
 properties (including price, terms/license and deprecation when supplied),
 limits, and a compact schema summary. Prices retain the provider's exact units
