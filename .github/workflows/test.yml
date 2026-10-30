@@ -8,7 +8,10 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Avoid the mixed image pool during the ubuntu-latest migration.
+    runs-on: ubuntu-26.04
+    env:
+      JAVA_TOOL_OPTIONS: -Xmx1024m
     services:
       postgres:
         image: postgres
@@ -45,14 +48,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-maven-
 
-      # runs the tests and generates code coverage metrics
-      - name: test
+      # Dump JVM stacks on a stall, then fail rather than occupy a runner
+      # indefinitely. Both suites remain mandatory in the required test job.
+      - name: Midje coverage
+        timeout-minutes: 6
         env:
           YETIBOT_DB_URL: postgresql://yetibot:yetibot@localhost:5432/yetibot
           CLOVERAGE_VERSION: 1.1.2
         run: |
-          lein with-profile +test cloverage --codecov --runner midje
-          lein with-profile +test test yetibot.test.models.ai-mcp-catalog yetibot.test.models.ai-provider-catalog
+          timeout --signal=QUIT --kill-after=20s 240s \
+            lein with-profile +test cloverage --codecov --runner midje
+
+      - name: Catalog cache tests
+        timeout-minutes: 6
+        env:
+          YETIBOT_DB_URL: postgresql://yetibot:yetibot@localhost:5432/yetibot
+        run: |
+          timeout --signal=QUIT --kill-after=20s 240s \
+            lein with-profile +test test \
+              yetibot.test.models.ai-mcp-catalog \
+              yetibot.test.models.ai-provider-catalog
 
       # - uses: codecov/codecov-action@v5
       #   with:

@@ -101,12 +101,12 @@
            (discord-result #(discord/delete-message! conn thread id))))
        (future-cancel progress))}))
 
-(defn- in-discord [prepared channel-id message-id]
+(defn- in-discord [prepared args channel-id message-id]
   (let [thread (if (:no-thread prepared) channel-id
                 (legacy/start-thread! channel-id message-id (:prompt prepared)))
         progress (start-progress! (legacy/rest-conn) thread)
         result (try
-                 (ai/safely #(generate
+                 (ai/safely args #(generate
                                (assoc prepared :on-progress
                                                (:update! progress))))
                  (finally ((:stop! progress))))]
@@ -137,7 +137,7 @@
    # Discord shows live thinking previews, tool status and draft answer text."
   {:yb/cat #{:ai}}
   [{:keys [chat-source] :as args}]
-  (ai/safely
+  (ai/safely args
     (fn []
       (let [_ (when execution/*sensitive* (execution/sensitive!))
             prepared (ai/prepare-prompt args "grok" usage grok-config
@@ -146,7 +146,7 @@
             channel-id (or (:channel-id event) chat/*target*)
             message-id (:id event)]
         (if (and (legacy/discord?) channel-id message-id)
-          (in-discord prepared channel-id message-id)
+          (in-discord prepared args channel-id message-id)
           (generate prepared))))))
 
 (cmd-hook #"grok"

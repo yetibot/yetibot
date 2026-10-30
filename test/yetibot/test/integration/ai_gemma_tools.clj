@@ -8,6 +8,7 @@
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-input :as input]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
@@ -45,7 +46,7 @@
 (defn run-offline
   "Only HTTP/catalog/config boundaries are mocked. Native tools, validation,
    authorization, child ai/complete and parent continuation use real code."
-  [outputs {:keys [cfg unknown-child? actor-user]
+  [outputs {:keys [cfg unknown-child? actor-user pipeline-input]
             :or {cfg config actor-user "U1"}}]
   (execution/in-event execution/request "ai compare supplied text"
     (fn [request]
@@ -85,7 +86,8 @@
                            [{:role "system" :content "PRIVATE-PARENT-CONTEXT"}
                             {:role "user" :content "Compare three models"}]
                            {:actor (assoc (policy/actor request)
-                                          :user actor-user)})
+                                          :user actor-user)
+                            :pipeline-input pipeline-input})
                          (catch Exception e {:error (.getMessage e)}))]
             {:result result :posts @posts :callbacks @callbacks
              :catalogs @catalogs}))))))
@@ -94,6 +96,15 @@
   (filterv #(not= parent-model (get-in % [1 :model])) (:posts run)))
 (defn parent-posts [run]
   (filterv #(= parent-model (get-in % [1 :model])) (:posts run)))
+
+(fact "piped metadata reaches the parent but never implicitly enters a child"
+  (let [snapshot (input/capture {:data {:private "PIPED-PARENT-ONLY"}})
+        run (run-offline [screenshot] {:pipeline-input snapshot})]
+    (count (:callbacks run)) => 1
+    (string/includes? (str (get-in (first (parent-posts run)) [1 :messages]))
+                      "PIPED-PARENT-ONLY") => true
+    (get-in (first (child-posts run)) [1 :messages])
+    => [{:role "user" :content prompt}]))
 
 (fact "screenshot output invokes a native child rather than leaking markup"
   (let [run (run-offline [screenshot] {})]

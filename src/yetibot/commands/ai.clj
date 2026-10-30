@@ -3,6 +3,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-input :as input]
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
             [yetibot.models.ai-tools :as tools]
@@ -19,10 +20,15 @@
   "Only leading flags are options. Use -- to start a prompt with a flag."
   ([args] (parse-prompt args usage))
   ([args usage] (parse-prompt args usage {}))
-  ([args usage switches]
+  ([args usage switches] (parse-prompt args usage switches nil))
+  ([args usage switches default-prompt]
    (loop [remaining (string/trim args) options {}]
      (cond
-       (string/blank? remaining) (ai/fail usage)
+       (string/blank? remaining)
+       (if (and default-prompt
+                (not (and (:toolset options) (:no-tools options))))
+         (assoc options :prompt default-prompt)
+         (ai/fail usage))
        (string/starts-with? remaining "--")
        (let [[flag rest-args] (string/split remaining #"\s+" 2)
              switch (get (assoc switches "--no-tools" :no-tools) flag)]
@@ -53,13 +59,24 @@
                  (ai/fail usage))
                (assoc options :prompt remaining))))))
 
-(defn safely [f]
-  (try
-    (f)
-    (catch Exception e
-      {:result/error (if (:ai/error (ex-data e))
-                       (.getMessage e)
-                       "The AI request failed. Check the provider configuration and try again.")})))
+(defn safely
+  ([f] (safely nil f))
+  ([args f]
+   (try
+     (f)
+     (catch Exception e
+       (if (:ai/piped-input (ex-data e))
+         (do
+           (when-let [skip (:skip-next-n args)]
+             (reset! skip (count (:next-cmds args))))
+           ;; Core error decoration includes the evaluated command/input.
+           {:result/value input/error-message
+            :result/data {:isError true :error input/error-message}})
+         {:result/error
+          (if (:ai/error (ex-data e))
+            (.getMessage e)
+            (str "The AI request failed. Check the provider configuration "
+                 "and try again."))})))))
 
 (defn providers-cmd
   "ai providers # list configured AI provider names"
@@ -300,7 +317,11 @@
    (prepare-prompt args command-provider prompt-usage resolve-config {}))
   ([{:keys [match] :as args} command-provider prompt-usage resolve-config
     switches]
-   (let [options (parse-prompt match prompt-usage switches)
+   (let [snapshot (input/capture args)
+         options (parse-prompt (if snapshot (input/command-text args) match)
+                               prompt-usage switches
+                               (when snapshot
+                                 "Respond to the supplied Yetibot input."))
          _ (when (and command-provider (:provider options))
              (ai/fail prompt-usage))
          config (resolve-config)
@@ -320,20 +341,33 @@
      (when-not model
        (ai/fail (str "No default model configured for this provider. "
                      "Use --model <model> or configure its model.")))
-     (assoc options :provider provider :model model
-            :messages (context/messages args (:prompt options))
-            :actor (policy/actor args)))))
+     (cond-> (assoc options :provider provider :model model
+                    :messages (context/messages args (:prompt options))
+                    :actor (policy/actor args))
+       snapshot (assoc :pipeline-input snapshot
+                       :additional-secrets (keep :key (:providers config)))))))
 
 (defn complete-prompt
-  [{:keys [provider model messages no-tools toolset actor on-progress]}]
+  [{:keys [provider model messages no-tools toolset actor on-progress
+           pipeline-input additional-secrets]}]
   (if no-tools
-    (let [messages (tools/host-messages messages)]
+    (let [credential-file (:key-file provider)
+          provider (if pipeline-input (ai/resolve-provider provider) provider)
+          redactions (when pipeline-input
+                       (assoc (try (mcp/config) (catch Exception _ {}))
+                              :secrets (concat [(:key provider) credential-file]
+                                               additional-secrets)))
+          messages (tools/host-messages
+                     (input/messages messages pipeline-input redactions))]
       (if on-progress
         (ai/complete (dissoc provider :native-tools) model messages
                      {:on-progress on-progress})
         (ai/complete (dissoc provider :native-tools) model messages)))
     (tools/complete provider model messages
                     (cond-> {:toolset toolset :actor actor}
+                      pipeline-input (assoc :pipeline-input pipeline-input
+                                            :additional-secrets
+                                            additional-secrets)
                       on-progress (assoc :on-progress on-progress)))))
 
 (defn prompt-cmd
@@ -344,7 +378,8 @@
    ai --no-tools <prompt> # answer without native or MCP tools"
   {:yb/cat #{:ai}}
   [args]
-  (safely #(autodraft/complete (prepare-prompt args) args complete-prompt)))
+  (safely args
+    #(autodraft/complete (prepare-prompt args) args complete-prompt)))
 
 (cmd-hook #"ai"
   #"^providers\s*$" providers-cmd
