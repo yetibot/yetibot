@@ -65,6 +65,57 @@
       => true
       (some #(re-find #"PRIVATE|OPAQUE" (pr-str %)) @events) => nil)))
 
+(fact "completed answer items survive continued work without duplicate delivery"
+  (let [seen (atom []) posts (atom 0)
+        first-answer {:id "message-1" :type "message" :role "assistant"
+                      :status "completed"
+                      :content [{:type "output_text" :text "First provider-"}
+                                {:type "output_text"
+                                 :text "secret and other-secret."}]}
+        next-answer {:id "message-2" :type "message" :role "assistant"
+                     :status "completed"
+                     :content [{:type "output_text" :text "Next answer."}]}
+        body {:status "completed" :output [first-answer next-answer]}
+        wire (events-text
+               [{:type "response.output_item.done" :output_index 0
+                 :item first-answer}
+                {:type "response.output_item.done" :output_index 0
+                 :item first-answer}
+                {:type "response.reasoning_text.delta"
+                 :delta "Still working with a safe trailing buffer."}
+                {:type "response.output_item.done"
+                 :item {:type "function_call" :arguments "PRIVATE"}}
+                {:type "response.completed" :response body}])]
+    (with-redefs [client/post
+                  (fn [& _]
+                    (swap! posts inc)
+                    {:status 200 :body (bytes-stream wire)})]
+      (ai/chat provider "grok-4.7" []
+               {:on-progress #(swap! seen conj %)
+                :progress-config {:secrets ["other-secret"]}}) => body
+      (vec (keep :answer @seen))
+      => ["First [redacted] and [redacted]." "Next answer."]
+      @posts => 1
+      (some #(re-find #"provider-|other-secret|PRIVATE" (pr-str %)) @seen)
+      => nil)))
+
+(fact "completed answers are bounded after credential replacement"
+  (let [seen (atom [])
+        item {:type "message" :role "assistant"
+              :content [{:type "output_text"
+                         :text (str (String. (char-array 65528 (char 97)))
+                                    "S")}]}
+        body {:status "completed" :output [item]}]
+    (with-redefs [client/post
+                  (fn [& _]
+                    {:status 200 :headers {"content-type" "application/json"}
+                     :body (bytes-stream (json/generate-string body))})]
+      (ai/chat provider "grok-4.7" []
+               {:on-progress #(swap! seen conj %)
+                :progress-config {:secrets ["S"]}}) => body
+      (some :answer-limit? @seen) => true
+      (keep :answer @seen) => [])))
+
 (facts "SSE errors or EOF cannot become a completed response"
   (doseq [wire [[{:type "response.output_text.delta" :delta "Partial"}]
                 [{:type "response.incomplete"

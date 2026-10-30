@@ -98,11 +98,15 @@
       (fn [body]
         (if (= 1 (swap! turns inc))
           (let [output (conj agentic-state
+                             (assoc (text-output "I have a lead.")
+                                    :id "lead" :status "completed")
                              (function-call (account-function-name body)
                                             "stream-call" "{}"))]
             (reset! original output)
             (fn [out]
               (write-event! out {:type "response.web_search_call.searching"})
+              (write-event! out {:type "response.output_item.done"
+                                 :output_index 2 :item (nth output 2)})
               (write-event! out {:type "response.function_call_arguments.delta"
                                  :delta "PRIVATE-ARGUMENTS"})
               (write-event! out {:type "response.output_item.added"
@@ -124,7 +128,7 @@
                          {:on-progress
                           (fn [event]
                             (swap! seen conj event)
-                            (when (= "Preparing a tool request" (:phase event))
+                            (when (:answer event)
                               (deliver observed true)))}))]
           (try
             (fact (deref observed 3000 :timeout) => true
@@ -145,7 +149,9 @@
               (boolean
                 (some #(re-find #"^Running mcp_.*__whoami$" (:phase % ""))
                       @seen)) => true
-              (some #(re-find #"PRIVATE|opaque" (pr-str %)) @seen) => nil)))))))
+              (some #(re-find #"PRIVATE|opaque" (pr-str %)) @seen) => nil
+              (vec (keep :answer @seen))
+              => ["I have a lead." "Yetibot."])))))))
 
 (facts "completed SSE batches still validate every call before execution"
   (doseq [kind [:unknown :duplicate :over-budget]]

@@ -2,6 +2,7 @@
   (:require [clojure.core.async :as async]
             [clojure.core.async.impl.protocols :as async-protocols]
             [clojure.data.json :as json]
+            [clojure.string :as string]
             [discljord.messaging :as discord]
             [discljord.messaging.impl :as discord-impl]
             [discljord.util :as discord-util]
@@ -10,6 +11,7 @@
             [yetibot.api.ai :as api]
             [yetibot.commands.ai :as command-ai]
             [yetibot.commands.grok :as grok]
+            [yetibot.core.adapters.discord :as host-discord]
             [yetibot.core.chat :as chat]
             [yetibot.core.commands.grok :as legacy]
             [yetibot.core.commands.grokimage :as image]
@@ -315,6 +317,250 @@
                 (get-in @captured [0 :native-tools]) => nil
                 (second @captured) => "chosen"
                 (fn? (get-in @captured [3 :on-progress])) => true))))))
+
+(defn record-live! [record]
+  (fn [target chunks]
+    (binding [chat/*target* target]
+      (doseq [chunk chunks] (record chunk)))
+    :published))
+
+(facts "completed answers post immediately without repeating the final text"
+  (doseq [[answers final-text] [[["First SECRET" "Final answer"] "Final answer"]
+                               [["First SECRET" "Next"] "First SECRETNext"]]]
+    (let [posted (atom []) first-post (atom nil)]
+      (with-discord
+        (fn []
+          (with-redefs [discord/create-message!
+                        (fn [& _] (discord-promise {:id "progress"}))
+                        discord/delete-message!
+                        (fn [& _] (discord-promise {}))
+                        tools/complete
+                        (fn [_ _ _ options]
+                          ((:on-progress options) {:answer (first answers)})
+                          (reset! first-post @posted)
+                          ((:on-progress options) {:phase "Running a tool"})
+                          ((:on-progress options) {:answer (second answers)})
+                          {:result/value final-text})
+                        host-discord/publish-command-output!
+                        (record-live!
+                          #(swap! posted conj [chat/*target* %]))
+                        chat/chat-data-structure
+                        (fn [value] (swap! posted conj [chat/*target* value]))]
+            (grok/grok-cmd discord-request)
+            (fact @first-post
+                  => [["new-thread"
+                       "First [redacted]\n\nSent via configured-grok"]]
+                  @posted
+                  => [["new-thread"
+                       "First [redacted]\n\nSent via configured-grok"]
+                      ["new-thread"
+                       (str (second answers)
+                            "\n\nSent via configured-grok")]])))))))
+
+(fact "an error after a published answer remains visible"
+  (let [posted (atom [])]
+    (with-discord
+      (fn []
+        (with-redefs [discord/create-message!
+                      (fn [& _] (discord-promise {:id "progress"}))
+                      discord/delete-message!
+                      (fn [& _] (discord-promise {}))
+                      tools/complete
+                      (fn [_ _ _ options]
+                        ((:on-progress options) {:answer "First answer"})
+                        {:result/error "Safe continuation failure."})
+                      host-discord/publish-command-output!
+                      (record-live! #(swap! posted conj %))
+                      chat/chat-data-structure #(swap! posted conj %)]
+          (grok/grok-cmd discord-request)
+          (fact @posted => ["First answer\n\nSent via configured-grok"
+                           "Safe continuation failure."]))))))
+
+(fact "completed answer delivery has an explicit shared chat-message limit"
+  (let [posted (atom [])]
+    (with-discord
+      (fn []
+        (with-redefs [discord/create-message!
+                      (fn [& _] (discord-promise {:id "progress"}))
+                      discord/delete-message!
+                      (fn [& _] (discord-promise {}))
+                      tools/complete
+                      (fn [_ _ _ options]
+                        (doseq [n (range (+ chat/max-msg-count 2))]
+                          ((:on-progress options) {:answer (str "Answer " n)}))
+                        {:result/value "Final answer"})
+                      host-discord/publish-command-output!
+                      (record-live! #(swap! posted conj %))
+                      chat/chat-data-structure #(swap! posted conj %)]
+          (grok/grok-cmd discord-request)
+          (fact (count @posted) => (inc chat/max-msg-count)
+                (last @posted)
+                => (str "Additional Grok answers exceeded the chat delivery "
+                        "limit.\n\nSent via configured-grok")))))))
+
+(def limit-notice
+  (str "Additional Grok answers exceeded the chat delivery limit."
+       "\n\nSent via configured-grok"))
+
+(defn delivery [events final-text & [overrides status]]
+  (let [live (atom []) final (atom []) rest (atom [])]
+    (with-discord
+      (fn []
+        (with-redefs [api/config
+                      (constantly {:providers [(merge provider overrides)]})
+                      discord/create-message!
+                      (fn [_ target & options]
+                        (let [payload (apply hash-map options)]
+                          (when-not (= "*thinking* ▰" (:content payload))
+                            (swap! rest conj [target payload]))
+                          (discord-promise {:id "progress"})))
+                      discord/delete-message!
+                      (fn [& _] (discord-promise {}))
+                      host-discord/publish-command-output!
+                      (fn [target chunks]
+                        (swap! live conj [target chunks])
+                        (if (instance? Exception status)
+                          (throw status)
+                          (or status :published)))
+                      tools/complete
+                      (fn [_ _ _ options]
+                        (doseq [event events] ((:on-progress options) event))
+                        (if (map? final-text) final-text
+                          {:result/value final-text}))
+                      chat/chat-data-structure #(swap! final conj %)]
+          (grok/grok-cmd discord-request))))
+    {:live @live :final @final :rest @rest}))
+
+(defn live-chunks [result]
+  (vec (mapcat second (:live result))))
+
+(fact "one 61000-character answer is rejected whole, never a giant final"
+  (let [answer (string/join (repeat 61000 "a"))
+        result (delivery [{:answer answer}] answer)]
+    (live-chunks result) => [limit-notice]
+    (:final result) => []))
+
+(fact "physical chunks share the allowance across multipart answers"
+  (let [answer (string/join (repeat 29000 "a"))
+        result (delivery [{:answer answer} {:answer answer} {:answer "extra"}]
+                         "extra")
+        chunks (live-chunks result)]
+    (count chunks) => 31
+    (mapv count (map second (take 2 (:live result)))) => [15 15]
+    (last chunks) => limit-notice
+    (:final result) => []))
+
+(facts "UTF8 admission includes cumulative rendered footers and redactions"
+  (doseq [[answer overrides accepted]
+          [[(string/join (repeat 11000 "界")) {} 1]
+           [(string/join (repeat 1000 "界"))
+            {:model (string/join (repeat 1000 "界"))} 10]
+           [(string/join (repeat 1800 "KEY!界")) {:key "KEY!"} 2]]]
+    (let [result (delivery (repeat 25 {:answer answer}) answer overrides)
+          batches (:live result)
+          notice (last (live-chunks result))]
+      (fact (count batches) => (inc accepted)
+            (boolean (re-find #"Additional Grok answers" notice)) => true
+            (<= (count notice) 2000) => true
+            (:final result) => []))))
+
+(facts "a limit sentinel is sticky, including with no completed answers"
+  (doseq [events [[{:answer-limit? true}]
+                  [{:answer-limit? true} {:answer-limit? true}
+                   {:answer "must not post"}]]]
+    (let [result (delivery events "must not post")]
+      (fact (live-chunks result) => [limit-notice]
+            (:final result) => []))))
+
+(fact "overflow metadata cannot turn the notice into multipart output"
+  (let [result (delivery [{:answer-limit? true}] "hidden"
+                         {:model (string/join (repeat 2100 "m"))})]
+    (live-chunks result)
+    => ["Additional Grok answers exceeded the chat delivery limit."]
+    (:final result) => []))
+
+(facts "Discord chunks honor exact UTF16 boundaries and surrogate pairs"
+  (doseq [answer [(string/join (repeat 1974 "a"))
+                  (str (string/join (repeat 1999 "a")) "😀tail")]]
+    (let [result (delivery [{:answer answer}] answer)
+          chunks (live-chunks result)]
+      (fact (string/join chunks)
+            => (str answer "\n\nSent via configured-grok")
+            (mapv count chunks)
+            => (if (= 1974 (count answer)) [2000] [1999 32])
+            (some #(Character/isHighSurrogate (last %)) chunks) => nil
+            (some #(Character/isLowSurrogate (first %)) chunks) => nil
+            (:final result) => []))))
+
+(fact "stale ownership never falls back or emits further answers/final"
+  (let [result (delivery [{:answer "obsolete"} {:answer "later"}]
+                         "different final" nil :stale)]
+    (count (:live result)) => 1
+    (:rest result) => []
+    (:final result) => []))
+
+(fact "a final without completed events still obeys physical admission"
+  (let [result (delivery [] (string/join (repeat 61000 "a")))]
+    (live-chunks result) => [limit-notice]
+    (:final result) => []))
+
+(fact "only unavailable context permits trusted immediate REST fallback"
+  (let [result (delivery [{:answer "First SECRET @everyone"}]
+                         "First SECRET @everyone" nil :unavailable)]
+    (:rest result)
+    => [["new-thread"
+         {:content "First [redacted] @everyone\n\nSent via configured-grok"
+          :allowed-mentions {:parse []}}]]
+    (:final result) => []))
+
+(fact "unconfirmed host publication is not a success or an automatic retry"
+  (let [result (delivery [{:answer "First"} {:answer "later"}]
+                         "different final" nil (Exception. "SECRET"))]
+    (count (:live result)) => 1
+    (:rest result) => []
+    (:final result)
+    => ["Grok answer delivery failed; some messages may have arrived."]))
+
+(fact "a late safe provider error remains visible after the overflow notice"
+  (let [result (delivery [{:answer-limit? true}]
+                         {:result/error "Safe continuation failure."})]
+    (live-chunks result) => [limit-notice]
+    (:final result) => ["Safe continuation failure."]))
+
+(fact "partial standalone REST failure stops without retry or final replay"
+  (let [attempts (atom []) final (atom [])
+        answer (string/join (repeat 2100 "a"))]
+    (with-discord
+      (fn []
+        (with-redefs [discord/create-message!
+                      (fn [conn target & options]
+                        (let [payload (apply hash-map options)]
+                          (if (= "*thinking* ▰" (:content payload))
+                            (discord-promise {:id "progress"})
+                            (do
+                              (swap! attempts conj [conn target payload])
+                              (if (= 1 (count @attempts))
+                                (discord-promise {:id "confirmed"})
+                                (discord-promise {}))))))
+                      discord/delete-message!
+                      (fn [& _] (discord-promise {}))
+                      tools/complete
+                      (fn [_ _ _ options]
+                        ((:on-progress options) {:answer answer})
+                        ((:on-progress options) {:answer "do not send"})
+                        {:result/value answer})
+                      chat/chat-data-structure #(swap! final conj %)]
+          ;; Real candidate hook returns :unavailable outside core context.
+          (grok/grok-cmd discord-request))))
+    (count @attempts) => 2
+    (mapv #(take 2 %) @attempts)
+    => [[:connection "new-thread"] [:connection "new-thread"]]
+    (mapv #(get-in % [2 :allowed-mentions]) @attempts)
+    => [{:parse []} {:parse []}]
+    (string/join (map #(get-in % [2 :content]) @attempts))
+    => (str answer "\n\nSent via configured-grok")
+    @final
+    => ["Grok answer delivery failed; some messages may have arrived."]))
 
 (facts "thread switch is Grok-only and respects leading-flag termination"
   (with-discord

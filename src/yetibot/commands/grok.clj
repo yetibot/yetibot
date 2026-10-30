@@ -8,6 +8,7 @@
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
+            [yetibot.core.adapters.discord :as host-discord]
             [yetibot.core.chat :as chat]
             ;; Require before registering our hook: the loader may encounter
             ;; core before or after this namespace, but require is idempotent.
@@ -21,13 +22,16 @@
   (str "Usage: grok [--model <model>] "
        "[--toolset <name> | --no-tools] [--no-thread] <prompt>"))
 
+(defn- answer-text [prepared text]
+  (str text "\n\nSent via " (:model prepared)))
+
 (defn- generate [prepared]
   (let [result (ai/complete-prompt prepared)]
     (walk/postwalk
       #(if (string? %)
          (mcp/redact % {:secrets [(get-in prepared [:provider :key])]}) %)
       (-> result
-          (update :result/value str "\n\nSent via " (:model prepared))
+          (update :result/value #(answer-text prepared %))
           (update :result/data assoc
                   :provider (get-in prepared [:provider :name])
                   :model (:model prepared))))))
@@ -101,18 +105,113 @@
            (discord-result #(discord/delete-message! conn thread id))))
        (future-cancel progress))}))
 
+(defn- answer-chunks [^String text]
+  (let [length (.length text)
+        maximum host-discord/discord-max-message-length]
+    (loop [start 0 chunks []]
+      (if (= start length) chunks
+        (let [end (min length (+ start maximum))
+              end (if (and (< end length)
+                           (Character/isHighSurrogate (.charAt text (dec end)))
+                           (Character/isLowSurrogate (.charAt text end)))
+                    (dec end) end)]
+          (recur end (conj chunks (subs text start end))))))))
+
+(defn- answer-publisher [prepared thread]
+  (let [state (atom {:answers [] :bytes 0 :messages 0})
+        render #(mcp/redact (answer-text prepared %)
+                            {:secrets [(get-in prepared [:provider :key])]})
+        notice "Additional Grok answers exceeded the chat delivery limit."
+        rendered-notice (render notice)
+        notice (if (<= (count rendered-notice)
+                       host-discord/discord-max-message-length)
+                 rendered-notice notice)]
+    (letfn [(blocked? []
+              (some @state [:limited? :stale? :failed?]))
+            (post! [chunks]
+              (try
+                (case (host-discord/publish-command-output! thread chunks)
+                  :published true
+                  :stale (do (swap! state assoc :stale? true) false)
+                  :unavailable
+                  (do
+                    (doseq [chunk chunks]
+                      (let [message
+                            (deref (discord/create-message!
+                                     (legacy/rest-conn) thread :content chunk
+                                     :allowed-mentions {:parse []})
+                                   30000 nil)]
+                        (when-not (:id message)
+                          (throw (ex-info "Unconfirmed Discord delivery" {})))))
+                    true))
+                ;; A REST batch may have partially delivered. Do not record
+                ;; success or automatically retry an uncertain batch/final.
+                (catch Exception _
+                  (swap! state assoc :failed? true)
+                  false)))
+            (limit! []
+              (swap! state assoc :limited? true)
+              (post! [notice]))
+            (admit! [text rendered publish!]
+              (let [chunks (answer-chunks rendered)
+                    bytes (alength (.getBytes ^String rendered "UTF-8"))]
+                (if (or (> (+ (:messages @state) (count chunks))
+                           chat/max-msg-count)
+                        (> (+ (:bytes @state) bytes) 65536))
+                  (limit!)
+                  (when (publish! chunks)
+                    (swap! state #(-> % (update :answers conj text)
+                                       (update :messages + (count chunks))
+                                       (update :bytes + bytes)))))))
+            (posted? [value]
+              (let [answers (:answers @state)]
+                (some #(= value (render (string/join (subvec answers %))))
+                      (range (count answers)))))]
+      {:update!
+       (fn [event]
+         (locking state
+           (when-not (blocked?)
+             (if (:answer-limit? event)
+               (limit!)
+               (when (string? (:answer event))
+                 (admit! (:answer event) (render (:answer event)) post!))))))
+       :finish!
+       (fn [value]
+         (locking state
+           (when-not (or (blocked?) (posted? value))
+             ;; Ordinary terminal output still uses the collector, but must
+             ;; pass the same whole-answer admission and safe splitting.
+             (admit! nil value
+                     (fn [chunks]
+                       (doseq [chunk chunks]
+                         (chat/chat-data-structure chunk))
+                       true)))))
+       :stale? #(:stale? @state)
+       :failed? #(:failed? @state)})))
+
 (defn- in-discord [prepared args channel-id message-id]
   (let [thread (if (:no-thread prepared) channel-id
                 (legacy/start-thread! channel-id message-id (:prompt prepared)))
         progress (start-progress! (legacy/rest-conn) thread)
+        answers (answer-publisher prepared thread)
         result (try
-                 (ai/safely args #(generate
-                               (assoc prepared :on-progress
-                                               (:update! progress))))
+                 (ai/safely
+                   args #(generate
+                           (assoc prepared :on-progress
+                                  (fn [event]
+                                    ((:update! answers) event)
+                                    ((:update! progress)
+                                     (dissoc event :answer :answer-limit?))))))
                  (finally ((:stop! progress))))]
     (binding [chat/*target* thread]
-      (chat/chat-data-structure (or (:result/error result)
-                                  (:result/value result))))
+      (when-not ((:stale? answers))
+        (if-let [error (:result/error result)]
+          (chat/chat-data-structure error)
+          (when-not ((:failed? answers))
+            ((:finish! answers) (:result/value result)))))
+      (when (and ((:failed? answers)) (not ((:stale? answers))))
+        (chat/chat-data-structure
+          "Grok answer delivery failed; some messages may have arrived.")))
     (chat/suppress {})))
 
 (defn- grok-config []
