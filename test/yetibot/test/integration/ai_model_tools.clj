@@ -18,6 +18,22 @@
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.test.support.ai-execution :as execution]))
 
+(fact "structured model output compiles redaction patterns once per traversal"
+  (let [compile-pattern re-pattern
+        compilations (atom 0)
+        result (with-redefs [clojure.core/re-pattern
+                             (fn [text]
+                               (swap! compilations inc)
+                               (compile-pattern text))]
+                 (#'models/safe-text
+                   (json/generate-string
+                     {:a "fixture/secret"
+                      :b ["fixture/secret" "public"]})
+                   {:secrets ["fixture/secret"]}))]
+    (json/parse-string result true)
+    => {:a "[redacted]" :b ["[redacted]" "public"]}
+    @compilations => 1))
+
 (def parent {:name "parent" :url "https://parent.example/v1" :model "p"})
 (def child {:name "child" :url "https://child.example/v1" :model "c"
             :key "child-token" :api "responses"

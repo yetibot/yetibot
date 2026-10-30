@@ -64,6 +64,24 @@
           (mcp/metadata-text "prefix quote\"/secret suffix" settings 12)
           => {:text "prefix [reda" :truncated true})))
 
+(fact "compiled redactors remain local to their credential snapshot"
+  (let [compile-pattern re-pattern
+        compilations (atom 0)
+        redact (with-redefs [clojure.core/re-pattern
+                             (fn [text]
+                               (swap! compilations inc)
+                               (compile-pattern text))]
+                 (mcp/metadata-redactor {:secrets ["quote\"/secret"]}))
+        other (mcp/metadata-redactor {:secrets ["other-secret"]})]
+    (redact "quote\\\"\\/secr\\u0065t other-secret")
+    => "[redacted] other-secret"
+    (redact "quote\"/secret") => "[redacted]"
+    @compilations => 1
+    (other "quote\"/secret other-secret") => "quote\"/secret [redacted]"
+    (mcp/metadata-redact "quote\"/secret other-secret"
+                         {:secrets ["other-secret"]})
+    => "quote\"/secret [redacted]"))
+
 (facts "public GitHub transport controls are not mistaken for credentials"
   (let [s (assoc server :tools ["get_commit"]
                         :headers {"Authorization" "Bearer private-token"

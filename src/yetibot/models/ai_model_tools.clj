@@ -154,7 +154,7 @@
          "key[-_]?file|account[-_]?id)$")))
 
 (defn- safe-text [text config]
-  (let [redact #(mcp/metadata-redact % config)
+  (let [redact (mcp/metadata-redactor config)
         ;; Decode whole JSON responses before redaction, so escaped credentials
         ;; and credential-valued fields cannot evade a raw substring scan.
         parsed (try (json/parse-string text) (catch Exception _ ::plain))]
