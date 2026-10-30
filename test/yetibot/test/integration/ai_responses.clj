@@ -196,10 +196,15 @@
       (let [result (try
                      (tools/complete provider "grok-4.7" messages
                                      {:on-progress identity})
-                     (catch Exception e (.getMessage e)))]
+                     (catch Exception e e))
+            report (:ai/tool-failure (ex-data result))]
         (fact
-          result
-          => "The AI provider returned an invalid or incomplete event stream."
+          (.getMessage result)
+          => (str "The AI provider request failed or returned "
+                  "an incomplete response.")
+          (:reason report) => :provider-failure
+          (:budget report) => {:limit 2 :used 0 :remaining 2 :requested 0}
+          (:calls report) => []
           @calls => []
           (count (filter #(= "/v1/responses" (:path %)) @requests)) => 1
           (boolean (some #(= "DELETE" (:method %)) @requests)) => true)))))
@@ -361,9 +366,20 @@
                             (function-call name "three" "{\"page\":3}")]))))
       {:content []}
       (fn [provider _ calls]
-        (fact (try (tools/complete provider "grok-4.7" messages)
-                   (catch Exception e (:ai/error (ex-data e)))) => true
-              @calls => [])))))
+        (let [report (try (tools/complete provider "grok-4.7" messages)
+                          (catch Exception e (:ai/tool-failure (ex-data e))))]
+          (fact (:reason report) => (case kind
+                                     :unknown :unavailable-tool
+                                     :bad-json :invalid-arguments
+                                     :duplicate-id :duplicate-ids
+                                     :duplicate-action :repeat-action
+                                     :over-budget :budget-exceeded)
+                (get-in report [:budget :used]) => 0
+                (get-in report [:budget :requested])
+                => (case kind :bad-json 1 :over-budget 3 2)
+                (every? #(and (= :rejected (:outcome %))
+                              (false? (:attempted %))) (:calls report)) => true
+                @calls => []))))))
 
 (fact "uncertain MCP outcomes stop the batch and remove native and local tools"
   (let [turns (atom 0)]

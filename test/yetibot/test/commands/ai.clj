@@ -53,6 +53,38 @@
                  "--no-tools --no-tools hello"]]
     (fact (ai/prompt-cmd {:match input}) => {:result/error ai/usage})))
 
+(facts "tool budget flags are strict and fail before provider preparation"
+  (ai/parse-prompt "--max-tool-calls 12 hello")
+  => {:max-tool-calls 12 :prompt "hello"}
+  (let [effects (atom 0)]
+    (with-redefs [api/config (fn [] (swap! effects inc))]
+      (doseq [flags ["--max-tool-calls 0" "--max-tool-calls 21"
+                     "--max-tool-calls 1.5" "--max-tool-calls +2"
+                     "--max-tool-calls 02"
+                     "--max-tool-calls 2 --max-tool-calls 3"
+                     "--no-tools --max-tool-calls 2"
+                     "--max-tool-calls 2 --no-tools"]]
+        (fact (ai/prompt-cmd {:match (str flags " PRIVATE-PROMPT")})
+              => {:result/error ai/usage}))
+      (fact @effects => 0))))
+
+(fact "trace failures use safe value/data and stop downstream commands"
+  (let [skip (atom 0)
+        report {:reason :provider-failure
+                :budget {:limit 6 :used 1 :remaining 5 :requested 0}
+                :calls [{:call 1 :tool "yetibot_help" :arguments {}
+                         :outcome :success :attempted true :confirmed true}]
+                :omitted 0 :truncated false}
+        result (ai/safely {:skip-next-n skip :next-cmds [:a :b]}
+                         #(throw (ex-info "PRIVATE-CAUSE"
+                                          {:ai/tool-failure report})))]
+    (contains? result :result/error) => false
+    (get-in result [:result/data :isError]) => true
+    (get-in result [:result/data :tool-trace]) => report
+    (string/includes? (:result/value result) "used=1") => true
+    (string/includes? (:result/value result) "PRIVATE") => false
+    @skip => 2))
+
 (facts "registered command routing"
   (let [[_ commands] (hooks/find-sub-cmds "ai")]
     (fact

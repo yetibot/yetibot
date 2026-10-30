@@ -20,7 +20,8 @@
 
 (def usage
   (str "Usage: grok [--model <model>] "
-       "[--toolset <name> | --no-tools] [--no-thread] <prompt>"))
+       "[--toolset <name> | --no-tools] [--max-tool-calls <1..20>] "
+       "[--no-thread] <prompt>"))
 
 (defn- answer-text [prepared text]
   (str text "\n\nSent via " (:model prepared)))
@@ -205,14 +206,21 @@
                  (finally ((:stop! progress))))]
     (binding [chat/*target* thread]
       (when-not ((:stale? answers))
-        (if-let [error (:result/error result)]
+        (if-let [error (or (:result/error result)
+                          (when
+                            (and (get-in result [:result/data :isError])
+                                 (get-in result [:result/data :tool-trace]))
+                            (:result/value result)))]
           (chat/chat-data-structure error)
           (when-not ((:failed? answers))
             ((:finish! answers) (:result/value result)))))
       (when (and ((:failed? answers)) (not ((:stale? answers))))
         (chat/chat-data-structure
           "Grok answer delivery failed; some messages may have arrived.")))
-    (chat/suppress {})))
+    (chat/suppress
+      (if (get-in result [:result/data :tool-trace])
+        {:result/value (chat/suppress {}) :result/data (:result/data result)}
+        {}))))
 
 (defn- grok-config []
   (let [config (if (= :not-found (:error (get-config map? [:ai])))
@@ -228,13 +236,20 @@
       config)))
 
 (defn grok-cmd
-  "grok <prompt> # ask Grok (provider named grok or xai.key)
-   grok --model <model> <prompt> # choose a model from the Grok provider
-   grok --toolset <name> <prompt> # use an authorized shared MCP toolset
-   grok --no-tools <prompt> # disable MCP and native search for this request
-   grok --no-thread <prompt> # reply here without creating a Discord thread
-   # Discord shows live thinking previews, tool status and draft answer text."
-  {:yb/cat #{:ai}}
+  {:doc (str "grok <prompt> # ask Grok (provider named grok or xai.key)\n"
+             "   grok --model <model> <prompt> # choose a model "
+             "from the Grok provider\n"
+             "   grok --toolset <name> <prompt> # use an authorized "
+             "shared MCP toolset\n"
+             "   grok --max-tool-calls <1..20> <prompt> # choose a total "
+             "host-call budget within the configured ceiling\n"
+             "   grok --no-tools <prompt> # disable MCP and native search "
+             "for this request\n"
+             "   grok --no-thread <prompt> # reply here without creating "
+             "a Discord thread\n"
+             "   # Discord shows live thinking previews, tool status "
+             "and draft answer text.")
+   :yb/cat #{:ai}}
   [{:keys [chat-source] :as args}]
   (ai/safely args
     (fn []

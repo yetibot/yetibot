@@ -43,7 +43,21 @@
 (def messages [{:role "user" :content "Find the launch discussion."}])
 
 (defn error-message [f]
-  (try (f) (catch Exception e (.getMessage e))))
+  (try (f)
+       (catch Exception e
+         (when-let [report (:ai/tool-failure (ex-data e))]
+           (fact (contains? #{:invalid-arguments :repeat-action :budget-exceeded
+                             :unavailable-tool :tool-exception}
+                            (:reason report)) => true)
+           (fact (get-in report [:budget :used])
+                 => (if (= :tool-exception (:reason report)) 1 0))
+           (fact (get-in report [:budget :requested])
+                 => (+ (count (:calls report)) (:omitted report)))
+           (fact (every? #(and (= :rejected (:outcome %))
+                               (false? (:attempted %)))
+                         (:calls report))
+                 => (not= :tool-exception (:reason report))))
+         (.getMessage e))))
 
 (defn with-history [f]
   (let [config (assoc (db/config) :table
@@ -242,7 +256,8 @@
                                (throw (AssertionError. "Database accessed")))]
       (fact (error-message #(run-calls config
                              [["history_count" {}] ["history" args]]))
-            => "Invalid arguments for native Yetibot tool."))))
+            => (str "The AI provider sent invalid tool arguments. "
+                    "No tools from that response were run.")))))
 
 (facts "help reads docs without executing a command or leaking alias bodies"
   (with-redefs [help/get-docs (constantly {"echo" #{"echo <text> # repeat"}
@@ -615,7 +630,8 @@
                          "top" (apply str (repeat 1001 "x")) "bottom" "y"}]]]
         (fact (error-message #(run-calls nil
                                [["gi" {"prompt" "valid image"}] [op args]]))
-              => "Invalid arguments for native Yetibot media tool."))
+              => (str "The AI provider sent invalid tool arguments. "
+                      "No tools from that response were run.")))
       (fact @calls => []))))
 
 (fact "configured credentials cannot become media prompts or captions"
@@ -629,7 +645,8 @@
                       "private-model-key"]]
         (fact (error-message #(run-calls nil
                                [["gi" {"prompt" (str "render " secret)}]]))
-              => "Media arguments contain configured credentials."))
+              => (str "The AI provider sent invalid tool arguments. "
+                      "No tools from that response were run.")))
       (fact @calls => []))))
 
 (fact "an uncertain image call is sanitized and halts the rest of the batch"
@@ -672,7 +689,8 @@
                                               :name (str "meme " secret)}]}})]
       (fact (error-message #(run-calls nil
                              [["gi" {"prompt" (str "render " secret)}]]))
-            => "Media arguments contain configured credentials."
+            => (str "The AI provider sent invalid tool arguments. "
+                    "No tools from that response were run.")
             (get-in (run-calls nil [["meme" {"action" "search"
                                              "query" "meme"}]])
                     [:replies 0 :structuredContent :templates 0 :name])
@@ -721,7 +739,8 @@
                   gi/grokimage-cmd (fn [_] (swap! calls inc))]
       (fact (error-message #(run-calls media-config
                              [["gi" {"prompt" "a yeti"}]]))
-            => "Policy changed."
+            => (str "A tool call failed with an unconfirmed outcome. "
+                    "Later calls were not run.")
             @calls => 0))))
 
 (defn with-capabilities [f]
@@ -833,7 +852,8 @@
               #(run-calls nil [["clef" native-decision]
                                 ["wise" {"action" "balance"
                                          "account" "unconfigured"}]]))
-            => "That Wise account is not configured."
+            => (str "The AI provider sent invalid tool arguments. "
+                    "No tools from that response were run.")
             @inference => [] @wise => []))))
 
 (fact "Wise conversation policy also narrows explicit native discovery"
@@ -902,7 +922,8 @@
       (fact (error-message
               #(run-calls nil [["gi" {"prompt" "a yeti"}]
                                 ["util" (util-args "sum" ["not a number"])]]))
-            => "Invalid arguments or bounds for native JSON utility.")
+            => (str "The AI provider sent invalid tool arguments. "
+                    "No tools from that response were run."))
       (fact @paid => 0)))
   (let [calls (atom 0)]
     (with-redefs [help/get-docs (fn [] (swap! calls inc) {})
@@ -916,7 +937,8 @@
                 #(run-calls nil [["help" {}]
                                   ["util" (util-args "random" [1 2])]
                                   ["util" bad]]))
-              => "Invalid arguments or bounds for native JSON utility."))
+              => (str "The AI provider sent invalid tool arguments. "
+                      "No tools from that response were run.")))
       (fact @calls => 0))))
 
 (facts "util shares duplicate and total call budgets before any effect"
@@ -964,5 +986,6 @@
                 #(run-calls nil
                    [["wise" {"action" "balance"}]
                     ["clairic" {"fields" {"x" field} "input" "Value 42"}]]))
-              => "Invalid arguments for native structured inference tool."))
+              => (str "The AI provider sent invalid tool arguments. "
+                      "No tools from that response were run.")))
       (fact @wise => [] @inference => []))))

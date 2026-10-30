@@ -540,6 +540,7 @@ options.
 !grok --no-tools Explain map and reduce without searching.
 !grok --no-thread Search X for recent Clojure discussions.
 !grok --no-thread --no-tools Explain transducers.
+!grok --max-tool-calls 12 --toolset cloudflare_read Summarize our account.
 ```
 
 Plain `grok` uses the provider named `grok`, never the shared default or an
@@ -1077,12 +1078,37 @@ entries, not Yetibot's full environment or its other API keys.
   is unavailable or a configured tool is missing, the request fails clearly;
   it does not silently answer as if a search succeeded. `--no-tools` skips all
   connections.
-- `:max-tool-calls` defaults to 6 and accepts 1–20. The limit includes every call
-  across all servers and model turns. At the limit the model gets one final turn
-  with tool use disabled. Repeated calls with identical arguments are rejected,
-  even if the model changes their call IDs. Failed or uncertain calls are not
-  automatically retried. If a call has an unknown outcome, remaining calls in its
-  batch are skipped and the model can only give a final answer, not run more tools.
+- `:ai :mcp :max-tool-calls` (environment `YETIBOT_AI_MCP_MAX_TOOL_CALLS`)
+  accepts 1–20; the fallback remains **6**. This is a total client-side
+  invocation budget per explicit command, across all selected MCP servers,
+  native Yetibot
+  tools, batches and parent-model turns. It is not nesting depth or a per-round
+  allowance. A text-only delegated child counts as one host call; its prompt
+  remains context-free and receives no parent budget instructions.
+- Leading `ai --max-tool-calls N` and `grok --max-tool-calls N` choose a strict
+  integer 1–20 for that request. With no explicit configured cap, a request can
+  choose 12 (or up to the host ceiling 20) instead of the fallback 6. An
+  explicit configured cap is an **operator ceiling**, not overridable by chat:
+  the effective budget is the smaller of that cap and the requested value.
+  Omitting the flag
+  retains the configured cap, or fallback 6. Named toolset selection narrows
+  tools/access; it does not reset or raise this shared MCP configuration
+  ceiling. There is no separate per-toolset budget setting.
+  Duplicate/invalid flags,
+  `--no-tools` with a budget, and budgets on text-only `cf` are rejected before
+  provider/credential/discovery work. Use `--` for a literal leading flag.
+- Each parent turn receives current total/used/remaining guidance, asking the
+  model to keep the whole next batch within the remainder and answer with
+  available evidence when exhausted. This is not authority: whole-batch hard
+  enforcement still runs before any call. At exhaustion the existing final
+  continuation has tools disabled; no extra closing inference or retry is added.
+  Provider-native search and `:max-turns` remain independent,
+  per-provider-request controls, not part of this client-call budget or a
+  monetary spending limit.
+  Repeated IDs/actions and duplicate current IDs are rejected separately from
+  cumulative budget overshoot. Every call in a refused batch executes **zero**
+  times. If a call has an unknown outcome, later calls in its batch are skipped
+  and further tools are disabled. Failed/uncertain calls are never auto-retried.
 - `:timeout-ms` defaults to 30000 and accepts 100–120000, per MCP operation.
   At most 64 tools are offered per request. Arguments are limited to 16384
   characters, and each returned tool result is shortened to 20000 characters.
@@ -1092,6 +1118,36 @@ entries, not Yetibot's full environment or its other API keys.
   are removed from returned text, and tool results are marked as untrusted data
   in the model's instructions. No connection credentials are deliberately sent
   to the AI provider.
+
+### Tool-loop failure trace
+
+A failed tool loop returns a safe error summary with budget total, used,
+remaining and requested batch size, plus ordered redacted calls. Earlier
+completed calls remain visible even if a later HTTP or event-stream request
+fails. Ordinal references (`#1`, `#2`, …), not raw provider IDs, identify calls.
+Only advertised policy-filtered tool identifiers are shown; unknown names are
+withheld. Outcomes distinguish confirmed success/error replies, attempted but
+unconfirmed calls, refused calls (not attempted), and skipped calls after
+uncertainty. No tool output or exception cause is included.
+
+Privacy takes precedence over verbatim arguments: freeform prompts, queries,
+input/history, captions, financial values, credentials and paths are withheld.
+Known credential and literal prompt copies (including JSON escapes) are removed
+before bounds; safe action/schema selectors and numeric pagination can remain.
+This is not a general PII detector. The request-local trace is not persisted
+in a new store or global cache. Normal platform history/logging still applies.
+
+Structured `:result/data` has `:isError true` and `:tool-trace`, including a
+closed `:reason`, `:budget`, `:calls`, `:omitted` and `:truncated`. The
+structured report
+is bounded to 40 rows and less than 12 KiB of UTF-8 JSON; each redacted argument
+view has depth/node/entry limits and at most 768 UTF-8 JSON bytes. Omissions and
+shortening are explicit. The chat summary fits one physical message and may
+omit more rows, with a notice referring to the bounded structured data; a
+truncated report is never described as a full trace. Errors stop downstream
+pipeline commands without core's raw-command error decoration. Discord Grok
+still publishes a late error after completed answers or the answer-overflow
+notice, while respecting stale revision ownership.
 
 ### X (Twitter) search: read-only hosted MCP
 

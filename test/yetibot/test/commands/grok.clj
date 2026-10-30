@@ -527,6 +527,48 @@
     (live-chunks result) => [limit-notice]
     (:final result) => ["Safe continuation failure."]))
 
+(fact "late trace errors remain visible after completed answers and overflow"
+  (doseq [events [[{:answer "First"}] [{:answer-limit? true}]]]
+    (let [message "Safe trace failure. budget=6 used=1 remaining=5 requested=0"
+          result (delivery events
+                           {:result/value message
+                            :result/data
+                            {:isError true
+                             :tool-trace {:reason :provider-failure}}})]
+      (fact (count (:live result)) => 1)
+      (fact (:final result)
+            => [(str message "\n\nSent via configured-grok")]))))
+
+(fact "actual thrown late trace errors publish once and retain structured data"
+  (let [posted (atom [])
+        report {:reason :provider-failure
+                :budget {:limit 6 :used 1 :remaining 5 :requested 0}
+                :calls [{:call 1 :tool "yetibot_help" :arguments {}
+                         :outcome :success :attempted true :confirmed true}]
+                :omitted 0 :truncated false}]
+    (with-discord
+      (fn []
+        (with-redefs [discord/create-message!
+                      (fn [& _] (discord-promise {:id "progress"}))
+                      discord/delete-message! (fn [& _] (discord-promise {}))
+                      tools/complete
+                      (fn [_ _ _ options]
+                        ((:on-progress options) {:answer "First"})
+                        (throw (ex-info "PRIVATE-CAUSE"
+                                        {:ai/tool-failure report})))
+                      host-discord/publish-command-output!
+                      (record-live! #(swap! posted conj %))
+                      chat/chat-data-structure #(swap! posted conj %)]
+          (let [result (grok/grok-cmd discord-request)]
+            (fact (get-in result [:result/data :tool-trace]) => report)
+            (fact (get-in result [:result/data :isError]) => true)
+            (fact (:suppress (meta (:result/value result))) => true)
+            (fact (count @posted) => 2)
+            (fact (string/includes? (last @posted) "used=1") => true)
+            (fact (string/includes? (last @posted) "#1 yetibot_help success")
+                  => true)
+            (fact (boolean (re-find #"PRIVATE" (last @posted))) => false)))))))
+
 (fact "partial standalone REST failure stops without retry or final replay"
   (let [attempts (atom []) final (atom [])
         answer (string/join (repeat 2100 "a"))]
