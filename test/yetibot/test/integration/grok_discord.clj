@@ -1,6 +1,7 @@
 (ns yetibot.test.integration.grok-discord
   (:require [cheshire.core :as json]
             [clojure.core.async :as async]
+            [clojure.java.jdbc :as jdbc]
             [clojure.string :as string]
             [discljord.messaging :as messaging]
             [discljord.util :as discord-util]
@@ -10,7 +11,9 @@
             [yetibot.core.adapters.discord :as discord]
             [yetibot.core.chat :as chat]
             [yetibot.core.commands.grok :as legacy]
+            [yetibot.core.commands.observe]
             [yetibot.core.config :as config]
+            [yetibot.core.db.observe :as observers]
             [yetibot.core.models.channel :as channel]
             [yetibot.core.models.history :as history]
             [yetibot.core.models.users :as users]
@@ -44,6 +47,7 @@
 (fact "real handler and Responses SSE publish before terminal and reuse IDs"
   (let [release (promise) observed (promise)
         requests (atom []) calls (atom []) next-id (atom 0)
+        jdbc-attempts (atom 0) observer-lookups (atom 0)
         first-answer (answer "one" "First SECRET @everyone")
         second-answer (answer "two" "Next <@123>")
         adapter (discord/make-discord {:name "offline-discord"})
@@ -69,7 +73,15 @@
                                          :output [first-answer
                                                   second-answer]}}))})
       (fn [url]
-        (with-redefs [config/get-config
+        (with-redefs [jdbc/get-connection
+                      (fn [& _]
+                        (swap! jdbc-attempts inc)
+                        (throw (ex-info "Unexpected fixture JDBC access" {})))
+                      observers/find-all
+                      (fn [& _]
+                        (swap! observer-lookups inc)
+                        [])
+                      config/get-config
                       (fn [_ path]
                         (if (= path [:ai]) {:value {}} {:error :not-found}))
                       ai/config
@@ -150,4 +162,6 @@
                     (every? #(= {:parse []}
                                 (get-in % [3 :allowed_mentions]))
                             (payload-calls @calls :edit)) => true
-                    (count @requests) => 2))))))))
+                    (count @requests) => 2
+                    @observer-lookups => 2
+                    @jdbc-attempts => 0))))))))
