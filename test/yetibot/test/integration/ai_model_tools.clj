@@ -420,6 +420,18 @@
           (mapv :interface (:models (:result/data (cli/models-cmd request))))
           => [:chat :decision :extraction :model-specific])))))
 
+(fact "text-only CF rejects host tool budgets before any preparation"
+  (let [effects (atom [])]
+    (with-redefs [mcp/config (fn [] (swap! effects conj :config))
+                  ai/config (fn [] (swap! effects conj :provider))
+                  ai/resolve-provider
+                  (fn [& _] (swap! effects conj :credential))
+                  cf/catalog (fn [& _] (swap! effects conj :catalog))
+                  ai/complete (fn [& _] (swap! effects conj :inference))]
+      (get-in (cli/prompt-cmd {:match "--max-tool-calls 12 PRIVATE"})
+              [:result/data :isError]) => true
+      @effects => [])))
+
 (fact "cf command is registered in the real production command handler"
   (let [seen (atom [])]
     (with-redefs [ai/config (constantly settings)
@@ -606,4 +618,10 @@
           (:stage record) => :initial
           (:tool-choice record) => :auto
           (:tool-count record) => 2
-          (:item-count record) => 1)))))
+          ;; Host instructions plus one current, parent-only budget message.
+          (:item-count record) => 2
+          (get-in (ex-data error) [:ai/tool-failure :reason])
+          => :provider-failure
+          (get-in (ex-data error) [:ai/tool-failure :budget])
+          => {:limit 6 :used 0 :remaining 6 :requested 0}
+          (get-in (ex-data error) [:ai/tool-failure :calls]) => [])))))

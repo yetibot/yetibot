@@ -6,6 +6,7 @@
             [yetibot.api.ai :as api]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as commands]
+            [yetibot.core.commands.echo :as echo]
             [yetibot.models.ai-proposals :as proposals]
             [yetibot.models.ai-context :as context]
             [yetibot.test.models.ai-tool-policy :refer [actor]]
@@ -176,6 +177,52 @@
                                   (get-in % [:body :tools])))
                       (filter #(= "/v1/chat/completions" (:path %)) @requests))
                 => nil))))))))
+
+(fact {:midje/description
+       (str "real command budget propagation and trace failure "
+            "do not echo private command text")}
+  (let [turns (atom 0) effects (atom 0) echoes (atom 0)
+        p {:name "local" :url "http://localhost/v1" :model "chat"}
+        server {:name "search" :tools ["web_search"]}]
+    (with-redefs [api/config (constantly {:providers [p]})
+                  mcp/config (constantly {:servers [server] :max-tool-calls 1})
+                  mcp/with-tools
+                  (fn [_ f]
+                    (f [(assoc support/search-tool
+                               :session {:server server})]))
+                  context/messages
+                  (fn [_ prompt] [{:role "user" :content prompt}])
+                  mcp/call-tool (fn [& _] (swap! effects inc) {:content []})
+                  echo/echo-cmd (fn [& _] (swap! echoes inc) "MUST-NOT-RUN")
+                  api/chat (fn [_ _ _ opts]
+                             (let [turn (swap! turns inc)]
+                               {:choices
+                                [{:message
+                                  {:tool_calls
+                                   [{:id (str "PRIVATE-ID" turn)
+                                     :type "function"
+                                     :function
+                                     {:name "mcp_0_search__web_search"
+                                      :arguments
+                                      (json/generate-string
+                                        {"query"
+                                         (str "PRIVATE-QUERY" turn)})}}]}}]}))]
+      (let [result (chat/run-command chat/request
+                                    (str "ai --max-tool-calls 12 "
+                                         "PRIVATE-PROMPT | echo later"))
+            report (get-in result [:data :tool-trace])]
+        (fact (contains? result :error) => false)
+        (fact (get-in result [:data :isError]) => true)
+        (fact (:reason report) => :budget-exceeded)
+        (fact (:budget report) => {:limit 1 :used 1 :remaining 0 :requested 1})
+        (fact (mapv :outcome (:calls report)) => [:success :rejected])
+        (fact @effects => 1)
+        (fact @turns => 2)
+        (fact @echoes => 0)
+        (fact (boolean (re-find #"PRIVATE|MUST-NOT"
+                                (pr-str (select-keys result
+                                                     [:value :error :data]))))
+              => false)))))
 
 (fact "real HTTP/MCP transports preserve discovery, policy and approved writes"
   (doseq [discovery [:explicit :inherit :automatic]]

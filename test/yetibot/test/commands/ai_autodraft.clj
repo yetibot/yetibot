@@ -16,7 +16,8 @@
              :key-file "/unused/fixture-clef-token"})
 (defn request [] (assoc-in chat/request [:chat-source :raw-event :ts] (str (java.util.UUID/randomUUID))))
 (defn scenario [f]
-  (let [classified (atom []) writes (atom []) generations (atom [])]
+  (let [classified (atom []) writes (atom []) generations (atom [])
+        generation-options (atom [])]
     (with-redefs [channel/settings-for-chat-source (constantly {})
                   api/config (constantly {:providers [provider] :intent-router router})
                   mcp/config (constantly fixture/config)
@@ -24,8 +25,9 @@
                   clef/credential! (constantly "fixture-clef-secret")
                   clef/classify! (fn [_ prompt] (swap! classified conj prompt) :code-change)
                   tools/complete
-                  (fn [p model _ {:keys [actor toolset]}]
+                  (fn [p model _ {:keys [actor toolset] :as options}]
                     (swap! generations conj toolset)
+                    (swap! generation-options conj options)
                     (if (= toolset "github-pr")
                       (let [p (proposals/stage! fixture/t actor p model
                                 {"owner" "owner" "repo" "repo" "base" "main" "title" "Fix" "body" "Fix"
@@ -35,7 +37,24 @@
                       "ordinary answer"))
                   github/execute! (fn [_ p] (swap! writes conj p)
                                     {:status :succeeded :pr-url "https://github.com/owner/repo/pull/1"})]
-      (f {:classified classified :writes writes :generations generations}))))
+      (f {:classified classified :writes writes :generations generations
+          :generation-options generation-options}))))
+
+(fact "automatic code-change routing forwards only explicit tool-call budgets"
+  (doseq [[flag budget] [["--max-tool-calls 12 " 12]
+                        ["--max-tool-calls 1 " 1]
+                        ["" nil]]]
+    (scenario
+      (fn [{:keys [writes generations generation-options]}]
+        (let [result (chat/run-command
+                       (request) (str "ai " flag "Fix owner/repo"))
+              options (first @generation-options)]
+          (fact (get-in result [:data :status]) => :succeeded
+                @generations => ["github-pr"]
+                (count @writes) => 1
+                (count @generation-options) => 1
+                (:max-tool-calls options) => budget
+                (contains? options :max-tool-calls) => (some? budget)))))))
 
 (fact "one direct authorized change request creates a draft without page approval, once"
   (scenario (fn [{:keys [writes classified]}]

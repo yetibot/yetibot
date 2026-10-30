@@ -7,6 +7,7 @@
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-tool-trace :as trace]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
@@ -14,7 +15,9 @@
             [yetibot.models.ai-github :as github]
             [yetibot.util.ai-execution :as execution]))
 
-(def usage "Usage: ai [--provider <name>] [--model <model>] [--toolset <name> | --no-tools] <prompt>")
+(def usage
+  (str "Usage: ai [--provider <name>] [--model <model>] "
+       "[--toolset <name> | --no-tools] [--max-tool-calls <1..20>] <prompt>"))
 
 (defn parse-prompt
   "Only leading flags are options. Use -- to start a prompt with a flag."
@@ -26,7 +29,8 @@
      (cond
        (string/blank? remaining)
        (if (and default-prompt
-                (not (and (:toolset options) (:no-tools options))))
+                (not (and (:no-tools options)
+                          (or (:toolset options) (:max-tool-calls options)))))
          (assoc options :prompt default-prompt)
          (ai/fail usage))
        (string/starts-with? remaining "--")
@@ -37,7 +41,8 @@
            (if (string/blank? rest-args)
              (ai/fail usage)
              (do
-               (when (and (:toolset options) (:no-tools options))
+               (when (and (:no-tools options)
+                          (or (:toolset options) (:max-tool-calls options)))
                  (ai/fail usage))
                (assoc options :prompt rest-args)))
            switch
@@ -46,16 +51,21 @@
              (recur (or rest-args "") (assoc options switch true)))
            :else
            (let [option ({"--provider" :provider "--model" :model
-                          "--toolset" :toolset} flag)
+                          "--toolset" :toolset
+                          "--max-tool-calls" :max-tool-calls} flag)
                  [value rest-args] (when rest-args
                                      (string/split rest-args #"\s+" 2))]
              (when-not (and option (ai/nonblank-string? value)
                             (not (string/starts-with? value "--"))
                             (not (contains? options option)))
                (ai/fail usage))
-             (recur (or rest-args "") (assoc options option value)))))
+             (let [value (if (= option :max-tool-calls)
+                           (try (tools/request-budget! value)
+                                (catch Exception _ (ai/fail usage))) value)]
+               (recur (or rest-args "") (assoc options option value))))))
        :else (do
-               (when (and (:toolset options) (:no-tools options))
+               (when (and (:no-tools options)
+                          (or (:toolset options) (:max-tool-calls options)))
                  (ai/fail usage))
                (assoc options :prompt remaining))))))
 
@@ -65,18 +75,25 @@
    (try
      (f)
      (catch Exception e
-       (if (:ai/piped-input (ex-data e))
-         (do
+       (let [data (ex-data e)
+             report (:ai/tool-failure data)]
+         (when (or report (:ai/piped-input data))
            (when-let [skip (:skip-next-n args)]
-             (reset! skip (count (:next-cmds args))))
+             (reset! skip (count (:next-cmds args)))))
+         (cond
+           report
+           {:result/value (trace/summary report)
+            :result/data {:isError true :tool-trace report}}
+           (:ai/piped-input data)
            ;; Core error decoration includes the evaluated command/input.
            {:result/value input/error-message
-            :result/data {:isError true :error input/error-message}})
-         {:result/error
-          (if (:ai/error (ex-data e))
-            (.getMessage e)
-            (str "The AI request failed. Check the provider configuration "
-                 "and try again."))})))))
+            :result/data {:isError true :error input/error-message}}
+           :else
+           {:result/error
+            (if (:ai/error (ex-data e))
+              (.getMessage e)
+              (str "The AI request failed. Check the provider configuration "
+                   "and try again."))}))))))
 
 (defn providers-cmd
   "ai providers # list configured AI provider names"
@@ -349,7 +366,7 @@
 
 (defn complete-prompt
   [{:keys [provider model messages no-tools toolset actor on-progress
-           pipeline-input additional-secrets]}]
+           pipeline-input additional-secrets max-tool-calls]}]
   (if no-tools
     (let [credential-file (:key-file provider)
           provider (if pipeline-input (ai/resolve-provider provider) provider)
@@ -365,18 +382,25 @@
         (ai/complete (dissoc provider :native-tools) model messages)))
     (tools/complete provider model messages
                     (cond-> {:toolset toolset :actor actor}
+                      max-tool-calls (assoc :max-tool-calls max-tool-calls)
                       pipeline-input (assoc :pipeline-input pipeline-input
                                             :additional-secrets
                                             additional-secrets)
                       on-progress (assoc :on-progress on-progress)))))
 
 (defn prompt-cmd
-  "ai <prompt> # ask the default AI provider; includes the conversation in Slack/Discord threads
-   ai --provider <name> <prompt> # ask a named provider using its default model
-   ai --provider <name> --model <model> <prompt> # choose a provider and model
-   ai --model <model> <prompt> # infer a unique provider by exact advertised model ID
-   ai --no-tools <prompt> # answer without native or MCP tools"
-  {:yb/cat #{:ai}}
+  {:doc (str "ai <prompt> # ask the default AI provider; "
+             "includes the conversation in Slack/Discord threads\n"
+             "   ai --provider <name> <prompt> # ask a named provider "
+             "using its default model\n"
+             "   ai --provider <name> --model <model> <prompt> # "
+             "choose a provider and model\n"
+             "   ai --model <model> <prompt> # infer a unique provider "
+             "by exact advertised model ID\n"
+             "   ai --max-tool-calls <1..20> <prompt> # choose a total "
+             "host-call budget within the configured ceiling\n"
+             "   ai --no-tools <prompt> # answer without native or MCP tools")
+   :yb/cat #{:ai}}
   [args]
   (safely args
     #(autodraft/complete (prepare-prompt args) args complete-prompt)))

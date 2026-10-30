@@ -38,7 +38,9 @@
                         (:repositories t))]
     (when (= 1 (count matches)) (first matches))))
 
-(defn- execute-change! [{:keys [provider model messages actor]} args key router config t repo]
+(defn- execute-change!
+  [{:keys [provider model messages actor max-tool-calls]}
+   args key router config t repo]
   (let [secret (clef/credential! router)
         private-config (update config :secrets #(concat % [secret (:key provider)]))
         messages (mapv #(update % :content (fn [text] (if (string? text) (mcp/redact text private-config) text))) messages)
@@ -48,7 +50,10 @@
                                                         ". Read the relevant files and stage_changes alone. "
                                                         "The host will open a draft PR automatically; do not claim tests were run.")}]
                                         messages)
-                                  {:toolset (:name t) :actor actor :additional-secrets [secret]})
+                                  (cond-> {:toolset (:name t) :actor actor
+                                           :additional-secrets [secret]}
+                                    (some? max-tool-calls)
+                                    (assoc :max-tool-calls max-tool-calls)))
         id (get-in generated [:result/data :proposal])]
     (when-not id (ai/fail "The model did not stage a change. No GitHub writes were made."))
     (let [p (proposals/review! id actor)

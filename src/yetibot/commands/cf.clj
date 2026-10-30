@@ -125,7 +125,8 @@
   (safely args
     (fn []
       (let [options (ai/parse-prompt match usage)
-            _ (when (:provider options) (api/fail usage))
+            _ (when (or (:provider options) (:max-tool-calls options))
+                (api/fail usage))
             config (toolsets/select (mcp/config) (:toolset options))
             result (models/call!
                      config "cf"

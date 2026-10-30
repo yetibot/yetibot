@@ -8,6 +8,7 @@
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
+            [yetibot.models.ai-tool-trace :as trace]
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-native-tools :as native]
@@ -118,25 +119,38 @@
                                                  (or (:description tool) (:title tool) "")) config)
                              :parameters (clean-data schema config)}}}))
 
+(defn request-budget!
+  {:doc (str "Validate an explicit request before credentials/discovery; "
+             "nil means omitted.")}
+  [value]
+  (when (some? value)
+    (let [text (str value)
+          n (when (re-matches #"(?:[1-9]|1[0-9]|20)" text)
+              (Long/parseLong text))]
+      (when-not n (ai/fail "Tool-call budget must be an integer from 1 to 20."))
+      n)))
+
 (defn- parse-call [call entries seen config]
   (let [id (:id call)
         name (get-in call [:function :name])
         arguments (get-in call [:function :arguments])]
-    (when-not (and (= "function" (:type call)) (ai/nonblank-string? id) (<= (count id) 256)
-                   (not (contains? seen id)) (contains? entries name)
-                   (string? arguments) (<= (count arguments) 16384))
-      (ai/fail "The AI provider requested an invalid or unavailable tool. No tools from that response were run."))
+    (when (contains? seen id) (trace/fail! :repeated-id))
+    (when-not (contains? entries name) (trace/fail! :unavailable-tool))
+    (when-not (and (string? arguments) (<= (count arguments) 16384))
+      (trace/fail! :invalid-arguments))
     (let [parsed (try (json/parse-string arguments) (catch Exception _ nil))]
       (when-not (map? parsed)
-        (ai/fail "The AI provider sent invalid tool arguments. No tools from that response were run."))
+        (trace/fail! :invalid-arguments))
       {:id id :entry (get entries name)
        :arguments
-       (if-let [validate (get-in entries [name :tool :validate-arguments])]
-         (validate parsed)
-         (if (get-in entries [name :tool :host-call])
-           parsed
-           (policy/arguments! (:toolset config)
-                              (get-in entries [name :tool :name]) parsed)))})))
+       (try
+         (if-let [validate (get-in entries [name :tool :validate-arguments])]
+           (validate parsed)
+           (if (get-in entries [name :tool :host-call])
+             parsed
+             (policy/arguments! (:toolset config)
+                                (get-in entries [name :tool :name]) parsed)))
+         (catch Exception _ (trace/fail! :invalid-arguments)))})))
 
 (defn- text-content [item]
   (case (:type item)
@@ -172,78 +186,135 @@
                     (str (subs content 0 20000)
                          "\n[Tool result shortened to 20000 characters.]")))]
     (with-meta {:role "tool" :tool_call_id id :content content}
-      {::unknown-outcome unknown-outcome})))
+      {::unknown-outcome unknown-outcome ::tool-error (:isError result)})))
 
-(defn- execute-batch [calls config]
-  (reduce
-    (fn [{:keys [halted] :as state} call]
-      (if halted
-        (update state :replies conj
-                {:role "tool" :tool_call_id (:id call)
-                 :content "This tool was not run because an earlier call had an unknown outcome."})
-        (let [label (get-in call [:entry :name])
-              _ (stream/notify! (:on-progress config) config
-                                {:phase (str "Running " label)})
-              reply (execute-call call config)]
-          (stream/notify! (:on-progress config) config
-                          {:phase (str (if (::unknown-outcome (meta reply))
-                                         "Unknown outcome: " "Finished ")
-                                       label)})
-          (-> state
-              (update :replies conj reply)
-              (update :attempted inc)
-              (assoc :halted (boolean (::unknown-outcome (meta reply))))))))
-    {:replies [] :attempted 0 :halted false} calls))
+(defn- execute-batch [calls config trace-state start]
+  (loop [pending calls replies [] attempted 0 halted false]
+    (if-let [call (first pending)]
+      (let [ordinal (+ start (count replies) 1)]
+        (if halted
+          (do
+            (trace/outcome! trace-state ordinal :skipped false false)
+            (recur (next pending)
+                   (conj replies {:role "tool" :tool_call_id (:id call)
+                                  :content
+                                  (str "This tool was not run because an "
+                                       "earlier call had an unknown outcome.")})
+                   attempted true))
+          (let [label (get-in call [:entry :name])
+                _ (stream/notify! (:on-progress config) config
+                                  {:phase (str "Running " label)})
+                _ (swap! trace-state update :used inc)
+                _ (trace/outcome! trace-state ordinal :unknown true false)
+                reply (try (execute-call call config)
+                           (catch Exception _
+                             (doseq [n (range (inc ordinal)
+                                             (+ start (count calls) 1))]
+                               (trace/outcome!
+                                 trace-state n :skipped false false))
+                             (trace/fail! :tool-exception)))
+                unknown? (boolean (::unknown-outcome (meta reply)))]
+            (trace/outcome! trace-state ordinal
+                            (cond unknown? :unknown
+                                  (::tool-error (meta reply)) :error
+                                  :else :success) true (not unknown?))
+            (stream/notify! (:on-progress config) config
+                            {:phase (str (if unknown?
+                                           "Unknown outcome: " "Finished ")
+                                         label)})
+            (recur (next pending) (conj replies reply)
+                   (inc attempted) unknown?))))
+      {:replies replies :attempted attempted :halted halted})))
 
 (defn- run-tools [provider model messages tools config]
-  (when (> (count tools) 64) (ai/fail "Too many MCP tools are enabled. Allow at most 64 tools."))
+  (when (> (count tools) 64)
+    (ai/fail "Too many MCP tools are enabled. Allow at most 64 tools."))
   (let [entries (mapv #(tool-entry %1 %2 config) (range) tools)
         by-name (into {} (map (juxt :name identity) entries))
         definitions (mapv :definition entries)
-        limit (mcp/number-option (:max-tool-calls config) 6)]
-    (loop [messages (into [{:role "system" :content instructions}] messages)
-           used 0 seen #{} actions #{} halted false stage :initial]
-      (let [body (ai/chat provider model messages
-                          (cond->
-                            {::diagnostics/stage stage
-                             :tools definitions
-                             :tool_choice (if (and (< used limit) (not halted))
-                                            "auto" "none")}
-                            (:on-progress config)
-                            (assoc :on-progress (:on-progress config)
-                                   :progress-config config)))
-            message (ai/message provider body)
-            calls (:tool_calls message)]
-        (if (seq calls)
-          (do
-            (when halted
-              (ai/fail "The AI provider requested more tools after an uncertain result. No further tools were run."))
-            (when-not (and (vector? calls) (<= (+ used (count calls)) limit)
-                           (= (count calls) (count (distinct (map :id calls)))))
-              (ai/fail "The AI provider exceeded the tool-call limit or returned duplicate calls. No tools from that response were run."))
-            ;; Validate the whole batch before any external effect is attempted.
-            (let [parsed (mapv #(parse-call % by-name seen config) calls)
-                  requested-actions (mapv #(vector (get-in % [:entry :name]) (:arguments %)) parsed)]
-              (when (or (not= (count requested-actions) (count (distinct requested-actions)))
-                        (some actions requested-actions))
-                (ai/fail "The AI provider tried to repeat a tool call. No tools from that response were run."))
-              (when (and (> (count parsed) 1)
-                         (some #(get-in % [:entry :tool :exclusive?]) parsed))
-                (ai/fail "Stage changes in a separate, single-tool response."))
-              (let [{:keys [replies attempted halted]}
-                    (execute-batch parsed config)]
-                (if-let [p (some-> (:staged config) deref)]
-                  {:result/value (proposals/preview p)
-                   :result/data {:proposal (:id p) :mcp {:tool-calls (+ used attempted)}}}
-                  (recur (ai/continue-messages provider messages body replies)
-                         (long (+ used attempted)) (into seen (map :id calls))
-                         (into actions requested-actions) halted
-                         :follow-up)))))
-          (let [text (:content message)]
-            (when-not (ai/nonblank-string? text)
-              (ai/fail (str "AI provider " (:name provider) " returned no text response.")))
-            {:result/value (mcp/redact text config)
-             :result/data (clean-data (assoc body :mcp {:tool-calls used}) config)}))))))
+        limit (mcp/number-option (:max-tool-calls config) 6)
+        trace-state (atom {:calls [] :omitted 0 :next-call 0
+                           :used 0 :requested 0})
+        redact (trace/redactor config messages)]
+    (try
+      (loop [messages (into [{:role "system" :content instructions}] messages)
+             used 0 seen #{} actions #{} halted false stage :initial]
+        (let [_ (swap! trace-state assoc :requested 0)
+              turn-messages
+              (into [(first messages)
+                     {:role "system"
+                      :content
+                      (str "Host tool-call budget: total=" limit
+                           " used=" used " remaining=" (max 0 (- limit used))
+                           ". Keep the entire next batch within remaining. "
+                           "When exhausted, stop fetching and answer "
+                           "with available evidence.")}]
+                    (rest messages))
+              body (ai/chat provider model turn-messages
+                            (cond->
+                              {::diagnostics/stage stage
+                               :tools definitions
+                               :tool_choice
+                               (if (and (< used limit) (not halted))
+                                 "auto" "none")}
+                              (:on-progress config)
+                              (assoc :on-progress (:on-progress config)
+                                     :progress-config config)))
+              message (ai/message provider body)
+              calls (:tool_calls message)]
+          (if (and (some? calls) (not= [] calls))
+            (let [collection? (sequential? calls)
+                  start (trace/add-batch! trace-state
+                                          (if collection? calls [])
+                                          by-name redact)]
+              (when-not (vector? calls) (trace/fail! :malformed-batch))
+              (when halted (trace/fail! :uncertain-result))
+              (when-not (every? #(and (map? %) (= "function" (:type %))
+                                     (ai/nonblank-string? (:id %))
+                                     (<= (count (:id %)) 256)) calls)
+                (trace/fail! :malformed-call))
+              (when-not (= (count calls) (count (distinct (map :id calls))))
+                (trace/fail! :duplicate-ids))
+              (when (> (+ used (count calls)) limit)
+                (trace/fail! :budget-exceeded))
+              (let [parsed (mapv #(parse-call % by-name seen config) calls)
+                    requested-actions
+                    (mapv #(vector (get-in % [:entry :name]) (:arguments %))
+                          parsed)]
+                (when (or (not= (count requested-actions)
+                                (count (distinct requested-actions)))
+                          (some actions requested-actions))
+                  (trace/fail! :repeat-action))
+                (when (and (> (count parsed) 1)
+                           (some #(get-in % [:entry :tool :exclusive?]) parsed))
+                  (trace/fail! :exclusive-batch))
+                (let [{:keys [replies attempted halted]}
+                      (execute-batch parsed config trace-state start)]
+                  (if-let [p (some-> (:staged config) deref)]
+                    {:result/value (proposals/preview p)
+                     :result/data
+                     {:proposal (:id p)
+                      :mcp {:tool-calls (+ used attempted)}}}
+                    (recur (ai/continue-messages provider messages body replies)
+                           (long (+ used attempted))
+                           (into seen (map :id calls))
+                           (into actions requested-actions) halted
+                           :follow-up)))))
+            (let [text (:content message)]
+              (when-not (ai/nonblank-string? text)
+                (ai/fail (str "AI provider " (:name provider)
+                              " returned no text response.")))
+              {:result/value (mcp/redact text config)
+               :result/data
+               (clean-data (assoc body :mcp {:tool-calls used}) config)}))))
+      (catch Exception e
+        (let [reason (or (::trace/reason (ex-data e)) :provider-failure)
+              report (trace/report trace-state limit reason)]
+          (throw (ex-info (get trace/reasons reason)
+                          (cond-> {:ai/error true :ai/tool-failure report}
+                            (:ai/diagnostic (ex-data e))
+                            (assoc :ai/diagnostic
+                                   (:ai/diagnostic (ex-data e)))))))))))
 
 (defn- staging-tool [config actor provider model reads]
   {:name "stage_changes" :exclusive? true
@@ -280,9 +351,14 @@
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages
-    {:keys [toolset actor additional-secrets on-progress pipeline-input]}]
-   (let [config (assoc (toolsets/select (mcp/config) toolset)
-                       :on-progress on-progress :staged (atom nil))]
+    {:keys [toolset actor additional-secrets on-progress pipeline-input
+            max-tool-calls]}]
+   (let [requested (request-budget! max-tool-calls)
+         config (toolsets/select (mcp/config) toolset)
+         ceiling (mcp/number-option (:max-tool-calls config) 20)
+         config (cond-> (assoc config :on-progress on-progress
+                                     :staged (atom nil))
+                  requested (assoc :max-tool-calls (min ceiling requested)))]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (when (and (seq (get-in config [:toolset :native-tools]))
