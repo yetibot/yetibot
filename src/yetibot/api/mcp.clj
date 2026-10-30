@@ -306,9 +306,9 @@
   [text config]
   (reduce #(string/replace %1 %2 "[redacted]") text (credentials config)))
 
-(defn metadata-redact
-  "Redact known credentials, including JSON-escaped copies, before bounding."
-  [text config]
+(defn metadata-redactor
+  "Compile a transformation-local redactor. Never store it in metadata caches."
+  [config]
   (letfn [(character-pattern [c]
             (let [encoded (json/generate-string (str c))
                   escaped (subs encoded 1 (dec (count encoded)))
@@ -320,13 +320,17 @@
                    "|(?i:"
                    (java.util.regex.Pattern/quote
                      (format "\\u%04x" (int c))) "))")))]
-    (reduce
-      (fn [text secret]
-        ;; Per-character alternatives handle mixed raw/JSON/unicode escapes.
-        (string/replace text
-                        (re-pattern (string/join (map character-pattern secret)))
-                        "[redacted]"))
-      text (credentials config))))
+    ;; Per-character alternatives handle mixed raw/JSON/unicode escapes.
+    (let [patterns (mapv #(re-pattern
+                           (string/join (map character-pattern %)))
+                         (credentials config))]
+      (fn [text]
+        (reduce #(string/replace %1 %2 "[redacted]") text patterns)))))
+
+(defn metadata-redact
+  "Redact known credentials, including JSON-escaped copies, before bounding."
+  [text config]
+  ((metadata-redactor config) text))
 
 (defn metadata-text [text config maximum]
   (let [text (metadata-redact text config)]

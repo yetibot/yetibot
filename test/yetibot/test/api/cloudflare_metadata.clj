@@ -3,6 +3,23 @@
             [midje.sweet :refer [fact =>]]
             [yetibot.api.cloudflare :as cf]))
 
+(fact "one metadata record compiles credential patterns once, not per string"
+  (let [compile-pattern re-pattern
+        compilations (atom 0)
+        result (with-redefs [clojure.core/re-pattern
+                             (fn [text]
+                               (swap! compilations inc)
+                               (compile-pattern text))]
+                 (cf/model-metadata
+                   {:id "fixture-model" :description "fixture/secret"
+                    :properties {:summary "fixture\\/secr\\u0065t"
+                                 :example "public"}}
+                   {:secrets ["fixture/secret"]}))]
+    result => {:id "fixture-model" :description "[redacted]"
+               :properties {:summary "[redacted]" :example "public"}}
+    ;; One credential pattern and the existing sensitive-field pattern.
+    @compilations => 2))
+
 (fact "oversized required metadata terminates with a safe static failure"
   (let [sentinel "HOSTILE-METADATA-SENTINEL"
         text (string/join (repeat 2000 "界"))

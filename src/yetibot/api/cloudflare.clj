@@ -183,7 +183,8 @@
   "Bounded whitelist for remote model records, never credentials or schemas.
    Redact before truncation; omissions/truncation are not capability negatives."
   [record config]
-  (let [changed (atom false)
+  (let [redact (mcp/metadata-redactor config)
+        changed (atom false)
         sensitive (re-pattern
                     (str "(?i)authorization|password|token|secret|key|"
                          "api[-_]?key|key[-_]?file|account([-_]?id)?"))
@@ -191,7 +192,7 @@
                 (cond
                   (> depth 5) (do (reset! changed true) nil)
                   (string? value)
-                  (let [text (mcp/metadata-redact value config)]
+                  (let [text (redact value)]
                     (if (> (count text) 2000)
                       (do (reset! changed true) (subs text 0 2000)) text))
                   (map? value)
