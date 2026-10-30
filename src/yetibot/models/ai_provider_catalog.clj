@@ -8,6 +8,7 @@
             TimeUnit]))
 
 (def freshness-ms 300000)
+(def refresh-after-ms 240000)
 (def max-entries 32)
 (def max-ids 8192)
 (def max-id-bytes 512)
@@ -66,7 +67,7 @@
              (let [old (get state key)]
                (if (or (:refreshing old) (< now (:retry-at old 0))
                        (and (:good-at old)
-                            (< (- now (:good-at old)) freshness-ms)))
+                            (< (- now (:good-at old)) refresh-after-ms)))
                  state
                  (do (reset! claimed true)
                      (assoc state key (assoc old :token token :refreshing true

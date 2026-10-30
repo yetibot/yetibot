@@ -139,6 +139,47 @@
       (reset! clock (+ 30001 catalog/freshness-ms))
       (is (:result/error (safe-infer cache config model))))))
 
+(deftest refresh-ahead-keeps-routing-available-across-old-expiry
+  (let [{:keys [cache jobs clock]} (fixture)]
+    (with-redefs [ai/models catalogs]
+      (catalog/warm! cache)
+      (drain! jobs)
+      (reset! clock 180000)
+      (catalog/warm! cache)
+      (is (empty? @jobs))
+      (reset! clock 240001)
+      (catalog/warm! cache)
+      (is (= 2 (count @jobs)))
+      (is (= "one" (infer cache config model)))
+      (catalog/warm! cache)
+      (is (= 2 (count @jobs)))
+      (reset! clock 270001)
+      (drain! jobs)
+      (reset! clock 330001)
+      (is (= "one" (safe-infer cache config model)))
+      (is (empty? @jobs)))))
+
+(deftest refresh-ahead-never-extends-stale-or-failed-observations
+  (doseq [finish-at [240002 catalog/freshness-ms]]
+    (let [{:keys [cache jobs clock]} (fixture)]
+      (with-redefs [ai/models catalogs]
+        (catalog/warm! cache)
+        (drain! jobs)
+        (reset! clock 240001)
+        (catalog/warm! cache)
+        (is (= 2 (count @jobs)))
+        (is (= "one" (infer cache config model)))
+        (reset! clock finish-at)
+        (if (< finish-at catalog/freshness-ms)
+          (is (= "one" (infer cache config model)))
+          (is (:result/error (safe-infer cache config model))))
+        (with-redefs [ai/models
+                      (fn [_] (throw (Exception. "private-failure")))]
+          (drain! jobs))
+        (is (:result/error (safe-infer cache config model)))
+        (is (every? #(not (contains? % :ids)) (vals @(:state cache))))
+        (is (= 300000 catalog/freshness-ms))))))
+
 (deftest evicted-or-stopped-jobs-cannot-repopulate-state
   (let [{:keys [cache jobs]} (fixture) discovered (atom 0)]
     (with-redefs [ai/models (fn [_] (swap! discovered inc) (complete [model]))]
