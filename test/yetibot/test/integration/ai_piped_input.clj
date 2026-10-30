@@ -1,5 +1,6 @@
 (ns yetibot.test.integration.ai-piped-input
-  (:require [cheshire.core :as json]
+  (:require [yetibot.test.support.alias-fixture]
+            [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
