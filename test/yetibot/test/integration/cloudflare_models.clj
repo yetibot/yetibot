@@ -171,3 +171,92 @@
                 (do (fact (:next_after page) => (last ids))
                     (recur (:next_after page) seen))
                 (fact seen => (mapv :id (:models catalog)))))))))))
+
+(fact "category browsing is compact and filtering keeps full model records"
+  (let [extra [(assoc (first records) :id "image-record"
+                     :name "@cf/test/image" :description "Fixture image"
+                     :task {:id "image-task" :name "Text-to-Image"})
+               (assoc (first records) :id "unknown-record"
+                      :name "@cf/test/unknown" :task nil)]
+        catalog (with-redefs [http/get
+                              (fn [& _] (response (into records extra)))]
+                  (cf/catalog provider))
+        image (first (filter #(= "@cf/test/image" (:id %)) (:models catalog)))
+        text-models (:models (fixture-catalog))
+        paid (atom 0) posts (atom 0)]
+    (with-redefs [ai/config (constantly settings)
+                  cf/catalog (constantly catalog)
+                  http/post (fn [& _]
+                              (swap! posts inc)
+                              (throw (AssertionError. "Unexpected POST")))
+                  models/call! (fn [& _]
+                                 (swap! paid inc)
+                                 {:isError true})]
+      (let [summary (execution/run-command execution/request
+                      "cf models --categories")
+            selected (execution/run-command execution/request
+                       "cf models --category text-to-image")
+            shown (execution/run-command execution/request
+                    "cf models --category text-to-image | random | data show")
+            unknown (execution/run-command execution/request
+                      "cf models --category uncategorized")
+            all (execution/run-command execution/request "cf models")
+            text (execution/run-command execution/request
+                   "cf models --category TEXT-GENERATION")
+            llama (execution/run-command execution/request
+                    (str "cf models --category text-generation"
+                         " | grep llama | head | data show"))]
+        (:value summary)
+        => ["text-generation: 3 models (Text Generation)"
+            "text-to-image: 1 model (Text-to-Image)"
+            "uncategorized: 1 model (Uncategorized)"]
+        (:data-collection summary)
+        => [{:id "text-generation" :name "Text Generation" :count 3}
+            {:id "text-to-image" :name "Text-to-Image" :count 1}
+            {:id "uncategorized" :name "Uncategorized" :count 1}]
+        (:data-collection selected) => [image]
+        (:value selected) => ["@cf/test/image [Text-to-Image; model-specific]"]
+        (string/includes? (str (:value shown)) "Fixture image") => true
+        (string/includes? (str (:value shown)) "context_window") => true
+        (mapv :id (:data-collection unknown)) => ["@cf/test/unknown"]
+        (:data-collection all) => (:models catalog)
+        (:data-collection text) => text-models
+        (string/includes? (str (:value llama)) "Llama 3.1 8B quantized") => true
+        (string/includes? (str (:value llama)) "Fixture decision model")
+        => false
+        @paid => 0
+        @posts => 0))))
+
+(fact "catalog options never fall through to paid inference"
+  (let [catalog (fixture-catalog)
+        config-reads (atom 0) catalog-reads (atom 0) paid (atom 0)
+        posts (atom 0)]
+    (with-redefs [ai/config (fn [] (swap! config-reads inc) settings)
+                  cf/catalog (fn [_] (swap! catalog-reads inc) catalog)
+                  http/post (fn [& _]
+                              (swap! posts inc)
+                              (throw (AssertionError. "Unexpected POST")))
+                  models/call! (fn [& _]
+                                 (swap! paid inc)
+                                 {:isError true})]
+      (doseq [options ["--category" "--wat" "--categories extra"
+                       "--category text-generation --categories"
+                       "--category --categories" "unexpected"]]
+        (let [result (execution/run-command execution/request
+                       (str "cf models " options))]
+          (fact (get-in result [:data :isError]) => true
+                (string/includes? (str (:value result)) "Usage: cf models")
+                => true)))
+      (fact @config-reads => 0
+            @catalog-reads => 0
+            @paid => 0)
+      (let [result (execution/run-command execution/request
+                     "cf models --category missing-private-value | count")]
+        (fact (get-in result [:data :isError]) => true
+              (string/includes? (str (:value result))
+                                "Use cf models --categories") => true
+              (string/includes? (str (:value result))
+                                "missing-private-value") => false
+              @catalog-reads => 1
+              @paid => 0
+              @posts => 0)))))
