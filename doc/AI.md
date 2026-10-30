@@ -552,9 +552,38 @@ Updates coalesce about every two seconds instead of posting a message per
 token. The view keeps the latest thinking/answer excerpts and three recent
 tool statuses, within Discord's message limit. Previews are provisional and
 may change; they are not tool authorization or evidence of publication.
-Mentions are disabled on preview creation/edits. The temporary view is deleted
-before posting the complete final answer and selected-model footer. A failed
-progress create/edit/delete does not discard the final answer.
+Mentions are disabled on preview creation/edits. Completed assistant messages
+are posted as separate replies in the same thread/channel while Grok continues
+searching or using tools. Draft deltas remain in the temporary preview. A
+completed answer is not posted again as a duplicate final reply; a later error
+is still shown. The temporary view is deleted when the request finishes. A
+failed progress create/edit/delete does not discard the final answer.
+
+Answer payload delivery is limited to 30 physical Discord messages (each at
+most 2000 UTF-16 characters, without splitting surrogate pairs) and a shared
+64 KiB UTF-8 budget, including model footers after credential redaction. Whole
+answers are admitted or rejected; answer data is never cropped to fit. At most
+one fixed overflow notice is additional to that payload allowance. The notice
+includes the normal model footer only when it fits in one Discord message.
+Terminal provider errors remain visible even after the payload limit.
+
+Completed answers use the core adapter's tracked immediate publisher, not its
+ordinary deferred chat collector. Final replay reuses the tracked message IDs;
+command edits retain revision ownership, and obsolete callbacks cannot fall
+back to an untracked send. Outside a core command context only, standalone
+invocations can use immediate REST delivery to the selected thread/channel.
+Completed-answer create/edit/replay payloads disable mentions. REST batches
+are not transactional: a failure can leave some messages visible. Unconfirmed
+batches are not recorded as published or automatically retried by Grok; a safe
+delivery-failure status replaces the ordinary final fallback. The core's final
+reconciliation reuses confirmed IDs but does not resend failed, unknown or
+unattempted live parts. Live batches and terminal replay each have a shared
+30-second delivery deadline. A dispatched request can still complete after a
+local timeout; this is not a cancellation guarantee.
+
+Listening ends at the provider's completed response or the existing stream
+limits; this does not send extra inference requests in response to prose such
+as "I'll continue."
 
 Configured provider/active-tool credentials are masked before previews reach
 Discord. Credential-sized edges are buffered to prevent leaks across chunks or

@@ -53,7 +53,16 @@
                 (-> masked (tail limit)
                     (string/replace #"\u0000+" "[redacted]")
                     (tail limit))))
+            answer (when (string? (:answer event))
+                     (mcp/redact (:answer event) config))
+            answer-limit? (and answer
+                               (> (alength (.getBytes ^String answer
+                                                     StandardCharsets/UTF_8))
+                                  65536))
             event (cond-> (select-keys event [:phase :summary :text])
+                    answer
+                    (merge (if answer-limit? {:answer-limit? true}
+                             {:answer answer}))
                     (:phase event)
                     (update :phase #(clip (mcp/redact % config) 160))
                     (:summary event)
@@ -128,11 +137,34 @@
   (let [input (reader stream)
         state (atom {:phase "Thinking" :summary "" :text ""})
         publish! (fn [event]
-                   (notify! callback config (swap! state merge event)))]
+                   (notify! callback config (swap! state merge event)))
+        seen (atom #{})
+        publish-answer!
+        (fn [index item]
+          (when (and (= "message" (:type item))
+                     (contains? #{nil "assistant"} (:role item))
+                     (contains? #{nil "completed"} (:status item)))
+            (let [id (:id item)
+                  identity (if (and (string? id) (not (string/blank? id)))
+                             [:id id]
+                             (when (and (integer? index) (<= 0 index))
+                               [:index index]))
+                  text (->> (:content item)
+                            (filter #(= "output_text" (:type %)))
+                            (map :text) (filter string?) (apply str))]
+              (when (and identity (seq text)
+                         (not (contains? @seen identity)))
+                (swap! seen conj identity)
+                (notify! callback config (assoc @state :answer text))))))
+        finish! (fn [body]
+                  (let [body (completed body)]
+                    (doseq [[index item] (map-indexed vector (:output body))]
+                      (publish-answer! index item))
+                    body))]
     (publish! @state)
     (if (string/includes? (string/lower-case (or content-type ""))
                           "application/json")
-      (completed (parsed (slurp input)))
+      (finish! (parsed (slurp input)))
       (loop [frame (StringBuilder.)]
         (let [line (.readLine input)]
           (when (or (nil? line) (> (count line) 4194304)) (fail!))
@@ -145,7 +177,7 @@
               (when-not (string? kind) (fail!))
               (cond
                 (contains? #{"response.completed" "response.done"} kind)
-                (completed (:response event))
+                (finish! (:response event))
                 (contains? #{"error" "response.failed" "response.incomplete"}
                            kind) (fail! (or (:response event) event))
                 :else
@@ -165,6 +197,9 @@
                            key (tail text 8192)
                            cropped (or (get @state cropped)
                                        (> (count text) 8192))})))
+                    (and (= "response.output_item.done" kind)
+                         (= "message" (get-in event [:item :type])))
+                    (publish-answer! (:output_index event) (:item event))
                     phase (publish! {:phase phase})
                     (and (= "response.output_item.added" kind)
                          (= "function_call" (get-in event [:item :type])))
