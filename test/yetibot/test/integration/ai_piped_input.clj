@@ -4,6 +4,7 @@
             [clj-http.client :as http]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
+            [taoensso.timbre :as log]
             [yetibot.api.ai :as api]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
@@ -43,19 +44,22 @@
         messages))
 
 (defn run-pipe [records command]
-  (let [calls (atom [])]
-    (with-redefs [api/config (constantly {:providers [provider]})
-                  cf/catalog (constantly {:models records})
-                  mcp/config (constantly {:servers []})
-                  native/tools (fn [& _] [])
-                  context/messages (fn [_ prompt]
-                                     [{:role "user" :content prompt}])
-                  clojure.core/rand-int (constantly 0)
-                  api/complete (fn [p model messages & _]
-                                 (swap! calls conj [p model messages])
-                                 {:result/value "Formatted fixture"})]
-      {:result (execution/run-command execution/request command)
-       :calls @calls})))
+  ;; The oversized-input fixtures must not dump megabyte log lines into CI.
+  ;; Midje failures and error-level application diagnostics remain visible.
+  (log/with-level :error
+    (let [calls (atom [])]
+      (with-redefs [api/config (constantly {:providers [provider]})
+                    cf/catalog (constantly {:models records})
+                    mcp/config (constantly {:servers []})
+                    native/tools (fn [& _] [])
+                    context/messages (fn [_ prompt]
+                                       [{:role "user" :content prompt}])
+                    clojure.core/rand-int (constantly 0)
+                    api/complete (fn [p model messages & _]
+                                   (swap! calls conj [p model messages])
+                                   {:result/value "Formatted fixture"})]
+        {:result (execution/run-command execution/request command)
+         :calls @calls}))))
 
 (facts "real catalog random pipe gives AI the complete selected record"
   (doseq [flags ["--no-tools " ""]]
