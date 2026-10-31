@@ -1,8 +1,11 @@
 (ns yetibot.test.models.release-info
-  (:require [clojure.java.io :as io]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as http]
+            [clojure.java.io :as io]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts => truthy]]
-            [yetibot.models.release-info :as releases]))
+            [yetibot.models.release-info :as releases])
+  (:import [java.util.concurrent CountDownLatch TimeUnit]))
 
 (defn resource [text]
   (java.io.ByteArrayInputStream. (.getBytes text "UTF-8")))
@@ -79,3 +82,88 @@
       (:changes result) => (:changes fixture)
       (:total_changes result) => 1
       (:has_more result) => false)))
+
+(def published (assoc fixture :build
+                      {:app {:version "20261031.203010.6700557c"
+                             :revision "6700557c"
+                             :commit_url (str "https://github.com/yetibot/"
+                                              "yetibot/commit/6700557c")}
+                       :core nil}))
+
+(fact "default queries are offline and never resolve provider credentials"
+  (with-redefs [http/get (fn [& _] (throw (AssertionError. "No HTTP")))]
+    (:source (releases/info {})) => "bundled"))
+
+(fact "latest is a bounded credential-free GET, not an installed-release claim"
+  (let [requests (atom [])]
+    (with-redefs [http/get
+                  (fn [url options]
+                    (swap! requests conj [url options])
+                    {:status 200 :body (resource (json/generate-string published))})]
+      (let [result (releases/info {"view" "latest"})
+            [url options] (first @requests)]
+        (:view result) => "latest"
+        (:build result) => (:build published)
+        (:running_build result) => (:build releases/running)
+        url => "https://yetibot.com/releases/latest.json"
+        (:follow-redirects options) => false
+        (:redirect-strategy options) => :none
+        (:headers options) => {"Accept" "application/json"}
+        (select-keys options [:basic-auth :oauth-token :bearer-token]) => {}
+        (pos? (:socket-timeout options)) => true
+        (count @requests) => 1))))
+
+(facts "HTTP errors, redirects and malformed manifests are sanitized"
+  (doseq [response [{:status 302 :body (resource "redirect-secret")}
+                    {:status 500 :body (resource "server-secret")}
+                    {:status 200 :body (resource "not-json-secret")}
+                    {:status 200 :body (resource "{\"schema_version\":999}")}
+                    {:status 200 :body
+                     (resource (json/generate-string
+                                 (assoc published :credential "private")))}]]
+    (with-redefs [http/get (constantly response)]
+      (fact (try (releases/info {"view" "latest"}) :unexpected
+                 (catch Exception e (.getMessage e)))
+            => "Published release information is unavailable."))))
+
+(fact "oversized public bodies fail without parsing or exposing their data"
+  (with-redefs [http/get
+                (constantly {:status 200
+                             :body (resource (apply str (repeat
+                                               (inc releases/max-manifest-bytes)
+                                               "x")))})]
+    (try (releases/info {"view" "latest"}) :unexpected
+         (catch Exception e (.getMessage e)))
+    => "Published release information is unavailable."))
+
+(fact "a stalled lookup has a caller deadline and does not block forever"
+  (let [gate (CountDownLatch. 1)
+        started (CountDownLatch. 1)]
+    (with-redefs [http/get (fn [& _] (.countDown started) (.await gate)
+                           (throw (Exception. "synthetic stalled request")))]
+      (let [answer (future
+                     (try (releases/info {"view" "latest"}) :unexpected
+                          (catch Exception e (.getMessage e))))]
+        (try
+          (.await started 2 TimeUnit/SECONDS) => true
+          (deref answer 10000 ::hung)
+          => "Published release information is unavailable."
+          (.getCount gate) => 1
+          (finally (.countDown gate) (future-cancel answer)))))))
+
+(fact "large note sets preserve complete entries within the result budget"
+  (let [summary (apply str (repeat 800 "x"))
+        changes (mapv #(assoc (first (:changes fixture))
+                              :id (str "feature-" %) :summary summary)
+                      (range 20))]
+    (with-redefs [releases/running (assoc published :changes changes)]
+      (let [result (releases/info {"limit" 20})]
+        (:total_changes result) => 20
+        (:has_more result) => true
+        (<= (count (json/generate-string result)) 10000) => true
+        (every? #(= summary (:summary %)) (:changes result)) => true))))
+
+(fact "bad dates or redirecting fields are rejected before any request"
+  (with-redefs [http/get (fn [& _] (throw (AssertionError. "No HTTP")))]
+    (try (releases/info {"view" "latest" "url" "https://elsewhere.invalid"})
+         false (catch Exception _ true)) => true))

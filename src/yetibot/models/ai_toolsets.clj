@@ -16,7 +16,7 @@
   (and (vector? xs) (seq xs) (every? ai/nonblank-string? xs)
        (= (count xs) (count (distinct xs)))))
 
-(def default-native-tools ["help" "history" "history_count"])
+(def default-native-tools ["help" "history" "history_count" "release_info"])
 (def native-names
   (into (set default-native-tools)
         ["meme" "gi" "clef" "clairic" "wise" "ai" "cf" "util"

@@ -131,7 +131,7 @@
             ; [lein-ring "0.12.4"]
             [io.sarnowski/lein-docker "1.1.0"]]
 
-  :aliases {"version" ["exec" "-ep" "(use 'yetibot.core.version)(print version)"]
+  :aliases {"version" ["run" "-m" "yetibot.models.release-info"]
             "test" ["midje"]}
 
   ;; :pedantic :ignore

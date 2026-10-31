@@ -1,10 +1,12 @@
 (ns yetibot.models.release-info
   "Public build identity and curated changes, frozen with the running code."
   (:require [cheshire.core :as json]
+            [clj-http.client :as http]
             [clojure.edn :as edn]
             [clojure.java.io :as io]
             [clojure.string :as string])
-  (:import [java.time LocalDate]
+  (:import [java.io ByteArrayOutputStream InputStream]
+           [java.time LocalDate]
            [java.util Properties]))
 
 (def latest-url "https://yetibot.com/releases/latest.json")
@@ -109,18 +111,77 @@
     (invalid!))
   options)
 
+(defn- bounded-body [^InputStream stream]
+  (let [buffer (byte-array 4096)
+        output (ByteArrayOutputStream.)]
+    (loop [total 0]
+      (when (.isInterrupted (Thread/currentThread)) (invalid!))
+      (let [n (.read stream buffer)]
+        (if (neg? n)
+          (.toString output "UTF-8")
+          (do
+            (when (> (+ total n) max-manifest-bytes) (invalid!))
+            (.write output buffer 0 n)
+            (recur (+ total n))))))))
+
+(defn- published-manifest []
+  (let [request
+        (future
+          (let [response (http/get latest-url
+                           {:headers {"Accept" "application/json"}
+                            :as :stream :throw-exceptions false
+                            :follow-redirects false :redirect-strategy :none
+                            :connection-timeout 1500 :socket-timeout 2000
+                            :connection-request-timeout 1000
+                            :retry-handler (fn [& _] false)})]
+            (with-open [stream (:body response)]
+              (when-not (and (= 200 (:status response))
+                             (instance? InputStream stream)) (invalid!))
+              (validate-manifest!
+                (json/parse-string (bounded-body stream) true)))))]
+    (try
+      (let [result (deref request 5000 ::timeout)]
+        (when (= result ::timeout) (invalid!))
+        result)
+      (catch Exception _
+        ;; Do not retain HTTP bodies, headers or exception causes in tool data.
+        (throw (ex-info "Published release information is unavailable."
+                        {:release/unavailable true})))
+      (finally (future-cancel request)))))
+
+(defn- same-source? [published]
+  (every?
+    (fn [component]
+      (let [a (get-in running [:build component :revision])
+            b (get-in published [:build component :revision])]
+        (and a b (or (string/starts-with? a b)
+                     (string/starts-with? b a)))))
+    [:app :core]))
+
 (defn info [options]
   (validate-options! options)
-  (when (= "latest" (get options "view"))
-    (throw (ex-info "Published release information is unavailable." {})))
-  (let [since (get options "since")
-        changes (cond->> (:changes running)
+  (let [latest? (= "latest" (get options "view"))
+        manifest (if latest? (published-manifest) running)
+        since (get options "since")
+        changes (cond->> (:changes manifest)
                   since (filter #(not (neg? (compare (:date %) since)))))
         changes (vec (sort-by :date #(compare %2 %1) changes))
-        selected (vec (take (get options "limit" 10) changes))]
-    (assoc running :changes selected :view "running" :source "bundled"
-           :total_changes (count changes)
-           :has_more (< (count selected) (count changes)))))
+        selected (vec (take (get options "limit" 10) changes))
+        result (cond->
+                 (assoc manifest :changes selected
+                        :view (if latest? "latest" "running")
+                        :source (if latest? latest-url "bundled")
+                        :total_changes (count changes)
+                        :has_more (< (count selected) (count changes)))
+                 latest? (assoc :running_build (:build running)
+                                :same_source_revisions
+                                (boolean (same-source? manifest))))]
+    ;; Match the existing native help capability's bounded response budget.
+    (loop [result result]
+      (if (and (seq (:changes result))
+               (> (count (json/generate-string result)) 10000))
+        (recur (-> result (update :changes pop) (assoc :has_more true)))
+        result))))
 
 (defn format-version [build]
   (string/join "\n"
@@ -129,6 +190,32 @@
       (str label ": `" (or (:version entry) "unknown") "`"
            (when-let [url (:commit_url entry)]
              (str " ([source](" url "))"))))))
+
+(defn format-changelog [result]
+  (string/join "\n\n"
+    (concat
+      [(if (= "latest" (:view result))
+         "Latest published features — not proof of what's installed."
+         "Recent features included in this running build.")
+       (format-version (:build result))]
+      (when (= "latest" (:view result))
+        [(str "Running build:\n" (format-version (:running_build result)))])
+      (if (seq (:changes result))
+        (for [{:keys [date title summary commands requires links]}
+              (:changes result)]
+          (string/join "\n"
+            (concat [(str "**" title "** · " date) summary]
+                    (when (seq commands)
+                      [(str "Try: " (string/join " · "
+                                       (map #(str "`!" % "`") commands)))])
+                    (when (seq requires)
+                      [(str "Requires: " (string/join "; " requires))])
+                    links)))
+        ["No matching changelog entries."])
+      (when (:has_more result)
+        [(str "Showing " (count (:changes result)) " of "
+              (:total_changes result)
+              " matching entries. Use --limit up to 20 for more.")]))))
 
 (defn manifest-json []
   (str (json/generate-string running {:pretty true}) "\n"))
