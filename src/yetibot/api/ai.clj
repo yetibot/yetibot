@@ -4,6 +4,7 @@
             [clojure.spec.alpha :as s]
             [clojure.string :as string]
             [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.api.opencode :as opencode]
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.mcp :as mcp]
@@ -196,7 +197,8 @@
             (with-meta (mapv :id (:models catalog))
               {:catalog catalog
                :complete? (true? (:complete? (meta catalog)))}))
-          (let [body (request client/get provider "/models" {})
+          (let [body (request client/get (opencode/catalog-provider provider)
+                              "/models" {})
                 data (:data body)]
             (when-not (and (sequential? data)
                            (every? #(nonblank-string? (:id %)) data))
@@ -270,6 +272,10 @@
                        (<= 1 (:max-output-tokens options) 2048))))
     (fail "AI output token limit must be an integer from 1 to 2048."))
   (let [provider (resolve-provider provider)
+        _ (when (and (opencode/provider? provider)
+                     (not (opencode/configured-key? (:key provider))))
+            (fail (str "OpenCode Zen requires an API key. Configure the "
+                       "provider's key or key-file; model discovery is public.")))
         responses-api? (responses? provider)
         progress (when (and responses-api? (fn? (:on-progress options)))
                    {:callback (:on-progress options)
