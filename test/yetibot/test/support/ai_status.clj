@@ -39,7 +39,7 @@
   (get-in call [:body :components 0 :components 0 :content]))
 
 (defn status-calls [calls]
-  (filterv #(= 32768 (get-in % [:body :flags])) calls))
+  (filterv #(and (= :status (:lane %)) (= 32768 (get-in % [:body :flags]))) calls))
 
 (defn await-card [calls expected]
   (let [observed (promise)
@@ -105,7 +105,7 @@
                       (when hold-create (await hold-create)))
                   (do (deliver edited call)
                       (when hold-edit (await hold-edit)))))
-              (when (and (= *lane* :answer) (:content body))
+              (when (and (= *lane* :answer) (get-in body [:components 0 :components 0 :content]))
                 (deliver answered call))
               (when (= method :delete) (deliver deleted call))
               (delay
@@ -244,7 +244,7 @@
                     (string/includes? (or (:url card) "")
                                       (if threaded? thread target)) => true))
             (when (= command :grok)
-              (fact (get-in (await answered) [:body :content])
+              (fact (get-in (await answered) [:body :components 0 :components 0 :content])
                     => (str "Immediate @everyone\n\nSent via " model))
               (fact (empty? (deletions @calls)) => true))
             (finally (deliver release true)))
@@ -255,8 +255,8 @@
                 expected (str "Final answer @everyone"
                               (when (= command :grok)
                                 (str "\n\nSent via " model)))]
-            (fact (get-in final [:body :content]) => expected
-                  (every? #(nil? (get-in % [:body :flags])) answers) => true)
+            (fact (get-in final [:body :components 0 :components 0 :content]) => expected
+                  (every? #(= 32768 (get-in % [:body :flags])) answers) => true)
             ;; Typing consumed a synthetic status ID; cleanup must use the
             ;; confirmed card ID, never an answer or a guessed identifier.
             (fact (mapv :id (deletions @calls))
@@ -288,7 +288,7 @@
             (let [answer (first (answer-calls @calls))
                   deletion (first (deletions @calls))
                   card (first (status-calls @calls))]
-              (fact (get-in answer [:body :content])
+              (fact (get-in answer [:body :components 0 :components 0 :content])
                     => (if failure?
                          (str "The AI request failed. Check the provider "
                               "configuration and try again.")
@@ -311,7 +311,7 @@
           (try
             (fact (not= :timeout (await created)) => true)
             (deliver release true)
-            (fact (get-in (await answered) [:body :content])
+            (fact (get-in (await answered) [:body :components 0 :components 0 :content])
                   => (str "Answer\n\nSent via " model))
             (fact (deletions @calls) => [])
             (finally (deliver release true) (deliver receipt true)))
@@ -349,7 +349,7 @@
                              (deliver tracked (mapv :id replies))))))
             (deliver release true)
             (let [answer (await answered)]
-              (fact (get-in answer [:body :content])
+              (fact (get-in answer [:body :components 0 :components 0 :content])
                     => (str "Answer\n\nSent via " model)))
             ;; The ancillary HTTP request is still held. Normal answer IDs
             ;; are retained independently by the genuine command collector.

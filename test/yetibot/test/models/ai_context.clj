@@ -117,6 +117,23 @@
                   {:role "assistant" :content "reply"}
                   {:role "user" :content "current"}])))))
 
+(fact "Discord V2 answers remain readable in follow-up thread context"
+  (binding [chat/*adapter* {:conn (atom {:rest :connection})}]
+    (with-redefs [discord/get-channel! (fn [& _] (delivered {:id "100" :type 12}))
+                  discord/get-channel-messages!
+                  (fn [& _]
+                    (delivered
+                      [(assoc (discord-message "300" "bot" "")
+                              :flags 32768
+                              :components
+                              [{:type 17 :accent-color 0x08B8CD
+                                :components [{:type 10 :content "The previous answer"}
+                                             {:type 1 :components
+                                              [{:type 2 :label "Run again"}]}]}])]))]
+      (context/messages discord-args "follow up")
+      => [{:role "assistant" :content "The previous answer"}
+          {:role "user" :content "follow up"}])))
+
 (fact "Discord channel errors and timeouts fail safely"
   (binding [chat/*adapter* {:conn (atom {:rest :connection})}]
     (with-redefs [discord/get-channel! (fn [& _] (delivered {:error "no access"}))]

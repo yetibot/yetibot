@@ -41,7 +41,7 @@
 
 (defn- payload-calls [calls op]
   (filterv #(and (= op (first %))
-                 (string/includes? (get-in % [3 :content] "") "Sent via"))
+                 (string/includes? (get-in % [3 :components 0 :components 0 :content] "") "Sent via"))
            calls))
 
 (fact "real handler and Responses SSE publish before terminal and reuse IDs"
@@ -114,7 +114,7 @@
                                 payload (apply hash-map options)]
                             (fact rest => :mock-rest)
                             (swap! calls conj [:create target id payload])
-                            (when (string/includes? (:content payload "")
+                            (when (string/includes? (get-in payload [:components 0 :components 0 :content] "")
                                                     "Sent via")
                               (deliver observed true))
                             (result-channel {:id id}))
@@ -158,8 +158,19 @@
                       (count @requests) => 1
                       (payload-calls @calls :create)
                       => [[:create "selected-thread" "2"
-                           {:content (str "First [redacted] @everyone"
-                                          "\n\nSent via selected")
+                           {:flags 32768
+                            :components
+                            [{:type 17 :accent_color 0x08B8CD
+                              :components
+                              [{:type 10 :content (str "First [redacted] @everyone"
+                                                      "\n\nSent via selected")}
+                               {:type 1 :components
+                                [{:type 2 :style 2 :label "Run again"
+                                  :custom_id "yb:again:parent:command"}
+                                 {:type 2 :style 2 :label "Help"
+                                  :custom_id "yb:help:parent:command"}
+                                 {:type 2 :style 2 :label "Show details"
+                                  :custom_id "yb:details:parent:command"}]}]}]
                             :allowed-mentions {:parse []}}]])
                 (finally (deliver release true)))
               (await! completion)
@@ -168,7 +179,7 @@
                 (fact (count creates) => 2
                       (mapv second creates)
                       => ["selected-thread" "selected-thread"]
-                      (mapv #(get-in % [3 :content]) creates)
+                      (mapv #(get-in % [3 :components 0 :components 0 :content]) creates)
                       => [(str "First [redacted] @everyone"
                                "\n\nSent via selected")
                           "Next <@123>\n\nSent via selected"]
