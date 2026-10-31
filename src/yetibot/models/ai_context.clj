@@ -4,7 +4,8 @@
             [clojure.string :as string]
             [discljord.messaging :as discord]
             [yetibot.api.ai :as ai]
-            [yetibot.core.chat :as chat]))
+            [yetibot.core.chat :as chat]
+            [yetibot.core.adapters.discord-components :as components]))
 
 (defn- text-message [content assistant? speaker]
   (when (ai/nonblank-string? content)
@@ -107,7 +108,7 @@
                              (keep #(text-message (:text %) (and bot-id (= bot-id (:user %)))
                                                   (:user %))
                                    (slack-history event)))
-                    :discord (keep #(text-message (:content %)
+                    :discord (keep #(text-message (components/message-text %)
                                                   (and bot-id (= bot-id (get-in % [:author :id])))
                                                   (get-in % [:author :username]))
                                    (discord-history event))

@@ -560,6 +560,38 @@ moves that conversation into its parent channel or changes history/tool scope.
 The flag is Grok-only, can combine with `--model`, `--toolset` or `--no-tools`,
 and must precede the prompt. Use `--` to begin a prompt with a literal flag.
 
+### Discord answer cards and buttons
+
+Regular Discord adapter replies use Components V2 containers with a consistent
+cyan accent. Direct image/GIF/video URLs render as media galleries; generated
+images are uploaded and referenced explicitly so V2 does not hide attachments.
+Other adapters are unchanged.
+
+Command replies include **Run again** and **Help**. Run again is restricted to
+the original requester and re-enters the normal command handler with the
+original input and attachments, replacing its tracked replies. Existing
+command/tool authorization still applies, including paid or write-capable
+commands: Run again opens a private **Confirm rerun** prompt before execution.
+The confirmation is requester-owned and expires when the command is edited or
+rerun. Simultaneous reruns are rejected; an intervening command edit supersedes
+an older click.
+Help privately shows the existing command/alias help documentation.
+
+AI replies with sanitized progress also offer **Show details**, opening the
+bounded tool-name/outcome/budget snapshot privately. Raw reasoning, prompts,
+arguments and tool results are not stored by this feature. The transient live
+card is still removed after answer delivery. Buttons use the bounded command
+cache and expire after eviction or a bot restart; expired buttons explain how
+to resend the command rather than guessing what to execute.
+
+Responses above 6,000 characters use one readable excerpt and a complete
+`answer.md` attachment instead of flooding the channel. No extra inference is
+used to summarize the answer. The file remains available on the message after
+interactive controls expire. Private answer pagination is not included in this
+first release. Discord thread history reads V2 text/media as well as legacy
+text; for attached long answers, history contains the inline excerpt rather
+than automatically downloading files.
+
 ### Live Discord progress
 
 Discord `ai` and `grok` use one transient V2 working card, separate from

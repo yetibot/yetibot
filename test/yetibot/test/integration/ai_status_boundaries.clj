@@ -27,7 +27,7 @@
 (fact "expected-card wait selects a full existing card and removes its watch"
   (let [expected "Working\n#1 sync-fixture — error"
         card (fn [text]
-               {:body {:flags 32768
+               {:lane :status :body {:flags 32768
                        :components [{:components [{:content text}]}]}})
         intermediate (card (str expected "\nstill intermediate"))
         matching (assoc (card expected) :method :post)
@@ -92,7 +92,7 @@
           (let [completion (run! "grok --no-thread fixture")]
             (try
               (fact (proof/await running) => true
-                    (get-in (proof/await answered) [:body :content])
+                    (get-in (proof/await answered) [:body :components 0 :components 0 :content])
                     => (str "Immediate\n\nSent via " proof/model)
                     (not= :timeout (proof/await created)) => true)
               (fact (empty? (proof/deletions @calls)) => true)
@@ -118,7 +118,7 @@
             (fact (not= :timeout (proof/await deleted)) => true
                   (count @turns) => 2
                   (some #(contains? % :on-progress) @turns) => nil
-                  (get-in (last (proof/answer-calls @calls)) [:body :content])
+                  (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
                   => (str "Final\n\nSent via " proof/model))))))))
 
 (fact "no-tools keeps a tool-free Working card and ordinary final transport"
@@ -158,7 +158,7 @@
                     @discovery => 0
                     (some #(seq (:tools %)) @wire) => nil
                     (some #(contains? % :on-progress) @wire) => nil
-                    (get-in (last (proof/answer-calls @calls)) [:body :content])
+                    (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
                     => "No tools answer"))))))))
 
 (fact "missing ancillary lane or failed status create cannot discard answers"
@@ -177,13 +177,13 @@
                 (fact (not= :timeout (proof/await created)) => true))
               (finally (deliver release true)))
             (proof/finish! completion)
-            (fact (get-in (last (proof/answer-calls @calls)) [:body :content])
+            (fact (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
                   => "Answer survives"
                   (proof/deletions @calls) => [])
             (when (= failure :missing)
               (fact (proof/status-calls @calls) => []))))))))
 
-(fact "final generated-image attachment stays flag-free and separate from card"
+(fact "final generated-image attachment is explicit V2 media separate from working card"
   (let [release (promise)
         id "status-fixture-image"
         url (str "https://status-fixture.invalid/generated-images/" id ".png")]
@@ -203,8 +203,8 @@
             (let [answer (first (proof/answer-calls @calls))
                   card (first (proof/status-calls @calls))]
               (fact (:file? answer) => true
-                    (get-in answer [:body :content]) => "Caption "
-                    (get-in answer [:body :flags]) => nil
+                    (get-in answer [:body :components 0 :components 0 :content]) => "Caption "
+                    (get-in answer [:body :flags]) => 32768
                     (:file? card) => false
                     (mapv :id (proof/deletions @calls)) => [(:id card)]))))))))
 
@@ -301,7 +301,7 @@
                     (boolean
                       (re-find #"Automatic PR stopped: unknown"
                                (get-in (last (proof/answer-calls @calls))
-                                       [:body :content]))) => true)
+                                       [:body :components 0 :components 0 :content]))) => true)
               (proof/finish!
                 (run! "ai --max-tool-calls 7 Fix owner/repo"))
               (fact (count @classified) => 1
@@ -341,7 +341,7 @@
                     (get-in @child-options [0 2 :on-progress]) => nil
                     (get-in @child-options [0 2 :progress-config]) => nil
                     (get-in @child-options [0 2 :tools]) => []
-                    (get-in (last (proof/answer-calls @calls)) [:body :content])
+                    (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
                     => "Child answer"))))))))
 
 (fact "stale callback cannot change the new command card or final answer"
@@ -384,7 +384,7 @@
                 (deliver second-release true)))
             (proof/finish! first-completion)
             (proof/finish! second-completion)
-            (fact (mapv #(get-in % [:body :content])
+            (fact (mapv #(get-in % [:body :components 0 :components 0 :content])
                         (proof/answer-calls @calls)) => ["Current answer"]
                   (some #(string/includes? (or (proof/status-text %) "")
                                            "stale_tool") @calls) => nil)
