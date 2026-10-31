@@ -156,6 +156,64 @@ reader/eval fallback. Select `random`, `head`, or a smaller subset rather than
 sending a large catalog. Existing upstream truncation markers remain data;
 formatting a record does not prove account entitlement or model quality.
 
+## OpenCode Zen
+
+OpenCode Zen (now called OpenCode Console in its current documentation) is
+available as a configured AI provider and through the `zen` shortcut. Add it
+to your existing `:ai :providers` vector without changing your default:
+
+```clojure
+{:name "zen"
+ :url "https://opencode.ai/inference/openai/v1"
+ :key-file "/run/secrets/opencode-zen-api-key"
+ :model "gpt-5.4-mini"}
+```
+
+Use your own Zen API key; credentials are not imported from other clients.
+For a bot, prefer a dedicated service account with a restricted API key whose
+**Models** permission is **Request**. Personal and service-account keys both
+work for inference; unrelated administrative permissions are not needed.
+The model is a configurable default, not an allowlist. Model discovery calls
+`https://opencode.ai/inference/v1/models` automatically: the current chat API
+base does not have a working `/models` endpoint. Legacy
+`https://opencode.ai/zen/v1` configurations retain their own models endpoint.
+Only known HTTPS OpenCode origins are adapted; redirects and paid retries
+remain disabled.
+
+```text
+!zen models
+!zen models | random | data show
+!zen Say hello.
+!zen --model <exact-id-from-zen-models> Compare these approaches.
+!ai models zen
+!ai --provider zen --no-tools Say hello.
+!ai --provider zen --model <exact-id> Use the configured tools.
+```
+
+Bare `!zen` retains the existing GitHub Zen wisdom command; provide a prompt
+or use `zen models` for OpenCode.
+
+`zen models` fetches all advertised IDs on each listing, including newly
+added models, and retains structured IDs for normal collection pipelines.
+The same catalog feeds the bounded background provider discovery used by
+`ai --model <exact-id>`; duplicate IDs still require `--provider zen`.
+There is no fixed model list to update in Yetibot.
+
+Like `cf`, `zen` prompts are single-hop text requests with no implicit thread
+history, files, searches or child tools, and at most 2,048 output tokens.
+`--toolset <name>` applies the existing user/provider/model policy. For normal
+AI thread context and tool use, select Zen through `ai --provider zen`.
+Uncertain paid outcomes stop the pipeline without retries or fallback.
+
+The catalog is public: omit both credential fields for discovery-only setup,
+or use `:key "REPLACE_WITH_OPENCODE_ZEN_API_KEY"` as a setup placeholder.
+The placeholder is never sent as Authorization. Prompts fail before POST
+until a real key or readable key-file is configured.
+A catalog listing is not proof of account access or model/tool quality.
+OpenCode's current documentation restricts free-tier chat models to OpenCode
+clients; Yetibot does not impersonate that client to bypass restrictions.
+See [OpenCode model documentation](https://opencode.ai/docs/zen/).
+
 ## Cloudflare inference and model discovery
 
 Cloudflare inference is an AI provider, not a Cloudflare MCP server. Add an
@@ -571,14 +629,19 @@ Command replies include **Run again** and **Help**. Run again is restricted to
 the original requester and re-enters the normal command handler with the
 original input and attachments, replacing its tracked replies. Existing
 command/tool authorization still applies, including paid or write-capable
-commands: Run again opens a private **Confirm rerun** prompt before execution.
+commands: Run again opens a public **Confirm rerun** prompt before execution.
 The confirmation is requester-owned and expires when the command is edited or
 rerun. Simultaneous reruns are rejected; an intervening command edit supersedes
-an older click.
-Help privately shows the existing command/alias help documentation.
+an older click. Confirming consumes and removes the confirmation card before
+execution; cleanup failure is best-effort and does not duplicate paid work.
+Help shows the existing command/alias help documentation in the channel.
 
-AI replies with sanitized progress also offer **Show details**, opening the
-bounded tool-name/outcome/budget snapshot privately. Raw reasoning, prompts,
+All interaction replies, including confirmations, details, help and errors,
+are public to readers of the same channel or thread. Requester-only rerun
+authorization is unchanged.
+
+AI replies with sanitized progress also offer **Show details**, posting the
+bounded tool-name/outcome/budget snapshot publicly. Raw reasoning, prompts,
 arguments and tool results are not stored by this feature. The transient live
 card is still removed after answer delivery. Buttons use the bounded command
 cache and expire after eviction or a bot restart; expired buttons explain how
