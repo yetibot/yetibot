@@ -9,6 +9,7 @@
             [yetibot.models.ai-inference-tools :as inference]
             [yetibot.models.ai-media-tools :as media]
             [yetibot.models.ai-model-tools :as models]
+            [yetibot.models.ai-react-tools :as react]
             [yetibot.models.ai-util-tools :as util]
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.models.ai-tool-policy :as policy]
@@ -106,11 +107,13 @@
                    (into (concat (media/available-tools)
                                  (inference/available-tools)
                                  (models/available-tools) wise-tools
+                                 (react/available-tools)
                                  (util/available-tools)
                                  (aliases/available-tools))))
         selected (get t :native-tools defaults)]
-    ;; Explicit selection never widens the financial reader's chat policy.
-    (if (seq wise-tools) selected (filterv #(not= "wise" %) selected))))
+    (cond->> selected
+      (empty? wise-tools) (filterv #(not= "wise" %))
+      (empty? (react/available-tools)) (filterv #(not= "react" %)))))
 
 (defn- adapter [operation]
   (cond
@@ -120,6 +123,9 @@
     (contains? util/definitions operation)
     {:definition (get util/definitions operation)
      :arguments util/arguments! :call util/call!}
+    (contains? react/definitions operation)
+    {:definition (get react/definitions operation)
+     :arguments react/arguments! :call react/call!}
     (contains? models/definitions operation)
     {:definition (get models/definitions operation)
      :arguments models/arguments! :call models/call!}

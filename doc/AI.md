@@ -190,8 +190,8 @@ remain disabled.
 !ai --provider zen --model <exact-id> Use the configured tools.
 ```
 
-Bare `!zen` retains the existing GitHub Zen wisdom command; provide a prompt
-or use `zen models` for OpenCode.
+Bare `!zen` shows usage without making an inference request. The legacy
+GitHub Zen wisdom command has been retired.
 
 `zen models` fetches all advertised IDs on each listing, including newly
 added models, and retains structured IDs for normal collection pipelines.
@@ -647,13 +647,35 @@ card is still removed after answer delivery. Buttons use the bounded command
 cache and expire after eviction or a bot restart; expired buttons explain how
 to resend the command rather than guessing what to execute.
 
-Responses above 6,000 characters use one readable excerpt and a complete
-`answer.md` attachment instead of flooding the channel. No extra inference is
-used to summarize the answer. The file remains available on the message after
-interactive controls expire. Private answer pagination is not included in this
+Responses fit in one card through 4,000 UTF-16 characters of rendered text.
+Markdown tables outside code fences become aligned fixed-width code blocks;
+headers and cells are preserved without another model call. Longer responses,
+unsafe tables and tables whose padding would exceed that budget use one readable
+excerpt and a complete `answer.md` attachment containing the exact original text
+instead of flooding the channel. No extra inference is used to summarize it.
+The file remains available on the message after interactive controls expire. Private answer pagination is not included in this
 first release. Discord thread history reads V2 text/media as well as legacy
 text; for attached long answers, history contains the inline excerpt rather
 than automatically downloading files.
+
+### Discord reactions
+
+`!react` accepts Unicode emoji, static `<:name:id>`, animated `<a:name:id>`, or
+API-form `name:id`. Bare `:shortcodes:` are ambiguous and are rejected; Slack's
+existing reaction behavior is unchanged.
+
+On Discord, the native `react` tool is available to enabled AI toolsets unless
+an explicit `:native-tools` allowlist excludes it; include `"react"` there to
+opt in.
+It requires `emoji` and optionally accepts a numeric-string `message_id`. The
+normal target is the original requesting human message, not whichever message is
+latest when the tool runs. Explicit targets stay in the requesting channel or
+thread; there is no channel override, command execution, removal or permission
+mutation. Trusted request provenance and normal toolset authorization are
+required.
+Only a confirmed Discord acknowledgement is reported as success. An uncertain
+result must not be retried blindly. Bot-added reactions do not invoke observers
+or delete the bot's own messages.
 
 ### Live Discord progress
 
@@ -677,13 +699,17 @@ Completed Grok assistant messages are separate replies in the same target while
 later tools continue. Completed answers are not duplicated as final replies;
 later errors remain visible. Status failure cannot discard the final answer.
 
-Answer payload delivery is limited to 30 physical Discord messages (each at
-most 2000 UTF-16 characters, without splitting surrogate pairs) and a shared
+Answer payload admission conservatively budgets 30 messages using
+2,000-character chunks (without splitting surrogate pairs) and a shared
 64 KiB UTF-8 budget, including model footers after credential redaction. Whole
 answers are admitted or rejected; answer data is never cropped to fit. At most
 one fixed overflow notice is additional to that payload allowance. The notice
 includes the normal model footer only when it fits in one Discord message.
 Terminal provider errors remain visible even after the payload limit.
+
+Discord V2 delivery coalesces those internal chunks to the 4,000-character card
+budget; answers above that budget use an excerpt and exact Markdown download.
+The admission accounting stays conservative rather than relaxing output limits.
 
 Completed answers use the core adapter's tracked immediate publisher, not its
 ordinary deferred chat collector. Final replay reuses the tracked message IDs;

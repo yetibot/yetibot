@@ -5,18 +5,16 @@
             [yetibot.api.opencode :as opencode]
             [yetibot.commands.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
-            [yetibot.core.util.http :refer [fetch]]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-toolsets :as toolsets]))
 
-(def endpoint "https://api.github.com/zen")
-
-(defn zen
-  "zen # fetch zen wisdom"
-  [_] (fetch endpoint))
-
 (def usage
-  "Usage: zen [--model <model>] [--toolset <name>] <prompt>")
+  (str "Usage: zen [--model <model>] [--toolset <name>] <prompt>\n"
+       "zen models # discover available OpenCode Zen models"))
+
+(defn usage-cmd
+  "zen # show OpenCode Zen usage without making an inference request"
+  [_] usage)
 
 (defn- failure [args unknown?]
   ;; Avoid core error decoration reflecting prompt prose or credentials.
@@ -82,6 +80,6 @@
     (catch Exception _ (failure args false))))
 
 (cmd-hook #"zen"
-  #"^\s*$" zen
+  #"^\s*$" usage-cmd
   #"(?s)^models(?:\s+(.*))?$" models-cmd
   #"(?s)^.+$" prompt-cmd)

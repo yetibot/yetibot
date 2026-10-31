@@ -7,6 +7,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
             [yetibot.core.adapters.discord :as host-discord]
+            [yetibot.core.adapters.discord-components :as components]
             [yetibot.core.chat :as chat]
             ;; Require before registering our hook: the loader may encounter
             ;; core before or after this namespace, but require is idempotent.
@@ -36,17 +37,18 @@
                   :provider (get-in prepared [:provider :name])
                   :model (:model prepared))))))
 
-(defn- answer-chunks [^String text]
-  (let [length (.length text)
-        maximum host-discord/discord-max-message-length]
-    (loop [start 0 chunks []]
-      (if (= start length) chunks
-        (let [end (min length (+ start maximum))
-              end (if (and (< end length)
-                           (Character/isHighSurrogate (.charAt text (dec end)))
-                           (Character/isLowSurrogate (.charAt text end)))
-                    (dec end) end)]
-          (recur end (conj chunks (subs text start end))))))))
+(defn- answer-chunks
+  ([text] (answer-chunks text host-discord/discord-max-message-length))
+  ([^String text maximum]
+   (let [length (.length text)]
+     (loop [start 0 chunks []]
+       (if (= start length) chunks
+         (let [end (min length (+ start maximum))
+               end (if (and (< end length)
+                            (Character/isHighSurrogate (.charAt text (dec end)))
+                            (Character/isLowSurrogate (.charAt text end)))
+                     (dec end) end)]
+           (recur end (conj chunks (subs text start end)))))))))
 
 (defn- answer-publisher [prepared thread]
   (let [state (atom {:answers [] :bytes 0 :messages 0})
@@ -61,7 +63,9 @@
               (some @state [:limited? :stale? :failed?]))
             (post! [chunks]
               (try
-                (case (host-discord/publish-command-output! thread chunks)
+                (case (host-discord/publish-command-output!
+                        thread (answer-chunks (apply str chunks)
+                                              components/max-text-length))
                   :published true
                   :stale (do (swap! state assoc :stale? true) false)
                   :unavailable

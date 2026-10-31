@@ -72,12 +72,14 @@
            (catch Exception _ :blocked)) => :blocked
       @calls => 0)))
 
-(fact "bare zen preserves the existing GitHub wisdom command"
-  (with-redefs [core-http/fetch (fn [url]
-                                (fact url => "https://api.github.com/zen")
-                                "Keep it simple.")]
-    (:value (execution/run-command execution/request "zen"))
-    => "Keep it simple."))
+(fact "bare zen shows usage without GitHub or inference requests"
+  (with-redefs [core-http/fetch (fn [& _]
+                                 (throw (AssertionError. "No GitHub wisdom")))
+                ai/complete (fn [& _] (throw (AssertionError. "No inference")))]
+    (let [result (execution/run-command execution/request "zen")]
+      (string/includes? (str (:value result)) "zen models") => true
+      (string/includes? (str (:value result)) "--model") => true
+      (get-in result [:data :isError]) => nil)))
 
 (fact "zen models discovers every ID and preserves pipeline selection"
   (with-redefs [ai/config (constantly settings)
