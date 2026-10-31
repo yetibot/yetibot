@@ -1,0 +1,63 @@
+{:schema_version 1
+ :changes
+ [{:id "release-discovery"
+   :date "2026-10-31"
+   :component "app"
+   :title "Ask Yetibot what's new"
+   :summary "Read the running app and core versions, browse bundled feature notes, or ask AI to explain them using a read-only release_info tool. Published JSON mirrors the same release data; a latest lookup is separate from what's installed."
+   :commands ["version" "changelog" "ai show me the new yetibot features"]
+   :requires []
+   :links []}
+  {:id "native-discord-reactions"
+   :date "2026-10-31"
+   :component "app"
+   :title "AI can react to Discord messages"
+   :summary "The native react tool adds a Unicode or custom-emoji reaction in the original channel or thread. By default it targets the human message that requested the response. It cannot change channels or remove reactions."
+   :commands ["ai react to this message with a thumbs up"]
+   :requires ["Discord and an authorized native AI toolset"]
+   :links ["https://github.com/yetibot/yetibot/pull/1292"]}
+  {:id "opencode-zen"
+   :date "2026-10-31"
+   :component "app"
+   :title "Discover and use OpenCode Zen models"
+   :summary "zen models lists advertised model IDs. zen sends a bounded text-only request; ai --provider zen retains the normal AI context and tools. Bare zen now shows usage, not GitHub wisdom. Automatic free-only model rotation is not included."
+   :commands ["zen" "zen models" "zen --model MODEL PROMPT"
+              "ai --provider zen --model MODEL PROMPT"]
+   :requires ["OpenCode credentials and inference entitlement"
+              "An explicit or configured model; advertised pricing does not prove access"]
+   :links ["https://github.com/yetibot/yetibot/pull/1289"
+           "https://github.com/yetibot/yetibot/pull/1292"]}
+  {:id "unicode-and-custom-reactions"
+   :date "2026-10-31"
+   :component "core"
+   :title "React with Unicode and custom Discord emoji"
+   :summary "Reaction parsing supports static and animated custom emoji, Unicode symbols, subdivision flags and newer emoji. Bot-added reactions are ignored by reaction observers to avoid feedback and accidental self-deletion."
+   :commands ["react 👍"]
+   :requires ["Discord for custom emoji"]
+   :links ["https://github.com/yetibot/core/pull/328"
+           "https://github.com/yetibot/core/pull/329"]}
+  {:id "readable-tables-and-long-answers"
+   :date "2026-10-31"
+   :component "core"
+   :title "Readable tables and longer Discord answers"
+   :summary "Components V2 replies fit up to 4,000 rendered characters. Markdown tables become aligned code blocks. Longer answers and unsafe or oversized tables include a readable excerpt and an exact answer.md download. Image captions use the same formatter."
+   :commands ["ai explain the result as a table"]
+   :requires ["Discord"]
+   :links ["https://github.com/yetibot/core/pull/328"
+           "https://github.com/yetibot/yetibot/pull/1292"]}
+  {:id "public-command-controls"
+   :date "2026-10-31"
+   :component "core"
+   :title "Public command controls with requester-only reruns"
+   :summary "Help, details, confirmations and errors are public to the channel or thread. Rerun authorization stays with the original requester, stale or replayed actions are rejected, and consumed confirmation cards are removed. Details contain sanitized outcomes, not raw tool data or private reasoning."
+   :commands []
+   :requires ["Discord"]
+   :links ["https://github.com/yetibot/core/pull/327"]}
+  {:id "discord-components-v2"
+   :date "2026-10-31"
+   :component "core"
+   :title "Discord Components V2 replies and AI progress"
+   :summary "Command replies, edits, generated media and files share a Components V2 renderer. AI progress shows bounded public tool labels and outcomes while preserving the final answer separately."
+   :commands []
+   :requires ["Discord"]
+   :links ["https://github.com/yetibot/core/pull/326"]}]}
