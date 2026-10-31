@@ -53,7 +53,8 @@
         original-delete messaging/delete-message!
         original-typing messaging/trigger-typing-indicator!
         jdbc-attempts (atom 0) observer-lookups (atom 0)
-        first-answer (answer "one" "First SECRET @everyone")
+        padding (apply str (repeat 2500 "x"))
+        first-answer (answer "one" (str "First SECRET @everyone\n" padding))
         second-answer (answer "two" "Next <@123>")
         adapter (discord/make-discord {:name "offline-discord"})
         conn (:conn adapter)
@@ -162,8 +163,10 @@
                             :components
                             [{:type 17 :accent_color 0x08B8CD
                               :components
-                              [{:type 10 :content (str "First [redacted] @everyone"
-                                                      "\n\nSent via selected")}
+                              [{:type 10
+                                :content
+                                (str "First [redacted] @everyone\n" padding
+                                     "\n\nSent via selected")}
                                {:type 1 :components
                                 [{:type 2 :style 2 :label "Run again"
                                   :custom_id "yb:again:parent:command"}
@@ -180,7 +183,7 @@
                       (mapv second creates)
                       => ["selected-thread" "selected-thread"]
                       (mapv #(get-in % [3 :components 0 :components 0 :content]) creates)
-                      => [(str "First [redacted] @everyone"
+                      => [(str "First [redacted] @everyone\n" padding
                                "\n\nSent via selected")
                           "Next <@123>\n\nSent via selected"]
                       (mapv #(nth % 2) edits) => ["2" "3"]

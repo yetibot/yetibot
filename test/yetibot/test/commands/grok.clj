@@ -348,13 +348,13 @@
     (live-chunks result) => [limit-notice]
     (:final result) => []))
 
-(fact "physical chunks share the allowance across multipart answers"
+(fact "conservative admission survives V2 coalescing across multipart answers"
   (let [answer (string/join (repeat 29000 "a"))
         result (delivery [{:answer answer} {:answer answer} {:answer "extra"}]
                          "extra")
         chunks (live-chunks result)]
-    (count chunks) => 31
-    (mapv count (map second (take 2 (:live result)))) => [15 15]
+    (count chunks) => 17
+    (mapv count (map second (take 2 (:live result)))) => [8 8]
     (last chunks) => limit-notice
     (:final result) => []))
 
@@ -388,14 +388,14 @@
     (:final result) => []))
 
 (facts "Discord chunks honor exact UTF16 boundaries and surrogate pairs"
-  (doseq [answer [(string/join (repeat 1974 "a"))
-                  (str (string/join (repeat 1999 "a")) "😀tail")]]
+  (doseq [answer [(string/join (repeat 3974 "a"))
+                  (str (string/join (repeat 3999 "a")) "😀tail")]]
     (let [result (delivery [{:answer answer}] answer)
           chunks (live-chunks result)]
       (fact (string/join chunks)
             => (str answer "\n\nSent via configured-grok")
             (mapv count chunks)
-            => (if (= 1974 (count answer)) [2000] [1999 32])
+            => (if (= 3974 (count answer)) [4000] [3999 32])
             (some #(Character/isHighSurrogate (last %)) chunks) => nil
             (some #(Character/isLowSurrogate (first %)) chunks) => nil
             (:final result) => []))))
