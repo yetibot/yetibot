@@ -26,3 +26,5 @@ profiles.clj
 .rebl/
 .clj-kondo
 postgres-data/
+# Generated public manifest bundled by release CI, not a source change.
+resources/yetibot/release-info.json

@@ -308,7 +308,7 @@
             (let [result (tools/tool-catalog nil actor)]
               (is (= (into (mapv #(str "github/" %) scope)
                            ["yetibot/help" "yetibot/history"
-                            "yetibot/history_count"])
+                            "yetibot/history_count" "yetibot/release_info"])
                      (:names result)))
               (is (= "fresh" (get-in result [:discovery :servers 0 :status]))))
             (mcp/with-tools (assoc (toolsets/select config "github-read")

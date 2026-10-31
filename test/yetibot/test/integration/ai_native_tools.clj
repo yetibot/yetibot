@@ -1,5 +1,6 @@
 (ns yetibot.test.integration.ai-native-tools
   (:require [cheshire.core :as json]
+            [clj-http.client :as client]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts => contains]]
@@ -28,6 +29,7 @@
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.release-info :as releases]
             [yetibot.test.commands.wise :as wise-fixture]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.test.support.mcp :as support]))
@@ -141,12 +143,13 @@
                         (fn [cfg f] (f (if (seq (:servers cfg)) [remote] [])))]
             (fact (tools/tool-names "yetibot" actor)
                   => ["yetibot/help" "yetibot/history"
-                      "yetibot/history_count" "yetibot/util" "yetibot/aliases"])
+                      "yetibot/history_count" "yetibot/release_info"
+                      "yetibot/util" "yetibot/aliases"])
             (fact (tools/tool-names nil actor)
                   => (vec (concat (when (seq (:servers settings))
                                     ["exa/search"])
                                   ["yetibot/help" "yetibot/history"
-                                   "yetibot/history_count"
+                                   "yetibot/history_count" "yetibot/release_info"
                                    "yetibot/util" "yetibot/aliases"])))))))))
 
 (fact "real listing commands preserve names and expose inert structured data"
@@ -158,10 +161,10 @@
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
             => ["`yetibot/help`" "`yetibot/history`" "`yetibot/history_count`"
-                "`yetibot/util`" "`yetibot/aliases`"]
+                "`yetibot/release_info`" "`yetibot/util`" "`yetibot/aliases`"]
             (mapv :id (get-in normal [:data :tools]))
             => ["yetibot/help" "yetibot/history" "yetibot/history_count"
-                "yetibot/util" "yetibot/aliases"]
+                "yetibot/release_info" "yetibot/util" "yetibot/aliases"]
             (every? #(and (string? (:description %))
                           (= "object" (get-in % [:inputSchema :type])))
                     (get-in normal [:data :tools])) => true
@@ -179,7 +182,7 @@
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
     (let [result (execution/run-command execution/request
                    "ai tools | tail 3 | xargs ai tools")
-          ids ["yetibot/history_count" "yetibot/util" "yetibot/aliases"]]
+          ids ["yetibot/release_info" "yetibot/util" "yetibot/aliases"]]
       (mapv #(some-> % string/split-lines first) (:value result)) => ids
       (mapv :id (:data result)) => ids
       (every? #(and (string? %) (string/includes? % "Inputs:"))
@@ -193,12 +196,34 @@
         (with-redefs [mcp/config (constantly defaults)]
           (fact (tools/tool-names "yetibot" actor)
                 => ["yetibot/help" "yetibot/history"
-                    "yetibot/history_count" "yetibot/util" "yetibot/aliases"])
+                    "yetibot/history_count" "yetibot/release_info"
+                    "yetibot/util" "yetibot/aliases"])
           (fact (tools/server-names (assoc actor :user "U2")) => []))
         (with-redefs [mcp/config
                       (constantly (assoc-in config [:toolsets 0 :native-tools]
                                             []))]
           (fact (tools/server-names actor) => []))))))
+
+(fact "release metadata travels through the budgeted native model roundtrip"
+  (let [result (run-calls implicit-config [["release_info" {}]])
+        data (get-in result [:replies 0 :structuredContent])]
+    (:view data) => "running"
+    (:untrusted data) => true
+    (:build data) => (:build releases/running)
+    (get-in data [:changes 0 :id]) => "release-discovery"
+    (count (:sent result)) => 2))
+
+(fact "whole-batch validation rejects injected release fields before any GET"
+  (let [requests (atom 0)]
+    (with-redefs [client/get
+                  (fn [& _] (swap! requests inc)
+                    (throw (AssertionError. "No public metadata fetch")))]
+      (error-message
+        #(run-calls implicit-config
+           [["release_info" {"view" "latest"}]
+            ["release_info" {"url" "https://elsewhere.invalid"}]]))
+      => string?
+      @requests => 0)))
 
 (facts "default history keeps current-room scope without native configuration"
   (with-history
@@ -528,14 +553,15 @@
   (execution/in-event execution/request "ai tools"
     (fn [request]
       (let [actor (policy/actor request)
-            reads ["yetibot/help" "yetibot/history" "yetibot/history_count"]]
+            reads ["yetibot/help" "yetibot/history" "yetibot/history_count"]
+            defaults (conj reads "yetibot/release_info")]
         (doseq [meme? [false true] image? [false true]]
           (with-redefs [imgflip/configured? meme?
                         xai/config (if image? {:key "fake-image-key"} {})
                         mcp/config (constantly nil)]
             (let [catalog (tools/tool-catalog "yetibot" actor)]
               (fact (:names catalog)
-                    => (conj (cond-> reads
+                    => (conj (cond-> defaults
                                meme? (conj "yetibot/meme")
                                image? (conj "yetibot/gi"))
                              "yetibot/util" "yetibot/aliases")
@@ -552,7 +578,7 @@
           (with-redefs [imgflip/configured? true
                         xai/config {:key "fake-image-key"}
                         mcp/config (constantly cfg)]
-            (fact (tools/tool-names "yetibot" actor) => reads)))))))
+            (fact (tools/tool-names "yetibot" actor) => defaults)))))))
 
 (fact "meme search is literal, bounded and returns usable template IDs"
   (with-redefs [imgflip/configured? true
@@ -789,7 +815,7 @@
         (fn [request]
           (let [actor (policy/actor request)
                 reads ["yetibot/help" "yetibot/history"
-                       "yetibot/history_count"]]
+                       "yetibot/history_count" "yetibot/release_info"]]
             (with-redefs [mcp/config (constantly nil)
                           clef/credential!
                           (fn [& _] (throw (AssertionError. "Token read")))]

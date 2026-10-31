@@ -80,7 +80,7 @@
                       (:budget trace) => {:limit 6 :used 1 :remaining 5
                                           :requested 1}
                       (count (:calls trace)) => 1
-                      (:tool row) => "mcp_5___stage_changes"
+                      (:tool row) => "mcp_6___stage_changes"
                       (select-keys row [:call :outcome :attempted :confirmed])
                       => {:call 1 :outcome :unknown :attempted true
                           :confirmed false}

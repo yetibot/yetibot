@@ -805,8 +805,8 @@ account is still needed to qualify your deployment and model's tool support.
 ## Native Yetibot tools
 
 Local tools are **enabled by default** for both `ai` and `grok` in trusted
-Slack/Discord chat requests. Help and history need no extra toolset, MCP server
-or opt-in configuration. Media and inference tools appear when their services
+Slack/Discord chat requests. Help, history and release discovery need no extra
+toolset, MCP server or opt-in configuration. Media and inference tools appear when their services
 are configured; Wise additionally requires account and chat allowlists.
 `!ai tools` lists them alongside existing MCP tools:
 
@@ -814,6 +814,11 @@ are configured; Wise additionally requires account and chat allowlists.
   This never runs a command. Runtime aliases and their bodies are not exposed.
 - `history`: read recent messages or search by literal, case-insensitive text.
 - `history_count`: count messages, optionally matching the same literal text.
+- `release_info`: read the running app/core versions and bundled feature notes.
+  Use it for “what's new in Yetibot?” questions. Optional `view: "latest"`
+  reads published JSON, explicitly separate from deployment; `since` is an
+  inclusive ISO date and `limit` is 1–20. No credentials or inference are used
+  by this tool. See [versions and changelogs](RELEASES.md).
 - `meme`: search Imgflip templates and create captioned memes when Imgflip is
   configured.
 - `gi`: create/edit images through the existing Grok image pipeline when
@@ -848,7 +853,7 @@ keep existing servers/toolsets if you also want external tools:
  [{:name "yetibot_read"
    :kind "search"
    :servers []
-   :native-tools ["help" "history" "history_count"]
+   :native-tools ["help" "history" "history_count" "release_info"]
    :users ["U0123456789"]
    :adapters ["slack"]
    :providers [{:name "grok" :models ["grok-4.7"]}]}]}
@@ -859,7 +864,8 @@ override requires user, Slack/Discord adapter and provider/model allowlists.
 Named toolset selection does not require a channel or thread allowlist; Wise
 still requires its own allowed conversations.
 Only `search` toolsets accept explicit native overrides. GitHub toolsets inherit
-only `help`, `history` and `history_count`, never media, inference, delegation
+only `help`, `history`, `history_count` and `release_info`, never media,
+inference, delegation
 or Wise. Explicit lists are not expanded automatically: add `"meme"`, `"gi"`,
 `"clef"`, `"clairic"`, `"wise"`, `"ai"` or `"cf"` to allow them. Explicit inclusion
 cannot bypass Wise's account/chat restrictions. Set `:native-tools []` on a
