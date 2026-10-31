@@ -3,7 +3,8 @@
   (:require [cheshire.core :as json]
             [clojure.string :as string]
             [yetibot.api.ai-diagnostics :as diagnostics]
-            [yetibot.api.mcp :as mcp])
+            [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-progress :as progress])
   (:import [java.io BufferedReader InputStream InputStreamReader]
            [java.nio.charset StandardCharsets CodingErrorAction]))
 
@@ -59,7 +60,15 @@
                                (> (alength (.getBytes ^String answer
                                                      StandardCharsets/UTF_8))
                                   65536))
+            tool-event (when-let [row (progress/tool-event (:tool-event event))]
+                         (if (and (= :host (:domain row))
+                                  (not= (:label row)
+                                        (mcp/redact (:label row) config)))
+                           (assoc row :label progress/redacted-label) row))
+            budget (progress/tool-budget (:tool-budget event))
             event (cond-> (select-keys event [:phase :summary :text])
+                    tool-event (assoc :tool-event tool-event)
+                    budget (assoc :tool-budget budget)
                     answer
                     (merge (if answer-limit? {:answer-limit? true}
                              {:answer answer}))
@@ -139,6 +148,58 @@
         publish! (fn [event]
                    (notify! callback config (swap! state merge event)))
         seen (atom #{})
+        ;; IDs and output indexes remain private to this one response. The
+        ;; host's response ordinal separates identities across tool-loop turns.
+        native-state (atom {:items {} :ids {} :indexes {} :next-call 0})
+        native!
+        (fn [event]
+          (let [kind (:type event "")
+                [_ native status]
+                (re-matches
+                  #"response\.(web_search|x_search)_call\.(.+)" kind)
+                item (:item event)
+                native (or native ({"web_search_call" "web_search"
+                                    "x_search_call" "x_search"} (:type item)))
+                id (or (:id item) (:item_id event))
+                index (:output_index event)
+                id (when (and (string? id) (seq id)) id)
+                index (when (and (integer? index) (<= 0 index)) index)
+                outcome (cond
+                          (or (= "failed" status)
+                              (= "failed" (:status item))) :error
+                          (or (= "completed" status)
+                              (= "completed" (:status item))) :success
+                          (= "response.output_item.done" kind) :unknown
+                          (or (#{"in_progress" "searching"} status)
+                              (= "response.output_item.added" kind)) :running)]
+            (when (and outcome (contains? native-tools native)
+                       (or id index))
+              (let [s @native-state
+                    key (or (get-in s [:ids id])
+                            (get-in s [:indexes index])
+                            (when id [:id id]) [:index index])
+                    previous (get-in s [:items key])
+                    call (or (:call previous) (inc (:next-call s)))
+                    row {:call call :outcome outcome
+                         :label (if (= native "web_search")
+                                  "web search" "X search")}
+                    changed? (and (not= outcome (:outcome previous))
+                                  (or (nil? previous)
+                                      (= :running (:outcome previous))))]
+                (swap! native-state
+                       (fn [s]
+                         (cond-> s
+                           changed? (assoc-in [:items key] row)
+                           (nil? previous) (update :next-call inc)
+                           id (assoc-in [:ids id] key)
+                           (some? index) (assoc-in [:indexes index] key))))
+                (when changed?
+                  (notify!
+                    callback config
+                    (assoc @state :tool-event
+                           (assoc row :domain :native
+                                  :response
+                                  (:progress-response config 1)))))))))
         publish-answer!
         (fn [index item]
           (when (and (= "message" (:type item))
@@ -159,56 +220,69 @@
         finish! (fn [body]
                   (let [body (completed body)]
                     (doseq [[index item] (map-indexed vector (:output body))]
+                      (native! {:type "response.output_item.done"
+                                :output_index index :item item})
                       (publish-answer! index item))
                     body))]
-    (publish! @state)
-    (if (string/includes? (string/lower-case (or content-type ""))
-                          "application/json")
-      (finish! (parsed (slurp input)))
-      (loop [frame (StringBuilder.)]
-        (let [line (.readLine input)]
-          (when (or (nil? line) (> (count line) 4194304)) (fail!))
-          (cond
-            (and (empty? line) (pos? (.length frame)))
-            (let [event (parsed (.toString frame))
-                  kind (:type event)
-                  phase (when (string? kind)
-                          (search-phase event native-tools))]
-              (when-not (string? kind) (fail!))
-              (cond
-                (contains? #{"response.completed" "response.done"} kind)
-                (finish! (:response event))
-                (contains? #{"error" "response.failed" "response.incomplete"}
-                           kind) (fail! (or (:response event) event))
-                :else
-                (do
-                  (cond
-                    (contains? #{"response.output_text.delta"
-                                 "response.reasoning_summary_text.delta"
-                                 "response.reasoning_text.delta"} kind)
-                    (let [key (if (= "response.output_text.delta" kind)
-                                :text :summary)]
-                      (when-not (string? (:delta event)) (fail!))
-                      (let [text (str (get @state key) (:delta event))
-                            cropped (if (= key :text)
-                                      :text-cropped? :summary-cropped?)]
-                        (publish!
-                          {:phase (if (= key :text) "Answering" "Thinking")
-                           key (tail text 8192)
-                           cropped (or (get @state cropped)
-                                       (> (count text) 8192))})))
-                    (and (= "response.output_item.done" kind)
-                         (= "message" (get-in event [:item :type])))
-                    (publish-answer! (:output_index event) (:item event))
-                    phase (publish! {:phase phase})
-                    (and (= "response.output_item.added" kind)
-                         (= "function_call" (get-in event [:item :type])))
-                    (publish! {:phase "Preparing a tool request"}))
-                  (recur (StringBuilder.)))))
-            (string/starts-with? line "data:")
-            (let [data (subs line (if (string/starts-with? line "data: ") 6 5))]
-              (.append frame data)
-              (.append frame \newline)
-              (when (> (.length frame) 4194304) (fail!))
-              (recur frame))
-            :else (recur frame)))))))
+    (try
+      (publish! @state)
+      (if (string/includes? (string/lower-case (or content-type ""))
+                            "application/json")
+        (finish! (parsed (slurp input)))
+        (loop [frame (StringBuilder.)]
+          (let [line (.readLine input)]
+            (when (or (nil? line) (> (count line) 4194304)) (fail!))
+            (cond
+              (and (empty? line) (pos? (.length frame)))
+              (let [event (parsed (.toString frame))
+                    kind (:type event)
+                    phase (when (string? kind)
+                            (search-phase event native-tools))]
+                (when-not (string? kind) (fail!))
+                (cond
+                  (contains? #{"response.completed" "response.done"} kind)
+                  (finish! (:response event))
+                  (contains? #{"error" "response.failed" "response.incomplete"}
+                             kind) (fail! (or (:response event) event))
+                  :else
+                  (do
+                    (native! event)
+                    (cond
+                      (contains? #{"response.output_text.delta"
+                                   "response.reasoning_summary_text.delta"
+                                   "response.reasoning_text.delta"} kind)
+                      (let [key (if (= "response.output_text.delta" kind)
+                                  :text :summary)]
+                        (when-not (string? (:delta event)) (fail!))
+                        (let [text (str (get @state key) (:delta event))
+                              cropped (if (= key :text)
+                                        :text-cropped? :summary-cropped?)]
+                          (publish!
+                            {:phase (if (= key :text) "Answering" "Thinking")
+                             key (tail text 8192)
+                             cropped (or (get @state cropped)
+                                         (> (count text) 8192))})))
+                      (and (= "response.output_item.done" kind)
+                           (= "message" (get-in event [:item :type])))
+                      (publish-answer! (:output_index event) (:item event))
+                      phase (publish! {:phase phase})
+                      (and (= "response.output_item.added" kind)
+                           (= "function_call" (get-in event [:item :type])))
+                      (publish! {:phase "Preparing a tool request"}))
+                    (recur (StringBuilder.)))))
+              (string/starts-with? line "data:")
+              (let [data (subs line (if (string/starts-with? line "data: ")
+                                      6 5))]
+                (.append frame data)
+                (.append frame \newline)
+                (when (> (.length frame) 4194304) (fail!))
+                (recur frame))
+              :else (recur frame)))))
+      (catch Exception e
+        (doseq [row (sort-by :call (vals (:items @native-state)))
+                :when (= :running (:outcome row))]
+          (notify! callback config
+                   {:tool-event (assoc row :domain :native :outcome :unknown
+                                       :response
+                                       (:progress-response config 1))}))
+        (throw e)))))

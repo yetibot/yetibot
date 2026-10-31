@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
+            [yetibot.core.chat :as chat]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-provider-catalog :as provider-catalog]
@@ -13,7 +14,8 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-proposals :as proposals]
             [yetibot.models.ai-github :as github]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.util.ai-status :as status]))
 
 (def usage
   (str "Usage: ai [--provider <name>] [--model <model>] "
@@ -403,7 +405,10 @@
    :yb/cat #{:ai}}
   [args]
   (safely args
-    #(autodraft/complete (prepare-prompt args) args complete-prompt)))
+    #(status/with-status
+       chat/*target* (prepare-prompt args)
+       (fn [prepared]
+         (autodraft/complete prepared args complete-prompt)))))
 
 (cmd-hook #"ai"
   #"^providers\s*$" providers-cmd

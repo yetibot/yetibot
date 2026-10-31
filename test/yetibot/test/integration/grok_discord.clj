@@ -46,7 +46,12 @@
 
 (fact "real handler and Responses SSE publish before terminal and reuse IDs"
   (let [release (promise) observed (promise)
-        requests (atom []) calls (atom []) next-id (atom 0)
+        requests (atom []) calls (atom []) next-id (atom 1)
+        status-id (atom 0)
+        original-create messaging/create-message!
+        original-edit messaging/edit-message!
+        original-delete messaging/delete-message!
+        original-typing messaging/trigger-typing-indicator!
         jdbc-attempts (atom 0) observer-lookups (atom 0)
         first-answer (answer "one" "First SECRET @everyone")
         second-answer (answer "two" "Next <@123>")
@@ -55,7 +60,7 @@
         event {:id "command" :channel-id "parent"
                :author {:id "alice" :username "alice"}
                :content "!grok --no-tools --model selected Hi"}]
-    (reset! conn {:rest :mock-rest})
+    (reset! conn {:rest :mock-rest :status-rest :mock-status-rest})
     (reset! (:yetibot-user adapter) {:id "bot" :username "yetibot"})
     (support/with-http-server
       (fn [request]
@@ -97,23 +102,53 @@
                       legacy/start-thread! (fn [& _] "selected-thread")
                       messaging/create-message!
                       (fn [rest target & options]
-                        (let [id (str (swap! next-id inc))
-                              payload (apply hash-map options)]
-                          (fact rest => :mock-rest)
-                          (swap! calls conj [:create target id payload])
-                          (when (string/includes? (:content payload "")
-                                                  "Sent via")
-                            (deliver observed true))
-                          (result-channel {:id id})))
+                        (cond
+                          (= rest :mock-status-rest)
+                          (let [payload (apply hash-map options)]
+                            (fact (:allowed_mentions payload)
+                                  => {:parse [] :replied_user false})
+                            (result-channel
+                              {:id (str "status-" (swap! status-id inc))}))
+                          (= rest :mock-rest)
+                          (let [id (str (swap! next-id inc))
+                                payload (apply hash-map options)]
+                            (fact rest => :mock-rest)
+                            (swap! calls conj [:create target id payload])
+                            (when (string/includes? (:content payload "")
+                                                    "Sent via")
+                              (deliver observed true))
+                            (result-channel {:id id}))
+                          :else
+                          (apply original-create rest target options)))
                       messaging/edit-message!
-                      (fn [_ target id & options]
-                        (swap! calls conj
-                               [:edit target id (apply hash-map options)])
-                        (result-channel {:id id}))
+                      (fn [rest target id & options]
+                        (cond
+                          (= rest :mock-status-rest)
+                          (do
+                            (fact (:allowed_mentions
+                                    (apply hash-map options))
+                                  => {:parse [] :replied_user false})
+                            (result-channel {:id id}))
+                          (= rest :mock-rest)
+                          (do
+                            (swap! calls conj
+                                   [:edit target id (apply hash-map options)])
+                            (result-channel {:id id}))
+                          :else
+                          (apply original-edit rest target id options)))
                       messaging/delete-message!
-                      (fn [_ target id]
-                        (swap! calls conj [:delete target id])
-                        (result-channel {}))]
+                      (fn [rest target id]
+                        (cond
+                          (= rest :mock-status-rest) (result-channel {})
+                          (= rest :mock-rest)
+                          (do (swap! calls conj [:delete target id])
+                              (result-channel {}))
+                          :else (original-delete rest target id)))
+                      messaging/trigger-typing-indicator!
+                      (fn [rest target]
+                        (if (= rest :mock-status-rest)
+                          (result-channel true)
+                          (original-typing rest target)))]
           (binding [chat/*adapter* adapter]
             (let [completion (discord/handle-event
                                :message-create event conn

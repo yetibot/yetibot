@@ -1,11 +1,9 @@
 (ns yetibot.commands.grok
   "Grok shortcut over shared AI configuration, policy and MCP execution."
-  (:require [clojure.core.async :as async]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [clojure.walk :as walk]
             [discljord.messaging :as discord]
             [yetibot.api.ai :as api]
-            [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
             [yetibot.core.adapters.discord :as host-discord]
@@ -16,7 +14,8 @@
             [yetibot.core.config :refer [get-config]]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.util.xai :as xai]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.util.ai-status :as status]))
 
 (def usage
   (str "Usage: grok [--model <model>] "
@@ -36,75 +35,6 @@
           (update :result/data assoc
                   :provider (get-in prepared [:provider :name])
                   :model (:model prepared))))))
-
-(defn- discord-result [f]
-  (try (deref (f) 30000 nil) (catch Exception _ nil)))
-
-(defn- progress-text [{:keys [view activity]} tick]
-  (stream/clip
-    (str "*Grok — " (:phase view "Thinking") "* "
-         (apply str (repeat (inc (mod tick 10)) "▰"))
-         (when (seq activity)
-           (str "\n" (string/join "\n" (map #(stream/clip % 80) activity))))
-         (when (seq (:summary view))
-           (str "\n\n*Thinking preview*\n" (stream/tail (:summary view) 400)))
-         (when (seq (:text view))
-           (str "\n\n*Draft answer*\n" (stream/tail (:text view) 1000))))
-    1900))
-
-(defn- start-progress! [conn thread]
-  (let [state (atom {:active? true :view {} :activity []})
-        _ (try
-            (when-let [pending (discord/create-message!
-                                 conn thread :content "*thinking* ▰"
-                                 :allowed-mentions {:parse []})]
-              (async/take!
-                pending
-                (fn [{:keys [id]}]
-                  (when id
-                    (locking state
-                      (if (:active? @state)
-                        (swap! state assoc :id id)
-                        ;; Discljord may create a queued message after the
-                        ;; answer. Its completion must still queue deletion.
-                        (try (discord/delete-message! conn thread id)
-                             (catch Exception _ nil))))))))
-            (catch Exception _ nil))
-        progress
-        (future
-          (loop [tick 1]
-            (Thread/sleep 2000)
-            (when (locking state
-                    (when (:active? @state)
-                      (when-let [id (:id @state)]
-                        (discord-result
-                          #(discord/edit-message!
-                             conn thread id
-                             :content (progress-text @state tick)
-                             ;; Discljord 1.3.1 edits keep literal JSON keys.
-                             :allowed_mentions {:parse []})))
-                      true))
-              (recur (inc tick)))))]
-    {:update!
-     (fn [event]
-       (swap! state
-              (fn [s]
-                (if-not (:active? s) s
-                  (let [phase (:phase event)
-                        s (update s :view merge event)]
-                    (if (and (string? phase)
-                             (re-find #"^(Searching|Running|Finished|Unknown)"
-                                      phase)
-                             (not= phase (last (:activity s))))
-                      (update s :activity
-                              #(vec (take-last 3 (conj % phase)))) s))))))
-     :stop!
-     (fn []
-       (locking state
-         (swap! state assoc :active? false)
-         (when-let [id (:id @state)]
-           (discord-result #(discord/delete-message! conn thread id))))
-       (future-cancel progress))}))
 
 (defn- answer-chunks [^String text]
   (let [length (.length text)
@@ -193,17 +123,12 @@
 (defn- in-discord [prepared args channel-id message-id]
   (let [thread (if (:no-thread prepared) channel-id
                 (legacy/start-thread! channel-id message-id (:prompt prepared)))
-        progress (start-progress! (legacy/rest-conn) thread)
         answers (answer-publisher prepared thread)
-        result (try
-                 (ai/safely
-                   args #(generate
-                           (assoc prepared :on-progress
-                                  (fn [event]
-                                    ((:update! answers) event)
-                                    ((:update! progress)
-                                     (dissoc event :answer :answer-limit?))))))
-                 (finally ((:stop! progress))))]
+        result (ai/safely
+                 args #(status/with-status
+                         thread
+                         (assoc prepared :on-progress (:update! answers))
+                         generate))]
     (binding [chat/*target* thread]
       (when-not ((:stale? answers))
         (if-let [error (or (:result/error result)
@@ -247,8 +172,8 @@
              "for this request\n"
              "   grok --no-thread <prompt> # reply here without creating "
              "a Discord thread\n"
-             "   # Discord shows live thinking previews, tool status "
-             "and draft answer text.")
+             "   # Discord shows a transient working/tool status card; "
+             "completed answers are separate messages.")
    :yb/cat #{:ai}}
   [{:keys [chat-source] :as args}]
   (ai/safely args
