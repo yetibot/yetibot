@@ -38,7 +38,8 @@
       (:name tool) => "react"
       (get-in tool [:inputSchema :required]) => ["emoji"]
       (get-in tool [:inputSchema :additionalProperties]) => false
-      (get-in (native/definition "react") [:annotations :readOnlyHint]) => false)))
+      (get-in (native/definition "react") [:annotations :readOnlyHint])
+      => false)))
 
 (fact
   "AI reacts to the requesting message using Discord custom emoji syntax"

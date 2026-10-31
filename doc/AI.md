@@ -653,8 +653,8 @@ headers and cells are preserved without another model call. Longer responses,
 unsafe tables and tables whose padding would exceed that budget use one readable
 excerpt and a complete `answer.md` attachment containing the exact original text
 instead of flooding the channel. No extra inference is used to summarize it.
-The file remains available on the message after interactive controls expire. Private answer pagination is not included in this
-first release. Discord thread history reads V2 text/media as well as legacy
+The file remains available on the message after interactive controls expire.
+Private answer pagination is not included in this first release. Discord thread history reads V2 text/media as well as legacy
 text; for attached long answers, history contains the inline excerpt rather
 than automatically downloading files.
 
