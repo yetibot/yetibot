@@ -39,7 +39,7 @@
     (when (= 1 (count matches)) (first matches))))
 
 (defn- execute-change!
-  [{:keys [provider model messages actor max-tool-calls]}
+  [{:keys [provider model messages actor max-tool-calls on-progress]}
    args key router config t repo]
   (let [secret (clef/credential! router)
         private-config (update config :secrets #(concat % [secret (:key provider)]))
@@ -53,7 +53,9 @@
                                   (cond-> {:toolset (:name t) :actor actor
                                            :additional-secrets [secret]}
                                     (some? max-tool-calls)
-                                    (assoc :max-tool-calls max-tool-calls)))
+                                    (assoc :max-tool-calls max-tool-calls)
+                                    on-progress
+                                    (assoc :on-progress on-progress)))
         id (get-in generated [:result/data :proposal])]
     (when-not id (ai/fail "The model did not stage a change. No GitHub writes were made."))
     (let [p (proposals/review! id actor)

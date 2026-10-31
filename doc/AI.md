@@ -562,26 +562,25 @@ and must precede the prompt. Use `--` to begin a prompt with a literal flag.
 
 ### Live Discord progress
 
-With a Responses provider, Discord `grok` streams into its temporary progress
-message automatically; no extra flag or configuration is needed:
+Discord `ai` and `grok` use one transient V2 working card, separate from
+ordinary answers and media. No extra flag or configuration is needed. The card
+shows only host-sanitized tool names, ordered host/native search outcomes and
+the actual shared host-call budget. Preparation is not execution, native
+searches do not consume host calls, and errors/unknown outcomes are not success.
+No reasoning, summary, draft text, arguments, results or prompt prose is shown.
+A no-tools request remains `Working` without fabricated tool activity.
 
-- Provider-exposed thinking text/summary deltas, when the model supplies them.
-  xAI documents reasoning summaries for Grok 4.7; this is not a promise of the
-  Grok app's complete private thinking trace.
-- Native web/X search activity and validated host function start/finish status.
-  Tool arguments, tool result bodies and opaque encrypted state are not shown.
-- A rolling draft-answer excerpt, updated as answer text arrives.
+Core coalesces status edits at about 1 Hz and best-effort typing about every
+8 seconds on an isolated ancillary REST lane. Missing or failed status transport
+never falls back to the answer connection. Mentions are disabled on the card.
+The selected channel/thread is immutable for the request. Core retires status
+at completion, flushes ordinary answers first, and attempts bounded cleanup of
+only a confirmed transient message ID. Queuing is not confirmed delivery or
+deletion; already-dispatched requests cannot be cancelled.
 
-Updates coalesce about every two seconds instead of posting a message per
-token. The view keeps the latest thinking/answer excerpts and three recent
-tool statuses, within Discord's message limit. Previews are provisional and
-may change; they are not tool authorization or evidence of publication.
-Mentions are disabled on preview creation/edits. Completed assistant messages
-are posted as separate replies in the same thread/channel while Grok continues
-searching or using tools. Draft deltas remain in the temporary preview. A
-completed answer is not posted again as a duplicate final reply; a later error
-is still shown. The temporary view is deleted when the request finishes. A
-failed progress create/edit/delete does not discard the final answer.
+Completed Grok assistant messages are separate replies in the same target while
+later tools continue. Completed answers are not duplicated as final replies;
+later errors remain visible. Status failure cannot discard the final answer.
 
 Answer payload delivery is limited to 30 physical Discord messages (each at
 most 2000 UTF-16 characters, without splitting surrogate pairs) and a shared
@@ -609,12 +608,11 @@ Listening ends at the provider's completed response or the existing stream
 limits; this does not send extra inference requests in response to prose such
 as "I'll continue."
 
-Configured provider/active-tool credentials are masked before previews reach
-Discord. Credential-sized edges are buffered to prevent leaks across chunks or
-rolling-window boundaries; very long configured secret values can suppress
-text previews. This is not comprehensive secret detection. Thinking previews
-can include supplied history or tool-derived private content, so use a channel
-appropriate for the request. Normal platform history/logging still applies.
+Configured provider/active-tool credentials are masked in completed answers;
+this is not comprehensive secret detection. Typed status omits provider prose
+entirely. Answers can still include supplied history or tool-derived private
+content, so use a channel appropriate for the request. Normal platform
+history/logging still applies.
 
 Only a completed provider response can reach host tool dispatch. Partial
 function-call events never execute tools, and the existing whole-batch policy,

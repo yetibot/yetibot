@@ -9,6 +9,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-trace :as trace]
+            [yetibot.models.ai-progress :as progress]
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-native-tools :as native]
@@ -188,6 +189,24 @@
     (with-meta {:role "tool" :tool_call_id id :content content}
       {::unknown-outcome unknown-outcome ::tool-error (:isError result)})))
 
+(defn- notify-tool! [config trace-state ordinal outcome]
+  (let [row (some #(when (= ordinal (:call %)) %) (:calls @trace-state))
+        label (if (contains? (:progress-labels config) (:tool row))
+                (:tool row) progress/redacted-label)
+        used (:used @trace-state)
+        limit (:progress-limit config)]
+    (stream/notify!
+      (:on-progress config) config
+      {:phase (str (case outcome
+                     :running "Running "
+                     :unknown "Unknown outcome: "
+                     :skipped "Skipped "
+                     :rejected "Rejected "
+                     "Finished ") label)
+       :tool-event {:domain :host :call ordinal :label label :outcome outcome}
+       :tool-budget {:used used :limit limit
+                     :remaining (max 0 (- limit used))}})))
+
 (defn- execute-batch [calls config trace-state start]
   (loop [pending calls replies [] attempted 0 halted false]
     (if-let [call (first pending)]
@@ -195,33 +214,34 @@
         (if halted
           (do
             (trace/outcome! trace-state ordinal :skipped false false)
+            (notify-tool! config trace-state ordinal :skipped)
             (recur (next pending)
                    (conj replies {:role "tool" :tool_call_id (:id call)
                                   :content
                                   (str "This tool was not run because an "
                                        "earlier call had an unknown outcome.")})
                    attempted true))
-          (let [label (get-in call [:entry :name])
-                _ (stream/notify! (:on-progress config) config
-                                  {:phase (str "Running " label)})
-                _ (swap! trace-state update :used inc)
+          (let [_ (swap! trace-state update :used inc)
                 _ (trace/outcome! trace-state ordinal :unknown true false)
+                _ (notify-tool! config trace-state ordinal :running)
                 reply (try (execute-call call config)
                            (catch Exception _
+                             (notify-tool! config trace-state ordinal :unknown)
                              (doseq [n (range (inc ordinal)
                                              (+ start (count calls) 1))]
                                (trace/outcome!
-                                 trace-state n :skipped false false))
+                                 trace-state n :skipped false false)
+                               (notify-tool! config trace-state n :skipped))
                              (trace/fail! :tool-exception)))
                 unknown? (boolean (::unknown-outcome (meta reply)))]
             (trace/outcome! trace-state ordinal
                             (cond unknown? :unknown
                                   (::tool-error (meta reply)) :error
                                   :else :success) true (not unknown?))
-            (stream/notify! (:on-progress config) config
-                            {:phase (str (if unknown?
-                                           "Unknown outcome: " "Finished ")
-                                         label)})
+            (notify-tool! config trace-state ordinal
+                          (cond unknown? :unknown
+                                (::tool-error (meta reply)) :error
+                                :else :success))
             (recur (next pending) (conj replies reply)
                    (inc attempted) unknown?))))
       {:replies replies :attempted attempted :halted halted})))
@@ -235,10 +255,26 @@
         limit (mcp/number-option (:max-tool-calls config) 6)
         trace-state (atom {:calls [] :omitted 0 :next-call 0
                            :used 0 :requested 0})
-        redact (trace/redactor config messages)]
+        redact (trace/redactor config messages)
+        ;; Check original spellings before generated-name substitution/cropping.
+        ;; The same lazy request redactor also supplies trace's safe row labels.
+        safe-entry?
+        (fn [{:keys [tool]}]
+          (every? #(and (string? %)
+                        (= % (redact %))
+                        (re-matches #"[a-zA-Z0-9_-]{1,64}" %))
+                  (keep identity [(:name tool)
+                                  (get-in tool [:session :server :name])])))
+        config (assoc config :progress-limit limit
+                      :progress-labels
+                      (when (:on-progress config)
+                        (set (map :name (filter safe-entry? entries)))))]
+    (stream/notify! (:on-progress config) config
+                    {:tool-budget {:used 0 :limit limit :remaining limit}})
     (try
       (loop [messages (into [{:role "system" :content instructions}] messages)
-             used 0 seen #{} actions #{} halted false stage :initial]
+             used 0 seen #{} actions #{} halted false stage :initial
+             response 1]
         (let [_ (swap! trace-state assoc :requested 0)
               turn-messages
               (into [(first messages)
@@ -259,7 +295,9 @@
                                  "auto" "none")}
                               (:on-progress config)
                               (assoc :on-progress (:on-progress config)
-                                     :progress-config config)))
+                                     :progress-config
+                                     (assoc config :progress-response
+                                            response))))
               message (ai/message provider body)
               calls (:tool_calls message)]
           (if (and (some? calls) (not= [] calls))
@@ -299,7 +337,7 @@
                            (long (+ used attempted))
                            (into seen (map :id calls))
                            (into actions requested-actions) halted
-                           :follow-up)))))
+                           :follow-up (inc response))))))
             (let [text (:content message)]
               (when-not (ai/nonblank-string? text)
                 (ai/fail (str "AI provider " (:name provider)
@@ -310,6 +348,9 @@
       (catch Exception e
         (let [reason (or (::trace/reason (ex-data e)) :provider-failure)
               report (trace/report trace-state limit reason)]
+          (doseq [row (:calls report)
+                  :when (= :rejected (:outcome row))]
+            (notify-tool! config trace-state (:call row) :rejected))
           (throw (ex-info (get trace/reasons reason)
                           (cond-> {:ai/error true :ai/tool-failure report}
                             (:ai/diagnostic (ex-data e))
@@ -373,7 +414,8 @@
                                [secret (subs encoded 1
                                              (dec (count encoded)))]))
                            (filter ai/nonblank-string?
-                                   (concat [(:key provider) credential-file]
+                                   (concat (:secrets config)
+                                           [(:key provider) credential-file]
                                            additional-secrets))))
            messages (input/messages messages pipeline-input config)
            local (when (or (ai/tool-calling? provider)

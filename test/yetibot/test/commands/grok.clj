@@ -149,46 +149,8 @@
       (get-in @captured [0 :native-tools]) => nil
       (second @captured) => "grok-custom")))
 
-(facts "Discord progress is removed on success and safely handled failure"
-  (doseq [failure? [false true]]
-    (let [events (atom [])]
-      (with-redefs [config/get-config (constantly {:value {}})
-                    api/config (constantly {:providers [provider]})
-                    context/messages (fn [_ prompt]
-                                       [{:role "user" :content prompt}])
-                    legacy/discord? (constantly true)
-                    legacy/rest-conn (constantly :connection)
-                    legacy/start-thread! (fn [channel message title]
-                                           (swap! events conj
-                                                  [:thread channel
-                                                   message title])
-                                           "new-thread")
-                    discord/create-message!
-                    (fn [& _] (discord-promise {:id "progress"}))
-                    discord/delete-message! (fn [& _]
-                                              (swap! events conj :delete)
-                                              (discord-promise {}))
-                    chat/chat-data-structure (fn [value]
-                                               (swap! events conj
-                                                      [:reply chat/*target*
-                                                       value]))
-                    tools/complete (fn [& _]
-                                     (if failure?
-                                       (throw (Exception. "SECRET"))
-                                       {:result/value "Answer"}))]
-        (fact
-          (:suppress
-            (meta (grok/grok-cmd
-                    {:match "Hi" :chat-source
-                     {:raw-event {:channel-id "parent" :id "trigger"}}})))
-          => true
-          @events
-          => [[:thread "parent" "trigger" "Hi"] :delete
-              [:reply "new-thread"
-               (if failure?
-                 (str "The AI request failed. Check the provider "
-                      "configuration and try again.")
-                 "Answer\n\nSent via configured-grok")]])))))
+(facts "Discord answers survive success/failure before transient cleanup"
+  ((requiring-resolve 'yetibot.test.support.ai-status/success-failure!)))
 
 (def discord-request
   {:match "Hi" :chat-source
@@ -204,65 +166,11 @@
                 legacy/start-thread! (fn [& _] "new-thread")]
     (f)))
 
-(fact "a progress message arriving after generation is still deleted"
-  (let [pending (async/promise-chan)
-        deleted (promise)
-        posted (promise)
-        ;; Simulate expiry without waiting thirty seconds. The result remains
-        ;; a readable async port, just like Discljord's queued result.
-        delayed (reify
-                  clojure.lang.IBlockingDeref
-                  (deref [_ _ timeout-value] timeout-value)
-                  async-protocols/ReadPort
-                  (take! [_ handler]
-                    (async-protocols/take! pending handler)))]
-    (with-discord
-      (fn []
-        (with-redefs [discord/create-message! (fn [& _] delayed)
-                      discord/delete-message! (fn [_ _ id]
-                                                (deliver deleted id)
-                                                (discord-promise {}))
-                      tools/complete (fn [& _] {:result/value "Answer"})
-                      chat/chat-data-structure #(deliver posted %)]
-          (grok/grok-cmd discord-request)
-          (fact (deref posted 1000 :timeout)
-                => "Answer\n\nSent via configured-grok")
-          (async/>!! pending {:id "late-status"})
-          (fact (deref deleted 1000 :timeout) => "late-status"))))))
+(fact "late confirmed transient creation gets only known-ID cleanup"
+  ((requiring-resolve 'yetibot.test.support.ai-status/late-create!)))
 
-(fact "cleanup waits for an in-flight progress edit before deletion"
-  (let [edit-started (promise)
-        generation-finished (promise)
-        edit-result (discord-util/derefable-promise-chan)
-        events (atom [])]
-    (with-discord
-      (fn []
-        (with-redefs [discord/create-message!
-                      (fn [& _] (discord-promise {:id "progress"}))
-                      discord/edit-message!
-                      (fn [& _]
-                        (swap! events conj :edit)
-                        (deliver edit-started true)
-                        edit-result)
-                      discord/delete-message!
-                      (fn [& _]
-                        (swap! events conj :delete)
-                        (discord-promise {}))
-                      tools/complete
-                      (fn [& _]
-                        (deref edit-started 5000 nil)
-                        (deliver generation-finished true)
-                        {:result/value "Answer"})
-                      chat/chat-data-structure
-                      (fn [_] (swap! events conj :reply))]
-          (let [result (future (grok/grok-cmd discord-request))]
-            (try
-              (fact (deref generation-finished 5000 :timeout) => true
-                    (deref result 100 :pending) => :pending
-                    @events => [:edit])
-              (finally (async/>!! edit-result {})))
-            (fact (:suppress (meta (deref result 1000 nil))) => true
-                  @events => [:edit :delete :reply])))))))
+(fact "held ancillary edit cannot block final answer transport or tracking"
+  ((requiring-resolve 'yetibot.test.support.ai-status/held-edit!)))
 
 (facts "no-thread uses the invoking channel and retains model/tool flags"
   (doseq [channel ["parent" "existing-thread"]]
@@ -620,61 +528,12 @@
           (grok/grok-cmd {:match "-- --no-thread"})
           (fact @prompts => ["Explain --no-thread" "--no-thread"]))))))
 
-(fact "live Discord progress shows provider snapshots without pinging mentions"
-  (let [edited (promise) posted (promise) options (atom nil)]
-    (with-discord
-      (fn []
-        (with-redefs [discord/create-message!
-                      (fn [& _] (discord-promise {:id "progress"}))
-                      discord/edit-message!
-                      (fn [_ _ _ & opts]
-                        (reset! options (apply hash-map opts))
-                        (deliver edited (:content @options))
-                        (discord-promise {}))
-                      discord/delete-message!
-                      (fn [& _] (discord-promise {}))
-                      tools/complete
-                      (fn [_ _ _ options]
-                        (when-let [notify (:on-progress options)]
-                          (notify {:phase "Searching web"
-                                   :summary "Checking sources."
-                                   :text "Draft answer @everyone"}))
-                        (deref edited 5000 nil)
-                        {:result/value "Final answer"})
-                      chat/chat-data-structure #(deliver posted %)]
-          (grok/grok-cmd discord-request)
-          (fact
-            (boolean (re-find #"Searching web" (deref edited 1 ""))) => true
-            (boolean (re-find #"Checking sources" (deref edited 1 ""))) => true
-            (boolean (re-find #"Draft answer" (deref edited 1 ""))) => true)
-          (fact (:allowed_mentions @options) => {:parse []}
-                (deref posted 1000 nil)
-                => "Final answer\n\nSent via configured-grok"))))))
+(fact "live Discord V2 status is typed-only with separate unchanged answers"
+  ((requiring-resolve 'yetibot.test.support.ai-status/typed-status!) :grok))
 
-(fact "live progress suppresses mentions in the actual Discord edit payload"
-  (let [queue (async/chan 1) request (atom nil)]
-    (with-redefs [discord/create-message!
-                  (fn [& _] (discord-promise {:id "progress"}))
-                  discord/delete-message!
-                  (fn [& _] (discord-promise {}))
-                  http/patch
-                  (fn [_ options]
-                    (reset! request options)
-                    (delay {:status 200 :body "{\"id\":\"progress\"}"}))]
-      (let [progress (#'grok/start-progress! queue "channel")]
-        (try
-          ((:update! progress) {:text "Draft @everyone"})
-          (let [[message] (async/alts!! [queue (async/timeout 5000)])
-                [endpoint & data] message]
-            (when message
-              (discord-impl/dispatch-http "Bot test-token" endpoint data))
-            (let [body (json/read-str (or (:body @request) "{}")
-                                      :key-fn keyword)]
-              (fact (:allowed_mentions body) => {:parse []}
-                    (boolean (re-find #"Draft @everyone"
-                                      (:content body ""))) => true)))
-          (finally ((:stop! progress))))))
-    (async/close! queue)))
+(fact "threaded V2 SDK payload suppresses mentions and excludes raw prose"
+  ((requiring-resolve 'yetibot.test.support.ai-status/typed-status!)
+   :grok true))
 
 (facts "Discord progress failures do not discard the final answer"
   (doseq [failure [:create-throws :create-nil :missing-id :delete-throws]]
