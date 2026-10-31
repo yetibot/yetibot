@@ -83,7 +83,7 @@
     (s/valid? ::mcp/config value) => true
     (:servers (toolsets/select value "yetibot_read")) => []
     (get-in (toolsets/select value "yetibot_read") [:toolset :native-tools])
-    => ["help" "history" "history_count"]))
+    => ["help" "history" "history_count" "release_info"]))
 
 (fact "flat EDN environment names remain byte-for-byte compatible"
   (let [value {:servers [{:name "local" :command "server" :tools ["search"]

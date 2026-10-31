@@ -63,9 +63,9 @@
       (fact (native/names {:toolset {:native-tools ["help"]}}) => ["help"])
       (fact (native/names {:toolset {:native-tools []}}) => [])
       (fact (native/names {:toolset {:kind "github-read"}})
-            => ["help" "history" "history_count"])
+            => ["help" "history" "history_count" "release_info"])
       (fact (native/names {:toolset {:kind "github-pr"}})
-            => ["help" "history" "history_count"])
+            => ["help" "history" "history_count" "release_info"])
       (fact (contains? toolsets/native-names "aliases") => true)
       (fact (toolsets/validate!
               {:servers [] :toolsets [(dissoc toolset :native-tools)]})

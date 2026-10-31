@@ -27,11 +27,14 @@ jobs:
       - name: timestamp
         # by setting INFERV_TIMESTAMP_MS we will get deterministic versions from
         # `lein pprint :version`
-        run: echo "INFERV_TIMESTAMP_MS=`date +%s%3N`" >> $GITHUB_ENV
+        run: echo "INFERV_TIMESTAMP_MS=$(date +%s%3N)" >> "$GITHUB_ENV"
       - name: version
-        run: echo "YB_VERSION=`lein pprint :version | sed 's/\"//g'`" >> $GITHUB_ENV
+        run: echo "YB_VERSION=$(lein pprint :version | tr -d '\"')" >> "$GITHUB_ENV"
       - name: docker tag
-        run: echo "YB_DOCKER_TAG=yetibot/yetibot:$YB_VERSION" >> $GITHUB_ENV
+        run: echo "YB_DOCKER_TAG=yetibot/yetibot:$YB_VERSION" >> "$GITHUB_ENV"
+      - name: Bundle public release manifest
+        run: lein version --write resources/yetibot/release-info.json
+
       - name: verify
         run: env
 
@@ -43,6 +46,23 @@ jobs:
           CLOJARS_USERNAME: ${{ secrets.CLOJARS_USERNAME }}
           CLOJARS_PASSWORD: ${{ secrets.CLOJARS_PASSWORD }}
         run: lein with-profile deploy release
+
+      - name: Publish release JSON on yetibot.com
+        env:
+          GH_TOKEN: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          payload = {"event_type": "yetibot-release-info", "client_payload": {
+              "version": os.environ["YB_VERSION"],
+              "sha": os.environ["GITHUB_SHA"],
+              "run_number": int(os.environ["GITHUB_RUN_NUMBER"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"])}}
+          with open("target/release-dispatch.json", "w") as out:
+              json.dump(payload, out)
+          PY
+          gh api --method POST repos/yetibot/yetibot.github.io/dispatches \
+            --input target/release-dispatch.json
 
       # Docker
       - name: Set up QEMU

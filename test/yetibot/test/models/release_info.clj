@@ -90,6 +90,19 @@
                                               "yetibot/commit/6700557c")}
                        :core nil}))
 
+(fact "Git-free images use their bundled release identity, not a placeholder"
+  (with-redefs [io/resource
+                (fn [path]
+                  (case path
+                    "META-INF/maven/yetibot/yetibot/pom.properties"
+                    (resource "version=_\n")
+                    "yetibot/release-info.json"
+                    (resource (json/generate-string published))
+                    (fixture-resource path)))]
+    (let [manifest (releases/assemble-manifest)]
+      (get-in manifest [:build :app :version]) => "20261031.203010.6700557c"
+      (get-in manifest [:build :core :version]) => "20261031.202949.2404ac0a")))
+
 (fact "default queries are offline and never resolve provider credentials"
   (with-redefs [http/get (fn [& _] (throw (AssertionError. "No HTTP")))]
     (:source (releases/info {})) => "bundled"))

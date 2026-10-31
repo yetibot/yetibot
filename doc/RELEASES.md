@@ -12,7 +12,10 @@
 Artifact versions normally use `YYYYMMDD.HHMMSS.<git-revision>`. The versions
 come from the **actual classpath artifacts' Maven metadata**, not the `_`
 placeholder in source `project.clj`, the website's latest release, or the
-current contents of a Git checkout. Missing metadata is explicitly unknown.
+current contents of a Git checkout. Git-free source images can use their
+CI-bundled manifest's app identity when Maven metadata cannot identify the
+revision and its notes match. Core identity still comes from the loaded core.
+Otherwise missing metadata is explicitly unknown.
 
 Build identity and bundled notes are realized once when the release model is
 loaded during startup. Updating files on disk does not change what an old JVM

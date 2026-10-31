@@ -91,8 +91,20 @@
 
 (defn assemble-manifest []
   (let [resource (io/resource "yetibot/release-info.edn")
-        notes (when resource (edn/read-string (slurp resource :encoding "UTF-8")))]
-    (validate-manifest! (assoc notes :build (read-build-info)))))
+        notes (when resource (edn/read-string (slurp resource :encoding "UTF-8")))
+        actual (read-build-info)
+        ;; Docker source images omit .git, so their newly generated Maven
+        ;; version may be a placeholder. CI bundles the public release JSON.
+        bundled (when-not (get-in actual [:app :revision])
+                  (when-let [resource (io/resource "yetibot/release-info.json")]
+                    (let [body (slurp resource :encoding "UTF-8")]
+                      (when (> (count (.getBytes body "UTF-8"))
+                               max-manifest-bytes) (invalid!))
+                      (validate-manifest! (json/parse-string body true)))))
+        build (if (and bundled (= (:changes bundled) (:changes notes)))
+                (assoc actual :app (get-in bundled [:build :app]))
+                actual)]
+    (validate-manifest! (assoc notes :build build))))
 
 ;; Realize at namespace load, not the first query: a source updater may change
 ;; files while the previous JVM is still serving requests before its restart.
@@ -144,7 +156,6 @@
         (when (= result ::timeout) (invalid!))
         result)
       (catch Exception _
-        ;; Do not retain HTTP bodies, headers or exception causes in tool data.
         (throw (ex-info "Published release information is unavailable."
                         {:release/unavailable true})))
       (finally (future-cancel request)))))
@@ -176,7 +187,6 @@
                  latest? (assoc :running_build (:build running)
                                 :same_source_revisions
                                 (boolean (same-source? manifest))))]
-    ;; Match the existing native help capability's bounded response budget.
     (loop [result result]
       (if (and (seq (:changes result))
                (> (count (json/generate-string result)) 10000))
