@@ -1,6 +1,15 @@
 {:schema_version 1
  :changes
- [{:id "runtime-ai-defaults"
+ [{:id "workers-ai-usage-captions"
+   :date "2026-11-01"
+   :component "app"
+   :title "Workers AI captions show priced usage"
+   :summary "Gemma token usage is estimated at Cloudflare's published model rates. Unknown Workers AI prices show reported neurons or input/output tokens instead of an invented cost. Zen free-usage rejections identify the upstream limit and numeric retry delay; denied access does not trigger paid fallback or client impersonation."
+   :commands ["ai --provider cloudflare --model @cf/google/gemma-4-26b-a4b-it Hello"
+              "zen Hello"]
+   :requires ["Configured provider credentials and upstream model access"]
+   :links []}
+  {:id "runtime-ai-defaults"
    :date "2026-11-01"
    :component "app"
    :title "Admins can change global AI defaults at runtime"

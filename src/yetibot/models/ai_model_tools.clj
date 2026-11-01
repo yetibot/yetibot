@@ -5,6 +5,7 @@
             [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
             [yetibot.api.ai-diagnostics :as diagnostics]
+            [yetibot.api.opencode :as opencode]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tool-policy :as policy]
@@ -319,15 +320,19 @@
                      (get-in result [:result/data :ai/cost])
                      (assoc :ai/cost (get-in result [:result/data :ai/cost])))}))))))
       (catch Exception e
-        (let [rate-limited? (and (= "zen" (get args "provider"))
-                                 (= 429 (get-in (ex-data e)
-                                                [:ai/diagnostic :status])))]
-          {:isError true :unknownOutcome (and @attempted? (not rate-limited?))
-           :error-code (when rate-limited? :zen-rate-limit)
+        (let [rejection (when (= "zen" (get args "provider"))
+                          (or (:ai/zen-rejection (ex-data e))
+                              (when (= 429 (get-in (ex-data e)
+                                                  [:ai/diagnostic :status]))
+                                {:code :zen-rate-limit})))
+              message (opencode/rejection-message
+                        (:code rejection) (:retry-after-seconds rejection))]
+          {:isError true :unknownOutcome (and @attempted? (not message))
+           :error-code (when message (:code rejection))
+           :retry-after-seconds (when message (:retry-after-seconds rejection))
            :structuredContent
            {:error (cond
-                     rate-limited?
-                     "OpenCode Zen is rate-limited (HTTP 429). No paid fallback was used."
+                     message message
                      @attempted?
                      (str "AI child outcome could not be confirmed; "
                           "do not repeat this paid request.")

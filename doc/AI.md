@@ -216,6 +216,12 @@ global AI provider/model choice, subject to the runtime controls below. It never
 changes credentials, URLs, permissions or file configuration. Restart clears it. X posts and model prose are hints, not pricing proof or
 permission to reconfigure anything. `429` inference rejection is reported as an
 upstream limit, not missing configuration, with no automatic paid retry.
+Free-usage rejections include a bounded numeric `Retry-After` when supplied;
+`403` is reported as denied access, not an uncertain paid outcome. Current
+[OpenCode documentation](https://opencode.ai/v2/docs/console/api/inference)
+restricts free-tier chat to the OpenCode client. A valid key and zero-priced
+catalog entry do not grant Yetibot access. Do not impersonate that client,
+rotate models to evade quotas, or silently select a paid model.
 
 Like `cf`, `zen` prompts are single-hop text requests with no implicit thread
 history, files, searches or child tools, and at most 2,048 output tokens.
@@ -273,6 +279,12 @@ execution duration, known host-tool count, and a public-safe cost label:
   [official rates](https://docs.x.ai/developers/models/grok-4.7), checked
   2026-11-01. Cached input and the 200k prompt tier are accounted for. These
   estimates exclude server-side tool fees.
+- Workers AI Gemma `@cf/google/gemma-4-26b-a4b-it` also uses `tokens est.`:
+  reported prompt/completion counts at the [official model rates](https://developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/),
+  checked 2026-11-01: $0.10/M input and $0.30/M output tokens. This is list-price
+  inference usage, not a statement about the account's bill or free allowance.
+  Unknown Workers AI model pricing shows reported neurons (e.g. `2.78 neurons`)
+  or `18 input / 96 output tokens`, rather than inventing a USD estimate.
 - `API est. $0.0000`: an automatic Zen model freshly verified to have zero
   advertised input/output/cache pricing, not an assumed free-ID suffix.
 - `text est. ...`: live Grok's stable visible-text-only estimate. UTF-8 bytes/4

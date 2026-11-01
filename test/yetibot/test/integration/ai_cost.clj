@@ -10,6 +10,39 @@
 
 (def provider {:name "grok" :url "https://api.x.ai/v1" :model "grok-4.7"})
 
+(def cloudflare
+  {:name "cloudflare"
+   :url (str "https://api.cloudflare.com/client/v4/accounts/"
+             "0123456789abcdef0123456789abcdef/ai/v1")})
+
+(fact "Workers AI Gemma usage is priced, unknown prices retain measured units"
+  (let [model "@cf/google/gemma-4-26b-a4b-it"
+        body {:usage {:prompt_tokens 18 :completion_tokens 96
+                      :total_tokens 114 :neurons 2.781818151473999}}
+        priced (cost/turn cloudflare model body)
+        neurons (cost/turn cloudflare "unknown" body)
+        tokens (cost/turn cloudflare "unknown"
+                 {:usage {:prompt_tokens 18 :completion_tokens 96}})]
+    priced => {:usd 0.0000306M :kind :estimate :scope :tokens :turns 1}
+    (cost/label priced) => "tokens est. <$0.0001"
+    (cost/label neurons) => "2.78 neurons"
+    (cost/label tokens) => "18 input / 96 output tokens"
+    (cost/label (cost/add neurons neurons)) => "5.56 neurons"
+    (cost/label (cost/add tokens tokens)) => "36 input / 192 output tokens"
+    (cost/add neurons tokens) => nil
+    (cost/add neurons nil) => nil
+    (cost/turn (assoc cloudflare :url "https://other.example/v1") model body)
+    => nil
+    (cost/turn cloudflare model {:usage {:prompt_tokens -1}}) => nil
+    (cost/turn cloudflare model
+      {:usage {:prompt_tokens 10 :completion_tokens "20"}}) => nil
+    (cost/turn cloudflare "unknown" {:usage {:neurons Double/NaN}}) => nil
+    (get-in
+      (with-redefs [ai/chat (fn [& _] (assoc body :choices
+                                        [{:message {:content "brooo"}}]))]
+        (ai/complete cloudflare model []))
+      [:result/data :ai/cost]) => priced))
+
 (fact "actual ticks are per-request USD, not token estimates"
   (cost/turn provider "any-model" {:usage {:cost_in_usd_ticks 37756000}})
   => {:usd 0.0037756M :kind :reported :scope :api :turns 1}
