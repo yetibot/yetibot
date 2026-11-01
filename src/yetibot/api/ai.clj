@@ -10,7 +10,8 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
-            [yetibot.util.ai-config :as settings])
+            [yetibot.util.ai-config :as settings]
+            [yetibot.util.ai-cost :as cost])
   (:import [java.io File FileInputStream]
            [java.net URI]
            [java.util UUID]))
@@ -380,10 +381,12 @@
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
    (let [body (chat provider model messages options)
+         accounting (cost/turn provider model body)
          text (:content (message provider body))]
      (when-not (nonblank-string? text)
        (fail (str "AI provider " (:name provider) " returned no "
                   (when (responses? provider) "completed ")
                   "text response.")))
      {:result/value text
-      :result/data body})))
+      :result/data (cond-> (dissoc body :ai/cost)
+                     accounting (assoc :ai/cost accounting))})))

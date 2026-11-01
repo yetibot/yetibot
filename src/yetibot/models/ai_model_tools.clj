@@ -47,7 +47,10 @@
                  (when resolve?
                    (ai/default-model provider
                      #(policy/model-allowed? t actor provider %)))
-                 (or (get args "model") (:model provider)))]
+                 (or (get args "model") (:model provider)))
+         provider (cond-> provider
+                    (and automatic? resolve? model)
+                    (assoc :ai/verified-free true))]
      (when (and (= "cf" operation) (not (cf/provider-account provider)))
        (ai/fail "Configure the Cloudflare Workers AI provider first."))
      (when (or model (not automatic?))
@@ -278,7 +281,7 @@
                              (filter #(provider-visible? config %)
                                      (:providers (ai/config))))}}
           :else
-          (let [[p model] (if (#{"ask" "set_default"} action)
+          (let [[p model] (if (= "ask" action)
                             (selected config operation args true)
                             [(ai/provider (ai/config)
                                (if (= "cf" operation) "cloudflare"
@@ -312,7 +315,9 @@
                                 :max-output-tokens
                                 (get args "max_output_tokens" 2048)})]
                   {:structuredContent
-                   (project p model (:result/value result) redactions)}))))))
+                   (cond-> (project p model (:result/value result) redactions)
+                     (get-in result [:result/data :ai/cost])
+                     (assoc :ai/cost (get-in result [:result/data :ai/cost])))}))))))
       (catch Exception e
         (let [rate-limited? (and (= "zen" (get args "provider"))
                                  (= 429 (get-in (ex-data e)

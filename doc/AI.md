@@ -208,12 +208,12 @@ runtime choice, otherwise the first eligible ID allowed by the toolset. If an
 offer expires, it is not retained; no eligible model means fail closed, never
 paid fallback. This follows rotating offerings, not round-robin request retries.
 
-Authorized native `ai` can accept
+Admin-authorized native `ai` can accept
 `{"action":"set_default","provider":"zen","model":"<exact-free-id>"}`.
 Whole-batch preflight remains offline; execution rechecks trusted provenance,
-provider/model policy and current free prices. Only the in-memory Zen preference
-changes, never credentials, URLs, permissions or file configuration. Restart
-clears the preference. X posts and model prose are hints, not pricing proof or
+admin status, provider/model policy and current free prices. This now sets the
+global AI provider/model choice, subject to the runtime controls below. It never
+changes credentials, URLs, permissions or file configuration. Restart clears it. X posts and model prose are hints, not pricing proof or
 permission to reconfigure anything. `429` inference rejection is reported as an
 upstream limit, not missing configuration, with no automatic paid retry.
 
@@ -232,14 +232,65 @@ OpenCode's current documentation restricts free-tier chat models to OpenCode
 clients; Yetibot does not impersonate that client to bypass restrictions.
 See [OpenCode model documentation](https://opencode.ai/docs/zen/).
 
+### Global runtime AI defaults
+
+```
+!ai default
+!ai default <configured-provider> <exact-model-id>
+!ai default reset
+```
+
+Inspection shows the effective global choice. Setting/resetting requires a real
+adapter-authenticated user listed in the instance's existing `:admin :users`.
+Send mutations directly, not through pipes, aliases, observers or computed
+commands. The provider must already be configured. The model is an exact ID,
+not an inference or entitlement test; use `ai models <provider>` to discover IDs.
+Selecting a paid non-Zen model is an explicit admin choice and can affect later
+requests for everyone. Zen runtime defaults still require fresh zero pricing.
+
+The choice is one atomic, in-memory provider/model pair, shared by AI callers.
+Explicit `--provider` / `--model` flags still take precedence. Credentials,
+endpoints, permissions, toolsets and file configuration are untouched. Restart
+or `ai default reset` restores configured defaults. Requests already prepared
+keep their pinned selection. A Zen model remains a preference: each automatic
+request rechecks current free eligibility and normal caller/model policy.
+
+The native `ai` tool also supports `{"action":"defaults"}`,
+`{"action":"set_default","provider":"<name>","model":"<exact-id>"}`, and
+`{"action":"reset_default"}`. Mutations require trusted admin provenance plus
+normal toolset/provider/model policy. Admin status and policy are checked again
+after catalog IO. This does not grant new tool or provider permissions.
+
 ### Small Discord AI captions
 
 Discord AI/Zen answers append muted `-#` subtext with the model, measured
-execution duration and known host-tool call count. Unknown usage and cost are
-omitted, not estimated. Streaming Grok uses a small model footer (and zero host
-calls when tools were explicitly disabled), keeping its live/final duplicate
-suppression intact. Slack output is unchanged. Only public labels/counts belong
-here, never prompts, tool arguments/results, credentials or private reasoning.
+execution duration, known host-tool count, and a public-safe cost label:
+
+- `API $0.0038`: provider-reported parent API cost. xAI usage ticks are divided
+  by 10 billion and summed across every parent model/tool-loop turn, including
+  xAI server-side searches. This is reported cost, not an estimate.
+- `tokens est. $0.0020`: estimate from reported Grok4.7 token usage and the
+  [official rates](https://docs.x.ai/developers/models/grok-4.7), checked
+  2026-11-01. Cached input and the 200k prompt tier are accounted for. These
+  estimates exclude server-side tool fees.
+- `API est. $0.0000`: an automatic Zen model freshly verified to have zero
+  advertised input/output/cache pricing, not an assumed free-ID suffix.
+- `text est. ...`: live Grok's stable visible-text-only estimate. UTF-8 bytes/4
+  approximates tokens in the original visible context and each delivered
+  answer; this excludes inserted host instructions, intervening turns, hidden
+  reasoning, images, searches/tool fees and child inference. It is not the
+  eventual API bill. Multimodal/opaque context or unknown models yields n/a.
+- `cost n/a`: no reliable applicable accounting. Missing usage, unsupported
+  pricing, malformed values or incomplete/mixed-scope parent totals never
+  become invented zero costs. Very small positive amounts display `<$0.0001`.
+
+Reported/usage-based totals cover only this parent provider's inference calls,
+not delegated child models or external services. Prices may change; estimates
+are not billing guarantees. See [xAI cost tracking](https://docs.x.ai/developers/cost-tracking).
+Live Grok keeps immediate publication and stable live/final deduplication;
+its footer is deliberately a text estimate rather than relabeling it as actual
+cost later. Slack and intermediate pipeline values remain unchanged. Never
+include prompts, tool arguments/results, credentials or private reasoning.
 
 ## Cloudflare inference and model discovery
 

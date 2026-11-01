@@ -4,7 +4,8 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.core.adapters.discord :as discord]
             [yetibot.models.ai-progress :as progress]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.util.ai-cost :as cost]))
 
 (defn discord? [prepared]
   (= "discord" (or (get-in prepared [:actor :adapter])
@@ -22,7 +23,7 @@
     (str text (when open (str "\n" open)))))
 
 (defn caption
-  "Discord-only public execution metadata. Unknown usage is omitted."
+  "Discord-only public execution metadata. Unknown cost is explicitly n/a."
   [prepared result elapsed-ms]
   (let [model (:model prepared)
         secrets (concat (:additional-secrets prepared)
@@ -41,7 +42,9 @@
                   (conj (String/format java.util.Locale/ROOT "%.1fs"
                           (to-array [(/ elapsed-ms 1000.0)])))
                   (and (integer? tools) (<= 0 tools 100000))
-                  (conj (str tools " tool" (when (not= 1 tools) "s")))))))
+                  (conj (str tools " tool" (when (not= 1 tools) "s")))
+                  true (conj (cost/label
+                               (get-in result [:result/data :ai/cost])))))))
       result)))
 
 (defn with-status

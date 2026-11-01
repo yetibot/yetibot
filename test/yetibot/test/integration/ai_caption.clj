@@ -9,25 +9,41 @@
 (fact "Discord captions are small, measured and public-safe"
   (status/caption prepared {:result/value "Answer"
                             :result/data {:mcp {:tool-calls 2}}} 1250)
-  => {:result/value "Answer\n\n-# sample-model · 1.3s · 2 tools"
+  => {:result/value "Answer\n\n-# sample-model · 1.3s · 2 tools · cost n/a"
       :result/data {:mcp {:tool-calls 2}}}
   (:result/value (status/caption (assoc prepared :no-tools true)
                                   {:result/value "Answer"} 20))
-  => "Answer\n\n-# sample-model · 0.0s · 0 tools")
+  => "Answer\n\n-# sample-model · 0.0s · 0 tools · cost n/a")
 
 (fact "unfinished fenced text cannot swallow the tiny footer"
   (:result/value (status/caption prepared {:result/value "```clj\n(+ 1 2)"} 0))
-  => "```clj\n(+ 1 2)\n```\n\n-# sample-model · 0.0s"
+  => "```clj\n(+ 1 2)\n```\n\n-# sample-model · 0.0s · cost n/a"
   (:result/value
     (status/caption prepared {:result/value "````\n```\n````"} 0))
-  => "````\n```\n````\n\n-# sample-model · 0.0s")
+  => "````\n```\n````\n\n-# sample-model · 0.0s · cost n/a")
 
 (fact "missing usage never becomes invented zero cost or tool usage"
   (:result/value (status/caption prepared {:result/value "Answer"} 1000))
-  => "Answer\n\n-# sample-model · 1.0s"
+  => "Answer\n\n-# sample-model · 1.0s · cost n/a"
   (string/includes? (:result/value
                       (status/caption prepared {:result/value "Answer"} 1))
                     "$") => false)
+
+(fact "reported and estimated parent costs have distinct tiny labels"
+  (let [p (assoc prepared :model "grok-4.7"
+                         :provider {:url "https://api.x.ai/v1"})]
+    (:result/value
+      (status/caption p
+        {:result/value "Answer"
+         :result/data {:ai/cost {:usd 0.0037756M :kind :reported
+                                :scope :api :turns 2}}} nil))
+    => "Answer\n\n-# grok-4.7 · API $0.0038"
+    (:result/value
+      (status/caption p
+        {:result/value "Answer"
+         :result/data {:ai/cost {:usd 0.002M :kind :estimate
+                                :scope :tokens :turns 1}}} nil))
+    => "Answer\n\n-# grok-4.7 · tokens est. $0.0020"))
 
 (fact "intermediate pipeline values are not decorated"
   (status/caption (assoc prepared :caption? false)

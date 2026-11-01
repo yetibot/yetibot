@@ -271,7 +271,7 @@
                                            "ai --toolset repo Read owner/repo"))
                   => (if (= :discord (get-in request [:chat-source :adapter]))
                        #(boolean (re-matches
-                                   #"Commit loaded\.\n\n-# chat · [0-9]+\.[0-9]s · 1 tool"
+                                   #"Commit loaded\.\n\n-# chat · [0-9]+\.[0-9]s · 1 tool · cost n/a"
                                    %))
                        "Commit loaded.")
                   (count (filter #(= "get_commit"

@@ -40,7 +40,7 @@
     (re-matches
       (re-pattern (str (java.util.regex.Pattern/quote answer)
                        "\\n\\n-# " model " · [0-9]+\\.[0-9]s"
-                       "(?: · [0-9]+ tools?)?")) text)))
+                       "(?: · [0-9]+ tools?)? · cost n/a")) text)))
 
 (defn status-text [call]
   (get-in call [:body :components 0 :components 0 :content]))
@@ -252,7 +252,7 @@
                                       (if threaded? thread target)) => true))
             (when (= command :grok)
               (fact (get-in (await answered) [:body :components 0 :components 0 :content])
-                    => (str "Immediate @everyone\n\n-# " model))
+                    => (str "Immediate @everyone\n\n-# " model " · cost n/a"))
               (fact (empty? (deletions @calls)) => true))
             (finally (deliver release true)))
           (finish! completion)
@@ -261,12 +261,12 @@
                 final (last answers)
                 expected (str "Final answer @everyone"
                               (when (= command :grok)
-                                (str "\n\n-# " model)))]
+                                (str "\n\n-# " model " · cost n/a")))]
             (fact (if (= command :ai)
                     (boolean (re-matches
                                (re-pattern
                                  (str (java.util.regex.Pattern/quote expected)
-                                      "\\n\\n-# " model " · [0-9]+\\.[0-9]s"))
+                                      "\\n\\n-# " model " · [0-9]+\\.[0-9]s · cost n/a"))
                                (get-in final [:body :components 0 :components 0 :content])))
                     (= expected (get-in final [:body :components 0 :components 0 :content]))) => true
                   (every? #(= 32768 (get-in % [:body :flags])) answers) => true)
@@ -305,7 +305,7 @@
                     => (if failure?
                          (str "The AI request failed. Check the provider "
                               "configuration and try again.")
-                         (str "Answer\n\n-# " model))
+                         (str "Answer\n\n-# " model " · cost n/a"))
                     (string/includes? (:url answer) thread) => true
                     (string/includes? (:url card) thread) => true
                     (< (.indexOf @calls answer)
@@ -325,7 +325,7 @@
             (fact (not= :timeout (await created)) => true)
             (deliver release true)
             (fact (get-in (await answered) [:body :components 0 :components 0 :content])
-                  => (str "Answer\n\n-# " model))
+                  => (str "Answer\n\n-# " model " · cost n/a"))
             (fact (deletions @calls) => [])
             (finally (deliver release true) (deliver receipt true)))
           (finish! completion)
@@ -363,7 +363,7 @@
             (deliver release true)
             (let [answer (await answered)]
               (fact (get-in answer [:body :components 0 :components 0 :content])
-                    => (str "Answer\n\n-# " model)))
+                    => (str "Answer\n\n-# " model " · cost n/a")))
             ;; The ancillary HTTP request is still held. Normal answer IDs
             ;; are retained independently by the genuine command collector.
             (fact (await tracked) => ["answer-1"])

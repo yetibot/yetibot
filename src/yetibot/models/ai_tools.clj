@@ -15,7 +15,8 @@
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-proposals :as proposals]
             [yetibot.models.ai-github :as github]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.util.ai-cost :as cost]))
 
 (def host-context
   (str "You are Yetibot's chat assistant, running inside Yetibot, "
@@ -277,7 +278,7 @@
     (try
       (loop [messages (into [{:role "system" :content instructions}] messages)
              used 0 seen #{} actions #{} halted false stage :initial
-             response 1]
+             response 1 accounting cost/initial]
         (let [_ (swap! trace-state assoc :requested 0)
               turn-messages
               (into [(first messages)
@@ -301,6 +302,7 @@
                                      :progress-config
                                      (assoc config :progress-response
                                             response))))
+              accounting (cost/add accounting (cost/turn provider model body))
               message (ai/message provider body)
               calls (:tool_calls message)]
           (if (and (some? calls) (not= [] calls))
@@ -335,19 +337,20 @@
                     {:result/value (proposals/preview p)
                      :result/data
                      {:proposal (:id p)
-                      :mcp {:tool-calls (+ used attempted)}}}
+                      :mcp {:tool-calls (+ used attempted)} :ai/cost accounting}}
                     (recur (ai/continue-messages provider messages body replies)
                            (long (+ used attempted))
                            (into seen (map :id calls))
                            (into actions requested-actions) halted
-                           :follow-up (inc response))))))
+                           :follow-up (inc response) accounting)))))
             (let [text (:content message)]
               (when-not (ai/nonblank-string? text)
                 (ai/fail (str "AI provider " (:name provider)
                               " returned no text response.")))
               {:result/value (mcp/redact text config)
                :result/data
-               (clean-data (assoc body :mcp {:tool-calls used}) config)}))))
+               (clean-data (assoc body :mcp {:tool-calls used}
+                                     :ai/cost accounting) config)}))))
       (catch Exception e
         (let [reason (or (::trace/reason (ex-data e)) :provider-failure)
               report (trace/report trace-state limit reason)]

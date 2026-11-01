@@ -119,7 +119,8 @@
               :else (ai/fail "Usage: ai default [<provider> <model> | reset]"))]
         {:result/value
          (str "AI default: " (:provider result) " / "
-              (or (:model result) "automatic verified-free")
+              (or (:model result) (if (:model_policy result)
+                                     "automatic verified-free" "not configured"))
               (when (:model_policy result) " (verified-free preference)")
               (if (:overridden result) " (runtime; resets on restart)"
                 " (configured)"))
@@ -391,7 +392,8 @@
          _ (when automatic? (policy/authorize-provider! t actor provider))
          model (or (:model options)
                    (ai/default-model provider
-                     #(policy/model-allowed? t actor provider %)))]
+                     #(policy/model-allowed? t actor provider %)))
+         provider (cond-> provider automatic? (assoc :ai/verified-free true))]
      (when-not model
        (ai/fail (str "No default model configured for this provider. "
                      "Use --model <model> or configure its model.")))
