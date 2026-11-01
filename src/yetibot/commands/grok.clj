@@ -16,6 +16,7 @@
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.util.xai :as xai]
             [yetibot.util.ai-execution :as execution]
+            [yetibot.util.ai-cost :as cost]
             [yetibot.util.ai-status :as status]))
 
 (def usage
@@ -25,7 +26,12 @@
 
 (defn- answer-text [prepared text]
   (if (status/discord? prepared)
-    (:result/value (status/caption prepared {:result/value text} nil))
+    (:result/value
+      (status/caption prepared
+        {:result/value text
+         :result/data {:ai/cost
+                       (cost/visible-estimate (:provider prepared)
+                         (:model prepared) (:messages prepared) text)}} nil))
     (str text "\n\nSent via " (:model prepared))))
 
 (defn- generate [prepared]

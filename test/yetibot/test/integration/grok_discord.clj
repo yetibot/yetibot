@@ -166,7 +166,7 @@
                               [{:type 10
                                 :content
                                 (str "First [redacted] @everyone\n" padding
-                                     "\n\n-# selected · 0 tools")}
+                                     "\n\n-# selected · 0 tools · cost n/a")}
                                {:type 1 :components
                                 [{:type 2 :style 2 :label "Run again"
                                   :custom_id "yb:again:parent:command"}
@@ -184,8 +184,8 @@
                       => ["selected-thread" "selected-thread"]
                       (mapv #(get-in % [3 :components 0 :components 0 :content]) creates)
                       => [(str "First [redacted] @everyone\n" padding
-                               "\n\n-# selected · 0 tools")
-                          "Next <@123>\n\n-# selected · 0 tools"]
+                               "\n\n-# selected · 0 tools · cost n/a")
+                          "Next <@123>\n\n-# selected · 0 tools · cost n/a"]
                       (mapv #(nth % 2) edits) => ["2" "3"]
                       (every? #(= {:parse []}
                                   (get-in % [3 :allowed_mentions])) edits)

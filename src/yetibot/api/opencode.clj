@@ -115,8 +115,8 @@
 
 (defn default-model [provider allowed?]
   (let [eligible (filterv allowed? (free-models provider))
-        preferred (get @preferences "zen")]
-    (or (some #{preferred} eligible) (first eligible) (unavailable!))))
+        preferred [(:model provider) (get @preferences "zen")]]
+    (or (some (set eligible) preferred) (first eligible) (unavailable!))))
 
 (defn set-default! [provider model allowed?]
   (when-not (and (some #{model} (free-models provider)) (allowed? model))

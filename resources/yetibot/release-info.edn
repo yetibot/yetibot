@@ -1,10 +1,18 @@
 {:schema_version 1
  :changes
- [{:id "free-zen-defaults"
+ [{:id "runtime-ai-defaults"
+   :date "2026-11-01"
+   :component "app"
+   :title "Admins can change global AI defaults at runtime"
+   :summary "Inspect, set or reset the global AI provider/model without editing configuration or restarting. Changes require a trusted admin and retain normal tool policy; explicit request flags win. Runtime choices reset on restart. Zen defaults remain freshly verified-free, while an explicit admin choice may select a paid model on another configured provider."
+   :commands ["ai default" "ai default <provider> <model>" "ai default reset"]
+   :requires ["Existing configured AI provider" "Admin authorization for changes"]
+   :links []}
+  {:id "free-zen-defaults"
    :date "2026-11-01"
    :component "app"
    :title "Zen defaults follow currently free offerings"
-   :summary "Zen defaults verify current zero input, output and advertised cache pricing before selection. Expired offers are not retained; unknown or paid pricing fails closed. Authorized native AI tools can change only the runtime Zen model preference. Explicit --model remains an intentional choice, including paid models. Catalog eligibility does not prove access: rate or quota limits can still reject inference."
+   :summary "Zen defaults verify current zero input, output and advertised cache pricing before selection. Expired offers are not retained; unknown or paid pricing fails closed. Trusted admins can set a free Zen preference through the global runtime AI default controls. Explicit --model remains an intentional choice, including paid models. Catalog eligibility does not prove access: rate or quota limits can still reject inference."
    :commands ["zen Say hello" "ai --provider zen Say hello"]
    :requires ["Configured Zen credentials and upstream model access"]
    :links []}
@@ -12,7 +20,7 @@
    :date "2026-11-01"
    :component "app"
    :title "Small Discord AI captions"
-   :summary "Discord AI and Zen answers use muted subtext for the model, measured execution time and known host-tool count. Streaming Grok starts with model attribution. Unknown usage and cost are omitted, not guessed; Slack formatting is unchanged."
+   :summary "Discord AI and Zen answers use muted subtext for the model, measured execution time and known host-tool count. Cost labels distinguish provider-reported API totals, usage-based token estimates, fresh-free Zen estimates and stable live Grok visible-text estimates. Missing or incomplete cost is marked unavailable, never invented zero; Slack formatting is unchanged."
    :commands ["ai Hello" "grok Hello"]
    :requires ["Discord"]
    :links []}

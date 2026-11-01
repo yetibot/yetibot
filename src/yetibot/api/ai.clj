@@ -10,7 +10,8 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
-            [yetibot.util.ai-config :as settings])
+            [yetibot.util.ai-config :as settings]
+            [yetibot.util.ai-cost :as cost])
   (:import [java.io File FileInputStream]
            [java.net URI]
            [java.util UUID]))
@@ -77,6 +78,9 @@
 (defn fail [message]
   (throw (ex-info message {:ai/error true})))
 
+;; Store only the atomic choice, never provider records or credentials.
+(defonce runtime-default (atom nil))
+
 (defn config []
   (let [{:keys [value error]} (get-config ::config [:ai])]
     (when error
@@ -85,7 +89,17 @@
               "AI is not configured. Configure ai.providers first."
               (str "AI configuration is invalid. Check provider names, "
                    "URLs and defaults."))))
-    (settings/ai value)))
+    (let [config (settings/ai value)
+          {:keys [provider model]} @runtime-default]
+      (if-not provider config
+        (do
+          (when-not (some #(= provider (:name %)) (:providers config))
+            (fail "Runtime AI provider is no longer configured. Reset ai default."))
+          (-> config
+              (assoc :default-provider provider)
+              (update :providers
+                      #(mapv (fn [p] (if (= provider (:name p))
+                                       (assoc p :model model) p)) %))))))))
 
 (defn provider [config provider-name]
   (let [provider-name (or provider-name (:default-provider config)
@@ -367,10 +381,12 @@
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
    (let [body (chat provider model messages options)
+         accounting (cost/turn provider model body)
          text (:content (message provider body))]
      (when-not (nonblank-string? text)
        (fail (str "AI provider " (:name provider) " returned no "
                   (when (responses? provider) "completed ")
                   "text response.")))
      {:result/value text
-      :result/data body})))
+      :result/data (cond-> (dissoc body :ai/cost)
+                     accounting (assoc :ai/cost accounting))})))

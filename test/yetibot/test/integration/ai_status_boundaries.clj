@@ -93,7 +93,7 @@
             (try
               (fact (proof/await running) => true
                     (get-in (proof/await answered) [:body :components 0 :components 0 :content])
-                    => (str "Immediate\n\n-# " proof/model)
+                    => (str "Immediate\n\n-# " proof/model " · cost n/a")
                     (not= :timeout (proof/await created)) => true)
               (fact (empty? (proof/deletions @calls)) => true)
               (deliver release-tool true)
@@ -119,7 +119,7 @@
                   (count @turns) => 2
                   (some #(contains? % :on-progress) @turns) => nil
                   (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
-                  => (str "Final\n\n-# " proof/model))))))))
+                  => (str "Final\n\n-# " proof/model " · cost n/a"))))))))
 
 (fact "no-tools keeps a tool-free Working card and ordinary final transport"
   (let [post http/post release (promise) wire (atom []) discovery (atom 0)
@@ -160,7 +160,7 @@
                     (some #(contains? % :on-progress) @wire) => nil
                     (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
                     => #(and (proof/captioned? % "No tools answer")
-                             (string/ends-with? % " · 0 tools"))))))))))
+                             (string/ends-with? % " · 0 tools · cost n/a"))))))))))
 
 (fact "missing ancillary lane or failed status create cannot discard answers"
   (doseq [failure [:missing :failed]]
