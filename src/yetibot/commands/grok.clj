@@ -24,7 +24,9 @@
        "[--no-thread] <prompt>"))
 
 (defn- answer-text [prepared text]
-  (str text "\n\nSent via " (:model prepared)))
+  (if (status/discord? prepared)
+    (:result/value (status/caption prepared {:result/value text} nil))
+    (str text "\n\nSent via " (:model prepared))))
 
 (defn- generate [prepared]
   (let [result (ai/complete-prompt prepared)]

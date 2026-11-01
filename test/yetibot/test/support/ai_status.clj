@@ -35,6 +35,13 @@
   (let [[_ port] (async/alts!! [completion (async/timeout 5000)])]
     (fact port => completion)))
 
+(defn captioned? [text answer]
+  (boolean
+    (re-matches
+      (re-pattern (str (java.util.regex.Pattern/quote answer)
+                       "\\n\\n-# " model " · [0-9]+\\.[0-9]s"
+                       "(?: · [0-9]+ tools?)?")) text)))
+
 (defn status-text [call]
   (get-in call [:body :components 0 :components 0 :content]))
 
@@ -245,7 +252,7 @@
                                       (if threaded? thread target)) => true))
             (when (= command :grok)
               (fact (get-in (await answered) [:body :components 0 :components 0 :content])
-                    => (str "Immediate @everyone\n\nSent via " model))
+                    => (str "Immediate @everyone\n\n-# " model))
               (fact (empty? (deletions @calls)) => true))
             (finally (deliver release true)))
           (finish! completion)
@@ -254,8 +261,14 @@
                 final (last answers)
                 expected (str "Final answer @everyone"
                               (when (= command :grok)
-                                (str "\n\nSent via " model)))]
-            (fact (get-in final [:body :components 0 :components 0 :content]) => expected
+                                (str "\n\n-# " model)))]
+            (fact (if (= command :ai)
+                    (boolean (re-matches
+                               (re-pattern
+                                 (str (java.util.regex.Pattern/quote expected)
+                                      "\\n\\n-# " model " · [0-9]+\\.[0-9]s"))
+                               (get-in final [:body :components 0 :components 0 :content])))
+                    (= expected (get-in final [:body :components 0 :components 0 :content]))) => true
                   (every? #(= 32768 (get-in % [:body :flags])) answers) => true)
             ;; Typing consumed a synthetic status ID; cleanup must use the
             ;; confirmed card ID, never an answer or a guessed identifier.
@@ -292,7 +305,7 @@
                     => (if failure?
                          (str "The AI request failed. Check the provider "
                               "configuration and try again.")
-                         (str "Answer\n\nSent via " model))
+                         (str "Answer\n\n-# " model))
                     (string/includes? (:url answer) thread) => true
                     (string/includes? (:url card) thread) => true
                     (< (.indexOf @calls answer)
@@ -312,7 +325,7 @@
             (fact (not= :timeout (await created)) => true)
             (deliver release true)
             (fact (get-in (await answered) [:body :components 0 :components 0 :content])
-                  => (str "Answer\n\nSent via " model))
+                  => (str "Answer\n\n-# " model))
             (fact (deletions @calls) => [])
             (finally (deliver release true) (deliver receipt true)))
           (finish! completion)
@@ -350,7 +363,7 @@
             (deliver release true)
             (let [answer (await answered)]
               (fact (get-in answer [:body :components 0 :components 0 :content])
-                    => (str "Answer\n\nSent via " model)))
+                    => (str "Answer\n\n-# " model)))
             ;; The ancillary HTTP request is still held. Normal answer IDs
             ;; are retained independently by the genuine command collector.
             (fact (await tracked) => ["answer-1"])

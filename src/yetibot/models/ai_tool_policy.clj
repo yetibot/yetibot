@@ -39,6 +39,19 @@
      (ai/fail "This provider/model is not allowed for the selected toolset."))
    t))
 
+(defn authorize-provider!
+  "Authorize catalog access before a dynamic default's model is known."
+  [t actor provider]
+  (authorize! t actor)
+  (when (and (:providers t)
+             (not-any? #(and (= (:name provider) (:name %)) (seq (:models %)))
+                       (:providers t)))
+    (ai/fail "This provider/model is not allowed for the selected toolset."))
+  t)
+
+(defn model-allowed? [t actor provider model]
+  (try (authorize! t actor provider model) true (catch Exception _ false)))
+
 (defn visible? [t actor]
   (try (authorize! t actor) true (catch Exception _ false)))
 

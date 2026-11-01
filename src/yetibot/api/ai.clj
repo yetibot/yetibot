@@ -187,6 +187,13 @@
                      " or read its response."))
               {:ai/error true :ai/diagnostic record})))))))
 
+(defn default-model
+  ([provider] (default-model provider (constantly true)))
+  ([provider allowed?]
+   (if (= "zen" (:name provider))
+     (opencode/default-model (resolve-provider provider) allowed?)
+     (:model provider))))
+
 (defn models [provider]
   ;; Resolve only this metadata request's provider. The request helper is
   ;; idempotent for an already-resolved provider; no other key-file is opened.

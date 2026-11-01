@@ -1,5 +1,6 @@
 (ns yetibot.test.integration.opencode-zen
-  (:require [clj-http.client :as http]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as http]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
@@ -16,10 +17,18 @@
           :key "zen-fixture-secret" :model "fixture-chat"})
 (def other {:name "other" :url "https://other.example/v1" :model "other"})
 (def settings {:providers [other zen] :default-provider "other"})
-(def records [{:id "fixture-chat" :type "chat"}
+(def records [{:id "fixture-chat" :type "chat"
+               :cost {:text {:input {:price 0} :output {:price 0}}}}
               {:id "new-model-arrived-today" :type "chat"}
               {:id "other" :type "chat"}])
-(defn response [] {:status 200 :body {:object "list" :data records}})
+(defn response
+  ([] (response {}))
+  ([options]
+   (let [body {:object "list" :data records}]
+     {:status 200 :body (if (= :stream (:as options))
+                         (java.io.ByteArrayInputStream.
+                           (.getBytes (json/generate-string body) "UTF-8"))
+                         body)})))
 
 (facts "Zen model discovery uses the catalog, not the chat models endpoint"
   (with-redefs [http/get
@@ -133,9 +142,9 @@
 
 (fact "ai supports Zen explicitly and through complete automatic discovery"
   (with-redefs [ai/config (constantly settings)
-                http/get (fn [url & _]
+                http/get (fn [url & [options]]
                            (if (string/starts-with? url "https://opencode.ai/")
-                             (response)
+                             (response options)
                              {:status 200 :body {:object "list"
                                                  :data [{:id "other"}]}}))]
     (let [cache (catalog/new-cache (constantly 1000) (fn [job] (job))
@@ -155,10 +164,23 @@
                 "ai --provider zen --no-tools Say hello"))
       => "Explicit Zen answer")))
 
+(fact "known Zen 429 rejection is not mistaken for missing configuration"
+  (with-redefs [ai/config (constantly settings)
+                mcp/config (constantly {:servers []})
+                http/get (fn [_ options] (response options))
+                ai/complete (fn [& _]
+                              (throw (ex-info "private vendor text"
+                                       {:ai/diagnostic {:status 429}})))]
+    (let [result (execution/run-command execution/request "zen Hello")]
+      (string/includes? (str (:value result)) "HTTP 429") => true
+      (string/includes? (str result) "private vendor text") => false
+      (get-in result [:data :unknownOutcome]) => false)))
+
 (fact "Zen failure is sanitized, never retried, and stops downstream commands"
   (let [calls (atom 0)]
     (with-redefs [ai/config (constantly settings)
                   mcp/config (constantly {:servers []})
+                  http/get (fn [_ options] (response options))
                   ai/complete
                   (fn [& _]
                     (swap! calls inc)
