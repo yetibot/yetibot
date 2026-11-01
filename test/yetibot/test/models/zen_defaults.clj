@@ -9,7 +9,7 @@
 (def provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
                :key "fixture-secret" :model "paid-old-default"})
 (def free-model
-  {:id "free-a" :cost {:text {:input {:price 0 :cache {:read {:price 0}}}
+  {:id "free-a" :cost {:text {:input {:price 0 :cache {:read 0 :write 0}}
                              :output {:price 0}}}})
 (defn response [models]
   {:status 200 :body (ByteArrayInputStream.
@@ -17,10 +17,13 @@
 
 (fact "free means explicit zero input/output and no unknown or paid charges"
   (zen/free-model? free-model) => true
+  (zen/free-model? (assoc-in free-model [:cost :text :input :cache]
+                             {:read {:price 0}})) => true
   (doseq [model [(dissoc free-model :cost)
                  (assoc-in free-model [:cost :text :input :price] "0")
                  (assoc-in free-model [:cost :text :input :price] 0.01)
                  (update-in free-model [:cost :text :output] dissoc :price)
+                 (assoc-in free-model [:cost :text :input :cache :write] 1)
                  (assoc-in free-model [:cost :text :input :cache :write]
                            {:price 1})
                  (assoc-in free-model [:cost :image] {:price 0})

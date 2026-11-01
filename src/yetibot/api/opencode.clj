@@ -51,7 +51,8 @@
            (let [cache (:cache value)]
              (and (map? cache) (seq cache)
                   (every? #{:read :write} (keys cache))
-                  (every? zero-price? (vals cache)))))))
+                  (every? #(or (and (number? %) (zero? %))
+                               (zero-price? %)) (vals cache)))))))
 
 (defn free-model? [{:keys [id cost]}]
   (boolean
