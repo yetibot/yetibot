@@ -165,15 +165,16 @@ to your existing `:ai :providers` vector without changing your default:
 ```clojure
 {:name "zen"
  :url "https://opencode.ai/inference/openai/v1"
- :key-file "/run/secrets/opencode-zen-api-key"
- :model "gpt-5.4-mini"}
+ :key-file "/run/secrets/opencode-zen-api-key"}
 ```
 
 Use your own Zen API key; credentials are not imported from other clients.
 For a bot, prefer a dedicated service account with a restricted API key whose
 **Models** permission is **Request**. Personal and service-account keys both
 work for inference; unrelated administrative permissions are not needed.
-The model is a configurable default, not an allowlist. Model discovery calls
+Zen defaults ignore fixed model settings and select only currently verified-free
+models. Explicit `--model` is a deliberate override and can incur charges.
+Model discovery calls
 `https://opencode.ai/inference/v1/models` automatically: the current chat API
 base does not have a working `/models` endpoint. Legacy
 `https://opencode.ai/zen/v1` configurations retain their own models endpoint.
@@ -199,6 +200,23 @@ The same catalog feeds the bounded background provider discovery used by
 `ai --model <exact-id>`; duplicate IDs still require `--provider zen`.
 There is no fixed model list to update in Yetibot.
 
+Each automatic default selection fetches current catalog pricing with bounded
+IO and no redirects/retries. Input/output prices and every advertised cache
+price must be numeric zero; missing base prices, unknown cost dimensions and
+paid models are ineligible. Selection is deterministic, preferring an eligible
+runtime choice, otherwise the first eligible ID allowed by the toolset. If an
+offer expires, it is not retained; no eligible model means fail closed, never
+paid fallback. This follows rotating offerings, not round-robin request retries.
+
+Authorized native `ai` can accept
+`{"action":"set_default","provider":"zen","model":"<exact-free-id>"}`.
+Whole-batch preflight remains offline; execution rechecks trusted provenance,
+provider/model policy and current free prices. Only the in-memory Zen preference
+changes, never credentials, URLs, permissions or file configuration. Restart
+clears the preference. X posts and model prose are hints, not pricing proof or
+permission to reconfigure anything. `429` inference rejection is reported as an
+upstream limit, not missing configuration, with no automatic paid retry.
+
 Like `cf`, `zen` prompts are single-hop text requests with no implicit thread
 history, files, searches or child tools, and at most 2,048 output tokens.
 `--toolset <name>` applies the existing user/provider/model policy. For normal
@@ -213,6 +231,15 @@ A catalog listing is not proof of account access or model/tool quality.
 OpenCode's current documentation restricts free-tier chat models to OpenCode
 clients; Yetibot does not impersonate that client to bypass restrictions.
 See [OpenCode model documentation](https://opencode.ai/docs/zen/).
+
+### Small Discord AI captions
+
+Discord AI/Zen answers append muted `-#` subtext with the model, measured
+execution duration and known host-tool call count. Unknown usage and cost are
+omitted, not estimated. Streaming Grok uses a small model footer (and zero host
+calls when tools were explicitly disabled), keeping its live/final duplicate
+suppression intact. Slack output is unchanged. Only public labels/counts belong
+here, never prompts, tool arguments/results, credentials or private reasoning.
 
 ## Cloudflare inference and model discovery
 

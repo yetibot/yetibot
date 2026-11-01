@@ -269,7 +269,11 @@
                   => "`reader/get_commit` — get_commit"
                   (:value (chat/run-command request
                                            "ai --toolset repo Read owner/repo"))
-                  => "Commit loaded."
+                  => (if (= :discord (get-in request [:chat-source :adapter]))
+                       #(boolean (re-matches
+                                   #"Commit loaded\.\n\n-# chat · [0-9]+\.[0-9]s · 1 tool"
+                                   %))
+                       "Commit loaded.")
                   (count (filter #(= "get_commit"
                                      (get-in % [:body :params :name]))
                                  @requests)) => 1)))))))))

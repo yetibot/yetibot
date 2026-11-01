@@ -356,11 +356,19 @@
              (ai/fail (str "AI provider " provider-name
                            " is not configured. Add it to ai.providers.")))
          provider (ai/provider config provider-name)
-         model (or (:model options) (:model provider))]
+         automatic? (and (= "zen" (:name provider)) (not (:model options)))
+         t (when (and automatic? (not (:no-tools options)))
+             (:toolset (toolsets/select (mcp/config) (:toolset options))))
+         actor (policy/actor args)
+         _ (when automatic? (policy/authorize-provider! t actor provider))
+         model (or (:model options)
+                   (ai/default-model provider
+                     #(policy/model-allowed? t actor provider %)))]
      (when-not model
        (ai/fail (str "No default model configured for this provider. "
                      "Use --model <model> or configure its model.")))
      (cond-> (assoc options :provider provider :model model
+                    :caption? (empty? (:next-cmds args))
                     :messages (context/messages args (:prompt options))
                     :actor (policy/actor args))
        snapshot (assoc :pipeline-input snapshot

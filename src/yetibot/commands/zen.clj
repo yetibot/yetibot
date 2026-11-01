@@ -6,6 +6,8 @@
             [yetibot.commands.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-model-tools :as models]
+            [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.util.ai-status :as status]
             [yetibot.models.ai-toolsets :as toolsets]))
 
 (def usage
@@ -16,20 +18,27 @@
   "zen # show OpenCode Zen usage without making an inference request"
   [_] usage)
 
-(defn- failure [args unknown?]
+(defn- failure
+  ([args unknown?] (failure args unknown? nil))
+  ([args unknown? code]
   ;; Avoid core error decoration reflecting prompt prose or credentials.
   (when-let [skip (:skip-next-n args)]
     (reset! skip (count (:next-cmds args))))
   (let [message
-        (if unknown?
+        (cond
+          (= code :zen-rate-limit)
+          "OpenCode Zen is rate-limited (HTTP 429). No paid fallback was used."
+          unknown?
           (str "OpenCode Zen outcome could not be confirmed; "
                "do not repeat this paid request.")
+          :else
           (str "OpenCode Zen request did not run. Configure the zen AI "
-               "provider, its API key and default model; check options "
+               "provider and API key; check current free-model availability, "
+               "options "
                "and toolset access. Use zen models for available IDs."))]
     {:result/value message
      :result/data {:isError true :unknownOutcome (boolean unknown?)
-                   :error message}}))
+                   :error message}})))
 
 (defn- provider! []
   (let [provider (api/provider (api/config) "zen")]
@@ -52,13 +61,14 @@
     (catch Exception _ (failure args false))))
 
 (defn prompt-cmd
-  "zen <prompt> # ask OpenCode Zen, text-only, no tools or implicit history
+  "zen <prompt> # ask a currently verified-free Zen model, text-only
    zen --model <id> <prompt> # select any advertised Zen model
    zen --toolset <name> <prompt> # apply configured provider/model policy"
   {:yb/cat #{:ai}}
   [{:keys [match chat-source] :as args}]
   (try
-    (let [options (ai/parse-prompt match usage)
+    (let [started (System/nanoTime)
+          options (ai/parse-prompt match usage)
           _ (when (or (:provider options) (:max-tool-calls options)
                       (:no-tools options))
               (api/fail usage))
@@ -75,8 +85,12 @@
                    chat-source)
           data (:structuredContent result)]
       (if (:isError result)
-        (failure args (:unknownOutcome result))
-        {:result/value (:text data) :result/data data}))
+        (failure args (:unknownOutcome result) (:error-code result))
+        (status/caption
+          {:provider provider :model (:model data) :actor (policy/actor args)
+           :no-tools true :caption? (empty? (:next-cmds args))}
+          {:result/value (:text data) :result/data data}
+          (/ (- (System/nanoTime) started) 1000000.0))))
     (catch Exception _ (failure args false))))
 
 (cmd-hook #"zen"

@@ -1,6 +1,22 @@
 {:schema_version 1
  :changes
- [{:id "release-discovery"
+ [{:id "free-zen-defaults"
+   :date "2026-11-01"
+   :component "app"
+   :title "Zen defaults follow currently free offerings"
+   :summary "Zen defaults verify current zero input, output and advertised cache pricing before selection. Expired offers are not retained; unknown or paid pricing fails closed. Authorized native AI tools can change only the runtime Zen model preference. Explicit --model remains an intentional choice, including paid models. Catalog eligibility does not prove access: rate or quota limits can still reject inference."
+   :commands ["zen Say hello" "ai --provider zen Say hello"]
+   :requires ["Configured Zen credentials and upstream model access"]
+   :links []}
+  {:id "tiny-discord-ai-captions"
+   :date "2026-11-01"
+   :component "app"
+   :title "Small Discord AI captions"
+   :summary "Discord AI and Zen answers use muted subtext for the model, measured execution time and known host-tool count. Streaming Grok starts with model attribution. Unknown usage and cost are omitted, not guessed; Slack formatting is unchanged."
+   :commands ["ai Hello" "grok Hello"]
+   :requires ["Discord"]
+   :links []}
+  {:id "release-discovery"
    :date "2026-10-31"
    :component "app"
    :title "Ask Yetibot what's new"
@@ -20,7 +36,7 @@
    :date "2026-10-31"
    :component "app"
    :title "Discover and use OpenCode Zen models"
-   :summary "zen models lists advertised model IDs. zen sends a bounded text-only request; ai --provider zen retains the normal AI context and tools. Bare zen now shows usage, not GitHub wisdom. Automatic free-only model rotation is not included."
+   :summary "zen models lists advertised model IDs. zen sends a bounded text-only request; ai --provider zen retains the normal AI context and tools. Bare zen now shows usage, not GitHub wisdom. Default selection now follows currently verified-free offerings without a paid fallback."
    :commands ["zen" "zen models" "zen --model MODEL PROMPT"
               "ai --provider zen --model MODEL PROMPT"]
    :requires ["OpenCode credentials and inference entitlement"

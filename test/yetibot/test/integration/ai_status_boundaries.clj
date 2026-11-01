@@ -93,7 +93,7 @@
             (try
               (fact (proof/await running) => true
                     (get-in (proof/await answered) [:body :components 0 :components 0 :content])
-                    => (str "Immediate\n\nSent via " proof/model)
+                    => (str "Immediate\n\n-# " proof/model)
                     (not= :timeout (proof/await created)) => true)
               (fact (empty? (proof/deletions @calls)) => true)
               (deliver release-tool true)
@@ -119,7 +119,7 @@
                   (count @turns) => 2
                   (some #(contains? % :on-progress) @turns) => nil
                   (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
-                  => (str "Final\n\nSent via " proof/model))))))))
+                  => (str "Final\n\n-# " proof/model))))))))
 
 (fact "no-tools keeps a tool-free Working card and ordinary final transport"
   (let [post http/post release (promise) wire (atom []) discovery (atom 0)
@@ -159,7 +159,8 @@
                     (some #(seq (:tools %)) @wire) => nil
                     (some #(contains? % :on-progress) @wire) => nil
                     (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
-                    => "No tools answer"))))))))
+                    => #(and (proof/captioned? % "No tools answer")
+                             (string/ends-with? % " · 0 tools"))))))))))
 
 (fact "missing ancillary lane or failed status create cannot discard answers"
   (doseq [failure [:missing :failed]]
@@ -178,7 +179,7 @@
               (finally (deliver release true)))
             (proof/finish! completion)
             (fact (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
-                  => "Answer survives"
+                  => #(proof/captioned? % "Answer survives")
                   (proof/deletions @calls) => [])
             (when (= failure :missing)
               (fact (proof/status-calls @calls) => []))))))))
@@ -203,7 +204,8 @@
             (let [answer (first (proof/answer-calls @calls))
                   card (first (proof/status-calls @calls))]
               (fact (:file? answer) => true
-                    (get-in answer [:body :components 0 :components 0 :content]) => "Caption "
+                    (get-in answer [:body :components 0 :components 0 :content])
+                    => #(proof/captioned? % "Caption ")
                     (get-in answer [:body :flags]) => 32768
                     (:file? card) => false
                     (mapv :id (proof/deletions @calls)) => [(:id card)]))))))))
@@ -342,7 +344,7 @@
                     (get-in @child-options [0 2 :progress-config]) => nil
                     (get-in @child-options [0 2 :tools]) => []
                     (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
-                    => "Child answer"))))))))
+                    => #(proof/captioned? % "Child answer")))))))))
 
 (fact "stale callback cannot change the new command card or final answer"
   (let [turn (atom 0) callbacks (atom []) second-ready (promise)
@@ -385,7 +387,9 @@
             (proof/finish! first-completion)
             (proof/finish! second-completion)
             (fact (mapv #(get-in % [:body :components 0 :components 0 :content])
-                        (proof/answer-calls @calls)) => ["Current answer"]
+                        (proof/answer-calls @calls))
+                  => #(and (= 1 (count %))
+                           (proof/captioned? (first %) "Current answer"))
                   (some #(string/includes? (or (proof/status-text %) "")
                                            "stale_tool") @calls) => nil)
             (remove-watch calls ::second-card)))))))

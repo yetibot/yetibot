@@ -41,7 +41,7 @@
 
 (defn- payload-calls [calls op]
   (filterv #(and (= op (first %))
-                 (string/includes? (get-in % [3 :components 0 :components 0 :content] "") "Sent via"))
+                 (string/includes? (get-in % [3 :components 0 :components 0 :content] "") "\n\n-# "))
            calls))
 
 (fact "real handler and Responses SSE publish before terminal and reuse IDs"
@@ -116,7 +116,7 @@
                             (fact rest => :mock-rest)
                             (swap! calls conj [:create target id payload])
                             (when (string/includes? (get-in payload [:components 0 :components 0 :content] "")
-                                                    "Sent via")
+                                                    "\n\n-# ")
                               (deliver observed true))
                             (result-channel {:id id}))
                           :else
@@ -166,7 +166,7 @@
                               [{:type 10
                                 :content
                                 (str "First [redacted] @everyone\n" padding
-                                     "\n\nSent via selected")}
+                                     "\n\n-# selected · 0 tools")}
                                {:type 1 :components
                                 [{:type 2 :style 2 :label "Run again"
                                   :custom_id "yb:again:parent:command"}
@@ -184,8 +184,8 @@
                       => ["selected-thread" "selected-thread"]
                       (mapv #(get-in % [3 :components 0 :components 0 :content]) creates)
                       => [(str "First [redacted] @everyone\n" padding
-                               "\n\nSent via selected")
-                          "Next <@123>\n\nSent via selected"]
+                               "\n\n-# selected · 0 tools")
+                          "Next <@123>\n\n-# selected · 0 tools"]
                       (mapv #(nth % 2) edits) => ["2" "3"]
                       (every? #(= {:parse []}
                                   (get-in % [3 :allowed_mentions])) edits)
