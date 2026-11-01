@@ -4,6 +4,7 @@
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.chat :as chat]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-defaults :as defaults]
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
@@ -96,6 +97,33 @@
               (.getMessage e)
               (str "The AI request failed. Check the provider configuration "
                    "and try again."))}))))))
+
+(defn default-cmd
+  "ai default # inspect global runtime/configured defaults
+   ai default <provider> <model> # admin-only runtime change; may incur costs
+   ai default reset # admin-only reset to file configuration"
+  {:yb/cat #{:ai}}
+  [{[_ choice] :match :as args}]
+  (safely args
+    (fn []
+      (let [parts (when-not (string/blank? choice)
+                    (string/split (string/trim choice) #"\s+"))
+            check! #(do (defaults/authorize! args)
+                        (execution/require-direct! args))
+            result
+            (cond
+              (empty? parts) (defaults/view)
+              (= ["reset"] parts) (defaults/reset-default! check!)
+              (= 2 (count parts))
+              (defaults/set-default! (first parts) (second parts) check!)
+              :else (ai/fail "Usage: ai default [<provider> <model> | reset]"))]
+        {:result/value
+         (str "AI default: " (:provider result) " / "
+              (or (:model result) "automatic verified-free")
+              (when (:model_policy result) " (verified-free preference)")
+              (if (:overridden result) " (runtime; resets on restart)"
+                " (configured)"))
+         :result/data result}))))
 
 (defn providers-cmd
   "ai providers # list configured AI provider names"
@@ -419,6 +447,7 @@
          (autodraft/complete prepared args complete-prompt)))))
 
 (cmd-hook #"ai"
+  #"^default(?:\s+(.*))?\s*$" default-cmd
   #"^providers\s*$" providers-cmd
   #"^models(?:\s+(\S+))?\s*$" models-cmd
   #"^toolsets\s*$" toolsets-cmd

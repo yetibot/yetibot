@@ -7,8 +7,8 @@
             [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.mcp :as mcp]
-            [yetibot.api.opencode :as zen]
             [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.models.ai-defaults :as defaults]
             [yetibot.util.ai-execution :as execution]))
 
 (defn available-tools []
@@ -67,7 +67,8 @@
     (when-not (and (#{"ai" "cf"} operation) (map? args)
                    (every? allowed (keys args))
                    (contains? (if (= "cf" operation) #{"models" "ask"}
-                                #{"providers" "models" "ask" "set_default"}) action))
+                                #{"providers" "models" "ask" "defaults"
+                                  "set_default" "reset_default"}) action))
       (invalid!))
     (doseq [field ["provider" "model" "prompt" "after"]]
       (when (and (contains? args field)
@@ -85,11 +86,17 @@
                (some #(contains? args %) ["after" "limit"])) (invalid!))
     (cond
       (= "set_default" action)
-      (do (when-not (and (= "ai" operation) (= "zen" (get args "provider"))
+      (do (defaults/authorize! execution/*event*)
+          (when-not (and (= "ai" operation) (contains? args "provider")
                          (contains? args "model")
                          (every? #{"action" "provider" "model"} (keys args)))
             (invalid!))
           (selected config operation args))
+      (#{"defaults" "reset_default"} action)
+      (do
+        (when-not (= #{"action"} (set (keys args))) (invalid!))
+        (when (= "reset_default" action)
+          (defaults/authorize! execution/*event*)))
       (= "ask" action)
       (do (when-not (contains? args "prompt") (invalid!))
           (selected config operation args))
@@ -133,7 +140,7 @@
                  {:type "integer" :minimum 1 :maximum 2048}}
           (not cloudflare?) (assoc :provider (property 200)))
         actions (if cloudflare? ["models" "ask"]
-                  ["providers" "models" "ask" "set_default"])]
+                  ["providers" "models" "ask" "defaults" "set_default" "reset_default"])]
     {:description
      (str (if cloudflare? "Cloudflare Workers AI" "Configured AI providers")
           ": list models or ask a single-hop text-only child. "
@@ -146,9 +153,12 @@
           "No URLs, credentials or identity arguments. Max 2048 output tokens. "
           (when-not cloudflare?
             (str "Zen defaults are freshly verified free-only. "
-                 "set_default with provider=zen and an exact model changes "
-                 "only the runtime preference after current free-price and "
-                 "policy checks; never keys, endpoints or file config.")))
+                 "defaults inspects global defaults. Admin-only set_default requires "
+                 "an exact configured provider and model; reset_default restores "
+                 "file defaults. These change only a global in-memory choice, "
+                 "may select a paid provider/model, and require caller policy. "
+                 "Zen defaults remain verified-free only. Never change keys, "
+                 "endpoints, permissions or file config; do not retry setters.")))
      :inputSchema
      ;; Grok requires complete typed object branches, not partial/not shapes.
      (assoc (action-schema properties actions [])
@@ -159,10 +169,9 @@
                (action-schema (select-keys properties [:provider :after :limit])
                               ["models"] [])]
               (not cloudflare?)
-              (conj (action-schema {} ["providers"] [])
+              (conj (action-schema {} ["providers" "defaults" "reset_default"] [])
                     (action-schema
-                      {:provider {:type "string" :enum ["zen"]}
-                       :model (property 200)}
+                      {:provider (property 200) :model (property 200)}
                       ["set_default"] ["provider" "model"]))))}))
 
 (def definitions {"ai" (definition false) "cf" (definition true)})
@@ -246,12 +255,29 @@
       (trusted! config source)
       (arguments! config operation args)
       (let [action (get args "action")]
-        (if (= "providers" action)
+        (cond
+          (= "defaults" action)
+          {:structuredContent (assoc (defaults/view) :untrusted true)}
+          (= "reset_default" action)
+          {:structuredContent
+           (assoc (defaults/reset-default!
+                    #(do (trusted! config source)
+                         (defaults/authorize! execution/*event*)))
+                  :untrusted true)}
+          (= "set_default" action)
+          {:structuredContent
+           (assoc (defaults/set-default! (get args "provider") (get args "model")
+                    #(do (trusted! config source)
+                         (defaults/authorize! execution/*event*)
+                         (selected config operation args)))
+                  :untrusted true)}
+          (= "providers" action)
           {:structuredContent
            {:untrusted true
             :providers (mapv :name
                              (filter #(provider-visible? config %)
                                      (:providers (ai/config))))}}
+          :else
           (let [[p model] (if (#{"ask" "set_default"} action)
                             (selected config operation args true)
                             [(ai/provider (ai/config)
@@ -267,15 +293,6 @@
                                   (cf/provider-account p)) (ai/models p))
                 catalog (:catalog (meta models))]
             (cond
-              (= "set_default" action)
-              {:structuredContent
-               (assoc (zen/set-default! p model
-                        (fn [candidate]
-                          (trusted! config source)
-                          (policy/authorize! (:toolset config)
-                            (policy/actor execution/*event*) p candidate)
-                          true))
-                      :untrusted true)}
               (= "models" action)
               {:structuredContent
                (model-page p models catalog args redactions)}

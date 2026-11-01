@@ -83,7 +83,8 @@
                        (:required shape)) => true))
       (fact (mapv #(get-in % [:properties :action :enum]) (:oneOf schema))
             => (if (= operation "cf") [["ask"] ["models"]]
-                 [["ask"] ["models"] ["providers"] ["set_default"]])))))
+                 [["ask"] ["models"] ["providers" "defaults" "reset_default"]
+            ["set_default"]])))))
 
 (facts "native availability is passive and explicit lists stay authoritative"
   (let [reads (atom 0)]

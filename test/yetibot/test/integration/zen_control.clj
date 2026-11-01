@@ -5,6 +5,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.api.opencode :as zen]
+            [yetibot.core.models.admin :as admin]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
@@ -35,11 +36,14 @@
       (let [gets (atom 0) prefs (atom {})]
         (with-redefs [ai/config (constantly settings)
                       zen/preferences prefs
+                      ai/runtime-default (atom nil)
+                      admin/user-is-admin? (constantly true)
                       http/get (fn [& _] (swap! gets inc) (response))
                       ai/complete (fn [& _] (throw (AssertionError. "No POST")))]
           (get-in (models/call! config "ai" selection (:chat-source request))
                   [:structuredContent :verified_free]) => true
-          @prefs => {"zen" "free-a"}
+          @ai/runtime-default => {:provider "zen" :model "free-a"}
+          @prefs => {}
           (ai/config) => settings
           @gets => 1
           (doseq [args [(assoc selection "model" "paid")
@@ -60,6 +64,8 @@
       (let [revoked (atom false) prefs (atom {}) sensitive! host/sensitive!]
         (with-redefs [ai/config (constantly settings)
                       zen/preferences prefs
+                      ai/runtime-default (atom nil)
+                      admin/user-is-admin? (constantly true)
                       http/get (fn [& _] (reset! revoked true) (response))
                       host/sensitive! (fn []
                                         (if @revoked (throw (Exception.))
@@ -75,6 +81,8 @@
         (with-redefs [ai/config (constantly settings)
                       mcp/config (constantly {:servers [] :toolsets [t]})
                       zen/preferences prefs
+                      ai/runtime-default (atom nil)
+                      admin/user-is-admin? (constantly true)
                       http/get (fn [& _] (swap! gets inc) (response))
                       ai/chat
                       (fn [& _]

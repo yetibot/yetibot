@@ -49,7 +49,7 @@
     (when (and (= :message (:event-type *event*))
                (= chat-source (:chat-source *event*)) (= user (:user *event*))
                text (= text (extract platform-body))
-               (re-matches #"ai\s+(?:proposal|approve|cancel)\s+[A-Za-z0-9-]+(?:\s+[0-9]+)?\s*" text)
+               (re-matches #"ai\s+(?:(?:proposal|approve|cancel)\s+[A-Za-z0-9-]+(?:\s+[0-9]+)?|default(?:\s+\S+){0,2})\s*" text)
                (= tree (parser/parser text)))
       (string/join " " (string/split (string/trim text) #"\s+")))))
 
@@ -96,7 +96,7 @@
                  (= *direct-command*
                     (str "ai " (string/join " "
                                 (string/split (string/trim (:args args "")) #"\s+")))))
-    (throw (ex-info "Send this proposal review/approval command directly in chat, without pipes, aliases, observers or computed commands."
+    (throw (ex-info "Send this AI control command directly in chat, without pipes, aliases, observers or computed commands."
                     {:ai/error true}))))
 
 ;; The HTTP /api route enters handle-unparsed-expr instead: EDN chat-source
