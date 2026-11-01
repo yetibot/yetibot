@@ -20,14 +20,15 @@
 
 (defn- failure
   ([args unknown?] (failure args unknown? nil))
-  ([args unknown? code]
+  ([args unknown? code] (failure args unknown? code nil))
+  ([args unknown? code retry-seconds]
   ;; Avoid core error decoration reflecting prompt prose or credentials.
   (when-let [skip (:skip-next-n args)]
     (reset! skip (count (:next-cmds args))))
-  (let [message
+  (let [rejection (opencode/rejection-message code retry-seconds)
+        message
         (cond
-          (= code :zen-rate-limit)
-          "OpenCode Zen is rate-limited (HTTP 429). No paid fallback was used."
+          rejection rejection
           unknown?
           (str "OpenCode Zen outcome could not be confirmed; "
                "do not repeat this paid request.")
@@ -85,7 +86,8 @@
                    chat-source)
           data (:structuredContent result)]
       (if (:isError result)
-        (failure args (:unknownOutcome result) (:error-code result))
+        (failure args (:unknownOutcome result) (:error-code result)
+                 (:retry-after-seconds result))
         (status/caption
           {:provider provider :model (:model data) :actor (policy/actor args)
            :no-tools true :caption? (empty? (:next-cmds args))}

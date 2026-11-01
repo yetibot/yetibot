@@ -26,6 +26,43 @@
                          (.getPath uri)))))
     (catch Exception _ false)))
 
+(defn rejection
+  "Closed public classification, never vendor prose, credentials or headers."
+  [status body headers]
+  (when (#{403 429} status)
+    (let [text (cond
+                 (string? body) body
+                 (map? body) (or (get-in body [:error :message])
+                                (:message body) (:error body)))
+          free-limit? (and (= 429 status) (string? text)
+                           (<= (count text) 16384)
+                           (re-find #"(?i)\bfree usage\b.{0,80}\blimit\b" text))
+          retry (get headers "retry-after")
+          seconds (when (and (string? retry)
+                             (re-matches #"[0-9]{1,6}" retry))
+                    (Long/parseLong retry))]
+      (cond-> {:code (cond
+                      free-limit? :zen-free-usage-limit
+                      (= 403 status) :zen-access-denied
+                      :else :zen-rate-limit)}
+        (and seconds (<= 1 seconds 604800))
+        (assoc :retry-after-seconds seconds)))))
+
+(defn rejection-message [code retry-seconds]
+  (when-let [message
+             (case code
+               :zen-free-usage-limit
+               "OpenCode Zen rejected the request: free-usage limit (HTTP 429)."
+               :zen-rate-limit "OpenCode Zen is rate-limited (HTTP 429)."
+               :zen-access-denied
+               (str "OpenCode Zen denied access (HTTP 403). "
+                    "Free-tier access may require the OpenCode client.")
+               nil)]
+    (str message
+         (when (and (integer? retry-seconds) (<= 1 retry-seconds 604800))
+           (str " Upstream says retry after " retry-seconds " seconds."))
+         " No paid fallback was used.")))
+
 (defn catalog-provider [provider]
   ;; Never follow catalog-advertised URLs or redirect credentials to a new
   ;; origin. Legacy Zen URLs keep their existing /models endpoint.

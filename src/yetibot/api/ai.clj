@@ -130,7 +130,8 @@
 
 (defn- request [method provider path params & [progress stage]]
   (let [context (diagnostics/context provider path (:form-params params) stage)
-        status (atom :unrecognized)]
+        status (atom :unrecognized)
+        zen-rejection (atom nil)]
     (try
       (let [provider (resolve-provider provider)
             gateway (when (cloudflare/provider-account provider)
@@ -162,6 +163,12 @@
             _ (reset! status (diagnostics/status (:status response)))
             read! (fn [body]
                     (when-not (<= 200 (:status response) 299)
+                      (when (and (not progress)
+                                 (= "zen" (:name provider))
+                                 (opencode/provider? provider))
+                        (reset! zen-rejection
+                                (opencode/rejection (:status response) body
+                                                    (:headers response))))
                       (throw
                         (ex-info
                           (str "AI provider " (:name provider)
@@ -199,7 +206,8 @@
               (if (:ai/error data) (.getMessage e)
                 (str "Could not reach AI provider " (:name provider)
                      " or read its response."))
-              {:ai/error true :ai/diagnostic record})))))))
+              (cond-> {:ai/error true :ai/diagnostic record}
+                @zen-rejection (assoc :ai/zen-rejection @zen-rejection)))))))))
 
 (defn default-model
   ([provider] (default-model provider (constantly true)))

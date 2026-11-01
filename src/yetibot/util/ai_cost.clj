@@ -1,6 +1,7 @@
 (ns yetibot.util.ai-cost
   "Public parent-request accounting, never prompts, reasoning or tool payloads."
-  (:require [yetibot.api.opencode :as zen])
+  (:require [yetibot.api.cloudflare :as cf]
+            [yetibot.api.opencode :as zen])
   (:import [java.net URI]
            [java.util Locale]))
 
@@ -25,9 +26,33 @@
     (let [[in cache out] (if (>= input 200000) [4M 1M 12M] [2M 0.5M 6M])]
       (/ (+ (* (- input cached) in) (* cached cache) (* output out)) 1000000M))))
 
+(defn- workers-ai? [provider]
+  (try
+    (let [u (URI. ^String (:url provider))]
+      (and (cf/provider-account provider)
+           (not (.getUserInfo u)) (not (.getQuery u)) (not (.getFragment u))))
+    (catch Exception _ false)))
+
+(defn- workers-usage [model usage]
+  (let [input (:prompt_tokens usage) output (:completion_tokens usage)
+        neurons (:neurons usage)]
+    (cond
+      ;; Official USD/M rates checked 2026-11-01. No pricing IO on chat paths.
+      ;; developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/
+      (and (= model "@cf/google/gemma-4-26b-a4b-it")
+           (every? tokens? [input output]))
+      {:usd (/ (+ (* input 0.10M) (* output 0.30M)) 1000000M)
+       :kind :estimate :scope :tokens :turns 1}
+      (amount? neurons)
+      {:neurons neurons :kind :reported :scope :neurons :turns 1}
+      (every? tokens? [input output])
+      {:input-tokens input :output-tokens output
+       :kind :reported :scope :token-usage :turns 1})))
+
 (defn turn [provider model body]
   (let [usage (when (map? (:usage body)) (:usage body))]
     (cond
+      (workers-ai? provider) (workers-usage model usage)
       (and (xai? provider) (contains? usage :cost_in_usd_ticks))
       (let [ticks (:cost_in_usd_ticks usage)]
         (when (and (integer? ticks) (<= 0 ticks 1000000000000000000))
@@ -52,12 +77,14 @@
   ;; Missing turns or incompatible scopes make the total unknown, not a subtotal.
   (when (and total next-turn
              (or (zero? (:turns total)) (= (:scope total) (:scope next-turn))))
-    (-> next-turn
-        (update :usd + (:usd total))
-        (update :turns + (:turns total))
-        (assoc :kind (if (or (= :estimate (:kind total))
-                             (= :estimate (:kind next-turn)))
-                       :estimate :reported)))))
+    (reduce
+      (fn [result key]
+        (if (contains? next-turn key)
+          (update result key + (get total key 0)) result))
+      (assoc next-turn :kind (if (or (= :estimate (:kind total))
+                                     (= :estimate (:kind next-turn)))
+                               :estimate :reported))
+      [:usd :neurons :input-tokens :output-tokens :turns])))
 
 (defn visible-estimate
   "Stable live-Grok estimate of visible text only, not the final API bill.
@@ -75,10 +102,17 @@
         {:usd usd :kind :estimate :scope :visible-text :turns 1}))))
 
 (defn label [cost]
-  (if-not (and (map? cost) (amount? (:usd cost))
-               (#{:reported :estimate} (:kind cost))
-               (#{:api :tokens :visible-text} (:scope cost)))
-    "cost n/a"
+  (cond
+    (and (= :reported (:kind cost)) (= :neurons (:scope cost))
+         (amount? (:neurons cost)))
+    (String/format Locale/ROOT "%.2f neurons"
+                   (to-array [(double (:neurons cost))]))
+    (and (= :reported (:kind cost)) (= :token-usage (:scope cost))
+         (every? tokens? [(:input-tokens cost) (:output-tokens cost)]))
+    (str (:input-tokens cost) " input / " (:output-tokens cost) " output tokens")
+    (and (map? cost) (amount? (:usd cost))
+         (#{:reported :estimate} (:kind cost))
+         (#{:api :tokens :visible-text} (:scope cost)))
     (let [usd (:usd cost)
           amount (if (< 0 usd 0.0001M) "<$0.0001"
                    (str "$" (String/format Locale/ROOT
@@ -88,4 +122,5 @@
              :visible-text "text est. "
              :tokens "tokens est. "
              :api (if (= :estimate (:kind cost)) "API est. " "API "))
-           amount))))
+           amount))
+    :else "cost n/a"))

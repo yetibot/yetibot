@@ -164,6 +164,42 @@
                 "ai --provider zen --no-tools Say hello"))
       => "Explicit Zen answer")))
 
+(fact "Zen rejection metadata is bounded and never relays vendor prose"
+  (opencode/rejection 429 "Free usage limit reached" {"retry-after" "26627"})
+  => {:code :zen-free-usage-limit :retry-after-seconds 26627}
+  (opencode/rejection 429 {:error {:message "Free usage limit reached"}}
+                      {"retry-after" "9999999999999999999"})
+  => {:code :zen-free-usage-limit}
+  (opencode/rejection 429 (apply str (repeat 17000 "x")) {})
+  => {:code :zen-rate-limit}
+  (opencode/rejection 403 "secret" {"retry-after" "private"})
+  => {:code :zen-access-denied}
+  (opencode/rejection 500 "Free usage limit" {}) => nil
+  (opencode/rejection-message :unknown "injected text") => nil)
+
+(fact "real Zen free-usage HTTP errors survive as safe actionable rejection"
+  (let [posts (atom 0)]
+    (with-redefs [ai/config (constantly settings)
+                  mcp/config (constantly {:servers []})
+                  http/get (fn [_ options] (response options))
+                  http/post
+                  (fn [_ options]
+                    (swap! posts inc)
+                    (fact (get-in options [:headers "Authorization"])
+                          => "Bearer zen-fixture-secret")
+                    {:status 429 :headers {"retry-after" "26627"}
+                     :body (str "Free usage limit reached. OpenCode "
+                                "zen-fixture-secret private vendor text")})]
+      (let [result (execution/run-command execution/request
+                     "zen why tho | echo must-not-run")]
+        @posts => 1
+        (string/includes? (str (:value result)) "free-usage limit") => true
+        (string/includes? (str (:value result)) "26627 seconds") => true
+        (string/includes? (str result) "zen-fixture-secret") => false
+        (string/includes? (str result) "private vendor text") => false
+        (string/includes? (str (:value result)) "must-not-run") => false
+        (get-in result [:data :unknownOutcome]) => false))))
+
 (fact "known Zen 429 rejection is not mistaken for missing configuration"
   (with-redefs [ai/config (constantly settings)
                 mcp/config (constantly {:servers []})
