@@ -1,6 +1,15 @@
 {:schema_version 1
  :changes
- [{:id "configured-zen-models"
+ [{:id "discord-thread-timing"
+   :date "2026-11-02"
+   :component "core"
+   :title "Run whole commands in Discord threads with shared elapsed timing"
+   :summary "Use thread <command> to run a whole expression, including pipes, in a thread on your message. Edits and confirmed reruns reuse it. Original caller permissions and channel settings remain in force; uncertain thread creation never runs or retries the command. Rich command replies, errors, media, files and working cards share a measured elapsed footer without duplicate AI timing. Slack and intermediate pipeline values are unchanged."
+   :commands ["thread echo hello | echo result: %s"
+              "thread ai --provider zen Hello"]
+   :requires ["Discord server text channel and thread permissions"]
+   :links []}
+  {:id "configured-zen-models"
    :date "2026-11-02"
    :component "app"
    :title "Zen honors the configured model and existing credits"

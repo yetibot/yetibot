@@ -8,6 +8,10 @@ its own name, base URL, optional API key and default model. The `grok` shortcut
 shares this configuration and MCP tools. The existing `openai` command is
 unchanged and uses separate configuration.
 
+Discord can wrap the whole expression with `!thread <command>`. Rich replies
+share elapsed timing at the transport layer; AI metadata does not repeat it.
+See [Discord command replies](DISCORD.md) for examples and permission boundaries.
+
 ## Configuration
 
 Add `:ai` inside `:yetibot` in `config/config.edn` (or your `CONFIG_PATH` file):

@@ -1,7 +1,8 @@
 (ns yetibot.test.integration.ai-caption
   (:require [clojure.string :as string]
             [midje.sweet :refer [fact =>]]
-            [yetibot.util.ai-status :as status]))
+            [yetibot.util.ai-status :as status]
+            [yetibot.core.adapters.discord :as discord]))
 
 (def prepared {:model "sample-model" :actor {:adapter "discord"}
                :provider {:key "fixture-secret"}})
@@ -14,6 +15,14 @@
   (:result/value (status/caption (assoc prepared :no-tools true)
                                   {:result/value "Answer"} 20))
   => "Answer\n\n-# sample-model · 0.0s · 0 tools · cost n/a")
+
+(fact "the shared renderer timer replaces rather than duplicates AI timing"
+  (with-redefs [discord/command-timing? (constantly true)]
+    (:result/value
+      (status/caption prepared
+                      {:result/value "Answer"
+                       :result/data {:mcp {:tool-calls 2}}} 1250))
+    => "Answer\n\n-# sample-model · 2 tools · cost n/a"))
 
 (fact "unfinished fenced text cannot swallow the tiny footer"
   (:result/value (status/caption prepared {:result/value "```clj\n(+ 1 2)"} 0))

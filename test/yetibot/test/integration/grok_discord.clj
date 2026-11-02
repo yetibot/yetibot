@@ -40,9 +40,19 @@
     (fact port => completion)))
 
 (defn- payload-calls [calls op]
-  (filterv #(and (= op (first %))
-                 (string/includes? (get-in % [3 :components 0 :components 0 :content] "") "\n\n-# "))
-           calls))
+  (mapv
+    (fn [call]
+      (let [children (get-in call [3 :components 0 :components])
+            elapsed? #(and (= 10 (:type %))
+                           (re-matches #"-# [0-9]+[.][0-9]s" (:content %)))]
+        (fact (count (filter elapsed? children)) => 1)
+        ;; Keep deterministic wire snapshots while checking elapsed separately.
+        (update-in call [3 :components 0 :components]
+                   #(vec (remove elapsed? %)))))
+    (filterv #(and (= op (first %))
+                   (string/includes?
+                     (get-in % [3 :components 0 :components 0 :content] "")
+                     "\n\n-# ")) calls)))
 
 (fact "real handler and Responses SSE publish before terminal and reuse IDs"
   (let [release (promise) observed (promise)
