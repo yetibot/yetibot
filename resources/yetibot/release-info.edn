@@ -1,6 +1,14 @@
 {:schema_version 1
  :changes
- [{:id "workers-ai-usage-captions"
+ [{:id "configured-zen-models"
+   :date "2026-11-02"
+   :component "app"
+   :title "Zen honors the configured model and existing credits"
+   :summary "An explicitly configured Zen model is no longer replaced by an automatic free model. GPT models use the Responses API without xAI-specific options; reported Zen costs appear in the existing tiny caption. Fresh free selection remains available only when no model is configured, with no silent paid fallback."
+   :commands ["zen Hello" "ai --provider zen Hello"]
+   :requires ["Configured Zen model, matching API family and existing credits"]
+   :links []}
+  {:id "workers-ai-usage-captions"
    :date "2026-11-01"
    :component "app"
    :title "Workers AI captions show priced usage"
@@ -21,7 +29,7 @@
    :date "2026-11-01"
    :component "app"
    :title "Zen defaults follow currently free offerings"
-   :summary "Zen defaults verify current zero input, output and advertised cache pricing before selection. Expired offers are not retained; unknown or paid pricing fails closed. Trusted admins can set a free Zen preference through the global runtime AI default controls. Explicit --model remains an intentional choice, including paid models. Catalog eligibility does not prove access: rate or quota limits can still reject inference."
+   :summary "When no model is configured, Zen defaults verify current zero input, output and advertised cache pricing before selection. Expired offers are not retained; unknown or paid pricing fails closed. Trusted admins can set a free Zen preference through the global runtime AI default controls. Explicit --model remains an intentional choice, including paid models. Catalog eligibility does not prove access: rate or quota limits can still reject inference."
    :commands ["zen Say hello" "ai --provider zen Say hello"]
    :requires ["Configured Zen credentials and upstream model access"]
    :links []}

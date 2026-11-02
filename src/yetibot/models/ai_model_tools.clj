@@ -42,6 +42,8 @@
                                  (get args "provider")))
          t (:toolset config) actor (policy/actor execution/*event*)
          automatic? (and (= "zen" (:name provider))
+                         (or (nil? (:model provider))
+                             (:ai/free-default provider))
                          (not (contains? args "model")))
          _ (when automatic? (policy/authorize-provider! t actor provider))
          model (if automatic?

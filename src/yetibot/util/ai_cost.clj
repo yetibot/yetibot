@@ -68,6 +68,15 @@
                                                    :cached_tokens]) 0))]
         {:usd usd :kind :estimate :scope :tokens :turns 1})
       (and (= "zen" (:name provider)) (zen/provider? provider)
+           (contains? usage :cost))
+      (when (and (amount? (:cost usage))
+                 (contains? #{nil true false}
+                            (get-in usage [:opencode :estimated])))
+        {:usd (bigdec (:cost usage))
+         :kind (if (true? (get-in usage [:opencode :estimated]))
+                 :estimate :reported)
+         :scope :api :turns 1})
+      (and (= "zen" (:name provider)) (zen/provider? provider)
            (true? (:ai/verified-free provider)))
       {:usd 0M :kind :estimate :scope :api :turns 1})))
 

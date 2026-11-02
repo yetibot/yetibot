@@ -48,6 +48,22 @@
             :include ["reasoning.encrypted_content"] :max_turns 3
             :tools [{:type "web_search"} {:type "x_search"}]}]])))
 
+(fact "Zen Responses uses the restored model without xAI-only max_turns"
+  (let [captured (atom nil)
+        zen {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+             :key "fixture-key" :model "gpt-5.4-mini" :api "responses"}]
+    (with-redefs [client/post (fn [url options]
+                               (fact url
+                                     => "https://opencode.ai/inference/openai/v1/responses")
+                               (reset! captured (:form-params options))
+                               {:status 200 :body answer})]
+      (:result/value (ai/complete zen "gpt-5.4-mini" []
+                                  {:tools [] :tool_choice "none"}))
+      => "Account: Yetibot (verified)"
+      (:model @captured) => "gpt-5.4-mini"
+      (contains? @captured :max_turns) => false
+      (:tools @captured) => [])))
+
 (fact "Responses function definitions are flat and coexist with native tools"
   (let [captured (atom nil)
         function {:name "cloudflare_whoami" :description "Read account"
