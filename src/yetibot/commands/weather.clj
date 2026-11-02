@@ -2,9 +2,11 @@
   (:require
     [clojure.spec.alpha :as s]
     [clj-http.client :as http.client]
+    [cheshire.core :as json]
     [taoensso.timbre :refer [info warn error]]
     [yetibot.core.config :refer [get-config]]
     [yetibot.core.hooks :refer [cmd-hook]]
+    [yetibot.core.util.public-result :as public-result]
     [yetibot.commands.weather.formatters :as fmt]))
 
 (s/def ::config any?)
@@ -13,19 +15,43 @@
 
 (def default-zip (-> config :default :zip))
 
+(defn- weather-failure [kind status]
+  {:error (if (= status 404) "Location not found."
+              "Failed to retrieve weather data.")
+   :public-error
+   (cond-> {:service "wttr.in" :stage "weather lookup" :kind kind}
+     (and (integer? status) (<= 100 status 599))
+     (assoc :http-status status))})
+
+(defn- weather-response [status body]
+  (if (not= status 200)
+    (weather-failure "http" status)
+    (try
+      (let [body (if (string? body)
+                   (when (<= (count body) 524288)
+                     (json/parse-string body true)) body)]
+        (if (and (map? body) (or (sequential? (:current_condition body))
+                                (sequential? (:weather body))))
+          (select-keys body [:current_condition :nearest_area :weather])
+          (weather-failure "invalid-response" status)))
+      (catch Exception _ (weather-failure "invalid-response" status)))))
+
 (defn get-json
   [location]
   (try
-    (let [uri (str "https://wttr.in/" (clojure.string/replace (or location "") #" " "+"))
-          options {:as :json :coerce :always :query-params {:format "j1"}}
+    (let [uri (str "https://wttr.in/"
+                   (clojure.string/replace (or location "") #" " "+"))
+          options {:as :text :query-params {:format "j1"}
+                   :throw-exceptions false :conn-timeout 5000
+                   :socket-timeout 10000}
           {:keys [status body]} (http.client/get uri options)]
-      (condp = status
-        200 body
-        {:error "Location not found."}))
+      ;; Keep the HTTP status even when an error body is HTML, not JSON.
+      (weather-response status body))
     (catch Exception e
-      (let [{:keys [status body]} (ex-data e)]
-        (error "Request failed with status:" status)
-        (or body {:error "Failed to retrieve weather data."})))))
+      (let [status (:status (ex-data e))
+            http? (and (integer? status) (<= 100 status 599))]
+        (error "Weather lookup failed" (when http? {:http-status status}))
+        (weather-failure (if http? "http" "transport") status)))))
 
 (defn get-aqi
   [lat lon]
@@ -165,9 +191,22 @@
 
 (defn- error-response [result]
   (cond
-    (nil? result) {:result/error "No response from weather service."}
-    (:error result) {:result/error (:error result)}
+    (nil? result)
+    {:result/error "No response from weather service."}
+    (:error result)
+    (public-result/reviewed
+      (cond-> {:result/error (:error result)}
+        (:public-error result)
+        (assoc :result/public-error
+               (select-keys (:public-error result)
+                            [:service :stage :kind :http-status]))))
     :else nil))
+
+(defn- public-weather [data]
+  (assoc (select-keys data [:city_name :state_code :country_code :temp
+                           :app_temp :wind_spd :wind_cdir :rh :aqi
+                           :min_temp :max_temp :valid_date])
+         :weather (select-keys (:weather data) [:description])))
 
 (defn- format-current
   [formatters c]
@@ -208,8 +247,13 @@
       (error-response result)
       (let [{[cs] :data} result
             formatters (fmt/get-formatters unit (:country_code cs))]
-        {:result/value (format-current formatters cs)
-         :result/data cs}))))
+        (public-result/reviewed
+          {:result/value (format-current formatters cs)
+           :result/data cs
+           :result/public-data
+           {:source "wttr.in"
+            :units {:temperature "C" :wind "km/h" :humidity "%"}
+            :current (public-weather cs)}})))))
 
 (defn default-weather-cmd
   "weather # look up weather for default location"
@@ -231,11 +275,14 @@
       (let [{:keys [city_name country_code data]} result
             formatters (fmt/get-formatters unit country_code)
             location (fmt/location-title result)]
-        {:result/value (into [location]
-                             (map
-                               (partial fmt/forecast-item formatters)
-                               data))
-         :result/data result}))))
+        (public-result/reviewed
+          {:result/value (into [location]
+                               (map (partial fmt/forecast-item formatters) data))
+           :result/data result
+           :result/public-data
+           {:source "wttr.in" :units {:temperature "C"}
+            :location (select-keys result [:city_name :state_code :country_code])
+            :forecast (mapv public-weather data)}})))))
 
 (defn air-cmd
   "weather air <location> # look up current air conditions for <location> by name or postal code, optional country code"

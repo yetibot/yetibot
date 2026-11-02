@@ -38,7 +38,8 @@
 
 (defn location-title
   [{:keys [city_name state_code country_code]}]
-  (let [loc (if (re-matches #"\d+" state_code)
+  (let [loc (if (or (str/blank? state_code)
+                    (re-matches #"\d+" state_code))
               city_name
               (str city_name ", " state_code))]
     (format "%s (%s)" loc country_code)))

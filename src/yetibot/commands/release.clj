@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [clojure.tools.cli :refer [parse-opts]]
             [yetibot.core.hooks :refer [cmd-hook]]
+            [yetibot.core.util.public-result :as public-result]
             [yetibot.models.release-info :as releases]))
 
 (def usage
@@ -9,12 +10,31 @@
        "Default: features included in this running build.\n"
        "latest: published release notes, not proof of deployment."))
 
+(defn- public-build [build]
+  (into {} (for [component [:app :core]]
+             [component (when-let [info (get build component)]
+                          (select-keys info
+                                       [:version :revision :commit_url]))])))
+
+(defn- public-info [info]
+  (cond-> (select-keys info [:schema_version :view :source :total_changes
+                            :has_more :same_source_revisions])
+    (:build info) (assoc :build (public-build (:build info)))
+    (:running_build info) (assoc :running_build
+                                (public-build (:running_build info)))
+    (:changes info)
+    (assoc :changes (mapv #(select-keys % [:id :date :component :title :summary
+                                         :commands :requires :links])
+                         (:changes info)))))
+
 (defn version-cmd
   "version # show running app and core versions with source links"
   {:yb/cat #{:util}}
   [_]
-  {:result/value (releases/format-version (:build releases/running))
-   :result/data (select-keys releases/running [:schema_version :build])})
+  (let [data (select-keys releases/running [:schema_version :build])]
+    (public-result/reviewed
+      {:result/value (releases/format-version (:build releases/running))
+       :result/data data :result/public-data (public-info data)})))
 
 (defn- options! [text]
   (let [tokens (if (string/blank? text) []
@@ -36,7 +56,10 @@
 (defn- failure [args text]
   (when-let [skip (:skip-next-n args)]
     (reset! skip (count (:next-cmds args))))
-  {:result/value text :result/data {:isError true :error text}})
+  (public-result/reviewed
+    {:result/value text :result/data {:isError true :error text}
+     :result/public-error {:stage "release lookup"
+                           :kind (if (= text usage) "validation" "unavailable")}}))
 
 (defn changelog-cmd
   "changelog # show recent features included in the running build
@@ -46,8 +69,10 @@
   [{[_ text] :match :as args}]
   (try
     (let [result (releases/info (options! text))]
-      {:result/value (releases/format-changelog result)
-       :result/data result :result/collection-path [:changes]})
+      (public-result/reviewed
+        {:result/value (releases/format-changelog result)
+         :result/data result :result/collection-path [:changes]
+         :result/public-data (public-info result)}))
     (catch Exception e
       (failure args (if (:release/unavailable (ex-data e))
                       (str "Published release information is unavailable. "

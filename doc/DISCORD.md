@@ -1,26 +1,69 @@
 # Discord command replies
 
+## Inspect errors and structured results
+
+**Error details** opens retained public diagnostics without rerunning the
+command. Weather failures can include the service, failure stage/kind and
+numeric HTTP status. If additional details were not retained, the viewer says
+so. Raw responses, credentials, headers and private AI internals are not shown.
+Unexpected Discord command exceptions use a safe summary rather than printing
+an arbitrary exception message.
+
+**Explore data** is available for explicitly reviewed public projections:
+`weather`, `weather forecast`, `version` and `changelog`. Select a field or array
+item to drill down; use **Back**, **Previous** and **Next** to navigate. Weather
+snapshot temperatures are labeled Celsius and wind speeds km/h, regardless of
+the units used in the ordinary formatted answer. Existing pipeline data remains
+unchanged. Other raw result maps do not automatically get a public data button.
+
+Snapshots freeze at command completion and are read-only. Public navigation can
+be used by anyone in the same reply channel/thread; rerunning remains
+requester-only with confirmation. Edits, cache eviction and process restarts
+expire old viewers. Inspection never fetches an upstream response or repeats
+inference/side effects. Original answers remain visible while navigation updates
+a separate viewer message.
+
+Views show eight entries per page, with at most eight data results and eight
+retained error records. Snapshots limit nesting, fields/items per container and string sizes;
+large data may be shortened. Missing or unreviewed fields are not a claim that
+the upstream response was empty. Adding support requires a reviewed field
+projection, not blanket map exposure.
+
 ## Run a command in a thread
 
 Send this directly in a **server text channel**:
 
 ```text
+!echo hi | thread
+!echo hi | thread | echo result: %s
+!weather | thread
 !thread echo hello
 !thread echo hello | echo result: %s
 !thread ai --provider zen Hello
 !thread grok --no-thread Explain this
 ```
 
-The thread is attached to your requesting message. The whole expression runs
-there, including pipes and embedded commands. Normal answers and working/tool
-status cards go to the thread. Grok's own thread behavior reuses the outer
-thread, including when `--no-thread` was supplied.
+The thread is attached to your requesting message. Native `| thread` passes the
+piped value/data through unchanged; it does not parse that value as a command.
+It switches ordinary delivery for later stages and the final answer. Earlier
+stages have already run, and any output they already sent cannot be moved.
+Parent working cards are retired when delivery moves; new progress can start in
+the thread. Explicit cross-channel sends keep their existing semantics.
+
+The prefix form `!thread <command>` confirms the thread **before** executing the
+whole expression, including pipes and embedded commands. Use that form when all
+work, including initial status/live output, should start in the thread. Grok's
+own thread behavior reuses an already selected command thread, including with
+`--no-thread`.
 
 The bot needs permission to create public threads and send messages in them.
-DMs, nested threads and indirect wrappers (aliases, pipes into `thread`, or
-embedded `thread` commands) are unsupported. If Discord cannot confirm creation,
-Yetibot does not run the nested command, fall back to the parent channel, or
-retry the create request. Check permissions and send a fresh message.
+DMs and nested threads are unsupported. If creation is uncertain, Yetibot may
+make one bounded read-only lookup to confirm the attached thread; it never
+retries the creation POST. Without confirmation the thread step fails, no
+following pipe stages run, and the prefix form does not execute its nested
+expression. There is no silent parent-channel fallback. Check permissions and
+send a fresh message. Direct-only admin controls still reject pipes, aliases,
+wrappers and computed expressions.
 
 Edits and requester-confirmed **Run again** reuse the same confirmed thread.
 The requesting user, original message and parent-channel settings remain the

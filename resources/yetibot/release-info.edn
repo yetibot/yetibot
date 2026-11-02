@@ -1,6 +1,16 @@
 {:schema_version 1
  :changes
- [{:id "discord-thread-timing"
+ [{:id "discord-result-viewers"
+   :date "2026-11-02"
+   :component "app"
+   :title "Inspect safe results and pipe output into Discord threads"
+   :summary "Native echo hi | thread sends the literal piped result into a confirmed message thread without executing it; later stages keep that destination and original caller permissions. Error details shows retained public failure stages/categories/HTTP status, not raw responses or private AI data. Explore data provides bounded read-only weather/forecast and version/changelog snapshots with drill-down, Back and paging. Weather retains HTTP status for HTML errors and handles forecasts without a state code."
+   :commands ["echo hi | thread" "echo hi | thread | echo result: %s"
+              "weather Seattle" "version" "changelog --limit 2"]
+   :requires ["Discord rich replies and core public-result support"
+              "Thread pipes need a server text channel and thread permissions"]
+   :links ["https://github.com/yetibot/core/pull/331"]}
+  {:id "discord-thread-timing"
    :date "2026-11-02"
    :component "core"
    :title "Run whole commands in Discord threads with shared elapsed timing"
