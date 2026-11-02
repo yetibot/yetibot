@@ -4,6 +4,9 @@
             [yetibot.api.opencode :as zen]
             [yetibot.commands.ai :as command]
             [yetibot.core.config :as core-config]
+            [yetibot.core.handler :as handler]
+            [yetibot.core.parser :as parser]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.core.models.admin :as admin]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-model-tools :as native]
@@ -99,6 +102,31 @@
       (:default-provider (api/config)) => "first"
       (chat/run-command chat/request "echo anything | ai default second chosen")
       (:default-provider (api/config)) => "first")))
+
+(fact "thread delivery preserves provenance but cannot make controls direct"
+  (isolated
+    (fn []
+      (let [request {:user {:id "U1" :username "alice"}
+                     :chat-source
+                     {:adapter :discord :uuid "discord" :room "parent"
+                      :raw-event {:id "message" :channel-id "parent"
+                                  :author {:id "U1"}}}}]
+        (chat/in-event request "thread ai default second chosen"
+          (fn [{:keys [chat-source user]}]
+            ;; Same original raw event/caller as the adapter's delivery wrapper;
+            ;; only the evaluated body loses its outer thread word.
+            (with-redefs [yetibot.core.models.channel/settings-for-chat-source
+                          (constantly {})]
+              (execution/with-adapter-event
+                (fn [source caller _ bot _]
+                  (:error
+                    (handler/handle-parsed-expr
+                      source caller bot
+                      (parser/parser "ai default second chosen"))))
+                chat-source user :message {:id "BOT"}
+                {:body "!ai default second chosen"}))))
+        => "💥 Error in `ai default second chosen`: Send this AI control command directly in chat, without pipes, aliases, observers or computed commands. 💥"
+        (:default-provider (api/config)) => "first"))))
 
 (fact "Zen defaults remain freshly free-only, with revocation after discovery"
   (isolated

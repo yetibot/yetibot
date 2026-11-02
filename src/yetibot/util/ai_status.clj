@@ -38,7 +38,7 @@
       (update result :result/value #(str (close-fence %) "\n\n-# "
               (string/join " · "
                 (cond-> [model]
-                  (some? elapsed-ms)
+                  (and (some? elapsed-ms) (not (discord/command-timing?)))
                   (conj (String/format java.util.Locale/ROOT "%.1fs"
                           (to-array [(/ elapsed-ms 1000.0)])))
                   (and (integer? tools) (<= 0 tools 100000))

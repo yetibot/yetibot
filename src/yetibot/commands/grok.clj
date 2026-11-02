@@ -133,8 +133,10 @@
        :failed? #(:failed? @state)})))
 
 (defn- in-discord [prepared args channel-id message-id]
-  (let [thread (if (:no-thread prepared) channel-id
-                (legacy/start-thread! channel-id message-id (:prompt prepared)))
+  (let [thread (or chat/*command-thread*
+                   (if (:no-thread prepared) channel-id
+                     (legacy/start-thread! channel-id message-id
+                                           (:prompt prepared))))
         answers (answer-publisher prepared thread)
         result (ai/safely
                  args #(status/with-status

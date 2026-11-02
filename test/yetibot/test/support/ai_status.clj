@@ -39,7 +39,7 @@
   (boolean
     (re-matches
       (re-pattern (str (java.util.regex.Pattern/quote answer)
-                       "\\n\\n-# " model " · [0-9]+\\.[0-9]s"
+                       "\\n\\n-# " model
                        "(?: · [0-9]+ tools?)? · cost n/a")) text)))
 
 (defn status-text [call]
@@ -185,6 +185,14 @@
             (check {:run! run! :calls calls :created created :edited edited
                     :answered answered :deleted deleted :conn conn})
             (finally
+              ;; Elapsed now belongs to the shared rich renderer, not AI text.
+              (doseq [call (answer-calls @calls)
+                      :let [children (get-in call [:body :components 0 :components])]
+                      :when (seq children)]
+                (fact (count (filter #(and (= 10 (:type %))
+                                          (re-matches #"-# [0-9]+[.][0-9]s"
+                                                      (:content %)))
+                                     children)) => 1))
               (when hold-create (deliver hold-create true))
               (when hold-edit (deliver hold-edit true))
               (async/close! answer-queue)
@@ -266,7 +274,7 @@
                     (boolean (re-matches
                                (re-pattern
                                  (str (java.util.regex.Pattern/quote expected)
-                                      "\\n\\n-# " model " · [0-9]+\\.[0-9]s · cost n/a"))
+                                      "\\n\\n-# " model " · cost n/a"))
                                (get-in final [:body :components 0 :components 0 :content])))
                     (= expected (get-in final [:body :components 0 :components 0 :content]))) => true
                   (every? #(= 32768 (get-in % [:body :flags])) answers) => true)
