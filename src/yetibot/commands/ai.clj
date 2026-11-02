@@ -385,7 +385,10 @@
              (ai/fail (str "AI provider " provider-name
                            " is not configured. Add it to ai.providers.")))
          provider (ai/provider config provider-name)
-         automatic? (and (= "zen" (:name provider)) (not (:model options)))
+         automatic? (and (= "zen" (:name provider))
+                         (or (nil? (:model provider))
+                             (:ai/free-default provider))
+                         (not (:model options)))
          t (when (and automatic? (not (:no-tools options)))
              (:toolset (toolsets/select (mcp/config) (:toolset options))))
          actor (policy/actor args)

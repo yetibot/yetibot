@@ -172,8 +172,12 @@ Use your own Zen API key; credentials are not imported from other clients.
 For a bot, prefer a dedicated service account with a restricted API key whose
 **Models** permission is **Request**. Personal and service-account keys both
 work for inference; unrelated administrative permissions are not needed.
-Zen defaults ignore fixed model settings and select only currently verified-free
-models. Explicit `--model` is a deliberate override and can incur charges.
+Zen honors an explicitly configured model, including paid models using your
+existing credits. Configure `:model "gpt-5.4-mini" :api "responses"` for that
+model; GPT models use the Responses endpoint. A configured model is not silently
+replaced by a free model. Explicit `--model` is a deliberate override and can
+incur charges. When no model is configured, fresh verified-free selection remains
+available, subject to upstream free-tier access and quota restrictions.
 Model discovery calls
 `https://opencode.ai/inference/v1/models` automatically: the current chat API
 base does not have a working `/models` endpoint. Legacy
@@ -200,7 +204,7 @@ The same catalog feeds the bounded background provider discovery used by
 `ai --model <exact-id>`; duplicate IDs still require `--provider zen`.
 There is no fixed model list to update in Yetibot.
 
-Each automatic default selection fetches current catalog pricing with bounded
+Only default selection without a configured model fetches current catalog pricing with bounded
 IO and no redirects/retries. Input/output prices and every advertised cache
 price must be numeric zero; missing base prices, unknown cost dimensions and
 paid models are ineligible. Selection is deterministic, preferring an eligible
@@ -258,7 +262,7 @@ The choice is one atomic, in-memory provider/model pair, shared by AI callers.
 Explicit `--provider` / `--model` flags still take precedence. Credentials,
 endpoints, permissions, toolsets and file configuration are untouched. Restart
 or `ai default reset` restores configured defaults. Requests already prepared
-keep their pinned selection. A Zen model remains a preference: each automatic
+keep their pinned selection. Without a configured model, a free Zen preference is rechecked: each automatic
 request rechecks current free eligibility and normal caller/model policy.
 
 The native `ai` tool also supports `{"action":"defaults"}`,
@@ -272,7 +276,9 @@ after catalog IO. This does not grant new tool or provider permissions.
 Discord AI/Zen answers append muted `-#` subtext with the model, measured
 execution duration, known host-tool count, and a public-safe cost label:
 
-- `API $0.0038`: provider-reported parent API cost. xAI usage ticks are divided
+- `API $0.0038`: provider-reported parent API cost. Credited OpenCode Zen uses
+  its reported `usage.cost` in USD; BYOK estimates remain labeled `API est.`.
+  xAI usage ticks are divided
   by 10 billion and summed across every parent model/tool-loop turn, including
   xAI server-side searches. This is reported cost, not an estimate.
 - `tokens est. $0.0020`: estimate from reported Grok4.7 token usage and the

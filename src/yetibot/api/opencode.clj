@@ -151,9 +151,13 @@
 (defonce preferences (atom {}))
 
 (defn default-model [provider allowed?]
-  (let [eligible (filterv allowed? (free-models provider))
-        preferred [(:model provider) (get @preferences "zen")]]
-    (or (some (set eligible) preferred) (first eligible) (unavailable!))))
+  (when-not (provider? provider) (unavailable!))
+  (if (and (:model provider) (not (:ai/free-default provider)))
+    (if (allowed? (:model provider)) (:model provider)
+      (throw (ex-info "Configured Zen model is not allowed." {:ai/error true})))
+    (let [eligible (filterv allowed? (free-models provider))
+          preferred (or (:model provider) (get @preferences "zen"))]
+      (or (some #{preferred} eligible) (first eligible) (unavailable!)))))
 
 (defn set-default! [provider model allowed?]
   (when-not (and (some #{model} (free-models provider)) (allowed? model))

@@ -75,6 +75,18 @@
   (cost/label {:usd 0.000001M :kind :estimate :scope :tokens})
   => "tokens est. <$0.0001")
 
+(fact "credited Zen reports its own cost, not a fake free-model estimate"
+  (let [zen {:name "zen" :url "https://opencode.ai/inference/openai/v1"}
+        body {:usage {:cost 0.00002925}}]
+    (cost/turn zen "gpt-5.4-mini" body)
+    => {:usd 0.00002925M :kind :reported :scope :api :turns 1}
+    (:kind (cost/turn zen "model"
+                     (assoc-in body [:usage :opencode :estimated] true)))
+    => :estimate
+    (cost/turn (assoc zen :url "https://other.example/v1") "model" body) => nil
+    (cost/turn (assoc zen :ai/verified-free true) "model"
+               {:usage {:cost "unknown"}}) => nil))
+
 (fact "zero estimates require a host-owned fresh free selection proof"
   (let [zen {:name "zen" :url "https://opencode.ai/inference/openai/v1"}]
     (cost/turn zen "free-a" {}) => nil

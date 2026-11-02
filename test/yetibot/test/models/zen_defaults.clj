@@ -7,7 +7,7 @@
   (:import [java.io ByteArrayInputStream]))
 
 (def provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
-               :key "fixture-secret" :model "paid-old-default"})
+               :key "fixture-secret"})
 (def free-model
   {:id "free-a" :cost {:text {:input {:price 0 :cache {:read 0 :write 0}}
                              :output {:price 0}}}})
@@ -30,7 +30,14 @@
                  (assoc-in free-model [:cost :text :output :unknown] 0)]]
     (fact (zen/free-model? model) => false)))
 
-(fact "defaults follow fresh offerings without using configured paid defaults"
+(fact "configured Zen models win without free discovery or silent rerouting"
+  (let [configured (assoc provider :model "gpt-5.4-mini")]
+    (with-redefs [http/get (fn [& _] (throw (AssertionError. "No catalog IO")))]
+      (ai/default-model configured) => "gpt-5.4-mini"
+      (try (ai/default-model configured (constantly false)) :unsafe
+           (catch Exception _ :closed)) => :closed)))
+
+(fact "defaults without a configured model follow fresh free offerings"
   (let [catalog (atom [free-model]) calls (atom 0)]
     (with-redefs [http/get (fn [url options]
                             (swap! calls inc)
@@ -43,6 +50,17 @@
       @calls => 2
       (reset! catalog [(assoc-in free-model [:cost :text :output :price] 1)])
       (try (ai/default-model provider) :unsafe
+           (catch Exception _ :closed)) => :closed)))
+
+(fact "free runtime preferences still revalidate instead of becoming paid defaults"
+  (let [catalog (atom [free-model])
+        runtime (assoc provider :model "free-a" :ai/free-default true)]
+    (with-redefs [http/get (fn [& _] (response @catalog))]
+      (ai/default-model runtime) => "free-a"
+      (reset! catalog [(assoc free-model :id "free-b")])
+      (ai/default-model runtime) => "free-b"
+      (reset! catalog [(assoc-in free-model [:cost :text :output :price] 1)])
+      (try (ai/default-model runtime) :unsafe
            (catch Exception _ :closed)) => :closed)))
 
 (fact "selection honors candidate policy and runtime preference stays bounded"

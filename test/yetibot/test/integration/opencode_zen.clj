@@ -164,6 +164,26 @@
                 "ai --provider zen --no-tools Say hello"))
       => "Explicit Zen answer")))
 
+(fact "configured paid Zen defaults are not relabeled verified free"
+  (let [selected (atom nil)]
+    (with-redefs [ai/config (constantly settings)
+                  mcp/config (constantly {:servers []})
+                  http/get (fn [& _] (throw (AssertionError. "No free discovery")))
+                  context/messages (fn [_ prompt]
+                                     [{:role "user" :content prompt}])
+                  ai/complete
+                  (fn [p model & _]
+                    (reset! selected [p model])
+                    {:result/value "Credited answer"})]
+      (:value (execution/run-command execution/request "zen Hello"))
+      => "Credited answer"
+      (second @selected) => "fixture-chat"
+      (:ai/verified-free (first @selected)) => nil
+      (:value (execution/run-command execution/request
+                "ai --provider zen --no-tools Hello")) => "Credited answer"
+      (second @selected) => "fixture-chat"
+      (:ai/verified-free (first @selected)) => nil)))
+
 (fact "Zen rejection metadata is bounded and never relays vendor prose"
   (opencode/rejection 429 "Free usage limit reached" {"retry-after" "26627"})
   => {:code :zen-free-usage-limit :retry-after-seconds 26627}

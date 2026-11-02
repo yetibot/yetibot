@@ -99,7 +99,9 @@
               (assoc :default-provider provider)
               (update :providers
                       #(mapv (fn [p] (if (= provider (:name p))
-                                       (assoc p :model model) p)) %))))))))
+                                       (cond-> (assoc p :model model)
+                                         (= "zen" provider)
+                                         (assoc :ai/free-default true)) p)) %))))))))
 
 (defn provider [config provider-name]
   (let [provider-name (or provider-name (:default-provider config)
@@ -319,10 +321,12 @@
                                       (:tools options)))))
                   options)
         params (if responses-api?
-                 {:model model :input messages :store false
-                  :include ["reasoning.encrypted_content"]
-                  :max_turns (Long/parseLong
-                               (str (or (:max-turns provider) 6)))}
+                 (cond-> {:model model :input messages :store false
+                          :include ["reasoning.encrypted_content"]}
+                   (not (opencode/provider? provider))
+                   (assoc :max_turns
+                          (Long/parseLong
+                            (str (or (:max-turns provider) 6)))))
                  {:model model
                   :messages (if (cloudflare/provider-account provider)
                               (cloudflare-messages messages) messages)})]

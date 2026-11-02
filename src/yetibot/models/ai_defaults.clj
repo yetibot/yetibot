@@ -26,7 +26,8 @@
       (cond-> {:provider (:name p) :model (:model p)
                :scope "global" :runtime_only true
                :overridden (boolean @ai/runtime-default)}
-        (= "zen" (:name p))
+        (and (= "zen" (:name p))
+             (or (nil? (:model p)) (:ai/free-default p)))
         (assoc :model_policy "fresh_verified_free_preference")))))
 
 (defn set-default!
