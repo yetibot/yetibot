@@ -36,6 +36,9 @@
 
 (defn- generate [prepared]
   (let [result (ai/complete-prompt prepared)]
+    (when (and (not (:result/error result))
+               (not (string? (:result/value result))))
+      (api/fail "Grok did not return a text answer."))
     (walk/postwalk
       #(if (string? %)
          (mcp/redact % {:secrets [(get-in prepared [:provider :key])]}) %)
@@ -132,34 +135,35 @@
        :stale? #(:stale? @state)
        :failed? #(:failed? @state)})))
 
-(defn- in-discord [prepared args channel-id message-id]
-  (let [thread (or chat/*command-thread*
-                   (if (:no-thread prepared) channel-id
-                     (legacy/start-thread! channel-id message-id
-                                           (:prompt prepared))))
-        answers (answer-publisher prepared thread)
-        result (ai/safely
-                 args #(status/with-status
-                         thread
-                         (assoc prepared :on-progress (:update! answers))
-                         generate))]
-    (binding [chat/*target* thread]
-      (when-not ((:stale? answers))
-        (if-let [error (or (:result/error result)
-                          (when
-                            (and (get-in result [:result/data :isError])
-                                 (get-in result [:result/data :tool-trace]))
-                            (:result/value result)))]
-          (chat/chat-data-structure error)
-          (when-not ((:failed? answers))
-            ((:finish! answers) (:result/value result)))))
-      (when (and ((:failed? answers)) (not ((:stale? answers))))
-        (chat/chat-data-structure
-          "Grok answer delivery failed; some messages may have arrived.")))
-    (chat/suppress
-      (if (get-in result [:result/data :tool-trace])
-        {:result/value (chat/suppress {}) :result/data (:result/data result)}
-        {}))))
+(defn- in-discord [prepared args channel-id]
+  (let [target (or (chat/command-target) channel-id)]
+    (if (seq (:next-cmds args))
+      ;; A consumed value is not an independent chat answer. Keep it literal
+      ;; and undecorated so a later thread/transform stage owns delivery.
+      (status/with-status target prepared generate)
+      (let [answers (answer-publisher prepared target)
+            result (ai/safely
+                     args #(status/with-status
+                             target
+                             (assoc prepared :on-progress (:update! answers))
+                             generate))]
+        (binding [chat/*target* target]
+          (when-not ((:stale? answers))
+            (if-let [error (or (:result/error result)
+                              (when
+                                (and (get-in result [:result/data :isError])
+                                     (get-in result [:result/data :tool-trace]))
+                                (:result/value result)))]
+              (chat/chat-data-structure error)
+              (when-not ((:failed? answers))
+                ((:finish! answers) (:result/value result)))))
+          (when (and ((:failed? answers)) (not ((:stale? answers))))
+            (chat/chat-data-structure
+              "Grok answer delivery failed; some messages may have arrived.")))
+        (chat/suppress
+          (if (get-in result [:result/data :tool-trace])
+            {:result/value (chat/suppress {}) :result/data (:result/data result)}
+            {}))))))
 
 (defn- grok-config []
   (let [config (if (= :not-found (:error (get-config map? [:ai])))
@@ -184,8 +188,10 @@
              "host-call budget within the configured ceiling\n"
              "   grok --no-tools <prompt> # disable MCP and native search "
              "for this request\n"
-             "   grok --no-thread <prompt> # reply here without creating "
-             "a Discord thread\n"
+             "   grok --no-thread <prompt> # compatibility flag; replying "
+             "here is already the default\n"
+             "   # Use thread grok <prompt> for a new Discord thread, "
+             "or grok <prompt> | thread to pipe the answer there.\n"
              "   # Discord shows a transient working/tool status card; "
              "completed answers are separate messages.")
    :yb/cat #{:ai}}
@@ -199,7 +205,7 @@
             channel-id (or (:channel-id event) chat/*target*)
             message-id (:id event)]
         (if (and (legacy/discord?) channel-id message-id)
-          (in-discord prepared args channel-id message-id)
+          (in-discord prepared args channel-id)
           (generate prepared))))))
 
 (cmd-hook #"grok"

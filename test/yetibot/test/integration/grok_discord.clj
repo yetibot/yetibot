@@ -110,7 +110,8 @@
                       channel/settings-for-chat-source (constantly {})
                       context/messages
                       (fn [_ prompt] [{:role "user" :content prompt}])
-                      legacy/start-thread! (fn [& _] "selected-thread")
+                      legacy/start-thread!
+                      (fn [& _] (throw (Exception. "Unexpected automatic thread")))
                       messaging/create-message!
                       (fn [rest target & options]
                         (cond
@@ -168,7 +169,7 @@
                 (fact (deref observed 3000 :timeout) => true
                       (count @requests) => 1
                       (payload-calls @calls :create)
-                      => [[:create "selected-thread" "2"
+                      => [[:create "parent" "2"
                            {:flags 32768
                             :components
                             [{:type 17 :accent_color 0x08B8CD
@@ -191,7 +192,7 @@
                     edits (payload-calls @calls :edit)]
                 (fact (count creates) => 2
                       (mapv second creates)
-                      => ["selected-thread" "selected-thread"]
+                      => ["parent" "parent"]
                       (mapv #(get-in % [3 :components 0 :components 0 :content]) creates)
                       => [(str "First [redacted] @everyone\n" padding
                                "\n\n-# selected · 0 tools · cost n/a")

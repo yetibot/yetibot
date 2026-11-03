@@ -163,7 +163,8 @@
                                    [{:role "user" :content prompt}])
                 legacy/discord? (constantly true)
                 legacy/rest-conn (constantly :connection)
-                legacy/start-thread! (fn [& _] "new-thread")]
+                legacy/start-thread!
+                (fn [& _] (throw (Exception. "Unexpected automatic thread")))]
     (f)))
 
 (fact "late confirmed transient creation gets only known-ID cleanup"
@@ -172,8 +173,8 @@
 (fact "held ancillary edit cannot block final answer transport or tracking"
   ((requiring-resolve 'yetibot.test.support.ai-status/held-edit!)))
 
-(facts "no-thread uses the invoking channel and retains model/tool flags"
-  (doseq [channel ["parent" "existing-thread"]]
+(facts "default and compatibility flag use the invoking channel/thread"
+  (doseq [channel ["parent" "existing-thread"] flags ["" "--no-thread"]]
     (let [posted (atom nil) prepared (atom nil)]
       (with-discord
         (fn []
@@ -192,7 +193,7 @@
             (fact
               (:suppress
                 (meta (grok/grok-cmd
-                        {:match "--model chosen --no-thread Hi"
+                        {:match (str "--model chosen " flags " Hi")
                          :chat-source
                          {:raw-event {:channel-id channel :id "trigger"
                                       :parent-id "must-not-use"}}})))
@@ -201,6 +202,34 @@
               (second @prepared) => "chosen"
               (get-in @prepared [2 0 :content]) => "Hi"
               (fn? (get-in @prepared [3 :on-progress])) => true)))))))
+
+(fact "the active delivery resolver wins over a stale saved thread binding"
+  (let [posted (atom nil)]
+    (with-discord
+      (fn []
+        (binding [chat/*target* "explicit-target"
+                  chat/*command-thread* "saved-thread"
+                  chat/*command-thread-resolver* (constantly nil)]
+          (with-redefs [discord/create-message!
+                        (fn [& _] (discord-promise {:id "progress"}))
+                        discord/delete-message! (fn [& _] (discord-promise {}))
+                        tools/complete (fn [& _] {:result/value "Answer"})
+                        chat/chat-data-structure
+                        (fn [value] (reset! posted [chat/*target* value]))]
+            (grok/grok-cmd discord-request)))))
+    (first @posted) => "explicit-target"))
+
+(fact "malformed intermediate Grok results fail closed without raw data"
+  (doseq [value [nil {:raw "PRIVATE-RESULT"}]]
+    (with-discord
+      (fn []
+        (with-redefs [tools/complete
+                      (fn [& _] {:result/value value
+                                 :result/data {:raw "PRIVATE-DATA"}})]
+          (let [result (grok/grok-cmd
+                         (assoc discord-request :next-cmds ["thread"]))]
+            (:result/error result) => "Grok did not return a text answer."
+            (:result/data result) => nil))))))
 
 (fact "no-thread plus no-tools streams without enabling or contacting tools"
   (let [captured (atom nil) posted (atom nil)]
@@ -256,12 +285,12 @@
                         (fn [value] (swap! posted conj [chat/*target* value]))]
             (grok/grok-cmd discord-request)
             (fact @first-post
-                  => [["new-thread"
+                  => [["parent"
                        "First [redacted]\n\nSent via configured-grok"]]
                   @posted
-                  => [["new-thread"
+                  => [["parent"
                        "First [redacted]\n\nSent via configured-grok"]
-                      ["new-thread"
+                      ["parent"
                        (str (second answers)
                             "\n\nSent via configured-grok")]])))))))
 
@@ -416,7 +445,7 @@
   (let [result (delivery [{:answer "First SECRET @everyone"}]
                          "First SECRET @everyone" nil :unavailable)]
     (:rest result)
-    => [["new-thread"
+    => [["parent"
          {:content "First [redacted] @everyone\n\nSent via configured-grok"
           :allowed-mentions {:parse []}}]]
     (:final result) => []))
@@ -504,7 +533,7 @@
           (grok/grok-cmd discord-request))))
     (count @attempts) => 2
     (mapv #(take 2 %) @attempts)
-    => [[:connection "new-thread"] [:connection "new-thread"]]
+    => [[:connection "parent"] [:connection "parent"]]
     (mapv #(get-in % [2 :allowed-mentions]) @attempts)
     => [{:parse []} {:parse []}]
     (string/join (map #(get-in % [2 :content]) @attempts))
