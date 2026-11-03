@@ -115,6 +115,11 @@
         (invalid!)))))
 
 (defn validate! [config]
+  (doseq [server (:servers config)]
+    (when (and (contains? server :adapters)
+               (not (and (strings? (:adapters server))
+                         (every? #{"slack" "discord"} (:adapters server)))))
+      (invalid!)))
   (when (or (contains? config :native-tools)
             (some #(= "yetibot" (:name %)) (:servers config)))
     (invalid!))

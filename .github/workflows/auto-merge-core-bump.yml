@@ -1,32 +1,63 @@
 name: Auto-merge yetibot/core bumps
 
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
 
 jobs:
   auto-merge:
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
     permissions:
+      contents: read
+      actions: read
       pull-requests: write
-    if: |
-      github.event.pull_request.user.login == 'yetibot-admin' &&
-      startsWith(github.event.pull_request.title, 'Bump yetibot/core to')
     steps:
-      - name: Checkout
-        uses: actions/checkout@v6
-
-      - name: Approve PR
+      # Never check out or execute PR code in this privileged workflow.
+      - name: Find current, green core bump
+        id: pr
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          gh pr review --approve ${{ github.event.pull_request.number }}
-
-      - name: Enable auto-merge
+          python3 - <<'PY'
+          import json, os, re, subprocess
+          repo, sha = os.environ['GITHUB_REPOSITORY'], os.environ['HEAD_SHA']
+          assert re.fullmatch(r'[a-f0-9]{40}', sha)
+          def api(path):
+            return json.loads(subprocess.check_output(
+              ['gh', 'api', f'repos/{repo}/{path}'], timeout=20))
+          latest = api('actions/workflows/test.yml/runs?'
+                       f'event=pull_request&head_sha={sha}&per_page=1')['workflow_runs']
+          if not latest or str(latest[0]['id']) != os.environ['RUN_ID']:
+            raise SystemExit(0)
+          for pr in api(f'commits/{sha}/pulls?per_page=20'):
+            if (pr['state'] == 'open' and pr['head']['sha'] == sha
+                and pr['user']['login'] == 'yetibot-admin'
+                and pr['head']['repo']['full_name'] == repo
+                and pr['base']['ref'] == 'master'
+                and pr['head']['ref'].startswith('yetibot/core-')
+                and pr['title'].startswith('Bump yetibot/core to')):
+              with open(os.environ['GITHUB_OUTPUT'], 'a') as out:
+                out.write(f"number={int(pr['number'])}\n")
+              break
+          PY
+      - name: Approve tested bump
+        if: steps.pr.outputs.number != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+        run: gh pr review "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --approve
+      - name: Merge exact tested head
+        if: steps.pr.outputs.number != ''
         env:
           GH_TOKEN: ${{ secrets.YETIBOT_GITHUB_TOKEN }}
+          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          gh pr merge --auto --squash --delete-branch ${{ github.event.pull_request.number }}
+          gh pr merge "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" \
+            --squash --delete-branch --match-head-commit "$HEAD_SHA"

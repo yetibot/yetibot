@@ -6,7 +6,72 @@ on:
       - master
 
 jobs:
+  test:
+    runs-on: ubuntu-26.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: read
+    env:
+      JAVA_TOOL_OPTIONS: -Xmx1024m
+    steps:
+      - uses: actions/checkout@v6
+      - name: Reuse exact-tree PR validation
+        id: validated
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 .github/ci/reuse_pr.py
+      - name: CI gate regression tests
+        run: python3 -m unittest discover -s .github/ci -v
+      - uses: actions/setup-java@v6
+        if: steps.validated.outputs.reuse != 'true'
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: DeLaGuardo/setup-clojure@13
+        if: steps.validated.outputs.reuse != 'true'
+        with:
+          lein: 2.11.2
+      - name: Maven cache
+        if: steps.validated.outputs.reuse != 'true'
+        uses: actions/cache@v5
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-maven-${{ hashFiles('project.clj') }}
+          restore-keys: |
+            ${{ runner.os }}-maven-
+      - name: Start Postgres for unvalidated changes
+        if: steps.validated.outputs.reuse != 'true'
+        run: |
+          docker run -d --name ci-postgres \
+            -e POSTGRES_USER=yetibot -e POSTGRES_PASSWORD=yetibot \
+            -p 127.0.0.1:5432:5432 postgres
+          for _attempt in {1..30}; do
+            docker exec ci-postgres pg_isready -U yetibot && exit 0
+            sleep 1
+          done
+          exit 1
+      - name: Midje
+        if: steps.validated.outputs.reuse != 'true'
+        timeout-minutes: 6
+        env:
+          YETIBOT_DB_URL: postgresql://yetibot:yetibot@localhost:5432/yetibot
+        run: |
+          timeout --signal=QUIT --kill-after=20s 240s \
+            lein with-profile +test midje :all
+      - name: Catalog cache tests
+        if: steps.validated.outputs.reuse != 'true'
+        timeout-minutes: 6
+        env:
+          YETIBOT_DB_URL: postgresql://yetibot:yetibot@localhost:5432/yetibot
+        run: |
+          timeout --signal=QUIT --kill-after=20s 240s \
+            lein with-profile +test test \
+              yetibot.test.models.ai-mcp-catalog \
+              yetibot.test.models.ai-provider-catalog
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: checkout
