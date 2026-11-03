@@ -1061,17 +1061,29 @@ full bounded catalog.
 ### Memes and Grok images
 
 `!ai tools` and `!ai tools <server>` list one tool per line, in catalog order:
-`` `server/name` — short description ``. Only the display ID is wrapped in
+`` `server/name` — full description ``. Only the display ID is wrapped in
 backticks; structured `:id` and `:name` values remain raw. Descriptions are
-whitespace-collapsed and limited to 120 characters; command punctuation is
-made literal for `xargs`. Wrapped IDs and complete summary rows are accepted
+whitespace-collapsed, mention-neutralized and redacted; command punctuation is
+made literal for `xargs`. There is no extra display-only description cap.
+Existing catalog metadata safety limits still apply. Wrapped IDs and complete
+summary rows are accepted
 as selectors without evaluating their backticks as command substitutions.
 IDs stay unchanged, and no header rows interrupt collection pipelines.
 Each row stays paired with its projected metadata through collection commands.
 `!ai tools <server/name>` shows focused help: description, input names/types,
 required fields, enum choices and conditional required alternatives. A unique
 bare tool name works too; ambiguous names require the qualified ID. Exact
-server names retain their existing source-filter meaning.
+server names retain their existing source-filter meaning. Parameter descriptions,
+choices and required alternatives are no longer shortened for presentation.
+
+Long Discord lists/details offer **Previous/Next**, a page indicator and the
+complete `answer.md` download. Navigation reads the frozen, reviewed human text;
+it never reruns discovery, tools or inference. Files, ordinary controls and the
+original elapsed caption remain on the same message. Controls expire on command
+edits, eviction or restart. Only exact final output is paged: filtering a listing
+through a pipeline does not bring back earlier rows. Paging retains at most
+262,144 UTF-16 units per command; larger output keeps the complete download.
+Structured catalog/schema data is not automatically published as a snapshot.
 
 A complete summary row can be passed back to the command, so this works:
 `!ai tools | tail 3 | xargs ai tools`. Each lookup discovers only its source
