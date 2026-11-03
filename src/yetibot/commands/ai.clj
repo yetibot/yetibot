@@ -3,6 +3,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.chat :as chat]
+            [yetibot.core.util.public-result :as public-result]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-defaults :as defaults]
             [yetibot.models.ai-input :as input]
@@ -172,16 +173,13 @@
   [args]
   (safely #(tools/server-names (policy/actor args))))
 
-(defn- help-text [redact value limit]
-  (let [text (-> (str (or value ""))
-                 (string/replace #"\s+" " ")
-                 (string/replace #"@(?=everyone\b|here\b)" "@\u200b")
-                 (string/replace #"<(?=[@!])" "<\u200b")
-                 string/trim
-                 redact)]
-    (if (> (count text) limit)
-      (str (subs text 0 (dec limit)) "…")
-      text)))
+(defn- help-text [redact value]
+  (-> (str (or value ""))
+      (string/replace #"\s+" " ")
+      (string/replace #"@(?=everyone\b|here\b)" "@\u200b")
+      (string/replace #"<(?=[@!])" "<\u200b")
+      string/trim
+      redact))
 
 (defn- schema-field [schema field]
   (get schema field (get schema (name field))))
@@ -195,12 +193,11 @@
                              \return \space})
        "` — " (if (string/blank? description)
                    "No description provided."
-                   (help-text redact
-                     (string/escape description
-                                    {\| \¦ \` \’ \$ \＄ \" \”}) 120))))
+                   (string/escape (help-text redact description)
+                                  {\| \¦ \` \’ \$ \＄ \" \”}))))
 
 (defn- tool-detail [redact {:keys [id description inputSchema]}]
-  (let [short-text (partial help-text redact)
+  (let [display-text (partial help-text redact)
         properties (schema-field inputSchema :properties)
         required (set (schema-field inputSchema :required))
         parameters (sort-by (fn [[field _]]
@@ -211,30 +208,28 @@
       "\n"
       (concat
         [id (if (string/blank? description) "No description provided."
-              (short-text description 500)) "Inputs:"]
+              (display-text description)) "Inputs:"]
         (if (seq parameters)
           (map (fn [[field schema]]
                  (let [field (parameter-name field)
                        type (schema-field schema :type)
                        enum (schema-field schema :enum)
                        description (schema-field schema :description)]
-                   (str "  " (short-text field 60)
+                   (str "  " (display-text field)
                         (when (required field) " (required)") ": "
-                        (short-text (if (vector? type)
+                        (display-text (if (vector? type)
                                      (string/join " | " type)
-                                     (or type "any")) 80)
+                                     (or type "any")))
                         (when (seq enum)
-                          (str " [" (short-text (string/join ", " enum) 100)
+                          (str " [" (display-text (string/join ", " enum))
                                "]"))
                         (when (seq description)
-                          (str " — " (short-text description 120))))))
-               (take 20 parameters))
+                          (str " — " (display-text description))))))
+               parameters)
           ["  No parameter details advertised."])
-        (when (> (count parameters) 20)
-          ["  … Use data show for the full schema."])
         (when (seq variants)
           [(str "Required alternatives: "
-                (short-text
+                (display-text
                   (string/join
                     "; "
                     (map (fn [variant]
@@ -245,7 +240,7 @@
                              (str (when label (str label ": "))
                                   (string/join ", "
                                     (schema-field variant :required)))))
-                         variants)) 500))])))))
+                         variants))))])))))
 
 (defn- empty-catalog-text [catalog]
   (let [servers (get-in catalog [:discovery :servers])]
@@ -258,8 +253,16 @@
            "Other tool sources are unaffected.")
       :else "No allowed tools are currently advertised.")))
 
+(defn- reviewed-tool-text [result]
+  ;; Only the already-redacted human display is approved for paging. Never
+  ;; retain raw catalogs/schemas here, and keep pipeline values unchanged.
+  (let [value (:result/value result)]
+    (public-result/reviewed
+      (assoc result :result/public-text
+        (if (string? value) value (string/join "\n" value))))))
+
 (defn tools-cmd
-  "ai tools # list allowed tools with short descriptions
+  "ai tools # list allowed tools with full descriptions
    ai tools <server> # list allowed tools from one source
    ai tools <server/tool> # inspect one tool; list rows also work
    ai tools <tool> # inspect a unique tool name"
@@ -285,23 +288,24 @@
             catalog (tools/tool-catalog source actor)
             redactions (mcp/config)
             redact #(mcp/metadata-redact % redactions)]
-        (if (and selector (not server))
-          (let [matches (filterv #(or (= selector (:id %))
-                                     (= selector (:name %))) (:tools catalog))]
-            (case (count matches)
-              0 (ai/fail (str "Unknown or unavailable AI tool or server. "
-                             "Use ai tools to list tools."))
-              1 {:result/value (tool-detail redact (first matches))
-                 :result/data (first matches)}
-              (ai/fail "Tool name is ambiguous. Use its server/name ID.")))
-          {:result/value (cond
-                           (string? (:names catalog)) (:names catalog)
-                           (seq (:tools catalog))
-                           (mapv (partial tool-summary redact)
-                                 (:tools catalog))
-                           :else (empty-catalog-text catalog))
-           :result/data (dissoc catalog :names)
-           :result/collection-path [:tools]})))))
+        (reviewed-tool-text
+          (if (and selector (not server))
+            (let [matches (filterv #(or (= selector (:id %))
+                                       (= selector (:name %))) (:tools catalog))]
+              (case (count matches)
+                0 (ai/fail (str "Unknown or unavailable AI tool or server. "
+                               "Use ai tools to list tools."))
+                1 {:result/value (tool-detail redact (first matches))
+                   :result/data (first matches)}
+                (ai/fail "Tool name is ambiguous. Use its server/name ID.")))
+            {:result/value (cond
+                             (string? (:names catalog)) (:names catalog)
+                             (seq (:tools catalog))
+                             (mapv (partial tool-summary redact)
+                                   (:tools catalog))
+                             :else (empty-catalog-text catalog))
+             :result/data (dissoc catalog :names)
+             :result/collection-path [:tools]}))))))
 
 (defn toolsets-cmd
   "ai toolsets # list toolsets available to you in this conversation"

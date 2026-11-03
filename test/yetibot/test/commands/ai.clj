@@ -7,6 +7,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
             [yetibot.core.hooks :as hooks]
+            [yetibot.core.util.public-result :as public-result]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-tools :as tools]
             [yetibot.test.support.ai-execution :as execution]))
@@ -349,7 +350,7 @@
                      (str (:error (execution/run-command denied
                                     "ai tools search"))))) => true)))))
 
-(fact "summaries bound prose and neutralize chat mentions, not raw metadata"
+(fact "summaries keep full prose and neutralize chat mentions, not raw metadata"
   (with-inspection
     (fn []
       (let [description (str " @everyone <@123>\n"
@@ -360,15 +361,15 @@
         (with-redefs [mcp/with-tools (fn [_ f] (f [tool]))]
           (let [result (ai/tools-cmd {:match ["tools" nil]})
                 row (first (:result/value result))]
-            (count row) => (+ (count "`search/brief` — ") 120)
-            (string/ends-with? row "…") => true
+            (string/ends-with? row (string/join (repeat 200 "x"))) => true
+            (string/ends-with? row "…") => false
             (string/includes? row "\n") => false
             (string/includes? row "@everyone") => false
             (string/includes? row "<@123>") => false
             (get-in result [:result/data :tools 0 :description])
             => description))))))
 
-(fact "formatting redacts reconstructed credentials before display truncation"
+(fact "formatting redacts reconstructed credentials before display"
   (with-inspection
     (fn []
       (let [tool {:name "safe" :inputSchema inspection-schema
@@ -384,6 +385,29 @@
                              (ai/tools-cmd {:match ["tools" nil]})))]
             (string/includes? row "priv") => false
             (string/includes? row "[red") => true))))))
+
+(fact "full descriptions and parameter help are reviewed for frozen text paging"
+  (with-inspection
+    (fn []
+      (let [description (str (string/join (repeat 600 "Full 😀 description. "))
+                             "DESCRIPTION-END")
+            parameter (str (string/join (repeat 100 "parameter help ")) "PARAM-END")
+            tool {:name "long" :description description
+                  :session {:server {:name "search"}}
+                  :inputSchema {:type "object" :properties
+                                {:query {:type "string" :description parameter}}}}
+            captured (atom [])]
+        (with-redefs [mcp/with-tools (fn [_ f] (f [tool]))]
+          (binding [public-result/*capture* #(swap! captured conj %)]
+            (doseq [selector [nil "search/long"]]
+              (let [result (ai/tools-cmd {:match ["tools" selector]})
+                    value (:result/value result)
+                    text (if (string? value) value (string/join "\n" value))]
+                (fact (string/includes? text "DESCRIPTION-END") => true)
+                (public-result/observe! result)
+                (fact (:public-text (last @captured)) => text)
+                (when selector
+                  (fact (string/includes? text "PARAM-END") => true))))))))))
 
 (fact "detail explains enum choices and conditional required fields"
   (with-inspection

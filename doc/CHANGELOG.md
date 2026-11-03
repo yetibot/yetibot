@@ -8,6 +8,12 @@ as well.
 
 ## Unreleased
 
+- `ai tools` keeps complete descriptions and parameter help instead of clipping
+  them for display. Long Discord listings/details have Previous/Next pages and
+  a complete Markdown download. Paging uses frozen public text without
+  rediscovery or inference; existing visibility, redaction, metadata limits and
+  structured pipeline data are preserved.
+
 - Add a `code` command that uses Gemini to make a change in a GitHub repo and
   open a pull request, e.g. `code yetibot/core increase banana budget`. It
   clones the target repo with Yetibot's existing GitHub token, rebases on the
