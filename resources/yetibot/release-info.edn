@@ -1,6 +1,14 @@
 {:schema_version 1
  :changes
- [{:id "grok-opt-in-threading"
+ [{:id "discord-inline-tool-details"
+   :date "2026-11-03"
+   :component "core"
+   :title "Toggle tool details inside your Discord answer"
+   :summary "Show details expands the frozen public tool-call summary inside the original answer and becomes Hide details. Hiding restores the original card, files/media and elapsed caption. Inspection never reruns tools or reveals raw arguments/results; controls expire with the command revision. Long answers may be shortened only while details are open."
+   :commands ["ai Explain this" "grok Explain this"]
+   :requires ["Discord rich replies and retained sanitized AI progress"]
+   :links ["https://github.com/yetibot/core/pull/333"]}
+  {:id "grok-opt-in-threading"
    :date "2026-11-02"
    :component "app"
    :title "Grok replies here unless you choose a thread"

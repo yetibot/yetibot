@@ -182,9 +182,7 @@
                                 [{:type 2 :style 2 :label "Run again"
                                   :custom_id "yb:again:parent:command"}
                                  {:type 2 :style 2 :label "Help"
-                                  :custom_id "yb:help:parent:command"}
-                                 {:type 2 :style 2 :label "Show details"
-                                  :custom_id "yb:details:parent:command"}]}]}]
+                                  :custom_id "yb:help:parent:command"}]}]}]
                             :allowed-mentions {:parse []}}]])
                 (finally (deliver release true)))
               (await! completion)
@@ -198,6 +196,8 @@
                                "\n\n-# selected · 0 tools · cost n/a")
                           "Next <@123>\n\n-# selected · 0 tools · cost n/a"]
                       (mapv #(nth % 2) edits) => ["2" "3"]
+                      (some #(and (map? %) (= "Show details" (:label %)))
+                            (tree-seq coll? seq (last edits))) => true
                       (every? #(= {:parse []}
                                   (get-in % [3 :allowed_mentions])) edits)
                       => true
