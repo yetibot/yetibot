@@ -3,6 +3,7 @@
   (:require [cheshire.core :as json]
             [clojure.core.async :as async]
             [clojure.string :as string]
+            [discljord.messaging :as messaging]
             [discljord.messaging.impl :as sdk]
             [midje.sweet :refer [fact =>]]
             [org.httpkit.client :as http]
@@ -24,7 +25,7 @@
 (def ^:dynamic *lane* nil)
 (def model "status-fixture-model")
 (def target "status-fixture-parent")
-(def thread "status-fixture-thread")
+(def thread "status-fixture-command")
 (def forbidden
   "RAW-PHASE RAW-REASONING RAW-SUMMARY RAW-DRAFT RAW-ARG RAW-RESULT SECRET")
 
@@ -83,7 +84,9 @@
                    :tools tools/complete :context context/messages
                    :settings channel/settings-for-chat-source
                    :history history/add :observers observers/find-all
-                   :thread legacy/start-thread!}
+                   :thread legacy/start-thread!
+                   :channel messaging/get-channel!
+                   :create-thread messaging/start-thread-with-message!}
         request!
         (fn [method url options]
           (if-not (string/includes? url "/channels/status-fixture-")
@@ -160,8 +163,21 @@
          (fn [& args] (if *fixture* []
                        (apply (:observers originals) args)))
          legacy/start-thread!
-         (fn [& args] (if *fixture* thread
-                       (apply (:thread originals) args)))
+         (fn [& args]
+           (if *fixture* (throw (Exception. "Unexpected automatic thread"))
+             (apply (:thread originals) args)))
+         messaging/get-channel!
+         (fn [& args]
+           (if *fixture*
+             (deliver (promise) {:id (second args) :type 0
+                                 :guild-id "status-fixture-guild"})
+             (apply (:channel originals) args)))
+         messaging/start-thread-with-message!
+         (fn [& args]
+           (if *fixture*
+             (deliver (promise) {:id (nth args 2) :type 11
+                                 :parent-id (second args)})
+             (apply (:create-thread originals) args)))
          users/users (atom {})]
         (let [pump (fn [lane queue]
                      (async/thread
@@ -176,7 +192,7 @@
                      (binding [chat/*adapter* adapter]
                        (discord/handle-event
                          :message-create
-                         {:id "status-fixture-command" :channel-id target
+                         {:id thread :channel-id target :guild-id "status-fixture-guild"
                           :author {:id "status-fixture-user"
                                    :username "synthetic"}
                           :content (str "!" text)}
@@ -231,8 +247,8 @@
           :result/data {:unchanged "result"}})}
       (fn [{:keys [run! calls created edited answered deleted conn]}]
         (let [completion (run! (if (= command :grok)
-                                (if threaded? "grok fixture"
-                                  "grok --no-thread fixture")
+                                (if threaded? "thread grok fixture"
+                                  "grok fixture")
                                 "ai fixture"))]
           (try
             (fact (await ready) => true)
@@ -314,8 +330,8 @@
                          (str "The AI request failed. Check the provider "
                               "configuration and try again.")
                          (str "Answer\n\n-# " model " · cost n/a"))
-                    (string/includes? (:url answer) thread) => true
-                    (string/includes? (:url card) thread) => true
+                    (string/includes? (:url answer) target) => true
+                    (string/includes? (:url card) target) => true
                     (< (.indexOf @calls answer)
                        (.indexOf @calls deletion)) => true
                     (mapv :id (deletions @calls)) => [(:id card)]))))))))

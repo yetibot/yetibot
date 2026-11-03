@@ -2,8 +2,11 @@
 
 ## Inspect errors and structured results
 
-**Error details** opens retained public diagnostics without rerunning the
-command. Weather failures can include the service, failure stage/kind and
+**Error details** expands retained public diagnostics inside the original
+reply, without sending another message or rerunning the command. **Hide error
+details** restores the original card. Its field/Back/paging controls stay inline.
+Files and one original elapsed caption are preserved; a long error may be
+shortened only while details are open. Weather failures can include the service, failure stage/kind and
 numeric HTTP status. If additional details were not retained, the viewer says
 so. Raw responses, credentials, headers and private AI internals are not shown.
 Unexpected Discord command exceptions use a safe summary rather than printing
@@ -20,8 +23,9 @@ Snapshots freeze at command completion and are read-only. Public navigation can
 be used by anyone in the same reply channel/thread; rerunning remains
 requester-only with confirmation. Edits, cache eviction and process restarts
 expire old viewers. Inspection never fetches an upstream response or repeats
-inference/side effects. Original answers remain visible while navigation updates
-a separate viewer message.
+inference/side effects. Explore data uses a separate viewer and leaves the
+answer visible. Error details instead updates only the tracked original reply,
+with snapshot-token and revision checks.
 
 Views show eight entries per page, with at most eight data results and eight
 retained error records. Snapshots limit nesting, fields/items per container and string sizes;
@@ -40,7 +44,9 @@ Send this directly in a **server text channel**:
 !thread echo hello
 !thread echo hello | echo result: %s
 !thread ai --provider zen Hello
-!thread grok --no-thread Explain this
+!grok Explain this
+!grok Explain this | thread
+!thread grok Explain this
 ```
 
 The thread is attached to your requesting message. Native `| thread` passes the
@@ -52,9 +58,11 @@ the thread. Explicit cross-channel sends keep their existing semantics.
 
 The prefix form `!thread <command>` confirms the thread **before** executing the
 whole expression, including pipes and embedded commands. Use that form when all
-work, including initial status/live output, should start in the thread. Grok's
-own thread behavior reuses an already selected command thread, including with
-`--no-thread`.
+work, including initial status/live output, should start in the thread. Grok
+replies in the current channel/thread by default and creates no thread itself.
+An intermediate Grok answer is a literal undecorated value for later stages;
+`grok … | thread` moves its final output without an earlier independent answer.
+The legacy `--no-thread` flag remains accepted and honors explicit thread delivery.
 
 The bot needs permission to create public threads and send messages in them.
 DMs and nested threads are unsupported. If creation is uncertain, Yetibot may

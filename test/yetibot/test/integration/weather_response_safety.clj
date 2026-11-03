@@ -11,6 +11,15 @@
       (public-result/observe! result))
     (:public-error @seen)))
 
+(fact "weather errors without an HTTP receipt still retain honest diagnostics"
+  (doseq [response [nil {:error "No current conditions found."}]]
+    (with-redefs [weather/current (constantly response)]
+      (let [details (diagnostic (weather/weather-cmd {:match "San Francisco"}))]
+        (:service details) => "wttr.in"
+        (:stage details) => "weather response"
+        (:kind details) => "unavailable"
+        (:http-status details) => nil))))
+
 (fact "an HTML 503 retains its status instead of failing automatic JSON coercion"
   (with-redefs [http/get
                 (fn [_ options]

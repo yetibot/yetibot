@@ -711,12 +711,17 @@ still using the shared MCP runtime and policy. Without either configuration,
 for your shared default.
 
 Both commands use the same thread context, MCP connections, toolset selection
-and user/adapter/provider/model authorization. Discord `grok` creates a reply
-thread by default. Use `--no-thread` to skip thread creation and reply in the
-invoking channel. Inside an existing thread, it stays there: the flag never
-moves that conversation into its parent channel or changes history/tool scope.
-The flag is Grok-only, can combine with `--model`, `--toolset` or `--no-tools`,
-and must precede the prompt. Use `--` to begin a prompt with a literal flag.
+and user/adapter/provider/model authorization. Discord `grok` replies in the
+invoking channel by default, including when that channel is an existing thread.
+It no longer creates a thread automatically. Opt in with `!thread grok …` to
+start all work in a thread, or `!grok … | thread` to move its final literal answer
+there. Intermediate Grok answers are ordinary undecorated pipeline values, not
+independently published live answers. See [Discord delivery](DISCORD.md).
+
+The Grok-only `--no-thread` flag remains accepted for compatibility; the default
+already has that behavior. It never forces an existing thread into its parent
+or changes history/tool scope. It can combine with `--model`, `--toolset` or
+`--no-tools` and must precede the prompt. Use `--` to begin a literal-flag prompt.
 
 ### Discord answer cards and buttons
 

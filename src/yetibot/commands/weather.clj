@@ -190,17 +190,17 @@
     {:error "No forecast data found."}))
 
 (defn- error-response [result]
-  (cond
-    (nil? result)
-    {:result/error "No response from weather service."}
-    (:error result)
-    (public-result/reviewed
-      (cond-> {:result/error (:error result)}
-        (:public-error result)
-        (assoc :result/public-error
-               (select-keys (:public-error result)
-                            [:service :stage :kind :http-status]))))
-    :else nil))
+  (let [message (cond
+                  (nil? result) "No response from weather service."
+                  (:error result) (:error result))]
+    (when message
+      (public-result/reviewed
+        {:result/error message
+         :result/public-error
+         (select-keys (or (:public-error result)
+                          {:service "wttr.in" :stage "weather response"
+                           :kind "unavailable"})
+                      [:service :stage :kind :http-status])}))))
 
 (defn- public-weather [data]
   (assoc (select-keys data [:city_name :state_code :country_code :temp

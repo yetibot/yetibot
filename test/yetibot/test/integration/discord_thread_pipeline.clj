@@ -5,6 +5,7 @@
             [discljord.messaging :as messaging]
             [midje.sweet :refer [fact =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.commands.grok]
             [yetibot.core.adapters.discord :as discord]
             [yetibot.core.chat :as chat]
             [yetibot.core.commands.echo]
@@ -68,6 +69,44 @@
       (second (last calls)) => "100"
       (str/starts-with? (text calls) "ai default second chosen") => true
       (:default-provider (ai/config)) => "first")))
+
+(defn- grok-scenario [body check]
+  (with-redefs [defaults/settings
+                (update defaults/settings :providers conj
+                        {:name "grok" :model "grok-fixture"
+                         :url "https://grok.example/v1" :key "fixture-key"})]
+    (scenario body check)))
+
+(fact "Grok replies in the invoking channel without creating a thread"
+  (grok-scenario "!grok fixture"
+    (fn [calls]
+      (mapv first calls) => [:answer]
+      (second (last calls)) => "200"
+      (str/starts-with? (text calls) "ordinary answer") => true)))
+
+(fact "a native pipe receives Grok text instead of an early parent answer"
+  (grok-scenario "!grok fixture | thread"
+    (fn [calls]
+      (mapv first calls) => [:thread :answer]
+      (second (last calls)) => "100"
+      (str/starts-with? (text calls) "ordinary answer") => true
+      (str/includes? (text calls) "grok-fixture") => false)))
+
+(fact "Grok honors explicit outer and earlier native thread delivery"
+  (doseq [body ["!thread grok fixture"
+               "!grok fixture | thread | grok %s"]]
+    (grok-scenario body
+      (fn [calls]
+        (mapv first calls) => [:thread :answer]
+        (second (last calls)) => "100"
+        (str/starts-with? (text calls) "ordinary answer") => true))))
+
+(fact "intermediate Grok answers are consumed by normal later pipe stages"
+  (grok-scenario "!grok fixture | echo tail:%s"
+    (fn [calls]
+      (mapv first calls) => [:answer]
+      (str/starts-with? (text calls) "tail:ordinary answer") => true
+      (str/includes? (text calls) "grok-fixture") => false)))
 
 (fact "thread delivery cannot make a downstream global control direct"
   (scenario "!echo chosen | thread | ai default second %s"

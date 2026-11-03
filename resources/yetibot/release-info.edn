@@ -1,15 +1,26 @@
 {:schema_version 1
  :changes
- [{:id "discord-result-viewers"
+ [{:id "grok-opt-in-threading"
+   :date "2026-11-02"
+   :component "app"
+   :title "Grok replies here unless you choose a thread"
+   :summary "Grok replies in the invoking channel or existing thread instead of creating one automatically. Use thread grok for all work in a thread, or grok ... | thread to move its final literal answer. Intermediate Grok answers flow as undecorated pipeline values without separate live publication. The --no-thread flag remains compatible, and caller context, model and tool policy stay unchanged."
+   :commands ["grok Explain this" "grok Explain this | thread"
+              "thread grok Explain this"]
+   :requires ["Configured Grok provider or legacy xAI key"
+              "Explicit thread delivery requires a Discord server text channel"]
+   :links ["https://github.com/yetibot/yetibot/pull/1302"]}
+  {:id "discord-result-viewers"
    :date "2026-11-02"
    :component "app"
    :title "Inspect safe results and pipe output into Discord threads"
-   :summary "Native echo hi | thread sends the literal piped result into a confirmed message thread without executing it; later stages keep that destination and original caller permissions. Error details shows retained public failure stages/categories/HTTP status, not raw responses or private AI data. Explore data provides bounded read-only weather/forecast and version/changelog snapshots with drill-down, Back and paging. Weather retains HTTP status for HTML errors and handles forecasts without a state code."
+   :summary "Native echo hi | thread sends the literal piped result into a confirmed message thread without executing it; later stages keep that destination and original caller permissions. Error details expands retained public failure stages/categories/HTTP status inside the original card; Hide restores it. No raw responses or private AI data are shown. Explore data provides bounded read-only weather/forecast and version/changelog snapshots with drill-down, Back and paging. Weather retains HTTP status for HTML errors and handles forecasts without a state code."
    :commands ["echo hi | thread" "echo hi | thread | echo result: %s"
               "weather Seattle" "version" "changelog --limit 2"]
    :requires ["Discord rich replies and core public-result support"
               "Thread pipes need a server text channel and thread permissions"]
-   :links ["https://github.com/yetibot/core/pull/331"]}
+   :links ["https://github.com/yetibot/core/pull/331"
+           "https://github.com/yetibot/core/pull/332"]}
   {:id "discord-thread-timing"
    :date "2026-11-02"
    :component "core"
