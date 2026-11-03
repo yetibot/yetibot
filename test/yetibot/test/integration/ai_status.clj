@@ -19,11 +19,11 @@
     (.getProtocol resource) => "jar"
     (.getProtocol jar-url) => "file"
     (string/ends-with? (.getPath jar-url)
-                       (str "/yetibot/core/20261102.235541.149bb7e/"
-                            "core-20261102.235541.149bb7e.jar")) => true
+                       (str "/yetibot/core/20261103.162835.a5216f5/"
+                            "core-20261103.162835.a5216f5.jar")) => true
     (.getEntryName connection) => "yetibot/core/adapters/discord.clj"
     (string/join (map #(format "%02x" (bit-and 255 %)) (.digest digest)))
-    => "4ed630eac347c5ae9fd431256bba47c5dc081c33f58cd1fd371233c9c7eb68e5"))
+    => "789a6ccbb7c08dee0c59d792f24672b43a42539d7d488b979aabdce5260a3c30"))
 
 (fact "root AI delivers typed-only V2 status through genuine core and SDK"
   (proof/typed-status! :ai))

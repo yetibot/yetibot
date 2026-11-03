@@ -745,12 +745,16 @@ All interaction replies, including confirmations, details, help and errors,
 are public to readers of the same channel or thread. Requester-only rerun
 authorization is unchanged.
 
-AI replies with sanitized progress also offer **Show details**, posting the
-bounded tool-name/outcome/budget snapshot publicly. Raw reasoning, prompts,
-arguments and tool results are not stored by this feature. The transient live
-card is still removed after answer delivery. Buttons use the bounded command
-cache and expire after eviction or a bot restart; expired buttons explain how
-to resend the command rather than guessing what to execute.
+Completed AI replies with sanitized progress offer **Show details**, expanding
+that frozen tool-name/outcome/budget summary inside the original card. The
+button becomes **Hide details**, which restores the original answer, files/media
+and elapsed caption. Long answers may be shortened only while details are open.
+The summary is public to the reply channel/thread, but raw reasoning, prompts,
+arguments and tool results are not stored by this feature. Opening or hiding
+never reruns a tool or inference. The transient live card is still removed after
+answer delivery. Buttons expire after edits, cache eviction or a bot restart;
+expired buttons explain how to resend the command rather than guessing what
+to execute.
 
 Responses fit in one card through 4,000 UTF-16 characters of rendered text.
 Markdown tables outside code fences become aligned fixed-width code blocks;

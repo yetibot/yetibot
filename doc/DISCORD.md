@@ -2,6 +2,13 @@
 
 ## Inspect errors and structured results
 
+**Show details** expands a completed AI reply's frozen tool-call summary inside
+the same card and becomes **Hide details**. Hide restores the original answer,
+files/media and elapsed caption. Long answers may be shortened temporarily
+while the summary is open. This shows only retained tool names, outcomes and
+budget counts, not raw arguments/results or private reasoning. It does not
+rerun tools. Tool and error panes replace one another rather than accumulating.
+
 **Error details** expands retained public diagnostics inside the original
 reply, without sending another message or rerunning the command. **Hide error
 details** restores the original card. Its field/Back/paging controls stay inline.
