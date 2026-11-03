@@ -756,6 +756,12 @@ answer delivery. Buttons expire after edits, cache eviction or a bot restart;
 expired buttons explain how to resend the command rather than guessing what
 to execute.
 
+Commands with reviewed public result data also offer inline **Explore data** /
+**Hide data**. Their tree starts at two levels; **Expand** and **Collapse**
+change one level everywhere, with paging for large snapshots. This does not
+make raw AI tool arguments/results public. All inspection panes share the
+original card's restoration base and never accumulate or rerun work.
+
 Responses fit in one card through 4,000 UTF-16 characters of rendered text.
 Markdown tables outside code fences become aligned fixed-width code blocks;
 headers and cells are preserved without another model call. Longer responses,

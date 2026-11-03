@@ -7,7 +7,7 @@ the same card and becomes **Hide details**. Hide restores the original answer,
 files/media and elapsed caption. Long answers may be shortened temporarily
 while the summary is open. This shows only retained tool names, outcomes and
 budget counts, not raw arguments/results or private reasoning. It does not
-rerun tools. Tool and error panes replace one another rather than accumulating.
+rerun tools. Data, tool and error panes replace one another rather than accumulating.
 
 **Error details** expands retained public diagnostics inside the original
 reply, without sending another message or rerunning the command. **Hide error
@@ -19,23 +19,32 @@ so. Raw responses, credentials, headers and private AI internals are not shown.
 Unexpected Discord command exceptions use a safe summary rather than printing
 an arbitrary exception message.
 
-**Explore data** is available for explicitly reviewed public projections:
-`weather`, `weather forecast`, `version` and `changelog`. Select a field or array
-item to drill down; use **Back**, **Previous** and **Next** to navigate. Weather
-snapshot temperatures are labeled Celsius and wind speeds km/h, regardless of
-the units used in the ordinary formatted answer. Existing pipeline data remains
-unchanged. Other raw result maps do not automatically get a public data button.
+**Explore data** expands inside the original reply and becomes **Hide data**.
+It is available for explicitly reviewed public projections: `weather`,
+`weather forecast`, `version` and `changelog`. The tree initially shows two
+levels, or all available levels for shallower data. **Expand** shows one more
+level everywhere; **Collapse** shows one fewer. Both reset to the first page.
+Collapsed objects/arrays show type/count summaries instead of requiring a
+one-field dropdown. Large JSON previews use **Previous** and **Next** at the
+same depth; pages may continue a document. Controls disable at their bounds.
+Hide data restores the exact original answer, files/media and elapsed caption.
+Reopening starts at the two-level overview. Weather snapshot temperatures are
+labeled Celsius and wind speeds km/h, regardless of the ordinary answer's
+units. Pipeline data stays unchanged. Raw result maps do not automatically get
+a public data button.
 
 Snapshots freeze at command completion and are read-only. Public navigation can
 be used by anyone in the same reply channel/thread; rerunning remains
 requester-only with confirmation. Edits, cache eviction and process restarts
 expire old viewers. Inspection never fetches an upstream response or repeats
-inference/side effects. Explore data uses a separate viewer and leaves the
-answer visible. Error details instead updates only the tracked original reply,
-with snapshot-token and revision checks.
+inference/side effects. All panes update only the tracked original reply, with
+snapshot-token, revision and final ownership checks. Long answers can be
+shortened temporarily while a pane is open; Hide restores them in full.
 
-Views show eight entries per page, with at most eight data results and eight
-retained error records. Snapshots limit nesting, fields/items per container and string sizes;
+Data previews page at1,500 UTF-16 characters, preferably at line boundaries;
+error navigation retains eight fields/items per page. At most eight data
+results and eight error records are retained. Snapshots limit nesting,
+fields/items per container and string sizes;
 large data may be shortened. Missing or unreviewed fields are not a claim that
 the upstream response was empty. Adding support requires a reviewed field
 projection, not blanket map exposure.
