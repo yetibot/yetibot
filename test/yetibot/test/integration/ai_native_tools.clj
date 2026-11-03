@@ -210,7 +210,7 @@
     (:view data) => "running"
     (:untrusted data) => true
     (:build data) => (:build releases/running)
-    (get-in data [:changes 0 :id]) => "discord-inline-tool-details"
+    (get-in data [:changes 0 :id]) => "discord-inline-data-tree"
     (count (:sent result)) => 2))
 
 (fact "whole-batch validation rejects injected release fields before any GET"

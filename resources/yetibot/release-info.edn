@@ -1,6 +1,15 @@
 {:schema_version 1
  :changes
- [{:id "discord-inline-tool-details"
+ [{:id "discord-inline-data-tree"
+   :date "2026-11-03"
+   :component "core"
+   :title "Explore public data inside the original Discord answer"
+   :summary "Explore data expands inline and becomes Hide data. The frozen public tree starts at two levels; Expand and Collapse change one level everywhere, with paging for large snapshots. Hiding restores the original card, files/media and elapsed caption. Data, tool and error panes replace one another without rerunning commands, refetching data or exposing private result maps. Controls expire with the command revision."
+   :commands ["weather Seattle" "weather forecast Seattle" "version"
+              "changelog --limit 2"]
+   :requires ["Discord rich replies and a retained reviewed public snapshot"]
+   :links ["https://github.com/yetibot/core/pull/334"]}
+  {:id "discord-inline-tool-details"
    :date "2026-11-03"
    :component "core"
    :title "Toggle tool details inside your Discord answer"
