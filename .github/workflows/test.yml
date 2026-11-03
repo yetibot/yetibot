@@ -1,14 +1,17 @@
 name: Test
 
 on:
-  push:
-    branches:
-      - "*"
   pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-tests-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   test:
-    # Avoid the mixed image pool during the ubuntu-latest migration.
     runs-on: ubuntu-26.04
     env:
       JAVA_TOOL_OPTIONS: -Xmx1024m
@@ -18,47 +21,41 @@ jobs:
         env:
           POSTGRES_USER: yetibot
           POSTGRES_PASSWORD: yetibot
-        # Set health checks to wait until postgres has started
         options: >-
           --health-cmd pg_isready
-          --health-interval 10s
+          --health-interval 1s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 30
         ports:
           - 5432:5432
     steps:
-      - name: checkout
-        uses: actions/checkout@v6
-
-      # Clojail's sandbox requires the SecurityManager supported by Java 17.
+      # PR validation is reusable only because we test this exact source tree.
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: CI gate regression tests
+        run: python3 -m unittest discover -s .github/ci -v
       - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "17"
-
       - uses: DeLaGuardo/setup-clojure@13
         with:
           lein: 2.11.2
-
-      - name: maven cache
+      - name: Maven cache
         uses: actions/cache@v5
         with:
           path: ~/.m2/repository
           key: ${{ runner.os }}-maven-${{ hashFiles('project.clj') }}
           restore-keys: |
             ${{ runner.os }}-maven-
-
-      # Dump JVM stacks on a stall, then fail rather than occupy a runner
-      # indefinitely. Both suites remain mandatory in the required test job.
-      - name: Midje coverage
+      - name: Midje
         timeout-minutes: 6
         env:
           YETIBOT_DB_URL: postgresql://yetibot:yetibot@localhost:5432/yetibot
-          CLOVERAGE_VERSION: 1.1.2
         run: |
           timeout --signal=QUIT --kill-after=20s 240s \
-            lein with-profile +test cloverage --codecov --runner midje
-
+            lein with-profile +test midje :all
       - name: Catalog cache tests
         timeout-minutes: 6
         env:
@@ -68,8 +65,3 @@ jobs:
             lein with-profile +test test \
               yetibot.test.models.ai-mcp-catalog \
               yetibot.test.models.ai-provider-catalog
-
-      # - uses: codecov/codecov-action@v5
-      #   with:
-      #     fail_ci_if_error: true # optional (default = false)
-      #     verbose: false # optional (default = false)

@@ -953,6 +953,16 @@ need a function-calling model and use the same host call budget as MCP tools.
 
 Existing named toolset user/adapter/provider/model restrictions still apply.
 Wise always enforces its separate account and conversation policy as well.
+An MCP server may declare `:adapters ["discord"]`. Default requests and tool
+listings omit that server outside its allowed adapters, before connection;
+other servers and native tools retain their existing policies. Server adapter
+rules must be nonempty, unique vectors of `"discord"`/`"slack"`. This allows the
+approved read-only Alpaca server to join ordinary search tools on Discord
+without exposing it on Slack or to untrusted callers. Explicit `--toolset
+markets` remains a narrower Alpaca-only choice; availability never forces a
+model to call a tool. GitHub/private toolsets and trading exclusions do not
+change.
+
 Without named toolsets, trusted chat can use the other configured defaults;
 history remains scoped to the requesting stored channel. Requests without
 trusted chat provenance do not receive implicit native tools.

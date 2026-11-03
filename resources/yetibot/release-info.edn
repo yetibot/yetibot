@@ -1,6 +1,14 @@
 {:schema_version 1
  :changes
- [{:id "discord-inline-data-tree"
+ [{:id "default-market-tools"
+   :date "2026-11-03"
+   :component "app"
+   :title "Use approved market reads without selecting a toolset"
+   :summary "Configured Alpaca read tools can join ordinary Discord search tools, so stock questions need no toolset flag. Server adapter rules filter connections and listings before discovery while preserving other toolset permissions. Explicit markets remains an Alpaca-only choice; trading/account tools stay disabled and tool availability never forces invocation."
+   :commands ["ai What are the latest IEX trades for SPY and QQQ?"]
+   :requires ["Configured approved Alpaca server included in the default toolset"]
+   :links []}
+  {:id "discord-inline-data-tree"
    :date "2026-11-03"
    :component "core"
    :title "Explore public data inside the original Discord answer"

@@ -28,11 +28,13 @@ jobs:
             ${{ runner.os }}-maven-
 
       - name: Bump!
+        env:
+          YB_VERSION: ${{ github.event.client_payload.message.yb_version }}
         run: |
           git config user.name "$GITHUB_ACTOR"
           git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
-          echo "Upgrading to yetibot/core ${{ github.event.client_payload.message.yb_version }}"
-          lein update-dependency yetibot/core "${{ github.event.client_payload.message.yb_version }}"
+          python3 .github/ci/bump_core_fixture.py
+          lein update-dependency yetibot/core "$YB_VERSION"
 
       - name: Create Pull Request
         uses: peter-evans/create-pull-request@v7
@@ -41,3 +43,6 @@ jobs:
           commit-message: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           title: Bump yetibot/core to "${{ github.event.client_payload.message.yb_version }}"
           branch: yetibot/core-${{ github.event.client_payload.message.yb_version }}
+          add-paths: |
+            project.clj
+            test/yetibot/test/integration/ai_status.clj

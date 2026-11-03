@@ -395,13 +395,23 @@
        (reset! (:staged config) p)
        {:structuredContent {:proposal (:id p) :status "pending"}}))})
 
+(defn- adapter-servers [config actor]
+  (if (seq (:servers config))
+    (update config :servers
+            #(filterv (fn [server]
+                        (or (not (contains? server :adapters))
+                            (some #{(:adapter actor)} (:adapters server))))
+                      %))
+    config))
+
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages
     {:keys [toolset actor additional-secrets on-progress pipeline-input
             max-tool-calls]}]
    (let [requested (request-budget! max-tool-calls)
-         config (toolsets/select (mcp/config) toolset)
+         config (adapter-servers (toolsets/select (mcp/config) toolset)
+                                 actor)
          ceiling (mcp/number-option (:max-tool-calls config) 20)
          config (cond-> (assoc config :on-progress on-progress
                                      :staged (atom nil))
@@ -454,7 +464,8 @@
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))
-        config (assoc config :redaction-servers (:servers config))]
+        config (adapter-servers
+                 (assoc config :redaction-servers (:servers config)) actor)]
     (if (seq (:toolsets config))
       (let [visible (filterv #(policy/visible? % actor) (:toolsets config))
             servers (into {} (map (juxt :name identity) (:servers config)))
