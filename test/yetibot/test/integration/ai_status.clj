@@ -19,8 +19,8 @@
     (.getProtocol resource) => "jar"
     (.getProtocol jar-url) => "file"
     (string/ends-with? (.getPath jar-url)
-                       (str "/yetibot/core/20261103.234837.ed1535f/"
-                            "core-20261103.234837.ed1535f.jar")) => true
+                       (str "/yetibot/core/20261103.235755.d43f9fe/"
+                            "core-20261103.235755.d43f9fe.jar")) => true
     (.getEntryName connection) => "yetibot/core/adapters/discord.clj"
     (string/join (map #(format "%02x" (bit-and 255 %)) (.digest digest)))
     => "307fdaa08d0af55169a0b0b2e55249e9f1bc685e8f9dc920e2aeb9963900b5f7"))
