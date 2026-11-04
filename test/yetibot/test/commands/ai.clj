@@ -386,6 +386,50 @@
             (string/includes? row "priv") => false
             (string/includes? row "[red") => true))))))
 
+(fact "real Cloudflare docs stay out of the overview and keep formatting in details"
+  (let [description (slurp "test/fixtures/mcp_cloudflare_search_description.md")
+        entry {:id "cloudflare-read/search" :name "search"
+               :description description :inputSchema inspection-schema}]
+    (with-redefs [mcp/config (constantly {})
+                  tools/server-names (constantly ["cloudflare-read"])
+                  tools/tool-catalog (fn [& _] {:tools [entry]})]
+      (let [overview (ai/tools-cmd {:match ["tools" nil]})
+            detail (ai/tools-cmd {:match ["tools" "cloudflare-read/search"]})]
+        (first (:result/value overview))
+        => "`cloudflare-read/search` — Search the Cloudflare OpenAPI spec."
+        (get-in overview [:result/data :tools 0 :description]) => description
+        (string/includes? (:result/value detail) description) => true
+        (string/includes? (:result/value detail)
+                          "\n\nTypes:\n\ninterface OperationInfo {") => true
+        (string/includes? (:result/value detail) "All $refs") => true
+        (string/includes? (:result/value detail) "\"x-api-token-group\"") => true))))
+
+(fact "a machine-only introduction is replaced by a docs pointer, not clipped code"
+  (let [description (str "```typescript\n" (string/join (repeat 1000 "x"))
+                         "\n```\nDESCRIPTION-END")
+        entry {:id "server/tool" :name "tool" :description description}]
+    (with-redefs [mcp/config (constantly {})
+                  tools/server-names (constantly ["server"])
+                  tools/tool-catalog (fn [& _] {:tools [entry]})]
+      (first (:result/value (ai/tools-cmd {:match ["tools" nil]})))
+      => "`server/tool` — Full documentation: ai tools server/tool."
+      (string/includes? (:result/value
+                          (ai/tools-cmd {:match ["tools" "server/tool"]}))
+                        description) => true)))
+
+(fact "formatted docs still redact credentials reconstructed across whitespace"
+  (with-redefs [mcp/config
+                (constantly {:servers [{:name "s" :url "https://s.test/mcp"
+                                        :headers {"X-Api-Key" "private token"}}]})
+                tools/server-names (constantly ["s"])
+                tools/tool-catalog
+                (fn [& _] {:tools [{:id "s/t" :name "t"
+                                   :description "Docs\n\nprivate\ntoken\n\n@everyone"}]})]
+    (let [text (:result/value (ai/tools-cmd {:match ["tools" "s/t"]}))]
+      (string/includes? text "[redacted]") => true
+      (string/includes? text "private") => false
+      (string/includes? text "@everyone") => false)))
+
 (fact "full descriptions and parameter help are reviewed for frozen text paging"
   (with-inspection
     (fn []
@@ -403,7 +447,10 @@
               (let [result (ai/tools-cmd {:match ["tools" selector]})
                     value (:result/value result)
                     text (if (string? value) value (string/join "\n" value))]
-                (fact (string/includes? text "DESCRIPTION-END") => true)
+                (fact (string/includes? text "DESCRIPTION-END")
+                      => (boolean selector))
+                (when-not selector
+                  (fact (string/includes? text "Full 😀 description.") => true))
                 (public-result/observe! result)
                 (fact (:public-text (last @captured)) => text)
                 (when selector

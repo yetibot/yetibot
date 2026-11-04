@@ -8,6 +8,11 @@ as well.
 
 ## Unreleased
 
+- Make `ai tools` a scannable one-sentence overview instead of flattening whole
+  provider manuals into listing rows. Inspect `ai tools <server/tool>` for full
+  help with paragraphs, code and punctuation preserved. Structured metadata,
+  visibility, redaction and literal summary-row pipelines stay unchanged.
+
 - `ai tools` keeps complete descriptions and parameter help instead of clipping
   them for display. Long Discord listings/details have Previous/Next pages and
   a complete Markdown download. Paging uses frozen public text without

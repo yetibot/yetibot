@@ -181,6 +181,31 @@
       string/trim
       redact))
 
+(defn- help-markdown [redact value]
+  (let [text (-> (str (or value ""))
+                 (string/replace #"\r\n?" "\n")
+                 (string/replace #"@(?=everyone\b|here\b)" "@\u200b")
+                 (string/replace #"<(?=[@!])" "<\u200b")
+                 string/trim
+                 redact)
+        flat (string/replace text #"\s+" " ")
+        safe-flat (redact flat)]
+    ;; Fail closed when whitespace folding reconstructs a configured secret.
+    ;; Ordinary provider Markdown keeps its paragraphs, code and punctuation.
+    (if (= flat safe-flat) text safe-flat)))
+
+(defn- tool-overview [redact id description]
+  (if (string/blank? description)
+    "No description provided."
+    (let [paragraph (first (string/split (help-markdown redact description)
+                                         #"\n[ \t]*\n" 2))
+          text (help-text redact paragraph)
+          purpose (or (second (re-find #"(?s)^(.+?[.!?])(?:\s|$)" text)) text)]
+      (if (or (> (count purpose) 240)
+              (re-find #"^(?:`{3,}|~{3,}|interface\s|declare\s|async\s|//)" text))
+        (str "Full documentation: ai tools " id ".")
+        purpose))))
+
 (defn- schema-field [schema field]
   (get schema field (get schema (name field))))
 
@@ -191,10 +216,8 @@
   ;; Xargs parses its first row to classify the command. Keep prose literal.
   (str "`" (string/escape id {\` \’ \| \¦ \newline \space
                              \return \space})
-       "` — " (if (string/blank? description)
-                   "No description provided."
-                   (string/escape (help-text redact description)
-                                  {\| \¦ \` \’ \$ \＄ \" \”}))))
+       "` — " (string/escape (tool-overview redact id description)
+                              {\| \¦ \` \’ \$ \＄ \" \”})))
 
 (defn- tool-detail [redact {:keys [id description inputSchema]}]
   (let [display-text (partial help-text redact)
@@ -208,7 +231,7 @@
       "\n"
       (concat
         [id (if (string/blank? description) "No description provided."
-              (display-text description)) "Inputs:"]
+              (help-markdown redact description)) "Inputs:"]
         (if (seq parameters)
           (map (fn [[field schema]]
                  (let [field (parameter-name field)
@@ -224,7 +247,7 @@
                           (str " [" (display-text (string/join ", " enum))
                                "]"))
                         (when (seq description)
-                          (str " — " (display-text description))))))
+                          (str " — " (help-markdown redact description))))))
                parameters)
           ["  No parameter details advertised."])
         (when (seq variants)
@@ -262,9 +285,9 @@
         (if (string? value) value (string/join "\n" value))))))
 
 (defn tools-cmd
-  "ai tools # list allowed tools with full descriptions
+  "ai tools # browse allowed tools with one-sentence overviews
    ai tools <server> # list allowed tools from one source
-   ai tools <server/tool> # inspect one tool; list rows also work
+   ai tools <server/tool> # read full formatted docs and inputs; list rows work
    ai tools <tool> # inspect a unique tool name"
   {:yb/cat #{:ai}}
   [{[_ selector] :match :as args}]

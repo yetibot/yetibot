@@ -3,8 +3,8 @@
  [{:id "ai-tools-pagination"
    :date "2026-11-03"
    :component "app"
-   :title "Read full tool descriptions with inline pages"
-   :summary "AI tool lists and details no longer shorten descriptions or parameter help for presentation. Long Discord output has Previous/Next pages, a page indicator and a complete Markdown download. Navigation reads frozen reviewed text without rediscovery, tool calls or inference; files, ordinary controls and the original elapsed caption stay on the same reply. Existing metadata safety limits, tool visibility, redaction and pipeline values are preserved. Controls expire with the command revision."
+   :title "Browse tools and read complete formatted help"
+   :summary "AI tool lists show scannable one-sentence overviews rather than dumping provider manuals into listing rows. Inspect server/tool for complete descriptions and parameter help with paragraphs, code and punctuation preserved. Long output has Previous/Next pages, balanced code fences and a complete Markdown download for the requested view. Navigation reads frozen reviewed text without rediscovery, tool calls or inference; files, controls and the original elapsed caption stay. Existing metadata limits, visibility, redaction and structured pipeline data are preserved."
    :commands ["ai tools" "ai tools alpaca" "ai tools alpaca/get_stock_snapshot"]
    :requires ["Discord rich replies and retained reviewed public text"]
    :links ["https://github.com/yetibot/core/pull/336"]}
