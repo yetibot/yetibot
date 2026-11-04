@@ -1097,7 +1097,13 @@ flat parameter names, types and required flags. The viewer's existing bounds
 apply. No manuals, raw schemas, defaults, enum payloads, provider/configuration
 maps, arguments or results are retained in this snapshot. Expand/Collapse,
 paging and Hide data use the frozen snapshot without rediscovery or execution;
-Hide restores the original card. Pipeline metadata is unchanged.
+Hide restores the original card. Collection operations keep the corresponding
+raw and reviewed metadata with selected/reordered rows. The data viewer follows
+the completed pipeline, not intermediate catalogs: `ai tools | random` shows
+only the selected summary, and `ai tools | random | ai tools` shows only that
+tool's detail snapshot. Filters, head/tail/take, sorting/shuffling, reverse,
+duplicate removal, flatten, xargs and repeat preserve this correspondence.
+Unreviewed/private data never gains approval by passing through these commands.
 
 A complete summary row can be passed back to the command, so this works:
 `!ai tools | tail 3 | xargs ai tools`. Each lookup discovers only its source
