@@ -1061,10 +1061,12 @@ full bounded catalog.
 ### Memes and Grok images
 
 `!ai tools` and `!ai tools <server>` list one tool per line, in catalog order:
-`` `server/name` — full description ``. Only the display ID is wrapped in
-backticks; structured `:id` and `:name` values remain raw. Descriptions are
-whitespace-collapsed, mention-neutralized and redacted; command punctuation is
-made literal for `xargs`. There is no extra display-only description cap.
+`` `server/name` — one-sentence purpose ``. This is a tool overview, not a dump
+of provider schemas and examples. The first sentence of the introduction is
+shown; code-only or oversized introductions point to `ai tools server/name`
+instead of displaying clipped code. Only the display ID is wrapped in backticks;
+structured `:id` and `:name` values remain raw. Overview punctuation stays literal
+for `xargs`; mentions and configured credentials remain neutralized/redacted.
 Existing catalog metadata safety limits still apply. Wrapped IDs and complete
 summary rows are accepted
 as selectors without evaluating their backticks as command substitutions.
@@ -1073,11 +1075,17 @@ Each row stays paired with its projected metadata through collection commands.
 `!ai tools <server/name>` shows focused help: description, input names/types,
 required fields, enum choices and conditional required alternatives. A unique
 bare tool name works too; ambiguous names require the qualified ID. Exact
-server names retain their existing source-filter meaning. Parameter descriptions,
-choices and required alternatives are no longer shortened for presentation.
+server names retain their existing source-filter meaning. Full descriptions and
+parameter help preserve paragraphs, indentation, code, quotes and punctuation,
+without presentation-only clipping. Choices and required alternatives remain
+complete. The structured catalog still contains the full descriptions regardless
+of the shorter overview. Credential redaction takes precedence over formatting.
 
 Long Discord lists/details offer **Previous/Next**, a page indicator and the
-complete `answer.md` download. Navigation reads the frozen, reviewed human text;
+complete `answer.md` download for the requested view (overview or selected tool),
+not a hidden dump of every tool's manual. Inspect a tool to read all its docs.
+Code fences remain balanced on continuation pages. Navigation reads frozen,
+reviewed human text;
 it never reruns discovery, tools or inference. Files, ordinary controls and the
 original elapsed caption remain on the same message. Controls expire on command
 edits, eviction or restart. Only exact final output is paged: filtering a listing
