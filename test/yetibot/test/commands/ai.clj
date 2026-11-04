@@ -396,6 +396,33 @@
                 => true)
           (fact (mapv :id (:data result)) => ids))))))
 
+(fact "collection pipelines expose only corresponding final reviewed tool data"
+  (with-inspection
+    (fn []
+      (with-redefs [clojure.core/rand-int (constantly 1)]
+        (doseq [[pipeline ids detail?]
+                [["random" ["search/b"] false]
+                 ["head" ["search/a"] false]
+                 ["tail 2" ["search/c" "search/d"] false]
+                 ["reverse | head" ["search/d"] false]
+                 ["grep Second" ["search/b"] false]
+                 ["random | ai tools" ["search/b"] true]
+                 ["tail 3 | xargs ai tools"
+                  ["search/b" "search/c" "search/d"] true]]]
+          (let [seen (atom [])
+                result (binding [public-result/*capture* #(swap! seen conj %)]
+                         (execution/run-command execution/request
+                           (str "ai tools search | " pipeline)))
+                snapshots (filterv :public-data? @seen)
+                data (:public-data (first snapshots))
+                entries (if (map? data) [data] data)]
+            (fact (:error result) => nil)
+            (fact (count snapshots) => 1)
+            (fact (mapv :id entries) => ids)
+            (fact (every? #(= detail? (contains? % :parameters)) entries)
+                  => true)
+            (fact (string/includes? (pr-str data) "inputSchema") => false)))))))
+
 (fact "restricted toolset pipelines retain the trusted caller"
   (with-inspection
     (fn []

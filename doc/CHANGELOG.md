@@ -8,6 +8,11 @@ as well.
 
 ## Unreleased
 
+- Collection pipelines keep corresponding raw/reviewed data with selected or
+  reordered values. Explore data follows the final result rather than earlier
+  catalog snapshots, including `ai tools | random | ai tools`. Private raw data
+  is never promoted to a public snapshot by collection operations.
+
 - Add the existing inline Explore data viewer to `ai tools`: IDs and short
   summaries only, plus flat parameter names/types/required flags for a selected
   tool. No raw catalog/schema dump, new UI, rediscovery or execution on clicks.
