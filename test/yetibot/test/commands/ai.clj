@@ -288,6 +288,72 @@
           "`search/c` — Find ’cf expensive’ ¦ docs across lines"
           "`search/d` — Fourth tool"])))
 
+(fact "tool data is a small reviewed projection, not the structured catalog"
+  (with-inspection
+    (fn []
+      (let [captured (atom [])
+            listing (ai/tools-cmd {:match ["tools search" "search"]})
+            detail (ai/tools-cmd {:match ["tools search/b" "search/b"]})]
+        (:result/public-data listing)
+        => [{:id "search/a" :summary "First tool"}
+            {:id "search/b" :summary "Second tool"}
+            {:id "search/c" :summary "Find `cf expensive` | docs across lines"}
+            {:id "search/d" :summary "Fourth tool"}]
+        (:result/public-data detail)
+        => {:id "search/b" :summary "Second tool"
+            :parameters [{:name "query" :type "string" :required true}
+                         {:name "limit" :type "integer" :required false}]}
+        (get-in detail [:result/data :inputSchema]) => inspection-schema
+        (binding [public-result/*capture* #(swap! captured conj %)]
+          (public-result/observe! listing)
+          (public-result/observe! detail))
+        (mapv :public-data? @captured) => [true true]
+        (mapv :public-data @captured)
+        => (mapv :result/public-data [listing detail])
+        (:result/public-data
+          (ai/tools-cmd {:match ["tools missing" "missing"]})) => nil))))
+
+(fact "tool snapshots exclude manuals, raw schemas and provider extras"
+  (let [entry {:id "search/read" :description "Read public information.\n\nMANUAL-BODY"
+               :private "PROVIDER-PRIVATE" :headers {"key" "HEADER-PRIVATE"}
+               :inputSchema {:type "object"
+                             :properties {"query" {:type "string"
+                                                   :description "PARAM-DOC"
+                                                   :default "RAW-DEFAULT"
+                                                   :enum ["RAW-ENUM"]}
+                                          "maybe" {:type ["string" "null"]}
+                                          "opaque" {:type {:private "RAW-TYPE"}}}}}]
+    (with-redefs [mcp/config (constantly {})
+                  tools/server-names (constantly ["search"])
+                  tools/tool-catalog (fn [& _] {:tools [entry]
+                                                :private "CATALOG-PRIVATE"})]
+      (let [listing (ai/tools-cmd {:match ["tools" nil]})
+            detail (ai/tools-cmd {:match ["tools search/read" "search/read"]})]
+        (:result/public-data listing)
+        => [{:id "search/read" :summary "Read public information."}]
+        (:result/public-data detail)
+        => {:id "search/read" :summary "Read public information."
+            :parameters [{:name "maybe" :type "string | null" :required false}
+                         {:name "opaque" :type "any" :required false}
+                         {:name "query" :type "string" :required false}]}
+        (:result/data detail) => entry))))
+
+(fact "tool data keeps credential and mention redaction"
+  (with-redefs [mcp/config
+                (constantly {:servers [{:name "s" :url "https://s.test/mcp"
+                                        :headers {"X-Api-Key" "private token"}}]})
+                tools/server-names (constantly ["s"])
+                tools/tool-catalog
+                (fn [& _] {:tools [{:id "s/t" :name "t"
+                                   :description "Find private token for @everyone."
+                                   :inputSchema {:properties
+                                                 {"private token" {:type "string"}}}}]})]
+    (let [result (ai/tools-cmd {:match ["tools s/t" "s/t"]})
+          data (pr-str (:result/public-data result))]
+      (string/includes? data "[redacted]") => true
+      (string/includes? data "private token") => false
+      (string/includes? data "@everyone") => false)))
+
 (fact "trailing whitespace still selects the default list"
   (with-inspection
     (fn []
