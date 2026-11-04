@@ -1091,7 +1091,13 @@ original elapsed caption remain on the same message. Controls expire on command
 edits, eviction or restart. Only exact final output is paged: filtering a listing
 through a pipeline does not bring back earlier rows. Paging retains at most
 262,144 UTF-16 units per command; larger output keeps the complete download.
-Structured catalog/schema data is not automatically published as a snapshot.
+**Explore data** uses the existing inline viewer for a small reviewed snapshot:
+listings expose only tool IDs and short purpose summaries; a selected tool adds
+flat parameter names, types and required flags. The viewer's existing bounds
+apply. No manuals, raw schemas, defaults, enum payloads, provider/configuration
+maps, arguments or results are retained in this snapshot. Expand/Collapse,
+paging and Hide data use the frozen snapshot without rediscovery or execution;
+Hide restores the original card. Pipeline metadata is unchanged.
 
 A complete summary row can be passed back to the command, so this works:
 `!ai tools | tail 3 | xargs ai tools`. Each lookup discovers only its source

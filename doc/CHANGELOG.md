@@ -8,6 +8,10 @@ as well.
 
 ## Unreleased
 
+- Add the existing inline Explore data viewer to `ai tools`: IDs and short
+  summaries only, plus flat parameter names/types/required flags for a selected
+  tool. No raw catalog/schema dump, new UI, rediscovery or execution on clicks.
+
 - Make `ai tools` a scannable one-sentence overview instead of flattening whole
   provider manuals into listing rows. Inspect `ai tools <server/tool>` for full
   help with paragraphs, code and punctuation preserved. Structured metadata,

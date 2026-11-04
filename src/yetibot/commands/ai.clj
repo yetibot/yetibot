@@ -276,13 +276,42 @@
            "Other tool sources are unaffected.")
       :else "No allowed tools are currently advertised.")))
 
-(defn- reviewed-tool-text [result]
-  ;; Only the already-redacted human display is approved for paging. Never
-  ;; retain raw catalogs/schemas here, and keep pipeline values unchanged.
-  (let [value (:result/value result)]
+(defn- public-tool-data [redact {:keys [id description inputSchema]} detail?]
+  (cond-> {:id (help-text redact id)
+           :summary (tool-overview redact (help-text redact id) description)}
+    detail?
+    (assoc :parameters
+      (let [required (set (schema-field inputSchema :required))]
+        (mapv (fn [[field schema]]
+                (let [field (parameter-name field)
+                      type (schema-field schema :type)]
+                  {:name (help-text redact field)
+                   :type (help-text redact
+                           (cond
+                             (string? type) type
+                             (and (vector? type) (every? string? type))
+                             (string/join " | " type)
+                             :else "any"))
+                   :required (boolean (required field))}))
+              (sort-by (fn [[field _]]
+                         [(not (required (parameter-name field)))
+                          (parameter-name field)])
+                       (schema-field inputSchema :properties)))))))
+
+(defn- reviewed-tool-text [redact result]
+  ;; Review only human text and this allowlisted metadata projection. Raw
+  ;; catalogs/schemas remain pipeline-only; the existing viewer bounds apply.
+  (let [value (:result/value result)
+        data (:result/data result)
+        public-data (when data
+                      (if (:result/collection-path result)
+                        (when (seq (:tools data))
+                          (mapv #(public-tool-data redact % false) (:tools data)))
+                        (public-tool-data redact data true)))]
     (public-result/reviewed
-      (assoc result :result/public-text
-        (if (string? value) value (string/join "\n" value))))))
+      (cond-> (assoc result :result/public-text
+                (if (string? value) value (string/join "\n" value)))
+        public-data (assoc :result/public-data public-data)))))
 
 (defn tools-cmd
   "ai tools # browse allowed tools with one-sentence overviews
@@ -311,7 +340,7 @@
             catalog (tools/tool-catalog source actor)
             redactions (mcp/config)
             redact #(mcp/metadata-redact % redactions)]
-        (reviewed-tool-text
+        (reviewed-tool-text redact
           (if (and selector (not server))
             (let [matches (filterv #(or (= selector (:id %))
                                        (= selector (:name %))) (:tools catalog))]
