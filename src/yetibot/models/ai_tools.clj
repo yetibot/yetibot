@@ -498,12 +498,24 @@
   (mapv :name (filter #(policy/visible? % actor)
                       (:toolsets (toolsets/validate! (mcp/config))))))
 
+(defn server-info
+  "Policy-filtered configured metadata only; no discovery or health claims."
+  [actor]
+  (let [config (listing-config actor)]
+    (cond-> (mapv (fn [server]
+                     {:name (:name server) :kind "mcp"
+                      :tool_names (:tools server)
+                      :selection (if (:tools server) "allowlist"
+                                   "server-default")
+                      :discovery "not-checked"}) (:servers config))
+      (seq (:native-tools config))
+      (conj {:name "yetibot" :kind "native"
+             :tool_names (vec (:native-tools config))
+             :selection "allowlist" :discovery "local"}))))
+
 (defn server-names
   ([] (server-names nil))
-  ([actor]
-   (let [config (listing-config actor)]
-     (cond-> (mapv :name (:servers config))
-       (seq (:native-tools config)) (conj "yetibot")))))
+  ([actor] (mapv :name (server-info actor))))
 
 (defn- public-data [value config]
   ;; Only JSON data is admissible. Never serialize functions or host objects,

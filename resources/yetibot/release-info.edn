@@ -1,6 +1,16 @@
 {:schema_version 1
  :changes
- [{:id "weather-cron-alias-data"
+ [{:id "ai-reply-routing-default-prices"
+   :date "2026-11-05"
+   :component "app"
+   :title "Continue AI replies and compare default model prices"
+   :summary "Plain human replies to fresh successful standalone AI/Grok/Zen answers inherit their resolved command, provider/model and safe options. Reply text stays literal; explicit commands switch branches. Recheck current policy, ownership and bounded context; ignore bots/errors/stale answers and duplicate turns. Paid routes make new paid requests; automatic free models must remain verified free, with no rotation or paid fallback. Any trusted chat user can explicitly select a global runtime default, including paid Zen models, with previous/new input/output list-rate comparisons; unknown prices say unavailable, and setting performs no inference. AI inspection and Zen model lists gain reviewed Explore data without credentials, endpoints, raw configs or private payloads."
+   :commands ["zen Hello" "ai default zen gpt-5.4-mini" "ai default"
+              "ai providers" "ai servers"]
+   :requires ["Fresh retained Discord answer for implicit continuation"
+              "Trusted direct chat for global defaults; normal model/tool policy"]
+   :links []}
+  {:id "weather-cron-alias-data"
    :date "2026-11-05"
    :component "app"
    :title "Follow reply conversations, inspect weather and manage schedules"

@@ -99,9 +99,8 @@
               (assoc :default-provider provider)
               (update :providers
                       #(mapv (fn [p] (if (= provider (:name p))
-                                       (cond-> (assoc p :model model)
-                                         (= "zen" provider)
-                                         (assoc :ai/free-default true)) p)) %))))))))
+                                       (dissoc (assoc p :model model)
+                                               :ai/free-default) p)) %))))))))
 
 (defn provider [config provider-name]
   (let [provider-name (or provider-name (:default-provider config)

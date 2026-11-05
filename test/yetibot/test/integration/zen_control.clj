@@ -41,7 +41,7 @@
                       http/get (fn [& _] (swap! gets inc) (response))
                       ai/complete (fn [& _] (throw (AssertionError. "No POST")))]
           (get-in (models/call! config "ai" selection (:chat-source request))
-                  [:structuredContent :verified_free]) => true
+                  [:structuredContent :runtime_only]) => true
           @ai/runtime-default => {:provider "zen" :model "free-a"}
           @prefs => {}
           (ai/config) => settings

@@ -158,12 +158,12 @@
           "nor tool quality. Only chat models accept ask. "
           "No URLs, credentials or identity arguments. Max 2048 output tokens. "
           (when-not cloudflare?
-            (str "Zen defaults are freshly verified free-only. "
-                 "defaults inspects global defaults. Admin-only set_default requires "
-                 "an exact configured provider and model; reset_default restores "
-                 "file defaults. These change only a global in-memory choice, "
-                 "may select a paid provider/model, and require caller policy. "
-                 "Zen defaults remain verified-free only. Never change keys, "
+            (str "defaults inspects global defaults. Trusted-user set_default "
+                 "requires a configured provider and exact model; reset_default "
+                 "restores file defaults. Changes are global and in-memory, "
+                 "may select paid models, show previous/new list pricing, "
+                 "and require caller policy. Only automatic Zen choices are "
+                 "verified-free. Never change keys, "
                  "endpoints, permissions or file config; do not retry setters.")))
      :inputSchema
      ;; Grok requires complete typed object branches, not partial/not shapes.
