@@ -252,10 +252,8 @@
           (json/parse-string text true)
           (recur (pop entries)))))))
 
-(defn call!
-  "Recheck trust/policy before credentials. At most one inference POST, no retries.
-   Catalog eligibility is remote state, checked at runtime before paid work."
-  [config operation args source]
+(defn- invoke!
+  [config operation args source read-messages]
   (let [attempted? (atom false)]
     (try
       (trusted! config source)
@@ -309,10 +307,15 @@
                                            (= :chat (:interface %)))
                                      (:models catalog)))
                   (ai/fail "Model is not a catalogued chat interface."))
-                (reset! attempted? true)
-                (let [result (ai/complete
-                               (assoc p :native-tools []) model
-                               [{:role "user" :content (get args "prompt")}]
+                (let [messages (if read-messages (read-messages)
+                                 [{:role "user" :content (get args "prompt")}])
+                      _ (credential-input! redactions messages)
+                      _ (trusted! config source)
+                      _ (policy/authorize! (:toolset config)
+                          (policy/actor execution/*event*) p model)
+                      _ (reset! attempted? true)
+                      result (ai/complete
+                               (assoc p :native-tools []) model messages
                                {::diagnostics/stage :delegation
                                 :tools [] :tool_choice "none"
                                 :max-output-tokens
@@ -322,7 +325,8 @@
                      (get-in result [:result/data :ai/cost])
                      (assoc :ai/cost (get-in result [:result/data :ai/cost])))}))))))
       (catch Exception e
-        (let [rejection (when (= "zen" (get args "provider"))
+        (let [context-error? (:ai/context (ex-data e))
+              rejection (when (= "zen" (get args "provider"))
                           (or (:ai/zen-rejection (ex-data e))
                               (when (= 429 (get-in (ex-data e)
                                                   [:ai/diagnostic :status]))
@@ -330,10 +334,13 @@
               message (opencode/rejection-message
                         (:code rejection) (:retry-after-seconds rejection))]
           {:isError true :unknownOutcome (and @attempted? (not message))
-           :error-code (when message (:code rejection))
+           :error-code (if context-error? :conversation-unavailable
+                         (when message (:code rejection)))
            :retry-after-seconds (when message (:retry-after-seconds rejection))
            :structuredContent
            {:error (cond
+                     context-error?
+                     "Could not read the conversation. No prompt was sent to the AI provider."
                      message message
                      @attempted?
                      (str "AI child outcome could not be confirmed; "
@@ -341,3 +348,14 @@
                      :else
                      (str "AI child did not run. Check trusted source, policy, "
                           "configuration and chat model eligibility."))}})))))
+
+(defn call!
+  "Stateless native child: one explicit prompt, no history or tool recursion."
+  [config operation args source]
+  (invoke! config operation args source nil))
+
+(defn chat!
+  "Trusted top-level chat only. Read host-owned context after authorization,
+   before attempting inference. This callback is not a model tool argument."
+  [config args source read-messages]
+  (invoke! config "ai" (assoc args "action" "ask") source read-messages))

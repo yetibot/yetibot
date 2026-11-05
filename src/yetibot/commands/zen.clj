@@ -6,6 +6,7 @@
             [yetibot.commands.ai :as ai]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-model-tools :as models]
+            [yetibot.models.ai-context :as context]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.util.ai-status :as status]
             [yetibot.models.ai-toolsets :as toolsets]))
@@ -29,6 +30,8 @@
         message
         (cond
           rejection rejection
+          (= code :conversation-unavailable)
+          "Could not read the conversation. No prompt was sent to the AI provider."
           unknown?
           (str "OpenCode Zen outcome could not be confirmed; "
                "do not repeat this paid request.")
@@ -78,12 +81,12 @@
                           (:key-file provider))
               (api/fail "Configure the Zen API key first."))
           config (toolsets/select (mcp/config) (:toolset options))
-          result (models/call!
-                   config "ai"
+          result (models/chat!
+                   config
                    (cond-> {"action" "ask" "provider" "zen"
                             "prompt" (:prompt options)}
                      (:model options) (assoc "model" (:model options)))
-                   chat-source)
+                   chat-source #(context/messages args (:prompt options)))
           data (:structuredContent result)]
       (if (:isError result)
         (failure args (:unknownOutcome result) (:error-code result)

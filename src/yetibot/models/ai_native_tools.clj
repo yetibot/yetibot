@@ -5,6 +5,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.core.models.help :as help]
             [yetibot.models.ai-alias-tools :as aliases]
+            [yetibot.models.ai-cron-tools :as cron]
             [yetibot.models.ai-history :as history]
             [yetibot.models.ai-inference-tools :as inference]
             [yetibot.models.ai-media-tools :as media]
@@ -12,6 +13,7 @@
             [yetibot.models.ai-react-tools :as react]
             [yetibot.models.release-info :as releases]
             [yetibot.models.ai-util-tools :as util]
+            [yetibot.models.ai-weather-tools :as weather]
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -127,7 +129,9 @@
                                  (models/available-tools) wise-tools
                                  (react/available-tools)
                                  (util/available-tools)
-                                 (aliases/available-tools))))
+                                 (aliases/available-tools)
+                                 (weather/available-tools)
+                                 (cron/available-tools))))
         selected (get t :native-tools defaults)]
     (cond->> selected
       (empty? wise-tools) (filterv #(not= "wise" %))
@@ -135,6 +139,12 @@
 
 (defn- adapter [operation]
   (cond
+    (contains? cron/definitions operation)
+    {:definition (get cron/definitions operation)
+     :arguments cron/arguments! :call cron/call!}
+    (contains? weather/definitions operation)
+    {:definition (get weather/definitions operation)
+     :arguments weather/arguments! :call weather/call!}
     (contains? aliases/definitions operation)
     {:definition (get aliases/definitions operation)
      :arguments aliases/arguments! :call aliases/call!}

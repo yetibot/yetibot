@@ -1,6 +1,16 @@
 {:schema_version 1
  :changes
- [{:id "ai-tools-pagination"
+ [{:id "weather-cron-alias-data"
+   :date "2026-11-05"
+   :component "app"
+   :title "Follow reply conversations, inspect weather and manage schedules"
+   :summary "Discord answers reply to their triggering command without pings. AI follow-ups read bounded same-channel reply ancestry, including visible V2 cards; unreadable chains fail before inference. Top-level zen gains conversation context but stays tool-free, while internal model calls remain stateless. Weather returns actual reviewed fields and explicit units for formatting suggestions. Cron supports current-channel list/get/create/update/delete with owner/admin writes, freshness and duplicate protection; no global controls or run-now. Scheduled commands cannot manage cron. Aliases/render preserve corresponding raw/reviewed data without publishing private fields."
+   :commands ["zen What about Calgary?"
+              "grok Run weather, inspect its data, and suggest a one-line alias."
+              "grok List this channel's cron schedules."]
+   :requires ["Trusted chat request and an enabled native toolset"]
+   :links []}
+  {:id "ai-tools-pagination"
    :date "2026-11-03"
    :component "app"
    :title "Browse tools and read complete formatted help"

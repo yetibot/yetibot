@@ -183,7 +183,11 @@
                                   :custom_id "yb:again:parent:command"}
                                  {:type 2 :style 2 :label "Help"
                                   :custom_id "yb:help:parent:command"}]}]}]
-                            :allowed-mentions {:parse []}}]])
+                            :message-reference
+                            {:message_id "command" :channel_id "parent"
+                             :fail_if_not_exists false}
+                            :allowed-mentions
+                            {:parse [] :replied_user false}}]])
                 (finally (deliver release true)))
               (await! completion)
               (let [creates (payload-calls @calls :create)
@@ -201,7 +205,7 @@
                       (every? #(= {:parse []}
                                   (get-in % [3 :allowed_mentions])) edits)
                       => true
-                      (every? #(= {:parse []}
+                      (every? #(= {:parse [] :replied_user false}
                                   (get-in % [3 :allowed-mentions])) creates)
                       => true
                       (mapv #(select-keys % [:method :path]) @requests)

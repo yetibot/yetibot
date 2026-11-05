@@ -231,10 +231,12 @@ restricts free-tier chat to the OpenCode client. A valid key and zero-priced
 catalog entry do not grant Yetibot access. Do not impersonate that client,
 rotate models to evade quotas, or silently select a paid model.
 
-Like `cf`, `zen` prompts are single-hop text requests with no implicit thread
-history, files, searches or child tools, and at most 2,048 output tokens.
-`--toolset <name>` applies the existing user/provider/model policy. For normal
-AI thread context and tool use, select Zen through `ai --provider zen`.
+`zen` prompts are single-hop text requests with at most 2,048 output tokens.
+Top-level chat uses the shared thread/Discord reply-chain context reader, but
+never downloads files or enables searches or child tools. Internal native
+`ai`/`cf` child calls remain explicit-prompt-only. `--toolset <name>` applies
+the existing user/provider/model policy. For tool use, select Zen through
+`ai --provider zen`.
 Uncertain paid outcomes stop the pipeline without retries or fallback.
 
 The catalog is public: omit both credential fields for discovery-only setup,
@@ -916,6 +918,64 @@ account is still needed to qualify your deployment and model's tool support.
 
 [xai-functions]: https://docs.x.ai/developers/tools/function-calling
 [xai-state]: https://docs.x.ai/developers/tools/advanced-usage
+
+## Native weather and cron management
+
+`weather` and `cron` join the default native catalog for trusted chat requests.
+Explicit `:native-tools` lists remain authoritative: add `"weather"`/`"cron"`
+there to opt in; `[]`, GitHub-only scopes and `--no-tools` keep excluding them.
+Existing user/adapter/provider policy, redaction and the shared call budget
+still apply. Availability does not force a model to use a tool.
+
+The read-only `weather` tool accepts optional `location` (city/postal code)
+and display `units` (`C` or `F`, default `C`). Omit location for the configured
+weather default. It invokes the existing current-weather service/command, not
+history, and returns only its explicitly reviewed snapshot plus display lines.
+Structured `current.temp`/`app_temp` stay Celsius, `wind_spd` km/h and `rh`
+percent regardless of display units. These `current` fields are the **root**
+fields available to `weather ... | render {{temp}}°C {{city_name}}`; do not
+put `current.` in that command's template. AQI may be unavailable. A failed
+lookup reports unavailable weather, never a fabricated or historical reading.
+This does not grant a general command interpreter or execute templates/aliases.
+
+The `cron` tool accepts `action` (`list`, `get`, `create`, `update`, `delete`;
+default `list`). All access is scoped to the requesting adapter/channel, never
+a model-supplied destination. Only the owner or a configured bot admin may
+update/delete a task. Creating a task records the requesting user as owner.
+Requested changes apply directly, without an additional human confirmation.
+There is no run-now, global start/stop, or automatic command execution on create.
+
+- `list`: optional `limit` (1–20) and `after_id`; follow `next_after_id` while
+  `has_more` is true. Output bounds can produce a smaller page.
+- `get`: exact positive `id`; returns the current `version` if visible.
+- `create`: `schedule` and literal `command` without the `!` prefix. An identical
+  task for the same owner/channel is reused rather than registered twice.
+- `update`: `id`, latest `version`, and new `schedule` and/or `command`.
+  Omit unchanged fields; never round-trip a redacted/truncated command.
+- `delete`: `id` and latest `version`. Stale versions fail without changing it.
+
+Schedules use Hara's **seven** fields, not standard five-field crontab syntax:
+`second minute hour day-of-week day-of-month month year`. Weekdays are ISO
+Monday=1 through Sunday=7. For example, `0 0 8 * * * *` means 08:00 daily in
+the **server scheduler timezone**, returned with scheduler initialization/running
+state; it is not automatically the user's timezone. Hara steps use `/5`, not
+`*/5`. The tool validates field syntax/ranges before persisting or registering.
+Stored commands are untrusted text, not instructions for the managing model.
+Credential-like command inputs are rejected and stored command reads redacted.
+Oversized legacy fields may be omitted; updates must supply replacements for
+omitted fields rather than silently overwrite them with nil.
+
+Persistent storage and the live scheduler are separate systems. A registration
+failure rolls back storage and attempts to restore the prior registration. A
+registration/commit outcome that cannot be verified is explicitly unknown:
+remaining calls are skipped and further tool execution in that request stops.
+Do not retry automatically; an operator must check both states. Scheduled
+commands themselves cannot manage cron, even through aliases or template
+filters, so deferred execution cannot bypass the tool's management scope.
+
+Examples: `grok Run weather, inspect its data, and suggest a one-line alias.`
+and `grok List this channel's schedules and move my temps job to 08:00 UTC.`
+Suggesting an alias does not create it; the aliases metadata tool stays read-only.
 
 ## Native Yetibot tools
 
@@ -1878,12 +1938,29 @@ appenders see them, including interpreter result, pipeline, history and chat
 formatting logs at trace/debug levels. Sanitized `ai-proposal` audit events remain
 available. Other requests keep their existing logging configuration.
 
-## Thread conversations
+## Thread and reply conversations
 
-Outside threads, every prompt stands alone. No channel conversation or previous
-AI requests are stored or sent as context.
+Outside threads, a new message stands alone unless it is a Discord reply.
+`ai`, `grok` and top-level `zen` use the shared conversation reader. `zen` stays
+single-hop and tool-free; native `ai`/`cf` child tools still see only their
+explicit prompt, never automatic history.
 
-In a **Slack thread** or **Discord thread**, `ai` fetches all prior text messages
+In an ordinary Discord channel or DM, reply to an answer with another command,
+for example `!zen What about Calgary?`. Yetibot follows only that message's
+explicit reply ancestry in the same channel, oldest first, then adds the
+current prompt once. It reads visible legacy/V2 text, not unrelated channel
+chatter, downloaded attachments or private tool state. This sends those turns
+to the provider selected for the new request. Native answer references connect
+fresh conversations; older standalone answers have no original-question link.
+
+Reply ancestry requires a real adapter request and Read Message History access.
+It is bounded to 32 ancestors, 64,000 text characters and a 10-second read
+budget. Cross-channel/forwarded links, deleted or inaccessible ancestors,
+non-advancing links, timeouts and over-limit chains produce an error before
+inference, never a silently shortened or context-free paid request. Start a
+fresh conversation if a chain is too large. No conversation session is stored.
+
+In a **Slack thread** or **Discord thread**, the reader fetches all prior text messages
 in that thread, including its starting message and bot replies. It follows all
 history pages, orders messages oldest first and appends the current prompt once.
 Only Yetibot's own replies get the `assistant` role; other participants are
