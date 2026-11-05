@@ -98,7 +98,9 @@
   (re-pattern (str "(?i)(?:^|[^a-z0-9])" sensitive-label
                    "(?:$|[^a-z0-9])")))
 
-(defn- protect [config text]
+(defn protect
+  "Redact a stored command literal without executing or expanding it."
+  [config text]
   (let [detected (detection-text text)]
     (if (or (re-find structural-field detected)
             (re-find credential-shape detected))

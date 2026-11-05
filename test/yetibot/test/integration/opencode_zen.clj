@@ -118,12 +118,13 @@
         (get-in result [:data :isError]) => true
         (string/includes? (str (:value result)) "must-not-run") => false))))
 
-(fact "zen prompts pin Zen without implicit history or child tools"
+(fact "top-level Zen pins its provider and includes host context without tools"
   (let [calls (atom [])]
     (with-redefs [ai/config (constantly settings)
                   mcp/config (constantly {:servers []})
                   context/messages
-                  (fn [& _] (throw (AssertionError. "implicit history")))
+                  (fn [_ prompt] [{:role "assistant" :content "prior answer"}
+                                  {:role "user" :content prompt}])
                   ai/complete
                   (fn [provider model messages options]
                     (swap! calls conj [provider model messages options])
@@ -134,7 +135,8 @@
         (:value result) => "Zen answer"
         (:name provider) => "zen"
         model => "new-model-arrived-today"
-        messages => [{:role "user" :content "Say hello"}]
+        messages => [{:role "assistant" :content "prior answer"}
+                     {:role "user" :content "Say hello"}]
         (:tools options) => []
         (:native-tools provider) => []
         (:max-output-tokens options) => 2048
@@ -201,6 +203,8 @@
   (let [posts (atom 0)]
     (with-redefs [ai/config (constantly settings)
                   mcp/config (constantly {:servers []})
+                  context/messages (fn [_ prompt]
+                                     [{:role "user" :content prompt}])
                   http/get (fn [_ options] (response options))
                   http/post
                   (fn [_ options]
@@ -223,6 +227,8 @@
 (fact "known Zen 429 rejection is not mistaken for missing configuration"
   (with-redefs [ai/config (constantly settings)
                 mcp/config (constantly {:servers []})
+                context/messages (fn [_ prompt]
+                                   [{:role "user" :content prompt}])
                 http/get (fn [_ options] (response options))
                 ai/complete (fn [& _]
                               (throw (ex-info "private vendor text"
@@ -236,6 +242,8 @@
   (let [calls (atom 0)]
     (with-redefs [ai/config (constantly settings)
                   mcp/config (constantly {:servers []})
+                  context/messages (fn [_ prompt]
+                                     [{:role "user" :content prompt}])
                   http/get (fn [_ options] (response options))
                   ai/complete
                   (fn [& _]

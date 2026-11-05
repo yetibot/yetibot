@@ -8,6 +8,20 @@ as well.
 
 ## Unreleased
 
+- Reply directly to Discord commands and read explicit same-channel reply
+  ancestry for AI follow-ups, including visible V2 text. Context reads are
+  bounded and fail before inference if incomplete. Top-level zen now uses
+  conversation context while retaining one-hop/tool-free inference; internal
+  model tools remain stateless. Actual threads retain full-thread context.
+
+- Add structured native weather and cron tools. Models can fetch actual current
+  weather with reviewed fields/explicit metric data units to suggest templates,
+  rather than infer it from history. Cron supports current-channel listing,
+  inspection, creation, updates and deletion; owner/admin writes apply directly
+  on request, with freshness checks, duplicate-create protection and no global
+  scheduler controls or immediate command execution. Preserve structured raw
+  and reviewed data through nested aliases/render, including temps pipelines.
+
 - Collection pipelines keep corresponding raw/reviewed data with selected or
   reordered values. Explore data follows the final result rather than earlier
   catalog snapshots, including `ai tools | random | ai tools`. Private raw data

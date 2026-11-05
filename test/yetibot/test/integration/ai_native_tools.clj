@@ -144,13 +144,15 @@
             (fact (tools/tool-names "yetibot" actor)
                   => ["yetibot/help" "yetibot/history"
                       "yetibot/history_count" "yetibot/release_info"
-                      "yetibot/util" "yetibot/aliases"])
+                      "yetibot/util" "yetibot/aliases"
+                      "yetibot/weather" "yetibot/cron"])
             (fact (tools/tool-names nil actor)
                   => (vec (concat (when (seq (:servers settings))
                                     ["exa/search"])
                                   ["yetibot/help" "yetibot/history"
                                    "yetibot/history_count" "yetibot/release_info"
-                                   "yetibot/util" "yetibot/aliases"])))))))))
+                                   "yetibot/util" "yetibot/aliases"
+                                   "yetibot/weather" "yetibot/cron"])))))))))
 
 (fact "real listing commands preserve names and expose inert structured data"
   (with-redefs [mcp/config (constantly nil)
@@ -161,10 +163,12 @@
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
             => ["`yetibot/help`" "`yetibot/history`" "`yetibot/history_count`"
-                "`yetibot/release_info`" "`yetibot/util`" "`yetibot/aliases`"]
+                "`yetibot/release_info`" "`yetibot/util`" "`yetibot/aliases`"
+                "`yetibot/weather`" "`yetibot/cron`"]
             (mapv :id (get-in normal [:data :tools]))
             => ["yetibot/help" "yetibot/history" "yetibot/history_count"
-                "yetibot/release_info" "yetibot/util" "yetibot/aliases"]
+                "yetibot/release_info" "yetibot/util" "yetibot/aliases"
+                "yetibot/weather" "yetibot/cron"]
             (every? #(and (string? (:description %))
                           (= "object" (get-in % [:inputSchema :type])))
                     (get-in normal [:data :tools])) => true
@@ -182,7 +186,7 @@
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
     (let [result (execution/run-command execution/request
                    "ai tools | tail 3 | xargs ai tools")
-          ids ["yetibot/release_info" "yetibot/util" "yetibot/aliases"]]
+          ids ["yetibot/aliases" "yetibot/weather" "yetibot/cron"]]
       (mapv #(some-> % string/split-lines first) (:value result)) => ids
       (mapv :id (:data result)) => ids
       (every? #(and (string? %) (string/includes? % "Inputs:"))
@@ -197,7 +201,8 @@
           (fact (tools/tool-names "yetibot" actor)
                 => ["yetibot/help" "yetibot/history"
                     "yetibot/history_count" "yetibot/release_info"
-                    "yetibot/util" "yetibot/aliases"])
+                    "yetibot/util" "yetibot/aliases"
+                    "yetibot/weather" "yetibot/cron"])
           (fact (tools/server-names (assoc actor :user "U2")) => []))
         (with-redefs [mcp/config
                       (constantly (assoc-in config [:toolsets 0 :native-tools]
@@ -210,7 +215,7 @@
     (:view data) => "running"
     (:untrusted data) => true
     (:build data) => (:build releases/running)
-    (get-in data [:changes 0 :id]) => "ai-tools-pagination"
+    (get-in data [:changes 0 :id]) => "weather-cron-alias-data"
     (count (:sent result)) => 2))
 
 (fact "whole-batch validation rejects injected release fields before any GET"
@@ -564,7 +569,8 @@
                     => (conj (cond-> defaults
                                meme? (conj "yetibot/meme")
                                image? (conj "yetibot/gi"))
-                             "yetibot/util" "yetibot/aliases")
+                             "yetibot/util" "yetibot/aliases"
+                             "yetibot/weather" "yetibot/cron")
                     (mapv :id (:tools catalog)) => (:names catalog)
                     (every? #(= "object" (get-in % [:inputSchema :type]))
                             (:tools catalog)) => true))
@@ -823,7 +829,8 @@
                 (fact (:names catalog)
                       => (into reads ["yetibot/clef" "yetibot/clairic"
                                       "yetibot/wise" "yetibot/util"
-                                      "yetibot/aliases"])
+                                      "yetibot/aliases"
+                                      "yetibot/weather" "yetibot/cron"])
                       (mapv :id (:tools catalog)) => (:names catalog)
                       (every? #(= "object" (get-in % [:inputSchema :type]))
                               (:tools catalog)) => true)))

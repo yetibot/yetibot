@@ -1,5 +1,25 @@
 # Discord command replies
 
+## Native replies and AI follow-ups
+
+Command answers reply directly to the triggering Discord message, including
+rich cards and attachments, without pinging its author. Edits keep the answer's
+message ID when possible; reruns still require the original requester.
+Explicit cross-channel sends and newly created threads do not reference a
+message in their parent channel. If the requesting message was deleted,
+Discord may deliver the answer without a reference; Yetibot does not repeat the
+command or blindly retry a send.
+
+Reply to a Yetibot answer with `!ai`, `!grok` or `!zen` and a follow-up prompt.
+In ordinary channels/DMs the AI receives that same-channel reply ancestry,
+including visible V2 answer text, not unrelated channel messages. Actual
+threads keep their existing full-thread context. The bot needs View Channel
+and Read Message History. An unreadable or oversized chain fails before
+inference instead of silently omitting context. See
+[AI conversations](AI.md#thread-and-reply-conversations) for limits and
+provider/privacy details. Internal model-to-model calls remain stateless and
+tool-free. Fresh answers establish links; old messages are not rewritten.
+
 ## Inspect errors and structured results
 
 **Show details** expands a completed AI reply's frozen tool-call summary inside
