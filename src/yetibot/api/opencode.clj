@@ -151,6 +151,43 @@
                      (string/includes? % (:key provider))))
        sort vec))
 
+(defn model-metadata
+  "Closed text-adapter capabilities and USD/1M rates; never catalog URLs."
+  [{:keys [id type modalities api cost] :as model}]
+  (let [protocol (some #(when (map? (get api %)) (name %))
+                       [:responses :chat-completions])
+        text? (and (= "chat" type)
+                   (some #{"text"} (:input modalities))
+                   (some #{"text"} (:output modalities)))
+        input (get-in cost [:text :input :price])
+        output (get-in cost [:text :output :price])
+        rate? #(and (number? %) (Double/isFinite (double %))
+                    (<= 0 % 1000000))
+        priced? (and (rate? input) (rate? output))]
+    {:id id :interface (if (and text? protocol) :chat :model-specific)
+     :task {:name (if text? "Text Generation" (or type "Unknown"))}
+     :schema-summary {:api protocol}
+     :pricing (cond-> {:kind (cond (free-model? model) "free"
+                                   (and priced? (pos? (+ input output))) "paid"
+                                   :else "unknown")
+                      :currency "USD" :unit "1M text tokens"
+                      :base_rates true}
+                priced? (assoc :input (bigdec input) :output (bigdec output)))}))
+
+(defn model-provider [provider record]
+  (when-not (= :chat (:interface record))
+    (throw (ex-info
+             "Zen model needs a catalogued text Chat Completions or Responses API. No inference was sent."
+             {:ai/error true :ai/request-not-sent true})))
+  (when (and (:ai/verified-free provider)
+             (not= "free" (get-in record [:pricing :kind])))
+    (throw (ex-info
+             "This conversation's model is no longer verified free. No inference was sent."
+             {:ai/error true :ai/request-not-sent true})))
+  ;; Only the protocol changes; no remote host/base_url is ever followed.
+  (assoc provider :api (get-in record [:schema-summary :api])
+                  ::selected-model (:id record) ::pricing (:pricing record)))
+
 (defn model-prices
   "Public USD/1M text-token list rates. No credentials or advertised URLs.
    https://opencode.ai/console/models documents the catalog's pricing unit."

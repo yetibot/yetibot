@@ -124,7 +124,8 @@
           (let [page (:structuredContent
                        (models/call! config "cf" {"action" "models"}
                                      (:chat-source request)))
-                llama (second (:models page))]
+                llama (first (filter #(= "@cf/meta/llama-3.1-8b-instruct-fp8" (:id %))
+                                     (:models page)))]
             (:description llama) => "[redacted] details"
             (get-in llama [:task :name]) => "Text Generation"
             (:unknown llama) => nil

@@ -53,6 +53,15 @@
                                              {:value @config}
                                              {:error :not-found}))
                   mcp/config #(deref policy)
+                  api/models
+                  (fn [_]
+                    (with-meta ["paid" "free-a"]
+                      {:catalog
+                       {:models (mapv #(hash-map :id % :interface :chat
+                                                :pricing {:kind (if (= % "free-a")
+                                                                  "free" "paid")}
+                                                :schema-summary {:api "responses"})
+                                      ["paid" "free-a"])}}))
                   api/complete
                   (fn [provider model history & [options]]
                     (swap! calls conj {:provider provider :model model

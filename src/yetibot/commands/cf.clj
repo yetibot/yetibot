@@ -46,24 +46,6 @@
               (when-not (string/starts-with? category "--")
                 {:category (lower-case category)})))))
 
-(defn- category [model]
-  (let [task (get-in model [:task :name])
-        label (if (string? task) (string/trim task) "")
-        id (-> (lower-case label)
-               (string/replace #"[^\p{L}\p{N}]+" "-")
-               (string/replace #"^-|-$" ""))]
-    (if (string/blank? id)
-      {:id "uncategorized" :name "Uncategorized"}
-      {:id id :name label})))
-
-(defn- categories [records]
-  (->> records
-       (group-by #(:id (category %)))
-       (map (fn [[_ entries]]
-              (assoc (category (first entries)) :count (count entries))))
-       (sort-by :id)
-       vec))
-
 (defn- catalog-error [args message]
   (-> (failure args false)
       (assoc :result/value message)
@@ -95,7 +77,7 @@
                 records (:models catalog)]
             (cond
               (:categories? options)
-              (let [summary (categories records)]
+              (let [summary (cloudflare/categories records)]
                 {:result/data (assoc (dissoc catalog :models)
                                      :categories summary)
                  :result/collection-path [:categories]
@@ -106,7 +88,7 @@
                        summary)})
               (:category options)
               (let [id (:category options)
-                    selected (filterv #(= id (:id (category %))) records)]
+                    selected (filterv #(= id (:id (cloudflare/category %))) records)]
                 (if (seq selected)
                   (catalog-result (assoc catalog :category id
                                                 :models selected))

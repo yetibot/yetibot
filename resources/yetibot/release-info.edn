@@ -1,6 +1,15 @@
 {:schema_version 1
  :changes
- [{:id "ai-usage-ledger"
+ [{:id "paid-text-model-selection"
+   :date "2026-11-06"
+   :component "app"
+   :title "Choose paid Zen and text-capable Cloudflare models"
+   :summary "Native Zen discovery defaults to paid text models with published input/output rates and supported API protocols. Select the exact model's Responses or Chat Completions protocol without following catalog URLs. Cloudflare native discovery exposes categories and filters text candidates before paging; stateless calls omit empty tool fields. Definite HTTP rejections no longer halt unrelated calls as unknown outcomes. Preserve no-retry safeguards, durable usage accounting and free-route revalidation. Successful Zen calls can estimate cost from returned tokens and known base rates; missing usage remains unavailable."
+   :commands ["ai models zen" "cf models --categories"
+              "cf models --category text-generation"]
+   :requires ["Updated application; existing configured Zen/Cloudflare access"]
+   :links ["https://github.com/yetibot/yetibot/pull/1326"]}
+  {:id "ai-usage-ledger"
    :date "2026-11-06"
    :component "app"
    :title "Report AI usage by month or custom timeframe"

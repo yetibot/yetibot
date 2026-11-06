@@ -173,6 +173,23 @@
                 #"/client/v4/accounts/([a-fA-F0-9]{32})/ai/v1/?"
                 (.getPath uri))))))
 
+(defn category [model]
+  (let [task (get-in model [:task :name])
+        label (if (string? task) (string/trim task) "")
+        id (-> (.toLowerCase ^String label java.util.Locale/ROOT)
+               (string/replace #"[^\p{L}\p{N}]+" "-")
+               (string/replace #"^-|-$" ""))]
+    (if (string/blank? id)
+      {:id "uncategorized" :name "Uncategorized"}
+      {:id id :name label})))
+
+(defn categories [records]
+  (->> records
+       (group-by #(:id (category %)))
+       (map (fn [[_ entries]]
+              (assoc (category (first entries)) :count (count entries))))
+       (sort-by :id) vec))
+
 (def catalog-fields
   [:id :catalog-id :description :task :interface :metadata-source
    :properties :limits :function-calling :schema-summary :source :created_at

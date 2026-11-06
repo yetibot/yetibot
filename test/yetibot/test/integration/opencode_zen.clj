@@ -17,10 +17,13 @@
           :key "zen-fixture-secret" :model "fixture-chat"})
 (def other {:name "other" :url "https://other.example/v1" :model "other"})
 (def settings {:providers [other zen] :default-provider "other"})
-(def records [{:id "fixture-chat" :type "chat"
-               :cost {:text {:input {:price 0} :output {:price 0}}}}
-              {:id "new-model-arrived-today" :type "chat"}
-              {:id "other" :type "chat"}])
+(def records
+  (mapv #(assoc % :modalities {:input ["text"] :output ["text"]}
+                  :api {:chat-completions {}})
+        [{:id "fixture-chat" :type "chat"
+          :cost {:text {:input {:price 0} :output {:price 0}}}}
+         {:id "new-model-arrived-today" :type "chat"}
+         {:id "other" :type "chat"}]))
 (defn response
   ([] (response {}))
   ([options]
@@ -121,6 +124,7 @@
 (fact "top-level Zen pins its provider and includes host context without tools"
   (let [calls (atom [])]
     (with-redefs [ai/config (constantly settings)
+                  http/get (fn [_ options] (response options))
                   mcp/config (constantly {:servers []})
                   context/messages
                   (fn [_ prompt] [{:role "assistant" :content "prior answer"}
@@ -170,7 +174,9 @@
   (let [selected (atom nil)]
     (with-redefs [ai/config (constantly settings)
                   mcp/config (constantly {:servers []})
-                  http/get (fn [& _] (throw (AssertionError. "No free discovery")))
+                  http/get (fn [_ options] (response options))
+                  opencode/free-models
+                  (fn [& _] (throw (AssertionError. "No free-only selection")))
                   context/messages (fn [_ prompt]
                                      [{:role "user" :content prompt}])
                   ai/complete

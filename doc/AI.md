@@ -1116,7 +1116,8 @@ default toolset, or first named toolset if none is configured, applies when
 
 These are adapters in the existing shared native/MCP catalog, not separate
 servers, command interpreters, or agent frameworks. `ai` supports actions
-`providers`, `models`, and `ask`; `cf` supports `models` and `ask` with the
+`providers`, `models`, and `ask` (plus global default controls); `cf` supports
+`categories`, `models` and `ask` with the
 provider fixed to `cloudflare`. Optional `provider` selects only a configured
 provider for `ai`. `ask` accepts `prompt`, optional `model`, and optional
 `max_output_tokens` (integer 1–2048, default 2048). It cannot accept URLs,
@@ -1128,8 +1129,13 @@ an allowed parent model does not grant access to other providers. Trusted
 adapter identity is rechecked before credential resolution and network work.
 Each child is one existing host tool call, counts against the existing parent
 budget, and calls the direct provider API once, **never** the agent/tool loop.
-All child tool/native search lists are empty. Responses uses
-`max_output_tokens`; generic Chat Completions uses `max_completion_tokens`.
+All child tool/native search lists are empty. Stateless Cloudflare payloads
+omit both `tools` and `tool_choice`. Responses uses `max_output_tokens`;
+generic Chat Completions uses `max_completion_tokens`, while Zen Chat
+Completions and Workers AI use `max_tokens`. Zen selects Responses or Chat Completions from that exact model's
+catalog metadata, not the configured default model's protocol. Catalog URLs
+never become credential destinations. Models requiring unsupported native
+protocols are not advertised as eligible text children and fail before inference.
 The child sees only its supplied prompt, not automatic history, files, or bank
 results. Parent models must not send unrelated private data in that prompt.
 
@@ -1141,13 +1147,28 @@ inside the host call, before the paid POST, not during pure preflight. Such
 runtime failures may follow earlier successful calls. Transport/output failure
 after an attempted paid request is an unknown outcome: no retry, later batch
 calls (including Wise/CF) are skipped, and further parent tools are disabled.
+Definite HTTP rejections (400/401/403/404/405/413/415/422/429) are errors, not
+unknown delivery: unrelated authorized calls may continue, but the rejected
+request is never retried. A rejection does not imply a known zero charge.
 
 Child results contain only bounded untrusted text plus provider/model, not
 raw provider bodies, headers, credentials, tool calls or reasoning state.
 Configured credentials are scanned as raw strings before outbound work; JSON
 strings are decoded and sensitive fields/credentials redacted before output
-truncation. Model listing pages the full catalog (default/max 20 entries) with
-`after`/`limit` and `next_after`, preserving the same whitelisted metadata.
+truncation. Native model listing defaults to text-chat candidates, filtered
+**before paging** (default/max 20 entries). Cloudflare supports
+`{"action":"categories"}`, `{"action":"models","category":"text-generation"}`
+and explicit `category: "all"` for the broader catalog. Zen defaults to paid,
+supported text models; `pricing: "free"` or `"all"` is an explicit opt-in.
+Cheap/fast does not mean free. Records include base USD/1M input/output rates
+and supported API protocol, never remote API URLs. Successful Zen calls without
+reported cost may use those rates and actual returned token counters for a
+partial estimate; missing counts stay unavailable, and cache tiers/tool fees
+are not invented. Reported costs take precedence. Automatic-free routes still
+require fresh zero-price eligibility at the wire boundary.
+
+Use `after`/`limit` and `next_after` to page the selected candidates, preserving
+the same whitelisted metadata.
 Pages stay below 12,000 UTF-8 JSON bytes, so a page may contain fewer than the
 requested number of entries. The cursor follows the last returned record;
 continue until `has_more` is false. `cf models` at the command line returns the

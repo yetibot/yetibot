@@ -52,7 +52,12 @@
   (let [captured (atom nil)
         zen {:name "zen" :url "https://opencode.ai/inference/openai/v1"
              :key "fixture-key" :model "gpt-5.4-mini" :api "responses"}]
-    (with-redefs [client/post (fn [url options]
+    (with-redefs [ai/models
+                  (constantly
+                    (with-meta ["gpt-5.4-mini"]
+                      {:catalog {:models [{:id "gpt-5.4-mini" :interface :chat
+                                           :schema-summary {:api "responses"}}]}}))
+                  client/post (fn [url options]
                                (fact url
                                      => "https://opencode.ai/inference/openai/v1/responses")
                                (reset! captured (:form-params options))

@@ -82,7 +82,7 @@
         (fact (every? #(contains? (:properties shape) (keyword %))
                        (:required shape)) => true))
       (fact (mapv #(get-in % [:properties :action :enum]) (:oneOf schema))
-            => (if (= operation "cf") [["ask"] ["models"]]
+            => (if (= operation "cf") [["ask"] ["models"] ["categories"]]
                  [["ask"] ["models"] ["providers" "defaults" "reset_default"]
             ["set_default"]])))))
 
@@ -187,7 +187,7 @@
                                   "max_output_tokens" 42}
                                  (:chat-source request)))) => "CF answer"
           (:max_tokens (first @posts)) => 42
-          (:tools (first @posts)) => []
+          (contains? (first @posts) :tools) => false
           @gets => 5)))))
 
 (facts "trust mismatch is denied before credentials, catalog or network"
@@ -281,7 +281,8 @@
     (fn [request]
       (with-redefs [cf/catalog (constantly catalog)]
         (let [result (:structuredContent
-                       (models/call! config "cf" {"action" "models" "limit" 2}
+                       (models/call! config "cf" {"action" "models" "limit" 2
+                                                 "category" "all"}
                                      (:chat-source request)))]
           (mapv :interface (:models result)) => ["extraction" "decision"]
           (:has_more result) => true
@@ -290,6 +291,7 @@
           (let [next (:structuredContent
                        (models/call! config "cf"
                                      {"action" "models" "limit" 2
+                                      "category" "all"
                                       "after" (:next_after result)}
                                      (:chat-source request)))]
             (mapv :id (:models next)) => ["@cf/vendor/chat" "@cf/vendor/image"]
@@ -543,7 +545,7 @@
           @posts => 1
           @echoes => 0)))))
 
-(fact "safe diagnostics survive private child failure without retrying"
+(fact "safe diagnostics survive unknown child failure without retrying"
   (let [logs (atom []) posts (atom []) effects (atom [])
         secret "PRIVATE-DIAGNOSTIC account balance USD 123456.78"
         calls [["ai" ask] ["wise" {"action" "balance"}]
@@ -578,7 +580,7 @@
                            {:name (str "yetibot_" name)
                             :arguments (json/generate-string args)}})
                         (range) calls)}}]}}
-                 {:status 400
+                 {:status (if (= 2 (count @posts)) 500 400)
                   :body {:error {:message secret
                                  :code "invalid_function_parameters"
                                  :param "tools"}}}))]
@@ -605,6 +607,140 @@
               => false
               (some #(re-find #"child-token|Only this text|123456|balance"
                               (pr-str %)) @logs) => nil)))))))
+
+(fact "native Cloudflare discovery filters text models before paging"
+  (in-request
+    (fn [request]
+      (with-redefs [cf/catalog
+                    (constantly
+                      (assoc catalog :models
+                        (into (mapv #(hash-map :id (str "@cf/a/image-" %)
+                                              :interface :model-specific
+                                              :task {:name "Text-to-Image"})
+                                    (range 40))
+                              (:models catalog))))]
+        (let [list-models #(models/call! config "cf" % (:chat-source request))]
+          (mapv :id (get-in (list-models {"action" "models"})
+                           [:structuredContent :models]))
+          => ["@cf/vendor/chat"]
+          (mapv :id (get-in (list-models {"action" "models"
+                                        "category" "text-generation"})
+                           [:structuredContent :models]))
+          => ["@cf/vendor/chat"]
+          (get-in (list-models {"action" "categories"})
+                  [:structuredContent :categories 0 :id]) => "text-generation")))))
+
+(def zen-catalog
+  [{:id "a-free" :type "chat"
+    :modalities {:input ["text"] :output ["text"]}
+    :api {:chat-completions {:base_url "https://ignored.invalid"}}
+    :cost {:text {:input {:price 0} :output {:price 0}}}}
+   {:id "b-paid" :type "chat"
+    :modalities {:input ["text"] :output ["text"]}
+    :api {:chat-completions {:base_url "https://ignored.invalid"}}
+    :cost {:text {:input {:price 0.3M} :output {:price 1.2M}}}}
+   {:id "c-native-only" :type "chat"
+    :modalities {:input ["text"] :output ["text"]}
+    :api {:generate-content {:base_url "https://ignored.invalid"}}
+    :cost {:text {:input {:price 0.3M} :output {:price 1.2M}}}}])
+
+(defn with-zen-catalog [f]
+  (in-request
+    (fn [request]
+      (with-redefs [ai/config
+                    (constantly
+                      {:providers [{:name "zen" :model "gpt-5.4-mini"
+                                    :api "responses" :key "zen-token"
+                                    :url "https://opencode.ai/inference/openai/v1"}]
+                       :default-provider "zen"})
+                    http/get (fn [& _] {:status 200 :body {:data zen-catalog}})]
+        (f request (update config :toolset dissoc :providers))))))
+
+(fact "Zen sampling exposes paid text candidates and real rates by default"
+  (with-zen-catalog
+    (fn [request config]
+      (let [result (models/call! config "ai"
+                     {"action" "models" "provider" "zen"}
+                     (:chat-source request))
+            rows (get-in result [:structuredContent :models])]
+        (mapv :id rows) => ["b-paid"]
+        (get-in rows [0 :pricing :input]) => 0.3M
+        (get-in rows [0 :pricing :output]) => 1.2M
+        (mapv :id (get-in (models/call! config "ai"
+                            {"action" "models" "provider" "zen"
+                             "pricing" "free"}
+                            (:chat-source request))
+                          [:structuredContent :models])) => ["a-free"]
+        (string/includes? (pr-str result) "ignored.invalid") => false))))
+
+(fact "Zen child overrides use the model's supported API, never catalog hosts"
+  (with-zen-catalog
+    (fn [request config]
+      (let [wire (atom nil)]
+        (with-redefs [http/post
+                      (fn [url options]
+                        (reset! wire [url (:form-params options)])
+                        {:status 200 :body {:choices [{:message {:content "READY"}}]
+                                            :usage {:prompt_tokens 10
+                                                    :completion_tokens 8}}})]
+          (get-in (models/call! config "ai"
+                    {"action" "ask" "provider" "zen" "model" "b-paid"
+                     "prompt" "Reply READY"}
+                    (:chat-source request)) [:structuredContent :text]) => "READY"
+          (first @wire)
+          => "https://opencode.ai/inference/openai/v1/chat/completions"
+          (:messages (second @wire))
+          => [{:role "user" :content "Reply READY"}]
+          (:max_tokens (second @wire)) => 2048
+          (contains? (second @wire) :max_completion_tokens) => false
+          (get-in (models/call! config "ai"
+                    {"action" "ask" "provider" "zen" "model" "b-paid"
+                     "prompt" "Reply READY"}
+                    (:chat-source request)) [:structuredContent :ai/cost :usd])
+          => 0.0000126M
+          (reset! wire nil)
+          (let [result (models/call! config "ai"
+                         {"action" "ask" "provider" "zen"
+                          "model" "c-native-only" "prompt" "Reply READY"}
+                         (:chat-source request))]
+            (:isError result) => true
+            (:unknownOutcome result) => false
+            @wire => nil))))))
+
+(fact "a fresh Zen protocol read cannot upgrade an automatic-free route"
+  (with-zen-catalog
+    (fn [_ _]
+      (boolean
+        (error #(ai/prepare-provider
+                  (assoc (ai/provider (ai/config) "zen") :ai/verified-free true)
+                  "b-paid"))) => true)))
+
+(fact "Cloudflare stateless text sends no empty tool negotiation fields"
+  (in-request
+    (fn [request]
+      (let [wire (atom nil)]
+        (with-redefs [cf/catalog (constantly catalog)
+                      http/post (fn [_ options]
+                                  (reset! wire (:form-params options))
+                                  {:status 200 :body {:choices [{:message {:content "READY"}}]}})]
+          (:isError (models/call! config "cf"
+                       {"action" "ask" "prompt" "Reply READY"}
+                       (:chat-source request))) => nil
+          (contains? @wire :tools) => false
+          (contains? @wire :tool_choice) => false)))))
+
+(fact "definite child HTTP rejection is not an unknown paid outcome"
+  (in-request
+    (fn [request]
+      (with-redefs [cf/catalog (constantly catalog)
+                    http/post (fn [& _] {:status 400 :body {}})]
+        (let [result (models/call! config "cf"
+                       {"action" "ask" "prompt" "Reply READY"}
+                       (:chat-source request))]
+          (:isError result) => true
+          (:unknownOutcome result) => false
+          (string/includes? (get-in result [:structuredContent :error]) "400")
+          => true)))))
 
 (fact "initial parent failure retains actual stage, count and choice"
   (in-request

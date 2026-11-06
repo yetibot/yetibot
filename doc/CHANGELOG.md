@@ -1,5 +1,14 @@
 # Yetibot changelog
 
+## 2026-11-06 — Native text-model selection
+
+- Default Zen sampling to supported paid text models with real base rates;
+  route each model through its advertised supported API on the configured host.
+- Expose Cloudflare categories to native discovery and filter chat candidates
+  before paging. Omit empty tool fields from stateless Workers AI requests.
+- Distinguish definite child HTTP rejection from unknown delivery without
+  retrying either. Keep durable receipts and automatic-free revalidation.
+
 Note: `yetibot` depends on [yetibot/core](https://github.com/yetibot/yetibot.core)
 which contains Yetibot's core functionality along with a few commands. See
 [yetibot/core's
