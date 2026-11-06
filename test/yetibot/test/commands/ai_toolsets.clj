@@ -12,6 +12,7 @@
             [yetibot.core.db.observe :as observers]
             [yetibot.core.handler :as handler]
             [yetibot.core.interpreter :as interpreter]
+            [yetibot.core.util.public-result :as public]
             [yetibot.core.models.channel :as channel]
             [yetibot.core.models.history :as history]
             [yetibot.core.webapp.routes.api :as route]
@@ -49,8 +50,10 @@
 
 (fact "private toolsets require trusted adapter context, not copied metadata"
   (with-redefs [mcp/config (constantly fixture/config)]
-    (ai/toolsets-cmd chat/request) => []
-    (ai/servers-cmd chat/request) => []
+    (doseq [result [(ai/toolsets-cmd chat/request)
+                    (ai/servers-cmd chat/request)]]
+      result => {:result/value [] :result/data [] :result/public-data []}
+      (:result/public-data (public/projection result)) => [])
     (:value (chat/run-command chat/request "ai toolsets")) => ["github-pr"]
     (:value (chat/run-command chat/request "ai servers"))
     => ["reader" "yetibot"]))
