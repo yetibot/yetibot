@@ -128,8 +128,8 @@
     (mapv #(get-in % [1 "prompt"]) (:callbacks run)) => (vec (repeat 3 prompt))
     (mapv :messages children)
     => (vec (repeat 3 [{:role "user" :content prompt}]))
-    (mapv :tools children) => [[] [] []]
-    (mapv :tool_choice children) => ["none" "none" "none"]
+    (mapv #(contains? % :tools) children) => [false false false]
+    (mapv #(contains? % :tool_choice) children) => [false false false]
     (mapv :max_tokens children) => [1 1024 2048]
     (some #(string/includes? (pr-str %) "PRIVATE-PARENT-CONTEXT") children)
     => nil
@@ -203,4 +203,4 @@
     (count (:callbacks run)) => 1
     (get-in (child-posts run) [0 1 :messages])
     => [{:role "user" :content supplied}]
-    (get-in (child-posts run) [0 1 :tools]) => []))
+    (contains? (second (first (child-posts run))) :tools) => false))

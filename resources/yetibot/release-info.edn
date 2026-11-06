@@ -8,7 +8,7 @@
    :commands ["ai models zen" "cf models --categories"
               "cf models --category text-generation"]
    :requires ["Updated application; existing configured Zen/Cloudflare access"]
-   :links []}
+   :links ["https://github.com/yetibot/yetibot/pull/1326"]}
   {:id "ai-usage-ledger"
    :date "2026-11-06"
    :component "app"

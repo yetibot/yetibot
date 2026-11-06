@@ -152,10 +152,16 @@
         (str/includes? (error read-context) "Timed out") => true
         @reads => 1))))
 
+(def zen-models
+  (with-meta ["fixed-model"]
+    {:catalog {:models [{:id "fixed-model" :interface :chat
+                         :schema-summary {:api "chat-completions"}}]}}))
+
 (fact "top-level Zen inherits context but retains single-hop/tool-free inference"
   (let [calls (atom [])]
     (binding [chat/*adapter* adapter]
       (with-redefs [ai/config (constantly settings)
+                    ai/models (constantly zen-models)
                     mcp/config (constantly {:servers []})
                     discord/get-channel! (fn [& _]
                                            (delivered {:id "100" :type 0}))
@@ -191,6 +197,7 @@
 (fact "native AI children remain stateless even in a reply's ambient context"
   (let [calls (atom [])]
     (with-redefs [ai/config (constantly settings)
+                  ai/models (constantly zen-models)
                   context/messages (fn [& _]
                                      (throw (AssertionError. "No child history")))
                   ai/complete (fn [_ _ messages _]
