@@ -42,7 +42,12 @@
        "it. Formatting a model record does not require invoking that model. "
        "For model selection, discover the provider's catalog, select a "
        "model identified as a chat interface, then invoke its exact ID "
-       "with the explicit provider. Never use speech, embedding, image, "
+       "with the explicit provider. Zen sampling uses paid text models by default; "
+       "cheap/fast does not mean free. Use free-tier IDs only when requested. "
+       "Cloudflare native models supports category=text-generation; filter "
+       "before paging, rather than browsing image/audio/embedding pages. "
+       "Use returned rates/protocol eligibility instead of guessing from IDs. "
+       "Never use speech, embedding, image, "
        "decision, or extraction models as generic chat models. "
        "For a random choice, use the advertised bounded utility tool on "
        "eligible model data, not an invented --random flag or Bash. "
@@ -422,7 +427,7 @@
                 (not (native/trusted? actor)))
        (ai/fail "Native Yetibot tools require a trusted chat request."))
      (let [credential-file (when pipeline-input (:key-file provider))
-           provider (ai/resolve-provider provider)
+           provider (ai/prepare-provider provider model)
            config (assoc config :secrets
                          (mapcat
                            (fn [secret]

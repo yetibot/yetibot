@@ -238,9 +238,14 @@
             ;; Unknown envelopes cannot establish uniqueness. Listing and
             ;; explicit requests still work without this readiness signal.
             (with-meta (vec (sort (distinct (map :id data))))
-              {:complete? (and (every? #{:data :object} (keys body))
-                               (or (nil? (:object body))
-                                   (= "list" (:object body))))})))
+              (cond->
+                {:complete? (and (every? #{:data :object} (keys body))
+                                 (or (nil? (:object body))
+                                     (= "list" (:object body))))}
+                (opencode/provider? provider)
+                (assoc :catalog
+                       {:source :opencode-zen
+                        :models (mapv opencode/model-metadata data)})))))
         redactions {:secrets [(:key provider)]}]
     ;; Identity must survive redaction unchanged. Rewriting it would route a
     ;; nonexistent ID; retaining it could persist reflected Authorization.
@@ -249,6 +254,22 @@
                            (= % (mcp/metadata-redact % redactions))) models)
       (fail "AI provider returned an unsafe model identity."))
     models))
+
+(defn prepare-provider
+  "Resolve a Zen model's supported text protocol before reserving inference."
+  [provider model]
+  (let [provider (resolve-provider provider)]
+    (if (and (opencode/provider? provider)
+             (not= model (::opencode/selected-model provider)))
+      (try
+        (let [catalog (:catalog (meta (models provider)))
+              record (some #(when (= model (:id %)) %) (:models catalog))]
+          (opencode/model-provider provider record))
+        (catch Exception _
+          (throw (ex-info
+                   "Zen text model routing is unavailable. No inference was sent."
+                   {:ai/error true :ai/request-not-sent true}))))
+      provider)))
 
 (defn- cloudflare-messages [messages]
   ;; Workers AI schemas can reject OpenAI-standard null/text-parts content.
@@ -302,7 +323,7 @@
              (not (and (integer? (:max-output-tokens options))
                        (<= 1 (:max-output-tokens options) 2048))))
     (fail "AI output token limit must be an integer from 1 to 2048."))
-  (let [provider (resolve-provider provider)
+  (let [provider (prepare-provider provider model)
         _ (when (and (opencode/provider? provider)
                      (not (opencode/configured-key? (:key provider))))
             (fail (str "OpenCode Zen requires an API key. Configure the "
@@ -346,7 +367,8 @@
                       (:max-output-tokens options)
                       (assoc (cond
                                responses-api? :max_output_tokens
-                               (cloudflare/provider-account provider)
+                               (or (cloudflare/provider-account provider)
+                                   (opencode/provider? provider))
                                :max_tokens
                                :else :max_completion_tokens)
                              (:max-output-tokens options)))
@@ -355,7 +377,12 @@
                       ;; tools remain. Empty tools still disable every tool.
                       (or (= "omit" (:tool-choice provider))
                           (and responses-api? (empty? (:tools options))))
-                      (dissoc :tool_choice)))}
+                      (dissoc :tool_choice)
+                      ;; A stateless Workers AI request has no tool protocol.
+                      ;; Some chat schemas reject even empty tools/none fields.
+                      (and (cloudflare/provider-account provider)
+                           (empty? (:tools options)))
+                      (dissoc :tools :tool_choice)))}
             progress (::diagnostics/stage options :initial)))
         (partial cost/ledger-metrics provider model)))))
 
@@ -398,7 +425,8 @@
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
-   (let [body (chat provider model messages options)
+   (let [provider (prepare-provider provider model)
+         body (chat provider model messages options)
          accounting (cost/turn provider model body)
          text (:content (message provider body))]
      (when-not (nonblank-string? text)

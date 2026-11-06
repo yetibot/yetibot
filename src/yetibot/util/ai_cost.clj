@@ -88,7 +88,21 @@
          :scope :api :turns 1})
       (and (= "zen" (:name provider)) (zen/provider? provider)
            (true? (:ai/verified-free provider)))
-      {:usd 0M :kind :estimate :scope :api :turns 1})))
+      {:usd 0M :kind :estimate :scope :api :turns 1}
+      (and (= "zen" (:name provider)) (zen/provider? provider)
+           (= model (::zen/selected-model provider)))
+      (let [{:keys [input output]} (::zen/pricing provider)
+            in (or (:input_tokens usage) (:prompt_tokens usage))
+            out (or (:output_tokens usage) (:completion_tokens usage))]
+        ;; Fresh catalog base rates are partial estimates, not invoices;
+        ;; cached tiers, tool fees and discounts are deliberately not invented.
+        (when (and (every? amount? [input output])
+                   (every? tokens? [in out]))
+          (let [usd (/ (+ (* (bigdec in) input) (* (bigdec out) output))
+                       1000000M)]
+            (when (amount? usd)
+              {:usd usd :kind :estimate :scope :tokens :turns 1
+               :input-tokens in :output-tokens out})))))))
 
 (defn ledger-metrics
   "Per-wire receipt only. Never record a parent answer's accumulated caption."
