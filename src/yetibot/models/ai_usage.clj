@@ -6,7 +6,10 @@
             [yetibot.core.db.ai-usage :as store]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.util.ai-execution :as execution])
-  (:import [java.time Instant LocalDate OffsetDateTime YearMonth ZoneOffset]))
+  (:import [java.math RoundingMode]
+           [java.time Instant LocalDate OffsetDateTime YearMonth ZoneOffset]
+           [java.time.format DateTimeFormatter]
+           [java.util Locale]))
 
 (def help-text
   (str "Usage: ai usage [YYYY-MM | <start> <end>]. "
@@ -46,73 +49,107 @@
      (catch Exception _ (ai/fail help-text)))))
 
 (defn- count-label [value]
-  (if (nil? value) "unavailable" (str value)))
+  (if (nil? value) "n/a"
+    (String/format Locale/US "%,d" (object-array [(biginteger value)]))))
+
+(defn- counted [value singular plural]
+  (str (count-label value) " " (if (= 1 value) singular plural)))
 
 (defn- usd [value]
-  (if (nil? value) "unavailable"
-    (let [value (bigdec value)]
-      (if (zero? value) "$0.00"
-        (str "$" (.toPlainString (.stripTrailingZeros value)))))))
+  (let [value (bigdec value)
+        rounded (cond (>= value 1) (.setScale value 2 RoundingMode/HALF_UP)
+                      (>= value 0.0001M)
+                      (.setScale value 4 RoundingMode/HALF_UP)
+                      :else value)]
+    (if (zero? value) "$0.00"
+      (str "$" (.toPlainString (.stripTrailingZeros rounded))))))
 
-(defn- known-units [totals]
-  (string/join "; "
-    (keep (fn [[key label]]
-            (when-some [value (get totals key)] (str label " " value)))
-          [[:images "images"] [:seconds "video seconds"] [:neurons "neurons"]])))
+(defn- spend [{:keys [reported_usd estimated_usd cost_unknown_events events]}]
+  (let [positive (keep (fn [[value label]]
+                         (when (and (number? value) (pos? value))
+                           (str (usd value) " " label)))
+                       [[reported_usd "reported"] [estimated_usd "estimated"]])
+        known? (and (number? reported_usd) (number? estimated_usd)
+                    (< cost_unknown_events events))]
+    (string/join " · "
+      (concat (if (seq positive) positive
+                [(if known? "$0.00 known cost" "Cost unavailable")])
+              (when (pos? cost_unknown_events)
+                [(str (count-label cost_unknown_events) " unpriced")])))))
+
+(defn- format-date [instant pattern]
+  (.format (DateTimeFormatter/ofPattern pattern Locale/US)
+           (.atOffset ^Instant instant ZoneOffset/UTC)))
+
+(defn- period-label [{:keys [start end]}]
+  (let [start (Instant/parse start) end (Instant/parse end)
+        month (YearMonth/from (.atOffset start ZoneOffset/UTC))
+        point-label #(if (and (zero? (mod (.getEpochSecond ^Instant %) 86400))
+                              (zero? (.getNano ^Instant %)))
+                       (format-date % "uuuu-MM-dd") (str %))]
+    (if (and (= start (month-start month))
+             (= end (month-start (.plusMonths month 1))))
+      (str (format-date start "MMM uuuu") " UTC")
+      (str (point-label start) " → " (point-label end)
+           " UTC (end exclusive)"))))
+
+(defn- coverage-note [{:keys [status started_at]}]
+  (case status
+    "partial" (str "Tracking since "
+                   (format-date (Instant/parse started_at) "MMM d")
+                   ". Earlier usage is unknown.")
+    "before-tracking"
+    "Before tracking; an empty report does not mean zero usage."
+    "unknown" "Tracking coverage unknown."
+    nil))
 
 (defn readable [{:keys [window coverage groups groups_truncated totals]}]
-  (let [units (known-units totals)]
+  (let [models (take 5
+                 (sort-by (juxt #(- (+ (or (:reported_usd %) 0M)
+                                      (or (:estimated_usd %) 0M)))
+                                #(- (:events %)) :provider :model :scope)
+                          groups))
+        status (keep (fn [[key label]]
+                       (when (pos? (or (get totals key) 0))
+                         (str (count-label (get totals key)) " " label)))
+                     [[:failed_events "failed"]
+                      [:uncertain_events "pending/unknown"]])
+        units (keep (fn [[key singular plural]]
+                      (when (pos? (or (get totals key) 0))
+                        (counted (get totals key) singular plural)))
+                    [[:images "image" "images"]
+                     [:seconds "video second" "video seconds"]])]
     (string/join "\n"
       (concat
-        [(str "Yetibot AI usage — UTC [" (:start window) ", " (:end window) ")")
-         (str "Tracking began: " (or (:started_at coverage) "unavailable") ".")
-         (case (:status coverage)
-           "partial"
-           (str "Partial history: this window begins before tracking. "
-                "Earlier usage is unknown.")
-           "before-tracking"
-           (str "This window predates the rollout marker; "
-                "missing history does not mean zero usage.")
-           "unknown"
-           (str "Tracking coverage is unavailable; "
-                "no complete total can be inferred.")
-           "This window starts at or after tracking began.")
-         (str "Recorded events: " (:events totals) " (" (:http_attempts totals)
-              " HTTP attempts, " (:cli_sessions totals) " CLI sessions; "
-              (:failed_events totals) " failed, " (:uncertain_events totals)
-              " pending/uncertain).")
-         (str "Known requests: " (:http_requests totals) " HTTP receipts + "
-              (:cli_requests totals) " CLI-reported; request counts unavailable for "
-              (:request_count_unknown_events totals) " events.")
-         (str "USD subtotals: reported " (usd (:reported_usd totals))
-              "; estimated " (usd (:estimated_usd totals)) "; unpriced "
-              (:cost_unknown_events totals) " events.")
-         (str "Native input/output token counters: "
-              (count-label (:input_count totals))
-              " / " (count-label (:output_count totals))
-              "; incomplete token counters for "
-              (:text_counter_unknown_events totals)
-              " events.")]
-        (when (seq units) [(str "Other known units: " units ".")])
-        (when (pos? (:cli_sessions totals))
-          ["CLI sessions are aggregates booked at session start, not per-call traces."])
-        (when groups_truncated
-          ["Model breakdown limited to 200 groups; global totals include all groups."])
-        (when (seq groups)
-          ["Provider/model breakdown (requested routes; CLI-reported models):"])
-        (map (fn [group]
-               (str (:provider group) " / " (:model group)
-                    (when (= "session" (:scope group)) " [CLI aggregate]")
-                    " — " (:events group) " events; known in/out "
-                    (count-label (:input_count group)) "/"
-                    (count-label (:output_count group))
-                    "; reported " (usd (:reported_usd group))
-                    "; estimated " (usd (:estimated_usd group))
-                    "; unpriced " (:cost_unknown_events group))) groups)
-        ["Token definitions vary by provider; cached/reasoning counters may overlap."
-         "Missing prices/usage are unavailable, never assumed free."
-         (str "Subtotals are not account invoices or external-app usage; "
-              "estimates may omit fees.")]))))
+        [(str "Yetibot AI usage · " (period-label window))]
+        (if (zero? (:events totals)) ["No recorded usage."]
+          [(spend totals)
+           (string/join " · "
+             (concat
+               (when (pos? (:http_attempts totals))
+                 [(counted (:http_attempts totals) "request" "requests")])
+               (when (pos? (:cli_sessions totals))
+                 [(counted (:cli_sessions totals) "CLI session" "CLI sessions")])
+               status units))
+           (if (some some? [(:input_count totals) (:output_count totals)])
+             (str "Tokens: " (count-label (:input_count totals)) " in / "
+                  (count-label (:output_count totals)) " out"
+                  (when (pos? (:text_counter_unknown_events totals)) " (partial)"))
+             "Tokens unavailable")])
+        (when (seq models)
+          (cons ""
+            (map (fn [group]
+                   (str (:provider group) "/" (:model group)
+                        (when (= "session" (:scope group)) " [CLI]")
+                        " · " (counted (:events group) "event" "events")
+                        " · " (spend group))) models)))
+        [""]
+        (when (or groups_truncated (> (count groups) 5))
+          [(str "Showing " (count models) " of " (count groups)
+                (if groups_truncated "+ model groups; totals include all."
+                  " model groups."))])
+        (when-let [note (coverage-note coverage)] [note])
+        ["More in Explore data."]))))
 
 (def ^:private total-fields
   [:events :http_attempts :cli_sessions :failed_events :uncertain_events

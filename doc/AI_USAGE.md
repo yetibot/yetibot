@@ -11,7 +11,7 @@ ai usage 2026-11-01T00:00:00Z 2026-11-05T12:00:00Z
 calendar month. Two bounds select an arbitrary interval: start inclusive, end
 exclusive. Date-only bounds mean midnight UTC. Instants must include `Z` or an
 explicit offset; ambiguous local timestamps and reversed/empty ranges are
-rejected. The report prints the normalized UTC interval.
+rejected. Custom intervals print their normalized UTC bounds.
 
 ## Access and scope
 
@@ -30,11 +30,17 @@ in the provider or CLI's reported statistics.
 
 ## Reading the totals
 
+Chat shows spend first, request/session counts, token totals and up to five
+model groups, ordered by known spend then activity. Failures and coverage gaps
+appear only when relevant. Explore data keeps the detailed counters and
+accounting caveats; its existing snapshot bounds still apply. Displayed money
+is rounded, but tiny positive amounts never become zero and data stays exact.
+
 - **Recorded events:** HTTP inference reservations and CLI sessions, not human
   messages. Pending rows can represent in-flight work, a crash, or a failed
   final ledger write. Unknown transport outcomes may still have incurred cost.
 - **Known requests:** confirmed HTTP receipts plus available CLI-native request
-  counts. The report separately counts events with unavailable request counts.
+  counts. Explore data separately counts events with unavailable request counts.
   A session without statistics is not invented as one request.
 - **Reported USD:** accepted per-request figures from existing known-origin
   provider cost fields. They are not account invoices or entitlement proofs.
@@ -42,7 +48,7 @@ in the provider or CLI's reported statistics.
   Estimates can omit tool fees, media, tiers or discounts. A zero known subtotal
   does not price any of the separately listed unpriced events as free.
 - **Unpriced events:** at least one model summary lacks usable dollar accounting.
-  Available units remain visible; missing costs are not substituted with zero.
+  Available units remain in data; missing costs are not substituted with zero.
 
 Each actual wire turn, including a delegated child model, has its own receipt.
 The ledger does not scrape or re-add accumulated parent answer captions. A
@@ -61,9 +67,10 @@ traces. A multi-model session appears in several model groups, but global
 session counts are distinct. Group event counts are therefore not additive.
 CLI's older family-based budget calculations do not become reported USD.
 
-The model breakdown is limited to 200 groups. Global totals still include all
-groups, and truncation is explicit. Reports run as one consistent, read-only
-snapshot with bounded database waits; unavailable reports return a static error
+The query returns at most 200 model groups; chat shows at most five of those.
+Global totals still include all groups, and both display limits are explicit.
+Reports run as one consistent, read-only snapshot with bounded database waits;
+unavailable reports return a static error
 rather than a fabricated empty total.
 
 ## Rollout and failures
