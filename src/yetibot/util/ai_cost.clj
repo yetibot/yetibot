@@ -1,15 +1,13 @@
 (ns yetibot.util.ai-cost
   "Public parent-request accounting, never prompts, reasoning or tool payloads."
   (:require [yetibot.api.cloudflare :as cf]
-            [yetibot.api.opencode :as zen])
+            [yetibot.api.opencode :as zen]
+            [yetibot.core.util.ai-usage :as usage])
   (:import [java.net URI]
            [java.util Locale]))
 
-(defn- amount? [x]
-  (and (number? x) (Double/isFinite (double x)) (<= 0 x 1000000000)))
-
-(defn- tokens? [x]
-  (and (integer? x) (<= 0 x 1000000000000)))
+(def ^:private amount? usage/amount?)
+(def ^:private tokens? usage/counter?)
 
 (defn- xai? [provider]
   (try
@@ -19,16 +17,10 @@
            (not (.getUserInfo u)) (not (.getQuery u)) (not (.getFragment u))))
     (catch Exception _ false)))
 
-(def ^:private grok-rates
-  {:short [2M 0.5M 6M] :long [4M 1M 12M]})
+(def ^:private grok-rates usage/grok-rates)
 (def ^:private gemma-rates [0.10M 0.30M])
 
-(defn- token-price [input output cached]
-  ;; Official Grok4.7 rates, checked 2026-11-01. USD per million tokens.
-  ;; https://docs.x.ai/developers/models/grok-4.7
-  (when (and (every? tokens? [input output cached]) (<= cached input))
-    (let [[in cache out] (grok-rates (if (>= input 200000) :long :short))]
-      (/ (+ (* (- input cached) in) (* cached cache) (* output out)) 1000000M))))
+(def ^:private token-price usage/grok-token-cost)
 
 (defn- workers-ai? [provider]
   (try
@@ -97,6 +89,14 @@
       (and (= "zen" (:name provider)) (zen/provider? provider)
            (true? (:ai/verified-free provider)))
       {:usd 0M :kind :estimate :scope :api :turns 1})))
+
+(defn ledger-metrics
+  "Per-wire receipt only. Never record a parent answer's accumulated caption."
+  [provider model body]
+  (let [cost (turn provider model body)]
+    (cond-> (usage/tokens body)
+      (and (amount? (:usd cost)) (#{:reported :estimate} (:kind cost)))
+      (assoc :usd (:usd cost) :cost_kind (name (:kind cost))))))
 
 (def initial {:usd 0M :kind :reported :scope :api :turns 0})
 

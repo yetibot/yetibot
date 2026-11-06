@@ -3,7 +3,8 @@
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
             [clojure.string :as string]
-            [yetibot.api.mcp :as mcp])
+            [yetibot.api.mcp :as mcp]
+            [yetibot.core.util.ai-usage :as usage])
   (:import [java.io InputStream ByteArrayOutputStream]
            [java.net URI]
            [org.apache.http.client.methods HttpUriRequest]))
@@ -132,13 +133,19 @@
   (let [body (json/generate-string (assoc payload :model model))]
     (when (string/includes? body token)
       (fail! "Inference input contains the configured credential."))
-    (let [response (request!
-                     http/post
-                     (str (account-url (:account-id config))
-                          "/ai/run/@cf/cloudflare/" model)
-                     {:headers (merge {"Authorization" (str "Bearer " token)}
-                                      (gateway-headers (:gateway-id config)))
-                      :content-type :json :body body})
+    (let [response (usage/capture!
+                     {:provider "cloudflare" :model (str "@cf/cloudflare/" model)
+                      :operation "classification" :secrets [token]}
+                     (fn []
+                       (request!
+                         http/post
+                         (str (account-url (:account-id config))
+                              "/ai/run/@cf/cloudflare/" model)
+                         {:headers
+                          (merge {"Authorization" (str "Bearer " token)}
+                                 (gateway-headers (:gateway-id config)))
+                          :content-type :json :body body}))
+                     usage/tokens)
           result (:result response)
           schema (or (:questions payload) (:fields payload))
           answers (:answers result)]

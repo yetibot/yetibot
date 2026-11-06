@@ -7,6 +7,7 @@
             [yetibot.core.adapters.discord :as discord]
             [yetibot.core.interpreter :as interp]
             [yetibot.core.util.public-result :as public]
+            [yetibot.core.util.ai-usage :as usage]
             [robert.hooke :as hooke]
             [taoensso.timbre :as log]
             [yetibot.core.handler :as handler]
@@ -91,7 +92,8 @@
 (defn- dispatch-followup! [route chat-source user yetibot-user body]
   (async/thread
     (binding [interp/*chat-source* chat-source interp/*current-user* user
-              interp/*yetibot-user* yetibot-user]
+              interp/*yetibot-user* yetibot-user
+              usage/*context-id* (usage/context-id)]
       (let [args {:chat-source chat-source :user user :yetibot-user yetibot-user
                   :cmd (:command route) :args body :match body
                   :next-cmds []}
@@ -108,7 +110,12 @@
 
 (defn with-adapter-event
   [callback chat-source user event-type yetibot-user event-info]
-  (let [sensitive (atom false)
+  (let [body (:body event-info)
+        ;; Report arguments must be private before interpreter diagnostics run.
+        sensitive (atom (boolean
+                          (and (string? body)
+                               (re-find #"(?is)(?:^|[^A-Za-z0-9_])ai\s+usage(?:\s|$)"
+                                        body))))
         ;; Filter before existing middleware/appenders can inspect source. Keep
         ;; only closed provider diagnostics and sanitized proposal audit events.
         privacy (fn [data]

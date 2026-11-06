@@ -8,6 +8,7 @@
             [yetibot.models.ai-defaults :as defaults]
             [yetibot.models.ai-inspection :as inspection]
             [yetibot.models.ai-pricing :as pricing]
+            [yetibot.models.ai-usage :as reports]
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
@@ -100,6 +101,27 @@
               (.getMessage e)
               (str "The AI request failed. Check the provider configuration "
                    "and try again."))}))))))
+
+(defn usage-cmd
+  "ai usage # current UTC month's recorded AI usage and cost subtotals
+   ai usage YYYY-MM # a calendar month
+   ai usage <start> <end> # dates/ISO instants; start inclusive, end exclusive"
+  {:yb/cat #{:ai}}
+  [{[_ text] :match :as args}]
+  (let [result (safely args
+                 #(let [data (reports/report! args text)]
+                    (inspection/reviewed {:result/value (reports/readable data)
+                                          :result/data data} data)))]
+    (if-let [error (:result/error result)]
+      ;; Core error decoration quotes the evaluated command. Never reflect
+      ;; invalid private arguments, and stop rather than pipe an error into AI.
+      (do
+        (when-let [skip (:skip-next-n args)]
+          (reset! skip (count (:next-cmds args))))
+        (let [data {:isError true :error error}]
+          (public-result/reviewed
+            {:result/value error :result/data data :result/public-data data})))
+      result)))
 
 (defn default-cmd
   "ai default # inspect global runtime/configured defaults
@@ -574,6 +596,7 @@
                                      (complete-prompt prepared))))))
 
 (cmd-hook #"ai"
+  #"(?s)^usage(?:\s+(.*))?\s*$" usage-cmd
   #"^default(?:\s+(.*))?\s*$" default-cmd
   #"^providers\s*$" providers-cmd
   #"^models(?:\s+(\S+))?\s*$" models-cmd

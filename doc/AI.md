@@ -5,12 +5,28 @@
 listing through `GET /models` or Cloudflare's Workers AI catalog. You can
 configure multiple providers, each with
 its own name, base URL, optional API key and default model. The `grok` shortcut
-shares this configuration and MCP tools. The existing `openai` command is
-unchanged and uses separate configuration.
+shares this configuration and MCP tools. The legacy `openai` command uses
+separate configuration but also contributes usage receipts.
 
 Discord can wrap the whole expression with `!thread <command>`. Rich replies
 share elapsed timing at the transport layer; AI metadata does not repeat it.
 See [Discord command replies](DISCORD.md) for examples and permission boundaries.
+
+## Usage and cost reports
+
+Use `ai usage` for the current UTC month, `ai usage YYYY-MM` for a calendar
+month, or `ai usage <start> <end>` for explicit date/offset bounds. Start is
+inclusive and end is exclusive. Any trusted human can read bot-wide totals;
+bots and forged requests cannot. Reporting itself performs no inference.
+
+The ledger covers supported Yetibot calls across providers, models, tool
+rounds, delegated models, classifiers, media, legacy commands and CLI sessions.
+Reported USD, estimates and unpriced events stay separate. Coverage starts at
+rollout, not the beginning of historical provider billing. Missing usage never
+means free, and CLI summaries are aggregates rather than HTTP traces.
+
+See [AI usage and cost reports](AI_USAGE.md) for syntax, units, failure behavior,
+frozen data and coverage limits. No new provider billing credentials are needed.
 
 ## Configuration
 

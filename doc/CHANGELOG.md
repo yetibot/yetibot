@@ -8,6 +8,15 @@ as well.
 
 ## Unreleased
 
+- Add `ai usage` for the current UTC month, an explicit month or an arbitrary
+  start-inclusive/end-exclusive timeframe. Any trusted human can read bot-wide
+  provider/model totals; bots and forged requests cannot. Record every supported
+  model wire turn, delegated model, classifier and CLI session before inference.
+  Keep provider-reported USD, estimates and unpriced events separate; expose
+  rollout gaps and native CLI scope without historical caption scraping or
+  provider-account billing claims. Reviewed Explore data stays frozen and
+  credential-free. See [AI usage reports](AI_USAGE.md).
+
 - Continue fresh successful standalone Discord AI/Grok/Zen answers with a plain
   reply, inheriting the resolved provider/model and safe options. Prompt syntax
   stays literal; explicit commands switch branches. Recheck ownership, context
