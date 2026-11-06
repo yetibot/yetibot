@@ -10,6 +10,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
+            [yetibot.core.util.ai-usage :as usage]
             [yetibot.util.ai-config :as settings]
             [yetibot.util.ai-cost :as cost])
   (:import [java.io File FileInputStream]
@@ -331,26 +332,32 @@
                               (cloudflare-messages messages) messages)})]
     (normalize-gemma
       provider model options
-      (request client/post provider
-             (if responses-api? "/responses" "/chat/completions")
-             {:content-type :json
-              :form-params
-              (merge (cond-> params
-                       progress (assoc :stream true)
-                       (:max-output-tokens options)
-                       (assoc (cond
-                                responses-api? :max_output_tokens
-                                (cloudflare/provider-account provider)
-                                :max_tokens
-                                :else :max_completion_tokens)
-                              (:max-output-tokens options)))
-                     (cond-> (select-keys options [:tools :tool_choice])
-                       ;; Responses rejects tool_choice even "none" when no
-                       ;; tools remain. Empty tools still disable every tool.
-                       (or (= "omit" (:tool-choice provider))
-                           (and responses-api? (empty? (:tools options))))
-                       (dissoc :tool_choice)))}
-             progress (::diagnostics/stage options :initial)))))
+      (usage/capture!
+        {:provider (:name provider) :model model :operation "text"
+         :secrets [(:key provider)]}
+        (fn []
+          (request
+            client/post provider
+            (if responses-api? "/responses" "/chat/completions")
+            {:content-type :json
+             :form-params
+             (merge (cond-> params
+                      progress (assoc :stream true)
+                      (:max-output-tokens options)
+                      (assoc (cond
+                               responses-api? :max_output_tokens
+                               (cloudflare/provider-account provider)
+                               :max_tokens
+                               :else :max_completion_tokens)
+                             (:max-output-tokens options)))
+                    (cond-> (select-keys options [:tools :tool_choice])
+                      ;; Responses rejects tool_choice even "none" when no
+                      ;; tools remain. Empty tools still disable every tool.
+                      (or (= "omit" (:tool-choice provider))
+                          (and responses-api? (empty? (:tools options))))
+                      (dissoc :tool_choice)))}
+            progress (::diagnostics/stage options :initial)))
+        (partial cost/ledger-metrics provider model)))))
 
 (defn message
   "Normalize only client-side function calls; native searches run at xAI."

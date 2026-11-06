@@ -3,7 +3,8 @@
   (:require [cheshire.core :as json]
             [clj-http.client :as client]
             [clojure.string :as string]
-            [yetibot.api.ai :as ai]))
+            [yetibot.api.ai :as ai]
+            [yetibot.core.util.ai-usage :as usage]))
 
 (def labels #{:code_change :answer :clarify})
 (defn enabled? [config] (contains? #{true "true"} (:enabled config)))
@@ -61,13 +62,22 @@
         (when (or (string/blank? key) (string/includes? text key)
                   (re-find #"(?:github_pat_|ghp_|cfut_)[A-Za-z0-9_-]{20,}|-----BEGIN [A-Z ]*PRIVATE KEY-----" text))
           (unavailable!))
-        (let [response (client/post
-                         (str "https://api.cloudflare.com/client/v4/accounts/" account
-                              "/ai/run/@cf/cloudflare/clef")
-                         {:as :json :throw-exceptions false :conn-timeout 5000 :socket-timeout 30000
-                          :redirect-strategy :none :retry-handler (fn [& _] false)
-                          :headers {"Authorization" (str "Bearer " key) "Accept" "application/json"}
-                          :content-type :json :body (json/generate-string (payload text))})
+        (let [response (usage/capture!
+                         {:provider "cloudflare" :model "@cf/cloudflare/clef"
+                          :operation "classification" :secrets [key]}
+                         (fn []
+                           (client/post
+                             (str "https://api.cloudflare.com/client/v4/accounts/"
+                                  account "/ai/run/@cf/cloudflare/clef")
+                             {:as :json :throw-exceptions false
+                              :conn-timeout 5000 :socket-timeout 30000
+                              :redirect-strategy :none
+                              :retry-handler (fn [& _] false)
+                              :headers {"Authorization" (str "Bearer " key)
+                                        "Accept" "application/json"}
+                              :content-type :json
+                              :body (json/generate-string (payload text))}))
+                         usage/response-metrics)
               body (:body response)
               answer (get-in body [:result :answers :intent])
               explicit (get-in body [:result :answers :explicit_change])

@@ -1,6 +1,16 @@
 {:schema_version 1
  :changes
- [{:id "ai-reply-routing-default-prices"
+ [{:id "ai-usage-ledger"
+   :date "2026-11-06"
+   :component "app"
+   :title "Report AI usage by month or custom timeframe"
+   :summary "Any trusted human can view bot-wide provider/model usage for the current UTC month, an explicit month or a custom inclusive-start/exclusive-end window. Cover supported text, streaming, tool rounds, delegated models, classifiers, media, legacy calls and Gemini CLI sessions. Running bots require a durable pending row before inference; final ledger failures preserve completed results and leave honest uncertainty without paid retries. Keep reported USD, partial estimates and unpriced usage separate, with rollout warnings, native CLI scope and frozen reviewed data. No historical caption scraping, new billing credentials or provider-account invoice claims."
+   :commands ["ai usage" "ai usage 2026-11"
+              "ai usage 2026-11-01 2026-12-01"]
+   :requires ["Upgraded core/application with the PostgreSQL usage ledger"
+              "Trusted human chat actor"]
+   :links []}
+  {:id "ai-reply-routing-default-prices"
    :date "2026-11-05"
    :component "app"
    :title "Continue AI replies and compare default model prices"
