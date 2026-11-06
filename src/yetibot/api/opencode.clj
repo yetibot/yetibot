@@ -112,8 +112,8 @@
               (.write out buffer 0 n)
               (recur (+ total n))))))))
 
-(defn free-models
-  "Fresh catalog verification, not proof of inference entitlement. No retries."
+(defn- catalog-models
+  "Bounded known-origin metadata, never an inference request or retry."
   [provider]
   (when-not (and (= "zen" (:name provider)) (provider? provider))
     (unavailable!))
@@ -140,11 +140,40 @@
                          (every? #(and (map? %) (string? (:id %))) models)
                          (= (count models) (count (distinct (map :id models)))))
             (unavailable!))
-          (->> models (filter free-model?) (map :id)
-               (remove #(and (configured-key? (:key provider))
-                             (string/includes? % (:key provider))))
-               sort vec))))
+          models)))
     (catch Exception _ (unavailable!))))
+
+(defn free-models
+  "Fresh catalog verification, not proof of inference entitlement. No retries."
+  [provider]
+  (->> (catalog-models provider) (filter free-model?) (map :id)
+       (remove #(and (configured-key? (:key provider))
+                     (string/includes? % (:key provider))))
+       sort vec))
+
+(defn model-prices
+  "Public USD/1M text-token list rates. No credentials or advertised URLs.
+   https://opencode.ai/console/models documents the catalog's pricing unit."
+  []
+  (let [rate? #(and (number? %) (Double/isFinite (double %))
+                    (<= 0 % 1000000))]
+    (into {}
+      (keep
+        (fn [{:keys [id cost]}]
+          (let [input (get-in cost [:text :input :price])
+                output (get-in cost [:text :output :price])]
+            (when (and (string? id)
+                       (re-matches #"[A-Za-z0-9@._:/-]{1,200}" id)
+                       (rate? input) (rate? output))
+              [id {:status "available" :currency "USD"
+                   :unit "1M text tokens" :input input :output output
+                   :base_rates true
+                   :tiered
+                   (boolean (some seq
+                              (map #(get-in cost [:text % :overrides])
+                                   [:input :output])))}]))))
+      (catalog-models {:name "zen"
+                       :url "https://opencode.ai/inference/openai/v1"}))))
 
 ;; Preference only; never credentials or file configuration. Every use is
 ;; revalidated against current prices, so expired offers cannot stick.

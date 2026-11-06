@@ -1,9 +1,16 @@
 (ns yetibot.util.ai-execution
   "Host-owned adapter provenance and request-scoped private-output logging."
   (:require [clojure.string :as string]
+            [clojure.core.async :as async]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.api.opencode :as zen]
+            [yetibot.core.adapters.discord :as discord]
+            [yetibot.core.interpreter :as interp]
+            [yetibot.core.util.public-result :as public]
             [robert.hooke :as hooke]
             [taoensso.timbre :as log]
             [yetibot.core.handler :as handler]
+            [yetibot.core.chat :as chat]
             [yetibot.core.parser :as parser]
             [yetibot.core.util.command :as command]))
 
@@ -17,6 +24,87 @@
     (throw (ex-info "Private AI output requires a trusted chat request."
                     {:ai/error true})))
   (reset! *sensitive* true))
+
+(defmulti run-followup
+  "Dispatch a host-owned route with the human body as literal prompt data."
+  (fn [route _args] (:command route)))
+
+(def ^:private expired-message
+  (str "This AI conversation changed or expired. "
+       "Send a new explicit AI command."))
+
+(defmethod run-followup :default [_ _]
+  {:result/error expired-message})
+
+(defn provider-signature [provider]
+  (let [identity (select-keys provider [:name :url :api :native-tools])
+        digest (.digest (java.security.MessageDigest/getInstance "SHA-256")
+                        (.getBytes (pr-str identity) "UTF-8"))]
+    (apply str (map #(format "%02x" (bit-and 255 %)) digest))))
+
+(defn ensure-followup! [route provider]
+  (when-not (and (= route (discord/command-followup))
+                 (= (:provider-signature route) (provider-signature provider)))
+    (throw (ex-info expired-message {:ai/error true}))))
+
+(defn revalidate-free-followup! [route provider]
+  (if-not (:verified-free route) provider
+    (do
+      (when-not (and (= "zen" (:name provider)) (zen/provider? provider)
+                     (some #{(:model route)} (zen/free-models provider)))
+        (throw (ex-info
+                 (str "This conversation's model is no longer verified free. "
+                      "No inference was sent. Choose a model explicitly.")
+                 {:ai/error true})))
+      (assoc provider :ai/verified-free true))))
+
+(defn remember-answer!
+  "Only a successful standalone original AI command (or owned continuation)
+   can open another turn. Never retain a prompt, credentials or pipeline text."
+  [command {:keys [provider model caption? pipeline-input actor] :as prepared}
+   result]
+  (when (and actor caption? (not pipeline-input)
+             (string? (:result/value result))
+             (not (string/blank? (:result/value result)))
+             (not (:result/error result))
+             (not (get-in result [:result/data :isError]))
+             (or (= command (:command (discord/command-followup)))
+                 (and *direct-input*
+                      (string/starts-with? (:evaluated *direct-input*)
+                                           (str command " ")))))
+    (let [route (cond->
+                  (merge {:command command :provider (:name provider)
+                          :model model
+                          :provider-signature (provider-signature provider)}
+                         (into {} (filter (comp some? val)
+                                     (select-keys prepared
+                                       [:no-tools :toolset :max-tool-calls]))))
+                  (:ai/verified-free provider) (assoc :verified-free true))
+          secrets (keep identity [(:key provider) (:key-file provider)])]
+      (when (every? #(= % (mcp/metadata-redact % {:secrets secrets}))
+                    [(:name provider) model])
+        (try (discord/remember-command-continuation! route)
+             ;; Unsupported IDs/options disable continuation, not the answer.
+             (catch IllegalArgumentException _ nil)))))
+  result)
+
+(defn- dispatch-followup! [route chat-source user yetibot-user body]
+  (async/thread
+    (binding [interp/*chat-source* chat-source interp/*current-user* user
+              interp/*yetibot-user* yetibot-user]
+      (let [args {:chat-source chat-source :user user :yetibot-user yetibot-user
+                  :cmd (:command route) :args body :match body
+                  :next-cmds []}
+            result (try (run-followup route args)
+                        (catch Exception _
+                          {:result/error
+                           (str "The AI follow-up outcome could not be confirmed; "
+                                "do not retry automatically.")}))]
+        (public/observe! result)
+        (handler/dispatch-command-response
+          {:result (if (chat/suppressed? result) result
+                     (or (:result/error result) (:result/value result) result))
+           :error? (boolean (:result/error result))})))))
 
 (defn with-adapter-event
   [callback chat-source user event-type yetibot-user event-info]
@@ -36,7 +124,11 @@
               *sensitive* sensitive
               log/*config* (update log/*config* :middleware
                                   #(into [privacy] %))]
-      (callback chat-source user event-type yetibot-user event-info))))
+      (if-let [route (discord/command-followup)]
+        (do (sensitive!)
+            (dispatch-followup! route chat-source user yetibot-user
+                                (:body event-info)))
+        (callback chat-source user event-type yetibot-user event-info)))))
 
 (defn- direct-expression [chat-source user tree]
   (let [platform-body (case (:adapter chat-source)

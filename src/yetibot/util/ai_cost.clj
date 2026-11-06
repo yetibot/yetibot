@@ -19,11 +19,15 @@
            (not (.getUserInfo u)) (not (.getQuery u)) (not (.getFragment u))))
     (catch Exception _ false)))
 
+(def ^:private grok-rates
+  {:short [2M 0.5M 6M] :long [4M 1M 12M]})
+(def ^:private gemma-rates [0.10M 0.30M])
+
 (defn- token-price [input output cached]
   ;; Official Grok4.7 rates, checked 2026-11-01. USD per million tokens.
   ;; https://docs.x.ai/developers/models/grok-4.7
   (when (and (every? tokens? [input output cached]) (<= cached input))
-    (let [[in cache out] (if (>= input 200000) [4M 1M 12M] [2M 0.5M 6M])]
+    (let [[in cache out] (grok-rates (if (>= input 200000) :long :short))]
       (/ (+ (* (- input cached) in) (* cached cache) (* output out)) 1000000M))))
 
 (defn- workers-ai? [provider]
@@ -33,6 +37,19 @@
            (not (.getUserInfo u)) (not (.getQuery u)) (not (.getFragment u))))
     (catch Exception _ false)))
 
+(defn published-rates
+  "Known-origin base list rates, not bills or account-specific discounts."
+  [provider model]
+  (let [rates (cond
+                (and (xai? provider) (= model "grok-4.7"))
+                [(first (:short grok-rates)) (last (:short grok-rates))]
+                (and (workers-ai? provider)
+                     (= model "@cf/google/gemma-4-26b-a4b-it")) gemma-rates)]
+    (when rates
+      {:status "available" :currency "USD" :unit "1M text tokens"
+       :input (first rates) :output (second rates) :base_rates true
+       :tiered (= model "grok-4.7")})))
+
 (defn- workers-usage [model usage]
   (let [input (:prompt_tokens usage) output (:completion_tokens usage)
         neurons (:neurons usage)]
@@ -41,7 +58,8 @@
       ;; developers.cloudflare.com/workers-ai/models/gemma-4-26b-a4b-it/
       (and (= model "@cf/google/gemma-4-26b-a4b-it")
            (every? tokens? [input output]))
-      {:usd (/ (+ (* input 0.10M) (* output 0.30M)) 1000000M)
+      {:usd (/ (+ (* input (first gemma-rates))
+                  (* output (second gemma-rates))) 1000000M)
        :kind :estimate :scope :tokens :turns 1}
       (amount? neurons)
       {:neurons neurons :kind :reported :scope :neurons :turns 1}

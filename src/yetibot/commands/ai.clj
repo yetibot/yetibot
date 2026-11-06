@@ -6,6 +6,8 @@
             [yetibot.core.util.public-result :as public-result]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-defaults :as defaults]
+            [yetibot.models.ai-inspection :as inspection]
+            [yetibot.models.ai-pricing :as pricing]
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
@@ -101,8 +103,8 @@
 
 (defn default-cmd
   "ai default # inspect global runtime/configured defaults
-   ai default <provider> <model> # admin-only runtime change; may incur costs
-   ai default reset # admin-only reset to file configuration"
+   ai default <provider> <model> # global runtime change; shows list pricing
+   ai default reset # restore file defaults; available to trusted chat users"
   {:yb/cat #{:ai}}
   [{[_ choice] :match :as args}]
   (safely args
@@ -118,20 +120,32 @@
               (= 2 (count parts))
               (defaults/set-default! (first parts) (second parts) check!)
               :else (ai/fail "Usage: ai default [<provider> <model> | reset]"))]
-        {:result/value
+        (inspection/reviewed
+          {:result/value
          (str "AI default: " (:provider result) " / "
               (or (:model result) (if (:model_policy result)
                                      "automatic verified-free" "not configured"))
               (when (:model_policy result) " (verified-free preference)")
               (if (:overridden result) " (runtime; resets on restart)"
-                " (configured)"))
-         :result/data result}))))
+                " (configured)")
+              (when (:pricing result)
+                (pricing/summary (:pricing result) (:previous result) result)))
+         :result/data result} result)))))
 
 (defn providers-cmd
   "ai providers # list configured AI provider names"
   {:yb/cat #{:ai}}
   [_]
-  (safely #(mapv :name (:providers (ai/config)))))
+  (safely
+    #(let [config (ai/config)
+           selected (:name (ai/provider config nil))
+           data (mapv (fn [p]
+                        {:name (:name p) :default_model (:model p)
+                         :selected (= selected (:name p))
+                         :interface (or (:api p) "chat-completions")})
+                      (:providers config))]
+       (inspection/reviewed {:result/value (mapv :name data)
+                             :result/data data} data))))
 
 (defn models-cmd
   "ai models # list available models grouped by provider
@@ -149,7 +163,8 @@
                                          (assoc :catalog
                                                 (:catalog (meta models)))))))
                           providers)]
-        {:result/data (zipmap (map :name providers) results)
+        (inspection/reviewed
+          {:result/data (zipmap (map :name providers) results)
          :result/value (mapv (fn [provider result]
                                (str (:name provider) ": "
                                     (or (:result/error result)
@@ -165,13 +180,30 @@
                                         (when (seq (:models result))
                                           (string/join ", " (:models result)))
                                         "No models available.")))
-                             providers results)}))))
+                             providers results)}
+          (into {}
+            (map (fn [p result]
+                   [(:name p)
+                    (if (:result/error result) {:status "unavailable"}
+                      (cond->
+                        {:status "available"
+                         :models (if-let [catalog (:catalog result)]
+                                   (mapv #(select-keys % [:id :interface])
+                                         (:models catalog))
+                                   (mapv (fn [id] {:id id}) (:models result)))}
+                        (:catalog result)
+                        (assoc :catalog (select-keys (:catalog result)
+                                                     [:source :coverage]))))])
+                 providers results)))))))
 
 (defn servers-cmd
   "ai servers # list configured MCP and native tool sources"
   {:yb/cat #{:ai}}
   [args]
-  (safely #(tools/server-names (policy/actor args))))
+  (safely
+    #(let [data (tools/server-info (policy/actor args))]
+       (inspection/reviewed {:result/value (mapv :name data)
+                             :result/data data} data))))
 
 (defn- help-text [redact value]
   (-> (str (or value ""))
@@ -363,7 +395,10 @@
   "ai toolsets # list toolsets available to you in this conversation"
   {:yb/cat #{:ai}}
   [args]
-  (safely #(tools/toolset-names (policy/actor args))))
+  (safely
+    #(let [names (tools/toolset-names (policy/actor args))
+           data (mapv (fn [name] {:name name}) names)]
+       (inspection/reviewed {:result/value names :result/data data} data))))
 
 (defn proposal-cmd
   "ai proposal <id> [page] # inspect a proposal and review every diff page"
@@ -463,6 +498,26 @@
        snapshot (assoc :pipeline-input snapshot
                        :additional-secrets (keep :key (:providers config)))))))
 
+(defn prepare-followup
+  "Re-resolve a host-owned route; the body is data, never flags or a pipeline."
+  [args route resolve-config]
+  (let [provider (ai/provider (resolve-config) (:provider route))
+        _ (execution/ensure-followup! route provider)
+        actor (policy/actor args)
+        _ (when-not actor
+            (ai/fail "AI follow-ups require a trusted chat user."))
+        _ (when (:verified-free route)
+            (policy/authorize!
+              (when-not (:no-tools route)
+                (:toolset (toolsets/select (mcp/config) (:toolset route))))
+              actor provider (:model route)))
+        provider (execution/revalidate-free-followup! route provider)
+        messages (context/messages args (:match args))]
+    (execution/ensure-followup! route provider)
+    (merge (select-keys route [:no-tools :toolset :max-tool-calls])
+           {:provider provider :model (:model route) :messages messages
+            :actor actor :prompt (:match args) :caption? true})))
+
 (defn complete-prompt
   [{:keys [provider model messages no-tools toolset actor on-progress
            pipeline-input additional-secrets max-tool-calls]}]
@@ -505,7 +560,18 @@
     #(status/with-status
        chat/*target* (prepare-prompt args)
        (fn [prepared]
-         (autodraft/complete prepared args complete-prompt)))))
+         (autodraft/complete prepared args
+           (fn [selected]
+             (execution/remember-answer! "ai" selected
+                                         (complete-prompt selected))))))))
+
+(defmethod execution/run-followup "ai" [route args]
+  (safely args
+    #(status/with-status
+       chat/*target* (prepare-followup args route ai/config)
+       (fn [prepared]
+         (execution/remember-answer! "ai" prepared
+                                     (complete-prompt prepared))))))
 
 (cmd-hook #"ai"
   #"^default(?:\s+(.*))?\s*$" default-cmd

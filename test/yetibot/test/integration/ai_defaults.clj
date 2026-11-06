@@ -31,13 +31,14 @@
                                              (if (= [:ai] path)
                                                {:value settings}
                                                (get-config spec path)))
-                    admin/user-is-admin? (constantly true)
+                    admin/user-is-admin? (constantly false)
+                    zen/model-prices (constantly {})
                     context/messages (fn [& _] [])
                     tools/complete (fn [& _] {:result/value "ordinary answer"})]
         (f))
       (finally (when state (reset! state before))))))
 
-(fact "an admin changes both defaults atomically without changing file config"
+(fact "a trusted user changes defaults atomically without changing file config"
   (isolated
     (fn []
       (get-in (chat/run-command chat/request "ai default second chosen")
@@ -72,7 +73,7 @@
       (chat/run-command chat/request "ai default first private-key")
       (:model (api/provider (api/config) nil)) => "original")))
 
-(fact "native AI control changes only defaults and requires the real admin"
+(fact "native AI control changes only defaults for trusted policy-allowed users"
   (isolated
     (fn []
       (chat/in-event chat/request "ai use second chosen as default"
@@ -86,20 +87,20 @@
             (:default-provider (api/config)) => "second"
             (get-in (native/call! config "ai" {"action" "defaults"} source)
                     [:structuredContent :model]) => "chosen"
-            (with-redefs [admin/user-is-admin? (constantly false)]
-              (:isError (native/call! config "ai"
-                          {"action" "reset_default"} source)) => true)
-            (:default-provider (api/config)) => "second"
+            (get-in (native/call! config "ai" {"action" "reset_default"} source)
+                    [:structuredContent :overridden]) => false
+            (:default-provider (api/config)) => "first"
             (get-in (native/call! config "ai" {"action" "reset_default"} source)
                     [:structuredContent :overridden]) => false
             (:default-provider (api/config)) => "first"))))))
 
-(fact "nonadmins and computed setters cannot change the global default"
+(fact "ordinary users can choose defaults but computed setters stay denied"
   (isolated
     (fn []
       (with-redefs [admin/user-is-admin? (constantly false)]
         (chat/run-command chat/request "ai default second chosen"))
-      (:default-provider (api/config)) => "first"
+      (:default-provider (api/config)) => "second"
+      (chat/run-command chat/request "ai default reset")
       (chat/run-command chat/request "echo anything | ai default second chosen")
       (:default-provider (api/config)) => "first")))
 
@@ -128,18 +129,13 @@
         => "💥 Error in `ai default second chosen`: Send this AI control command directly in chat, without pipes, aliases, observers or computed commands. 💥"
         (:default-provider (api/config)) => "first"))))
 
-(fact "Zen defaults remain freshly free-only, with revocation after discovery"
+(fact "explicit paid Zen defaults do not invoke automatic free selection"
   (isolated
     (fn []
-      (with-redefs [zen/free-models (constantly ["free-a"])]
-        (get-in (chat/run-command chat/request "ai default zen free-a")
-                [:data :verified_free]) => true
+      (with-redefs [zen/free-models
+                    (fn [& _] (throw (AssertionError. "Explicit paid choice")))]
+        (get-in (chat/run-command chat/request "ai default zen paid")
+                [:data :model]) => "paid"
         (:default-provider (api/config)) => "zen"
-        (chat/run-command chat/request "ai default zen paid")
-        (:model (api/provider (api/config) nil)) => "free-a"
-        (chat/run-command chat/request "ai default reset"))
-      (let [allowed (atom true)]
-        (with-redefs [admin/user-is-admin? (fn [_] @allowed)
-                      zen/free-models (fn [_] (reset! allowed false) ["free-a"])]
-          (chat/run-command chat/request "ai default zen free-a"))
-        (:default-provider (api/config)) => "first"))))
+        (api/default-model (api/provider (api/config) nil)) => "paid"
+        (:ai/free-default (api/provider (api/config) nil)) => nil))))

@@ -7,8 +7,10 @@
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-inspection :as inspection]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.util.ai-status :as status]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.models.ai-toolsets :as toolsets]))
 
 (def usage
@@ -58,21 +60,17 @@
     (when (and options (re-find #"\S" options))
       (api/fail "Usage: zen models"))
     (let [models (api/models (provider!))]
-      {:result/value models
-       :result/data {:provider "zen"
-                     :models (mapv #(hash-map :id %) models)}
-       :result/collection-path [:models]})
+      (let [data {:provider "zen"
+                  :models (mapv #(hash-map :id %) models)}]
+        (inspection/reviewed
+          {:result/value models :result/data data
+           :result/collection-path [:models]}
+          (:models data))))
     (catch Exception _ (failure args false))))
 
-(defn prompt-cmd
-  "zen <prompt> # ask a currently verified-free Zen model, text-only
-   zen --model <id> <prompt> # select any advertised Zen model
-   zen --toolset <name> <prompt> # apply configured provider/model policy"
-  {:yb/cat #{:ai}}
-  [{:keys [match chat-source] :as args}]
+(defn- ask-prompt [{:keys [chat-source continuation-route] :as args} options]
   (try
     (let [started (System/nanoTime)
-          options (ai/parse-prompt match usage)
           _ (when (or (:provider options) (:max-tool-calls options)
                       (:no-tools options))
               (api/fail usage))
@@ -81,22 +79,56 @@
                           (:key-file provider))
               (api/fail "Configure the Zen API key first."))
           config (toolsets/select (mcp/config) (:toolset options))
+          _ (when continuation-route
+              (execution/ensure-followup! continuation-route provider)
+              (policy/authorize! (:toolset config) (policy/actor args)
+                                 provider (:model continuation-route)))
+          provider (if continuation-route
+                     (execution/revalidate-free-followup!
+                       continuation-route provider) provider)
           result (models/chat!
                    config
                    (cond-> {"action" "ask" "provider" "zen"
                             "prompt" (:prompt options)}
                      (:model options) (assoc "model" (:model options)))
-                   chat-source #(context/messages args (:prompt options)))
+                   chat-source
+                   #(let [messages (context/messages args (:prompt options))]
+                      (when continuation-route
+                        (execution/ensure-followup!
+                          continuation-route provider))
+                      messages))
           data (:structuredContent result)]
       (if (:isError result)
         (failure args (:unknownOutcome result) (:error-code result)
                  (:retry-after-seconds result))
-        (status/caption
-          {:provider provider :model (:model data) :actor (policy/actor args)
-           :no-tools true :caption? (empty? (:next-cmds args))}
-          {:result/value (:text data) :result/data data}
-          (/ (- (System/nanoTime) started) 1000000.0))))
+        (let [provider (cond-> provider
+                         (and (not (:model options))
+                              (or (nil? (:model provider))
+                                  (:ai/free-default provider)))
+                         (assoc :ai/verified-free true))
+              prepared {:provider provider :model (:model data)
+                        :actor (policy/actor args) :no-tools true
+                        :toolset (get-in config [:toolset :name])
+                        :caption? (empty? (:next-cmds args))}]
+          (execution/remember-answer! "zen" prepared
+            (status/caption prepared
+              {:result/value (:text data) :result/data data}
+              (/ (- (System/nanoTime) started) 1000000.0))))))
     (catch Exception _ (failure args false))))
+
+(defn prompt-cmd
+  "zen <prompt> # ask the configured or automatic verified-free Zen default
+   zen --model <id> <prompt> # explicitly select a Zen model, possibly paid
+   zen --toolset <name> <prompt> # apply configured provider/model policy"
+  {:yb/cat #{:ai}}
+  [{:keys [match] :as args}]
+  (try (ask-prompt args (ai/parse-prompt match usage))
+       (catch Exception _ (failure args false))))
+
+(defmethod execution/run-followup "zen" [route args]
+  (ask-prompt (assoc args :continuation-route route)
+              (merge (select-keys route [:toolset])
+                     {:model (:model route) :prompt (:match args)})))
 
 (cmd-hook #"zen"
   #"^\s*$" usage-cmd

@@ -101,7 +101,16 @@
   (with-redefs [api/config (constantly config)
                 context/messages (fn [_ prompt] [{:role "user" :content prompt}])
                 api/complete (fn [provider model messages] [(:name provider) model messages])]
-    (ai/providers-cmd {}) => ["local" "hosted"]
+    (ai/providers-cmd {})
+    => {:result/value ["local" "hosted"]
+        :result/data [{:name "local" :default_model "llama3"
+                       :selected false :interface "chat-completions"}
+                      {:name "hosted" :default_model "chat"
+                       :selected true :interface "chat-completions"}]
+        :result/public-data [{:name "local" :default_model "llama3"
+                              :selected false :interface "chat-completions"}
+                             {:name "hosted" :default_model "chat"
+                              :selected true :interface "chat-completions"}]}
     (ai/prompt-cmd {:match "hello"})
     => ["hosted" "chat"
         (tools/host-messages [{:role "user" :content "hello"}])]
@@ -130,10 +139,18 @@
     (ai/models-cmd {:match ["models" nil]})
     => {:result/data {"local" {:models ["llama3" "org/model"]}
                      "hosted" {:result/error "Provider unavailable."}}
-        :result/value ["local: llama3, org/model" "hosted: Provider unavailable."]}
+        :result/value ["local: llama3, org/model"
+                       "hosted: Provider unavailable."]
+        :result/public-data
+        {"local" {:status "available"
+                  :models [{:id "llama3"} {:id "org/model"}]}
+         "hosted" {:status "unavailable"}}}
     (ai/models-cmd {:match ["models local" "local"]})
     => {:result/data {"local" {:models ["llama3" "org/model"]}}
-        :result/value ["local: llama3, org/model"]}
+        :result/value ["local: llama3, org/model"]
+        :result/public-data
+        {"local" {:status "available"
+                  :models [{:id "llama3"} {:id "org/model"}]}}}
     (ai/models-cmd {:match ["models missing" "missing"]})
     => {:result/error "Unknown AI provider. Use ai providers to list available providers."})
   (with-redefs [api/config (constantly config) api/models (constantly [])]
@@ -233,7 +250,8 @@
 
 (facts "tool inspection commands handle configuration errors safely"
   (with-redefs [mcp/config (constantly nil)]
-    (ai/servers-cmd {}) => []
+    (ai/servers-cmd {})
+    => {:result/value [] :result/data [] :result/public-data []}
     (:result/value (ai/tools-cmd {:match ["tools" nil]}))
     => "No MCP servers configured."
     (get-in (ai/tools-cmd {:match ["tools" nil]}) [:result/data :skills])

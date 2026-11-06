@@ -215,7 +215,7 @@
     (:view data) => "running"
     (:untrusted data) => true
     (:build data) => (:build releases/running)
-    (get-in data [:changes 0 :id]) => "weather-cron-alias-data"
+    (get-in data [:changes 0 :id]) => "ai-reply-routing-default-prices"
     (count (:sent result)) => 2))
 
 (fact "whole-batch validation rejects injected release fields before any GET"

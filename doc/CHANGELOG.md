@@ -8,6 +8,19 @@ as well.
 
 ## Unreleased
 
+- Continue fresh successful standalone Discord AI/Grok/Zen answers with a plain
+  reply, inheriting the resolved provider/model and safe options. Prompt syntax
+  stays literal; explicit commands switch branches. Recheck ownership, context
+  and current caller policy, exclude errors/bots/stale answers and duplicates,
+  and never silently turn an automatic free model into a paid continuation.
+
+- Let any trusted chat user explicitly select a global runtime model default,
+  including paid Zen models. Show previous/new published input/output list rates
+  and their difference without inference; missing prices are unavailable, not
+  free. Preserve automatic verified-free selection and all tool/provider policy.
+  Add reviewed Explore data to AI defaults/providers/models/servers/toolsets and
+  Zen model discovery, without keys, endpoints, raw configuration or private data.
+
 - Reply directly to Discord commands and read explicit same-channel reply
   ancestry for AI follow-ups, including visible V2 text. Context reads are
   bounded and fail before inference if incomplete. Top-level zen now uses

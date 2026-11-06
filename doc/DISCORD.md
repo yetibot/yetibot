@@ -10,7 +10,15 @@ message in their parent channel. If the requesting message was deleted,
 Discord may deliver the answer without a reference; Yetibot does not repeat the
 command or blindly retry a send.
 
-Reply to a Yetibot answer with `!ai`, `!grok` or `!zen` and a follow-up prompt.
+A plain human reply to a fresh successful standalone `!ai`, `!grok` or `!zen`
+answer continues with its resolved command/provider/model and safe options.
+Explicit commands override the branch; plain reply flags/pipes/backticks stay
+literal. There is no sticky channel mode, inherited actor privilege, bot loop or
+implicit retry of an error card. Paid routes make new paid requests; automatic
+free routes stop if the same model is no longer verified free. Edits, deletion,
+eviction/restart and changed providers expire prior ownership. You can always
+use an explicit AI command, including for old answers without retained routing.
+
 In ordinary channels/DMs the AI receives that same-channel reply ancestry,
 including visible V2 answer text, not unrelated channel messages. Actual
 threads keep their existing full-thread context. The bot needs View Channel
@@ -41,7 +49,11 @@ an arbitrary exception message.
 
 **Explore data** expands inside the original reply and becomes **Hide data**.
 It is available for explicitly reviewed public projections: `weather`,
-`weather forecast`, `version` and `changelog`. The tree initially shows two
+`weather forecast`, `version`, `changelog`, `ai tools`, AI defaults,
+provider/model/server/toolset inspection and `zen models`. AI inspection keeps
+only reviewed metadata, not credentials, endpoints, raw configs, prompts,
+schemas or private tool payloads; configured server data does not claim health.
+The tree initially shows two
 levels, or all available levels for shallower data. **Expand** shows one more
 level everywhere; **Collapse** shows one fewer. Both reset to the first page.
 Collapsed objects/arrays show type/count summaries instead of requiring a

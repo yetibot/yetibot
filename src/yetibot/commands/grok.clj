@@ -39,14 +39,15 @@
     (when (and (not (:result/error result))
                (not (string? (:result/value result))))
       (api/fail "Grok did not return a text answer."))
-    (walk/postwalk
-      #(if (string? %)
-         (mcp/redact % {:secrets [(get-in prepared [:provider :key])]}) %)
-      (-> result
-          (update :result/value #(answer-text prepared %))
-          (update :result/data assoc
-                  :provider (get-in prepared [:provider :name])
-                  :model (:model prepared))))))
+    (execution/remember-answer! "grok" prepared
+      (walk/postwalk
+        #(if (string? %)
+           (mcp/redact % {:secrets [(get-in prepared [:provider :key])]}) %)
+        (-> result
+            (update :result/value #(answer-text prepared %))
+            (update :result/data assoc
+                    :provider (get-in prepared [:provider :name])
+                    :model (:model prepared)))))))
 
 (defn- answer-chunks
   ([text] (answer-chunks text host-discord/discord-max-message-length))
@@ -178,6 +179,18 @@
                :native-tools ["web_search" "x_search"]})
       config)))
 
+(defn- execute-prepared [args prepared]
+  (let [event (get-in args [:chat-source :raw-event])
+        channel-id (or (:channel-id event) chat/*target*)
+        message-id (:id event)]
+    (if (and (legacy/discord?) channel-id message-id)
+      (in-discord prepared args channel-id)
+      (generate prepared))))
+
+(defmethod execution/run-followup "grok" [route args]
+  (ai/safely args
+    #(execute-prepared args (ai/prepare-followup args route grok-config))))
+
 (defn grok-cmd
   {:doc (str "grok <prompt> # ask Grok (provider named grok or xai.key)\n"
              "   grok --model <model> <prompt> # choose a model "
@@ -195,18 +208,13 @@
              "   # Discord shows a transient working/tool status card; "
              "completed answers are separate messages.")
    :yb/cat #{:ai}}
-  [{:keys [chat-source] :as args}]
+  [args]
   (ai/safely args
     (fn []
-      (let [_ (when execution/*sensitive* (execution/sensitive!))
-            prepared (ai/prepare-prompt args "grok" usage grok-config
-                                        {"--no-thread" :no-thread})
-            event (:raw-event chat-source)
-            channel-id (or (:channel-id event) chat/*target*)
-            message-id (:id event)]
-        (if (and (legacy/discord?) channel-id message-id)
-          (in-discord prepared args channel-id)
-          (generate prepared))))))
+      (when execution/*sensitive* (execution/sensitive!))
+      (execute-prepared args
+        (ai/prepare-prompt args "grok" usage grok-config
+                           {"--no-thread" :no-thread})))))
 
 (cmd-hook #"grok"
   #"(?s)^.+$" grok-cmd)

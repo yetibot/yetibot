@@ -117,6 +117,15 @@ name. A failure from one provider does not hide results from the others.
 `ai models <provider>` queries just that provider. These listing commands do not
 bypass automatic routing's all-provider completeness requirement.
 
+Defaults, provider/model listings, servers, toolsets and `zen models` also attach
+explicitly reviewed structured data for Discord's existing Explore data viewer.
+Provider rows expose names, default model IDs and API interface; model rows keep
+IDs and reviewed catalog/interface coverage. Server rows retain only visible
+configured names, kind, tool allowlists and a not-checked discovery label, never
+fabricated live health. No keys, headers, endpoints, command/environment config,
+prompts, schemas or private arguments/results are public. Frozen viewer actions
+perform no discovery or inference; the readable text remains alongside the data.
+
 ## Piped structured input
 
 `ai`, `grok`, and aliases expanding to those commands receive the current
@@ -216,13 +225,14 @@ runtime choice, otherwise the first eligible ID allowed by the toolset. If an
 offer expires, it is not retained; no eligible model means fail closed, never
 paid fallback. This follows rotating offerings, not round-robin request retries.
 
-Admin-authorized native `ai` can accept
-`{"action":"set_default","provider":"zen","model":"<exact-free-id>"}`.
-Whole-batch preflight remains offline; execution rechecks trusted provenance,
-admin status, provider/model policy and current free prices. This now sets the
-global AI provider/model choice, subject to the runtime controls below. It never
-changes credentials, URLs, permissions or file configuration. Restart clears it. X posts and model prose are hints, not pricing proof or
-permission to reconfigure anything. `429` inference rejection is reported as an
+Trusted-user native `ai` can accept
+`{"action":"set_default","provider":"zen","model":"<exact-model-id>"}`,
+including paid models. Whole-batch preflight remains offline; execution rechecks
+trusted provenance and provider/model policy after optional pricing metadata IO.
+This sets the global AI choice and shows previous/new list rates, subject to the
+runtime controls below. It never changes credentials, URLs, permissions or file
+configuration. Restart clears it. Model prose is not pricing proof or authority
+to reconfigure anything. `429` inference rejection is reported as an
 upstream limit, not missing configuration, with no automatic paid retry.
 Free-usage rejections include a bounded numeric `Retry-After` when supplied;
 `403` is reported as denied access, not an uncertain paid outcome. Current
@@ -256,13 +266,22 @@ See [OpenCode model documentation](https://opencode.ai/docs/zen/).
 !ai default reset
 ```
 
-Inspection shows the effective global choice. Setting/resetting requires a real
-adapter-authenticated user listed in the instance's existing `:admin :users`.
-Send mutations directly, not through pipes, aliases, observers or computed
-commands. The provider must already be configured. The model is an exact ID,
-not an inference or entitlement test; use `ai models <provider>` to discover IDs.
-Selecting a paid non-Zen model is an explicit admin choice and can affect later
-requests for everyone. Zen runtime defaults still require fresh zero pricing.
+Inspection shows the effective global choice. Any real adapter-authenticated
+chat user may set or reset it; bot-admin status is not required. Send mutations
+directly, not through pipes, aliases, observers or computed commands. The
+provider must already be configured. Any exact model ID may be selected,
+including paid Zen models; use `ai models <provider>` to discover IDs. Selection
+performs no inference or entitlement test. It affects later requests for
+everyone and may incur charges; automatic selection without an explicit model
+remains verified-free, with no paid fallback.
+
+After a change, Yetibot compares the actual previous and new defaults using
+published input/output USD rates per million text tokens, plus signed rate
+differences when both are known. These are base list prices, not account bills;
+cache, context tiers, media and tools can change actual cost. Zen prices come
+from one bounded credential-free public catalog read. Known Grok4.7/Gemma rates
+reuse the existing verified pricing tables; other or unavailable rates say
+unavailable, never free. A pricing outage does not block a valid selection.
 
 The choice is one atomic, in-memory provider/model pair, shared by AI callers.
 Explicit `--provider` / `--model` flags still take precedence. Credentials,
@@ -273,9 +292,9 @@ request rechecks current free eligibility and normal caller/model policy.
 
 The native `ai` tool also supports `{"action":"defaults"}`,
 `{"action":"set_default","provider":"<name>","model":"<exact-id>"}`, and
-`{"action":"reset_default"}`. Mutations require trusted admin provenance plus
-normal toolset/provider/model policy. Admin status and policy are checked again
-after catalog IO. This does not grant new tool or provider permissions.
+`{"action":"reset_default"}`. Mutations require trusted chat provenance plus
+normal toolset/provider/model policy, rechecked after metadata IO. They show the
+same pricing comparison and grant no new tool or provider permissions.
 
 ### Small Discord AI captions
 
@@ -1945,10 +1964,28 @@ Outside threads, a new message stands alone unless it is a Discord reply.
 single-hop and tool-free; native `ai`/`cf` child tools still see only their
 explicit prompt, never automatic history.
 
-In an ordinary Discord channel or DM, reply to an answer with another command,
-for example `!zen What about Calgary?`. Yetibot follows only that message's
-explicit reply ancestry in the same channel, oldest first, then adds the
-current prompt once. It reads visible legacy/V2 text, not unrelated channel
+A plain human reply to a fresh successful standalone Discord `!ai`, `!grok` or
+`!zen` answer continues with that command's resolved provider/model. Leading
+flags, pipes and backticks in the plain reply are literal prompt text, never
+commands. Explicit command prefixes override the route and establish their own
+branch. Inherited explicit toolset/no-tools/budget options keep their normal
+current-user policy; no actor permissions are inherited. Paid routes make
+ordinary new paid requests. An automatically verified-free route must reverify
+the same model each turn: no silent paid upgrade, model rotation or error retry.
+
+Only terminally delivered owned successful answers qualify. Errors, working
+cards, unknown/old answers, pipelines and embedded commands do not open implicit
+turns. Bot messages and ordinary channel chatter stay ignored. Edits, deletion,
+cache eviction or restart expire routing; provider identity changes fail closed.
+The bounded command cache retains route metadata, not another conversation-text
+session. Before inference the host rechecks ownership, current actor/policy and
+existing context limits. Native child model calls remain stateless; plain
+follow-ups do not activate automatic GitHub PR intent routing.
+
+You can still reply with an explicit command, such as `!zen What about Calgary?`,
+including when an old answer has no retained route. Yetibot follows only that
+message's explicit reply ancestry in the same channel, oldest first, then adds
+the current prompt once. It reads visible legacy/V2 text, not unrelated channel
 chatter, downloaded attachments or private tool state. This sends those turns
 to the provider selected for the new request. Native answer references connect
 fresh conversations; older standalone answers have no original-question link.
@@ -1958,7 +1995,8 @@ It is bounded to 32 ancestors, 64,000 text characters and a 10-second read
 budget. Cross-channel/forwarded links, deleted or inaccessible ancestors,
 non-advancing links, timeouts and over-limit chains produce an error before
 inference, never a silently shortened or context-free paid request. Start a
-fresh conversation if a chain is too large. No conversation session is stored.
+fresh conversation if a chain is too large. Conversation text is read from
+Discord, not retained in a separate session store.
 
 In a **Slack thread** or **Discord thread**, the reader fetches all prior text messages
 in that thread, including its starting message and bot replies. It follows all
