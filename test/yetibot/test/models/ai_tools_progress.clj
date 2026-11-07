@@ -142,7 +142,9 @@
       (:result/value
         (tools/complete provider "chat" []
                         {:on-progress #(swap! seen conj %)}))
-      => "Benign [redacted]"
+      => (str "Benign [redacted]\n\n1 tool failed.\n\n"
+              "#1 mcp_0_search__web_search — "
+              "A specific failure reason was not retained.")
       (some #(string/includes? (pr-str %) escaped) @seen) => nil
       (some #(string/includes? (pr-str %) "quote") @seen) => nil)))
 

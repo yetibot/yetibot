@@ -9,7 +9,7 @@
             [yetibot.api.mcp :as mcp]))
 
 (def reasons
-  {:partial-result "Some model calls returned no usable answer."
+  {:partial-result "Some tool calls did not return a usable result."
    :unknown-result
    (str "A tool's delivery outcome is uncertain. Later calls were not run; "
         "no further parent request was sent.")
@@ -173,16 +173,153 @@
             (assoc s :calls rows :omitted omitted)
             (recur (pop rows) (inc omitted))))))))
 
-(defn report [state limit reason]
-  (let [{:keys [used requested calls omitted]} @state]
-    {:reason reason :budget {:limit limit :used used
-                             :remaining (max 0 (- limit used))
-                             :requested requested}
-     :calls calls :omitted omitted
-     :truncated (boolean (or (pos? omitted) (some :details-shortened calls)))}))
+(defn- outcome-kind [{:keys [outcome operation code]}]
+  (cond
+    (= :unknown outcome) :unknown
+    (#{:skipped :rejected} outcome) :not-run
+    (= :inference operation)
+    (case code
+      :output-limit :limit
+      :no-answer :empty
+      :unsupported-output :unsupported
+      :incomplete-output :incomplete
+      (:request-rejected :zen-access-denied :zen-rate-limit
+                         :zen-free-usage-limit) :rejected
+      :model-failed)
+    :else :tool-failed))
 
-(defn fail! [reason]
-  (throw (ex-info (get reasons reason) {::reason reason})))
+(defn remember-failure!
+  "Keep three public failure receipts independently of chronological trace bounds."
+  [state row]
+  (let [row (select-keys row [:call :tool :outcome :operation :provider :model
+                              :code :http_status :error-class :error-code
+                              :parameter :output-cap :output_count :thinking_count])
+        row (reduce (fn [r k]
+                      (if (string? (get r k))
+                        (update r k progress/clip 200) r))
+                    row [:tool :provider :model])]
+    (swap! state
+      (fn [s]
+        (-> s
+            (update :failures
+                    #(vec (take 3 (sort-by
+                                    (fn [r] (if (= :unknown (:outcome r)) 0 1))
+                                    (conj (or % []) row)))))
+            (update-in [:failure-counts (outcome-kind row)] (fnil inc 0)))))))
+
+(defn report [state limit reason]
+  (let [{:keys [used requested calls omitted failures failure-counts]} @state]
+    (loop [rows calls omitted omitted]
+      (let [r (cond->
+                {:reason reason :budget {:limit limit :used used
+                                         :remaining (max 0 (- limit used))
+                                         :requested requested}
+                 :calls rows :omitted omitted
+                 :truncated (boolean
+                              (or (pos? omitted) (some :details-shortened rows)))}
+                (seq failures) (assoc :failures failures
+                                     :failure-counts failure-counts))]
+        ;; Leave room for a closed batch-validation code added by the caller.
+        (if (<= (bytes r) 11900) r
+          (recur (pop rows) (inc omitted)))))))
+
+(defn fail!
+  ([reason] (fail! reason nil))
+  ([reason code]
+   (throw (ex-info (get reasons reason)
+                   (cond-> {::reason reason}
+                     (contains? progress/failure-labels code)
+                     (assoc ::code code))))))
+
+(defn failure-reason
+  "Authored explanations only; never exception or provider message text."
+  [{:keys [outcome code error-code error-class parameter http_status]} report]
+  (cond
+    (= :unknown outcome)
+    "Delivery could not be confirmed. Not retried; cost may be unknown."
+    (= :skipped outcome) "Not run after an earlier uncertain outcome."
+    (= :rejected outcome)
+    (str "Batch not run: " (or (progress/failure-labels (:code report))
+                              (get reasons (:reason report))
+                              "validation failed."))
+    (or (= :authentication error-class) (= 401 http_status))
+    "Provider authentication failed."
+    (= :zen-free-usage-limit code)
+    "Zen free-usage limit reached. No paid fallback was used."
+    (= :unsupported-parameter error-code)
+    (if (= :token-limit parameter)
+      "Provider does not support the generation-budget parameter used."
+      "Provider does not support a request parameter.")
+    (= :model-access error-code)
+    "Provider denied access or the selected model is unavailable."
+    (= :context-limit error-code) "Input exceeded the model's context limit."
+    (= :rate-limit error-code) "Provider rate limit reached."
+    (= :invalid-message-content error-code)
+    "Provider rejected the message content format."
+    (= :invalid-tool-schema error-code) "Provider rejected the tool schema."
+    (= :missing-tool-output error-code) "Provider expected a missing tool output."
+    (= 413 http_status)
+    "Provider rejected the request as too large; the specific limit was not retained."
+    (or (= :server error-class)
+        (and (integer? http_status) (<= 500 http_status 599)))
+    "Provider service failed while handling the request."
+    (or (= :model-access error-class) (= 403 http_status))
+    "Provider denied access to this resource."
+    (or (= :rate-limit error-class) (= 429 http_status))
+    "Provider rate limit reached."
+    :else
+    (or (get {:output-limit "Generation limit reached before a complete answer."
+              :no-answer "Request completed without usable text."
+              :unsupported-output "Request returned unsupported output."
+              :incomplete-output "Provider returned incomplete output."
+              :request-rejected "Provider rejected the request; a specific cause was not retained."
+              :not-sent "Request was not sent; usage tracking or configuration was unavailable."}
+             code)
+        (when-let [label (progress/failure-labels code)]
+          (when (not= :tool-error code) (str label ".")))
+        "A specific failure reason was not retained.")))
+
+(defn public-errors
+  "Failure-first DTO fits the unchanged 64-node/4000-char core error budget.
+   Three bounded rows, eight fields each, eight detail scalars at most. Full
+   chronology/technical receipts remain in execution, not this error pane."
+  [report]
+  (let [failures (or (:failures report)
+                    (filter #(not= :success (:outcome %)) (:calls report)))
+        rows (take 3 (sort-by #(if (= :unknown (:outcome %)) 0 1) failures))
+        total (if (:failure-counts report)
+                (reduce + (vals (:failure-counts report))) (count failures))
+        omitted (- total (count rows))]
+    {:calls
+     (mapv (fn [row]
+             (let [label #(when (string? %) (progress/clip % 200))]
+               (cond->
+                 {:call (:call row) :tool (label (:tool row))
+                  :operation (:operation row)
+                  :provider (label (:provider row)) :model (label (:model row))
+                  :reason (failure-reason row report)
+                  :details (assoc (select-keys row
+                                    [:code :error-class :error-code :parameter
+                                     :output-cap :output_count :thinking_count])
+                                  :outcome (:outcome row))}
+                 (integer? (:http_status row))
+                 (assoc :http_status (:http_status row))))) rows)
+     :omitted omitted :trace_omitted (:omitted report)
+     :truncated (boolean (or (pos? omitted) (:truncated report)))
+     :reason (:reason report) :scope :unsuccessful-calls}))
+
+(defn- failure-lines [report]
+  (let [errors (public-errors report)]
+    (when (seq (:calls errors))
+      (str
+        (string/join "\n"
+          (map (fn [{:keys [call tool operation provider model reason]}]
+                 (str "#" call " " (or provider tool "tool")
+                      (when model (str "/" model))
+                      (when operation (str " (" (name operation) ")"))
+                      " — " reason)) (:calls errors)))
+        (when (pos? (:omitted errors))
+          (str "\n" (:omitted errors) " more unsuccessful calls omitted."))))))
 
 (defn public-report [report]
   ;; Deliberately omit arguments and IDs; not a generic tool-payload viewer.
@@ -198,7 +335,9 @@
 
 (defn- trace-summary [report]
   (let [{:keys [limit used remaining requested]} (:budget report)
-        header (str (get reasons (:reason report)) "\n"
+        header (str (get reasons (:reason report))
+                    (when-let [label (progress/failure-labels (:code report))]
+                      (str " " label ".")) "\n"
                     "Tool budget: total=" limit " used=" used
                     " remaining=" remaining " requested=" requested
                     ". Trace (redacted arguments; ordinal references, "
@@ -226,24 +365,11 @@
                         " which also marks any structured omissions.]"))
                  (when (empty? rows) "\nNo tool calls were attempted."))))))))
 
-(defn- outcome-kind [{:keys [outcome operation code]}]
-  (cond
-    (= :unknown outcome) :unknown
-    (#{:skipped :rejected} outcome) :not-run
-    (= :inference operation)
-    (case code
-      :output-limit :limit
-      :no-answer :empty
-      :unsupported-output :unsupported
-      :incomplete-output :incomplete
-      :request-rejected :rejected
-      :model-failed)
-    :else :tool-failed))
-
 (defn- outcome-line [report answers]
-  (let [counts (frequencies
-                 (map outcome-kind
-                      (remove #(= :success (:outcome %)) (:calls report))))
+  (let [counts (or (:failure-counts report)
+                   (frequencies
+                     (map outcome-kind
+                          (remove #(= :success (:outcome %)) (:calls report)))))
         labels [[:limit "hit its output limit" "hit their output limit"]
                 [:empty "returned no text" "returned no text"]
                 [:unsupported "returned unsupported output"
@@ -264,10 +390,16 @@
 
 (defn summary
   ([report] (summary report []))
-  ([report answers]
+  ([report answers] (summary report answers nil))
+  ([report answers parent-text]
    (if-not (or (seq answers)
-               (some #(= :inference (:operation %)) (:calls report)))
-     (trace-summary report)
+               (some #(= :inference (:operation %))
+                     (concat (:calls report) (:failures report))))
+     (if parent-text
+       (string/join "\n\n" (remove string/blank?
+                             [parent-text (outcome-line report answers)
+                              (failure-lines report)]))
+       (trace-summary report))
      (string/join "\n\n"
        (remove string/blank?
          [(if (seq answers)
@@ -277,6 +409,7 @@
                           "\n-# " provider "/" model)) answers))
             "No model answers returned.")
           (outcome-line report answers)
+          (failure-lines report)
           (if (= :unknown-result (:reason report))
             (str "Stopped after an uncertain outcome. "
                  "Do not retry unconfirmed calls automatically.")

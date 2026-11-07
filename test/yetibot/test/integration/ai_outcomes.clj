@@ -4,6 +4,7 @@
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.commands.ai :as command]
             [yetibot.api.opencode :as zen]
             [yetibot.api.mcp :as mcp]
@@ -119,6 +120,35 @@
               [:result/data :ai/accounting :parent :reported_usd])
       => 0.257858M)))
 
+(facts "host-side eligibility reasons survive without exposing exceptions"
+  (fixtures/with-zen-catalog
+    (fn [request cfg]
+      (doseq [code [:model-ineligible :credentials-unavailable :policy-denied]]
+        (with-redefs [ai/prepare-provider (fn [& _] (ai/fail "PRIVATE-THROW" code))
+                      http/post (fn [& _] (throw (AssertionError. "No inference")))]
+          (let [r (models/call! cfg "ai"
+                    {"action" "ask" "provider" "zen" "model" "b-paid"
+                     "prompt" "PRIVATE-PROMPT"} (:chat-source request))]
+            (fact (:error-code r) => code)
+            (fact (:unknownOutcome r) => false)
+            (fact (get-in r [:structuredContent :provider]) => "zen")
+            (fact (boolean (re-find #"PRIVATE" (pr-str r))) => false)))))))
+
+(fact "batch policy rejection is explained in the bounded public error view"
+  (let [r (command/safely {}
+            #(throw (ex-info "PRIVATE"
+                      {:ai/tool-failure
+                       {:reason :invalid-arguments :code :policy-denied
+                        :budget {:limit 20 :used 0 :remaining 20 :requested 1}
+                        :calls [{:call 1 :tool "yetibot_ai" :outcome :rejected}]
+                        :omitted 0 :truncated false}})))
+        snapshot (atom (viewer/initial))]
+    (binding [public/*capture* #(viewer/capture! snapshot %)]
+      (public/observe! r))
+    (string/includes? (get-in @snapshot [:errors 0 "calls" 0 "reason"])
+                      "policy") => true
+    (boolean (re-find #"PRIVATE" (pr-str r))) => false))
+
 (defn sample-run [failure]
   (fixtures/with-zen-catalog
     (fn [request cfg]
@@ -189,6 +219,106 @@
                      {:actor (policy/actor request)
                       :on-progress #(when (:answer %) (swap! published conj %))})
            :parents @parents :children @children :published @published})))))
+
+(defn mixed-diagnostic-run [catalog-status child-status total]
+  (fixtures/with-zen-catalog
+    (fn [request cfg]
+      (let [parent {:name "grok" :url "https://api.x.ai/v1" :api "responses"
+                    :model "grok-4.7" :key "ROOT-SECRET"}
+            parents (atom 0) children (atom 0) gets (atom 0)]
+        (with-redefs
+          [mcp/config (constantly
+                        {:servers [] :max-tool-calls 64
+                         :toolsets [(assoc (:toolset cfg) :native-tools ["ai"]
+                                     :providers [{:name "grok" :models ["grok-4.7"]}
+                                                 {:name "zen" :models ["b-paid"]}])]})
+           http/get
+           (fn [& _]
+             (swap! gets inc)
+             (if (= (- total 3) diagnostics/*call*)
+               {:status catalog-status :body {:error {:type "permission_error"
+                                          :code "permission_denied"
+                                          :message "PRIVATE-CATALOG"}}}
+               {:status 200 :body {:data fixtures/zen-catalog}}))
+           http/post
+           (fn [url _]
+             (if (string/includes? url "api.x.ai")
+               (let [n (swap! parents inc)]
+                 {:status 200
+                  :body {:status "completed"
+                         :output
+                         (if (= 1 n)
+                           (mapv (fn [i]
+                                   {:type "function_call" :call_id (str "d" i)
+                                    :name "yetibot_ai"
+                                    :arguments
+                                    (json/generate-string
+                                      (if (= (- total 3) i)
+                                        {"action" "models" "provider" "zen"}
+                                        {"action" "ask" "provider" "zen"
+                                         "model" "b-paid"
+                                         "prompt" (str "PRIVATE-PROMPT-" i)}))})
+                                 (range 1 (inc total)))
+                           [{:type "message" :content [{:type "output_text"
+                                                       :text "PARENT-PLAN"}]}])}})
+               (do
+                 (swap! children inc)
+                 (if (= (- total 2) diagnostics/*call*)
+                   {:status child-status :body {:error {:type "invalid_request_error"
+                                              :code (if (= 422 child-status)
+                                                      "unsupported_parameter"
+                                                      "PRIVATE-CODE")
+                                              :param "max_completion_tokens"
+                                              :message "PRIVATE-REJECTION"}}}
+                   {:status 200 :body {:choices [{:finish_reason "stop"
+                                                 :message {:content "323"}}]}}))))]
+          {:result (tools/complete parent "grok-4.7" []
+                     {:actor (policy/actor request) :max-tool-calls 64})
+           :parents @parents :children @children :gets @gets})))))
+
+(facts "failed discovery and model calls survive the real frozen error budget"
+ (doseq [[catalog-status child-status expected total]
+         [[403 422 "generation-budget" 12] [401 413 "too large" 12]
+          [401 413 "too large" 52]]]
+  (let [{:keys [result parents children]}
+        (mixed-diagnostic-run catalog-status child-status total)
+        snapshot (atom (viewer/initial))]
+    parents => 2
+    children => (dec total)
+    (<= (alength (.getBytes (json/generate-string
+                             (get-in result [:result/data :tool-trace])) "UTF-8"))
+        12000) => true
+    (binding [public/*capture* #(viewer/capture! snapshot %)]
+      (public/observe! result))
+    (let [calls (get-in @snapshot [:errors 0 "calls"])]
+      (mapv #(get % "call") calls) => [(- total 3) (- total 2)]
+      (get-in calls [0 "operation"]) => "models"
+      (get-in calls [0 "provider"]) => "zen"
+      (get-in calls [0 "http_status"]) => catalog-status
+      (string/includes? (str (get-in calls [0 "reason"]))
+                        (if (= 401 catalog-status) "authentication" "access"))
+      => true
+      (get-in calls [1 "model"]) => "b-paid"
+      (get-in calls [1 "http_status"]) => child-status
+      (string/includes? (str (get-in calls [1 "reason"])) expected)
+      => true)
+    (get-in @snapshot [:errors 0 "omitted"]) => 0
+    (get-in @snapshot [:errors 0 "truncated"]) => (> total 40)
+    (boolean (re-find #"PRIVATE|ROOT-SECRET|PARENT-PLAN" (pr-str snapshot))) => false
+    (string/includes? (:result/value result)
+                      (if (= 401 catalog-status) "authentication" "access")) => true
+    (string/includes? (:result/value result) expected) => true
+    (swap! snapshot assoc :sealed? true)
+    (with-redefs [http/get (fn [& _] (throw (AssertionError. "No rediscovery")))
+                  http/post (fn [& _] (throw (AssertionError. "No replay")))]
+      (map? (viewer/inline-error-payload
+              snapshot ["10" "20"]
+              {:components [{:type 17 :components
+                             [{:type 10 :content "Answer"}
+                              {:type 1 :components
+                               [{:type 2 :style 2 :label "Error details"
+                                 :custom_id "yb:error:10:20"}]}]}]} 3 0))
+      => true))))
 
 (def limited-chat
   {:choices [{:finish_reason "length"

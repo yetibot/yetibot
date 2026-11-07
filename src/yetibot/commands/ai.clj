@@ -111,7 +111,7 @@
              :result/public-data
              (cond-> {:execution (trace/public-report report)}
                (:ai/accounting data) (assoc :accounting (:ai/accounting data)))
-             :result/public-error (trace/public-report report)})
+             :result/public-error (trace/public-errors report)})
            (:ai/piped-input data)
            ;; Core error decoration includes the evaluated command/input.
            {:result/value input/error-message

@@ -157,7 +157,8 @@
              parsed
              (policy/arguments! (:toolset config)
                                 (get-in entries [name :tool :name]) parsed)))
-         (catch Exception _ (trace/fail! :invalid-arguments)))})))
+         (catch Exception e
+           (trace/fail! :invalid-arguments (:ai/error-code (ex-data e)))))})))
 
 (defn- request-action [{:keys [entry arguments]}]
   ;; A changed cap must not turn a consumed text request into a fresh action.
@@ -182,10 +183,11 @@
                  (mcp/call-tool (:session tool) (:name tool) arguments))
         unknown-outcome (:unknownOutcome result)
         error-code (:error-code result)
-        inference? (and (:native? tool) (fn? (:host-call tool))
-                        (#{"ai" "cf"} (:name tool))
-                        (= "ask" (get arguments "action" "ask")))
-        data (when inference?
+        model-tool? (and (:native? tool) (fn? (:host-call tool))
+                         (#{"ai" "cf"} (:name tool)))
+        action (when model-tool? (get arguments "action" "ask"))
+        inference? (= "ask" action)
+        data (when model-tool?
                (clean-data (:structuredContent result) config))
         ;; Text and structured results work with every chat model. Do not forward
         ;; binary image/audio content or server metadata into the conversation.
@@ -209,8 +211,12 @@
     (with-meta {:role "tool" :tool_call_id id :content content}
       {::unknown-outcome unknown-outcome ::tool-error (:isError result)
        ::detail
-       (when inference?
-         (merge {:operation :inference}
+       (when (or model-tool? (:isError result) unknown-outcome)
+         (merge (when model-tool?
+                  {:operation (get {"ask" :inference "models" :models
+                                    "providers" :providers "categories" :categories
+                                    "defaults" :defaults "set_default" :set-default
+                                    "reset_default" :reset-default} action)})
                 (select-keys data [:provider :model :http_status :error-class
                                    :error-code :parameter])
                 (select-keys (:ai/response data)
@@ -218,7 +224,8 @@
                              :input_count :output_count :thinking_count])
                 {:cost (:ai/cost data)
                  :code (cond unknown-outcome :unknown-outcome
-                             (get progress/failure-labels error-code)
+                             (and model-tool?
+                                  (get progress/failure-labels error-code))
                              error-code
                              (:isError result) :tool-error)}))
        ::answer
@@ -228,10 +235,19 @@
                     :truncated (or (:truncated data)
                                    (> (count (:text data)) 1200)))))})))
 
+(defn- public-tool-label [config label]
+  (if (contains? (:progress-labels config) label)
+    label progress/redacted-label))
+
+(defn- remember-failure! [config state call ordinal outcome details]
+  (trace/remember-failure!
+    state (merge details
+                 {:call ordinal :outcome outcome
+                  :tool (public-tool-label config (get-in call [:entry :name]))})))
+
 (defn- notify-tool! [config trace-state ordinal outcome]
   (let [row (some #(when (= ordinal (:call %)) %) (:calls @trace-state))
-        label (if (contains? (:progress-labels config) (:tool row))
-                (:tool row) progress/redacted-label)
+        label (public-tool-label config (:tool row))
         used (:used @trace-state)
         limit (:progress-limit config)]
     (stream/notify!
@@ -254,6 +270,7 @@
         (if halted
           (do
             (trace/outcome! trace-state ordinal :skipped false false)
+            (remember-failure! config trace-state call ordinal :skipped {})
             (notify-tool! config trace-state ordinal :skipped)
             (recur (next pending)
                    (conj replies {:role "tool" :tool_call_id (:id call)
@@ -277,11 +294,16 @@
                                (diagnostics/emit-tool!
                                  {:call ordinal :outcome :unknown
                                   :code :unknown-outcome :elapsed_ms elapsed}))
+                             (remember-failure! config trace-state call ordinal
+                                                :unknown {:code :unknown-outcome})
                              (notify-tool! config trace-state ordinal :unknown)
                              (doseq [n (range (inc ordinal)
                                              (+ start (count calls) 1))]
                                (trace/outcome!
                                  trace-state n :skipped false false)
+                               (remember-failure! config trace-state
+                                                  (nth calls (- n start 1))
+                                                  n :skipped {})
                                (notify-tool! config trace-state n :skipped))
                              (trace/fail! :tool-exception)))
                 unknown? (boolean (::unknown-outcome (meta reply)))]
@@ -292,6 +314,9 @@
                                     (long (/ (- (System/nanoTime) started)
                                              1000000)))))
             (when (or unknown? (::tool-error (meta reply)))
+              (remember-failure! config trace-state call ordinal
+                                 (if unknown? :unknown :error)
+                                 (::detail (meta reply)))
               (let [row (some #(when (= ordinal (:call %)) %) (:calls @trace-state))]
                 (diagnostics/emit-tool!
                   (merge {:call ordinal
@@ -409,7 +434,7 @@
                           :mcp {:tool-calls (+ used attempted)}
                           :ai/cost accounting}
                          :result/public-data {:execution (trace/public-report report)}
-                         :result/public-error (trace/public-report report)}))
+                         :result/public-error (trace/public-errors report)}))
                     (some-> (:staged config) deref)
                     (let [p @(:staged config)]
                       {:result/value (proposals/preview p)
@@ -426,15 +451,16 @@
               (when-not (ai/nonblank-string? text)
                 (ai/fail (str "AI provider " (:name provider)
                               " returned no text response.")))
-              (let [partial? (some #(and (= :inference (:operation %))
-                                         (= :error (:outcome %)))
-                                   (:calls @trace-state))
+              (let [partial? (or (seq (:failure-counts @trace-state))
+                                 (some #(= :error (:outcome %))
+                                       (:calls @trace-state)))
                     report (when partial?
                              (trace/report trace-state limit :partial-result))]
                 (public/reviewed
                  {:result/value
                  (if partial?
-                   (trace/summary report (:answers @trace-state))
+                   (trace/summary report (:answers @trace-state)
+                                  (mcp/redact text config))
                    (mcp/redact text config))
                  :result/data
                  (cond->
@@ -451,10 +477,12 @@
                   {:execution (trace/public-report
                                 (or report
                                     (trace/report trace-state limit :completed)))}
-                  :result/public-error (when partial? (trace/public-report report))}))))))
+                  :result/public-error (when partial? (trace/public-errors report))}))))))
       (catch Exception e
         (let [reason (or (::trace/reason (ex-data e)) :provider-failure)
-              report (trace/report trace-state limit reason)]
+              report (cond-> (trace/report trace-state limit reason)
+                       (::trace/code (ex-data e))
+                       (assoc :code (::trace/code (ex-data e))))]
           (doseq [row (:calls report)
                   :when (= :rejected (:outcome row))]
             (notify-tool! config trace-state (:call row) :rejected))

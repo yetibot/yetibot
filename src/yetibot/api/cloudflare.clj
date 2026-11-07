@@ -50,7 +50,9 @@
       (consume-response response
         (fn [stream]
           (when-not (<= 200 (:status response) 299)
-            (fail! (str "Cloudflare returned HTTP " (:status response) ".")))
+            (throw (ex-info (str "Cloudflare returned HTTP " (:status response) ".")
+                            {:ai/error true
+                             :ai/diagnostic {:status (:status response)}})))
           (let [body (json/parse-string
                        (String. ^bytes (read-bytes stream 1048576) "UTF-8")
                        true)]

@@ -101,13 +101,13 @@
               (proof/await-card
                 calls (str "Tools: 1/7 · 6 remaining\n"
                            "Search 1 #1 web search — success\n"
-                           "#1 mcp_0_status-search__lookup — error\n"
+                           "#1 mcp_0_status-search__lookup — error (tool returned an error)\n"
                            "Search 2 #1 web search — error"))
               (let [card (last (proof/status-calls @calls))]
                 (fact (proof/status-text card)
                       => (str "Tools: 1/7 · 6 remaining\n"
                               "Search 1 #1 web search — success\n"
-                              "#1 mcp_0_status-search__lookup — error\n"
+                              "#1 mcp_0_status-search__lookup — error (tool returned an error)\n"
                               "Search 2 #1 web search — error")
                       (boolean (re-find #"PRIVATE|RAW-|SECRET"
                                         (str (:body card)))) => false))
@@ -119,7 +119,10 @@
                   (count @turns) => 2
                   (some #(contains? % :on-progress) @turns) => nil
                   (get-in (last (proof/answer-calls @calls)) [:body :components 0 :components 0 :content])
-                  => (str "Final\n\n-# " proof/model " · 1 tool · cost n/a"))))))))
+                  => (str "Final\n\n1 tool failed.\n\n"
+                          "#1 mcp_0_status-search__lookup — "
+                          "A specific failure reason was not retained.\n\n-# "
+                          proof/model " · 1 tool · cost n/a"))))))))
 
 (fact "no-tools keeps a tool-free Working card and ordinary final transport"
   (let [post http/post release (promise) wire (atom []) discovery (atom 0)
