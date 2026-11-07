@@ -22,7 +22,8 @@
 
 (def usage
   (str "Usage: grok [--model <model>] "
-       "[--toolset <name> | --no-tools] [--max-tool-calls <1..20>] "
+       "[--toolset <name> | --no-tools] [--max-tool-calls <1..128>] "
+       "[--max-output-tokens <1..262144>] "
        "[--no-thread] <prompt>"))
 
 (defn- answer-text
@@ -220,8 +221,10 @@
              "from the Grok provider\n"
              "   grok --toolset <name> <prompt> # use an authorized "
              "shared MCP toolset\n"
-             "   grok --max-tool-calls <1..20> <prompt> # choose a total "
-             "host-call budget within the configured ceiling\n"
+             "   grok --max-tool-calls <1..128> <prompt> # override the "
+             "host-call budget\n"
+             "   grok --max-output-tokens <1..262144> <prompt> # override "
+             "parent/child generation budgets\n"
              "   grok --no-tools <prompt> # disable MCP and native search "
              "for this request\n"
              "   grok --no-thread <prompt> # compatibility flag; replying "

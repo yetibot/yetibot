@@ -79,7 +79,8 @@
                           :provider-signature (provider-signature provider)}
                          (into {} (filter (comp some? val)
                                      (select-keys prepared
-                                       [:no-tools :toolset :max-tool-calls]))))
+                                       [:no-tools :toolset :max-tool-calls
+                                        :max-output-tokens]))))
                   (:ai/verified-free provider) (assoc :verified-free true))
           secrets (keep identity [(:key provider) (:key-file provider)])]
       (when (every? #(= % (mcp/metadata-redact % {:secrets secrets}))
@@ -148,7 +149,7 @@
     (when (and (= :message (:event-type *event*))
                (= chat-source (:chat-source *event*)) (= user (:user *event*))
                text (= text (extract platform-body))
-               (re-matches #"ai\s+(?:(?:proposal|approve|cancel)\s+[A-Za-z0-9-]+(?:\s+[0-9]+)?|default(?:\s+\S+){0,2})\s*" text)
+               (re-matches #"ai\s+(?:(?:proposal|approve|cancel)\s+[A-Za-z0-9-]+(?:\s+[0-9]+)?|default(?:\s+\S+){0,2}|limits(?:\s+reset|(?:\s+--(?:max-output-tokens|max-tool-calls)\s+[1-9][0-9]*){1,2})?)\s*" text)
                (= tree (parser/parser text)))
       (string/join " " (string/split (string/trim text) #"\s+")))))
 

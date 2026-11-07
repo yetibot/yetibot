@@ -209,7 +209,8 @@
         (:as @wire) => :json
         (:form-params @wire)
         => {:model sentinel :input messages :store false
-            :include ["reasoning.encrypted_content"] :max_turns 6 :tools []}))))
+            :include ["reasoning.encrypted_content"] :max_turns 6
+            :max_output_tokens 32768 :tools []}))))
 
 (fact "counts saturate and attacker-controlled selectors are coarse"
   (let [record (diagnostics/context

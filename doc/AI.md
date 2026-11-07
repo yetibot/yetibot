@@ -12,6 +12,43 @@ Discord can wrap the whole expression with `!thread <command>`. Rich replies
 share elapsed timing at the transport layer; AI metadata does not repeat it.
 See [Discord command replies](DISCORD.md) for examples and permission boundaries.
 
+## Generation and tool budgets
+
+Built-in defaults are **32,768 generation tokens per model request** and
+**20 host tool calls per run**. Generation includes thinking/reasoning where the
+provider counts it against output. These are application budgets, not advertised
+model capacities or dollar caps. More tool rounds can multiply parent-model
+spend. Existing measured usage/cost reporting remains authoritative.
+
+Leading `ai` and `grok` flags override both budgets:
+`--max-output-tokens N` (1–262,144) and `--max-tool-calls N` (1–128).
+Single-hop `zen` and `cf` accept the token flag, but not a tool-call budget.
+Use plain decimal integers without separators. Explicit smaller caps still work.
+
+Inspect with `!ai limits`. An administrator can change global runtime defaults:
+`!ai limits --max-output-tokens 65536 --max-tool-calls 40`.
+Either flag may be set alone; `!ai limits reset` restores startup defaults.
+Changes require an original standalone trusted admin command, not a pipeline,
+alias, observer, computed command or model tool. They perform no inference,
+persist no credentials/configuration and clear on restart.
+
+Startup `:ai` configuration accepts `:max-output-tokens` and
+`:max-tool-calls`; environment names are `YETIBOT_AI_MAX_OUTPUT_TOKENS` and
+`YETIBOT_AI_MAX_TOOL_CALLS`. Precedence, independently for each field:
+explicit request flags > global runtime overrides > startup configuration >
+built-in defaults. The legacy `:ai :mcp :max-tool-calls` setting remains a
+fallback startup default, **not a ceiling on explicit flags**. Host ceilings
+are 262,144 generation tokens and 128 tool calls.
+
+Prepared requests and new Discord continuation routes pin their effective
+budgets. Native text children inherit the host generation budget and cannot
+raise it. Their optional `max_output_tokens` should be omitted unless the human
+explicitly requested a smaller cap. They remain stateless, single-hop and
+tool-free. Provider limits still apply and may reject an unsupported cap; choose
+a compatible explicit value rather than retrying automatically. No consumed
+request is replayed, no uncertain outcome is retried, and no cap is silently
+raised. Existing context, response-display and inspection bounds are separate.
+
 ## Usage and cost reports
 
 Use `ai usage` for the current UTC month, `ai usage YYYY-MM` for a calendar
@@ -257,7 +294,8 @@ restricts free-tier chat to the OpenCode client. A valid key and zero-priced
 catalog entry do not grant Yetibot access. Do not impersonate that client,
 rotate models to evade quotas, or silently select a paid model.
 
-`zen` prompts are single-hop text requests with at most 2,048 output tokens.
+`zen` prompts are single-hop text requests using the shared generation budget
+(default 32,768, overridable with `--max-output-tokens`).
 Top-level chat uses the shared thread/Discord reply-chain context reader, but
 never downloads files or enables searches or child tools. Internal native
 `ai`/`cf` child calls remain explicit-prompt-only. `--toolset <name>` applies
@@ -449,11 +487,11 @@ metadata sets `metadata-truncated`; omissions do not imply lack of support.
 Public record fixtures are in that repository under
 `src/content/workers-ai-models/`; they are documentation, not live quotes.
 
-`cf [--model <id>] [--toolset <name>] <prompt>`
+`cf [--model <id>] [--toolset <name>] [--max-output-tokens N] <prompt>`
 uses the fixed `cloudflare` provider and only the supplied prompt, with no
 implicit history, child tools, native searches, or recursion. Each request is
-capped at 2048 output tokens on the wire (`max_tokens` for Workers AI Chat
-Completions). Only catalogued `chat` interfaces are accepted; Clef, Clairic,
+bounded by the shared generation budget (default 32,768), serialized as
+`max_tokens` for Workers AI Chat Completions. Only catalogued `chat` interfaces are accepted; Clef, Clairic,
 image, audio, embedding and unknown interfaces are denied before inference.
 Catalog discovery is not evidence of inference entitlement or billing access.
 Use normal `ai` for its existing conversation/tool behavior.
@@ -1120,7 +1158,8 @@ servers, command interpreters, or agent frameworks. `ai` supports actions
 `categories`, `models` and `ask` with the
 provider fixed to `cloudflare`. Optional `provider` selects only a configured
 provider for `ai`. `ask` accepts `prompt`, optional `model`, and optional
-`max_output_tokens` (integer 1–2048, default 2048). It cannot accept URLs,
+`max_output_tokens` (integer 1 through the host's effective generation budget;
+default: inherit that budget, normally 32,768). It cannot accept URLs,
 headers, credentials, token paths, user identities, tools, or skills.
 
 The current toolset's user/adapter and provider/model policy governs child
@@ -1477,24 +1516,17 @@ entries, not Yetibot's full environment or its other API keys.
   it does not silently answer as if a search succeeded. `--no-tools` skips all
   connections.
 - `:ai :mcp :max-tool-calls` (environment `YETIBOT_AI_MCP_MAX_TOOL_CALLS`)
-  accepts 1–20; the fallback remains **6**. This is a total client-side
-  invocation budget per explicit command, across all selected MCP servers,
-  native Yetibot
-  tools, batches and parent-model turns. It is not nesting depth or a per-round
-  allowance. A text-only delegated child counts as one host call; its prompt
-  remains context-free and receives no parent budget instructions.
+  accepts 1–128 as a legacy startup default. The built-in fallback is **20**.
+  This total host invocation budget spans selected MCP servers, native tools,
+  batches and parent-model turns, not nesting depth or a per-round allowance.
+  A stateless delegated child counts as one host call.
 - Leading `ai --max-tool-calls N` and `grok --max-tool-calls N` choose a strict
-  integer 1–20 for that request. With no explicit configured cap, a request can
-  choose 12 (or up to the host ceiling 20) instead of the fallback 6. An
-  explicit configured cap is an **operator ceiling**, not overridable by chat:
-  the effective budget is the smaller of that cap and the requested value.
-  Omitting the flag
-  retains the configured cap, or fallback 6. Named toolset selection narrows
-  tools/access; it does not reset or raise this shared MCP configuration
-  ceiling. There is no separate per-toolset budget setting.
-  Duplicate/invalid flags,
-  `--no-tools` with a budget, and budgets on text-only `cf` are rejected before
-  provider/credential/discovery work. Use `--` for a literal leading flag.
+  integer 1–128, overriding runtime/startup defaults. Named toolset selection
+  narrows access; it does not grant additional calls or permissions. There is no
+  separate per-toolset budget. See generation/tool budget precedence above.
+  Duplicate/invalid flags, `--no-tools` with a tool-call budget, and tool-call
+  budgets on text-only `cf` are rejected before inference. Generation flags
+  remain valid for tool-free requests. Use `--` for a literal leading flag.
 - Each parent turn receives current total/used/remaining guidance, asking the
   model to keep the whole next batch within the remainder and answer with
   available evidence when exhausted. This is not authority: whole-batch hard

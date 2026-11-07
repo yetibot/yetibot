@@ -73,11 +73,11 @@
                     row (first (:calls trace))]
                 (fact (:value result) => string?
                       (string/includes? (:value result)
-                                        "Tool budget: total=6 used=1") => true
+                                        "Tool budget: total=20 used=1") => true
                       (contains? result :error) => false
                       (get-in result [:data :isError]) => true
                       (:reason trace) => :tool-exception
-                      (:budget trace) => {:limit 6 :used 1 :remaining 5
+                      (:budget trace) => {:limit 20 :used 1 :remaining 19
                                           :requested 1}
                       (count (:calls trace)) => 1
                       (:tool row) => "mcp_6___stage_changes"

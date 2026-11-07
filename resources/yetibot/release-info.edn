@@ -1,6 +1,14 @@
 {:schema_version 1
  :changes
- [{:id "ai-outcomes-and-run-costs"
+ [{:id "configurable-ai-budgets"
+   :date "2026-11-07"
+   :component "app"
+   :title "Raise AI budgets and make defaults overridable"
+   :summary "Default to 32768 generation tokens per model request and 20 host tool calls per run. Explicit flags override global runtime and startup defaults, up to 262144 tokens and 128 calls. Administrators can inspect/set/reset numeric runtime defaults without inference or file changes. Stateless children inherit the host budget; Discord continuations retain effective limits. Legacy MCP limits are defaults rather than hidden flag ceilings. Provider limits, no-paid-retry, uncertainty stops, policy and measured accounting remain."
+   :commands ["ai" "grok" "zen" "cf"]
+   :requires ["Updated application and core continuation validation"]
+   :links ["https://github.com/yetibot/core/pull/344"]}
+  {:id "ai-outcomes-and-run-costs"
    :date "2026-11-06"
    :component "app"
    :title "Keep real model answers, failures and measured costs"

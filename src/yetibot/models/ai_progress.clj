@@ -41,7 +41,7 @@
 
 (defn tool-budget [{:keys [used limit remaining]}]
   (when (and (integer? used) (integer? limit) (integer? remaining)
-             (<= 1 limit 20) (<= 0 used limit)
+             (<= 1 limit 128) (<= 0 used limit)
              (= remaining (- limit used)))
     {:used used :limit limit :remaining remaining}))
 

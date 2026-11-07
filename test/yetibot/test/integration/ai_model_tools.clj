@@ -16,7 +16,8 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-wise-tools :as wise]
-            [yetibot.test.support.ai-execution :as execution]))
+            [yetibot.test.support.ai-execution :as execution]
+            [yetibot.util.ai-limits :as limits]))
 
 (fact "structured model output compiles redaction patterns once per traversal"
   (let [compile-pattern re-pattern
@@ -73,9 +74,31 @@
       (with-redefs [ai/config (constantly settings)]
         (f request)))))
 
+(fact "larger host budgets reach stateless children and bound model-selected caps"
+  (in-request
+    (fn [request]
+      (let [sent (atom [])]
+        (with-redefs [limits/runtime (atom {:max-output-tokens 16})
+                      ai/complete
+                      (fn [_ _ _ options]
+                        (swap! sent conj options) {:result/value "answer"})]
+          (doseq [cap [65536 262144]]
+            (let [cfg (assoc config :max-output-tokens cap)
+                  schema (:inputSchema (models/definition cfg "ai"))]
+              (fact (get-in schema [:properties :max_output_tokens :maximum])
+                    => cap)
+              (fact (:isError (models/call! cfg "ai" ask
+                                          (:chat-source request))) => nil)
+              (fact (:max-output-tokens (last @sent)) => cap)
+              (fact (boolean (error #(models/arguments!
+                                     cfg "ai" (assoc ask "max_output_tokens"
+                                                     (inc cap))))) => true)))
+          (fact (count @sent) => 2))))))
+
 (facts "delegation schemas satisfy Grok's complete object-branch contract"
-  (doseq [[operation definition] models/definitions]
-    (let [schema (:inputSchema definition)]
+  (doseq [operation ["ai" "cf"]]
+    (let [definition (models/definition {} operation)
+          schema (:inputSchema definition)]
       (doseq [shape (cons schema (:oneOf schema))]
         (fact (:type shape) => "object")
         (fact (:additionalProperties shape) => false)
@@ -115,7 +138,7 @@
                         (assoc ask "key_file" "/tmp/token")
                         (assoc ask "user" "U1")
                         (assoc ask "tools" [])
-                        (assoc ask "max_output_tokens" 2049)
+                        (assoc ask "max_output_tokens" 32769)
                         (assoc ask "max_output_tokens" "1")
                         (assoc ask "prompt" "")
                         (assoc ask "prompt" (string/join (repeat 12001 "x")))
@@ -158,7 +181,7 @@
           (first @wire) => "https://child.example/v1/responses"
           (:input (second @wire))
           => [{:role "user" :content "Only this text"}]
-          (:max_output_tokens (second @wire)) => 2048
+          (:max_output_tokens (second @wire)) => 32768
           (:tools (second @wire)) => []
           (contains? (second @wire) :tool_choice) => false
           (contains? (second @wire) ::diagnostics/stage) => false)))))
@@ -381,7 +404,7 @@
 (facts "statically invalid mixed batches have zero effects"
   (doseq [invalid [(assoc ask "provider" "absent")
                    (assoc ask "model" "forbidden")
-                   (assoc ask "max_output_tokens" 9999)
+                   (assoc ask "max_output_tokens" 32769)
                    (assoc ask "key-file" "/tmp/no")]]
     (let [result (run-batch [["wise" {"action" "balance"}]
                              ["ai" invalid]] false)]
@@ -453,7 +476,7 @@
       (count @seen) => 1
       (get-in @seen [0 1])
       => [{:role "user" :content "only supplied text"}]
-      (get-in @seen [0 2 :max-output-tokens]) => 2048)))
+      (get-in @seen [0 2 :max-output-tokens]) => 32768)))
 
 (defn with-cf-private-fixture [f]
   (let [file (java.io.File/createTempFile "cf-private-token" ".txt")
@@ -598,7 +621,7 @@
               @effects => []
               (count @posts) => 2
               (get-in @posts [1 1 :form-params :tools]) => []
-              (get-in @posts [1 1 :form-params :max_output_tokens]) => 2048
+              (get-in @posts [1 1 :form-params :max_output_tokens]) => 32768
               (every? #(not (contains? (second %) ::diagnostics/stage))
                       @posts) => true
               (string/includes? (pr-str [@logs error]) secret)
@@ -689,7 +712,7 @@
           => "https://opencode.ai/inference/openai/v1/chat/completions"
           (:messages (second @wire))
           => [{:role "user" :content "Reply READY"}]
-          (:max_tokens (second @wire)) => 2048
+          (:max_tokens (second @wire)) => 32768
           (contains? (second @wire) :max_completion_tokens) => false
           (get-in (models/call! config "ai"
                     {"action" "ask" "provider" "zen" "model" "b-paid"
@@ -759,5 +782,5 @@
           (get-in (ex-data error) [:ai/tool-failure :reason])
           => :provider-failure
           (get-in (ex-data error) [:ai/tool-failure :budget])
-          => {:limit 6 :used 0 :remaining 6 :requested 0}
+          => {:limit 20 :used 0 :remaining 20 :requested 0}
           (get-in (ex-data error) [:ai/tool-failure :calls]) => [])))))

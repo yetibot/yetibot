@@ -32,7 +32,7 @@
                     {:servers [(assoc server :url "https://user:secret@example.com/mcp")]}
                     {:servers [(assoc server :url "https://example.com/mcp?key=secret")]}
                     {:servers [server] :max-tool-calls 0}
-                    {:servers [server] :max-tool-calls 21}
+                    {:servers [server] :max-tool-calls 129}
                     {:servers [server] :timeout-ms "bad"}]]
     (fact (s/valid? ::mcp/config settings) => false)))
 

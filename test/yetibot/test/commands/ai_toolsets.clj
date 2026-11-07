@@ -44,9 +44,11 @@
 (fact "real interpreter passes trusted policy context separately from messages"
   (with-redefs [api/config (constantly {:providers [provider]})
                 context/messages (fn [_ prompt] [{:role "user" :content prompt}])
-                tools/complete (fn [_ _ _ execution] execution)]
+                tools/complete (fn [_ _ _ execution]
+                                 {:result/value execution})]
     (:value (chat/run-command chat/request "ai --toolset github-pr change it"))
-    => {:toolset "github-pr" :actor actor}))
+    => {:toolset "github-pr" :actor actor
+        :max-tool-calls 20 :max-output-tokens 32768}))
 
 (fact "private toolsets require trusted adapter context, not copied metadata"
   (with-redefs [mcp/config (constantly fixture/config)]

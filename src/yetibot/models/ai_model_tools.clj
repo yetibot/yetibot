@@ -11,7 +11,8 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-defaults :as defaults]
             [yetibot.util.ai-execution :as execution]
-            [yetibot.util.ai-cost :as cost]))
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.util.ai-limits :as limits]))
 
 (defn available-tools []
   ;; Configuration only: no credential reads or catalog/network requests.
@@ -62,6 +63,10 @@
        (policy/authorize! t actor provider model))
      [provider model])))
 
+(defn- generation-budget [config]
+  (or (limits/request! :max-output-tokens (:max-output-tokens config))
+      (:max-output-tokens (limits/effective {}))))
+
 (defn arguments!
   "Static whole-batch preflight; never reads credentials or remote catalogs."
   [config operation args]
@@ -84,7 +89,8 @@
         (invalid!)))
     (when (and (contains? args "max_output_tokens")
                (not (and (integer? (get args "max_output_tokens"))
-                         (<= 1 (get args "max_output_tokens") 2048))))
+                         (<= 1 (get args "max_output_tokens")
+                             (generation-budget config)))))
       (invalid!))
     (when (and (contains? args "limit")
                (not (and (integer? (get args "limit"))
@@ -145,7 +151,7 @@
    :properties (assoc properties :action {:type "string" :enum actions})
    :required (into ["action"] required)})
 
-(defn- definition [cloudflare?]
+(defn- build-definition [cloudflare? maximum]
   (let [properties
         (cond-> {:model (property 200) :prompt (property 12000)
                  :after (property 200)
@@ -153,9 +159,9 @@
                  :category {:type "string" :pattern "^[a-z0-9-]{1,100}$"
                             :description "Task slug, e.g. text-generation; all lists non-chat models too."}
                  :max_output_tokens
-                 {:type "integer" :minimum 1 :maximum 2048
+                 {:type "integer" :minimum 1 :maximum maximum :default maximum
                   :description
-                  "Total generation budget; thinking can leave no visible answer. Do not silently increase or retry a consumed request."}}
+                  "Total generation budget, including thinking. Omit to use the host budget; only request a smaller cap when the human asks. Never retry a consumed request."}}
           (not cloudflare?)
           (assoc :provider (property 200)
                  :pricing {:type "string" :enum ["paid" "free" "all"]
@@ -179,7 +185,9 @@
           "Models pages bounded provider metadata; use next_after to "
           "continue. Unknown is not false; discovery proves neither access "
           "nor tool quality. Only chat models accept ask. "
-          "No URLs, credentials or identity arguments. Max 2048 output tokens. "
+          "No URLs, credentials or identity arguments. Host generation budget: "
+          maximum " tokens per request; thinking shares it. "
+          "Omit max_output_tokens unless the human requests a smaller cap. "
           (when-not cloudflare?
             (str "defaults inspects global defaults. Trusted-user set_default "
                  "requires a configured provider and exact model; reset_default "
@@ -205,7 +213,8 @@
                       {:provider (property 200) :model (property 200)}
                       ["set_default"] ["provider" "model"]))))}))
 
-(def definitions {"ai" (definition false) "cf" (definition true)})
+(defn definition [config operation]
+  (build-definition (= "cf" operation) (generation-budget config)))
 
 (defn- trusted! [config source]
   (let [actor (policy/actor execution/*event*)]
@@ -369,7 +378,8 @@
                                  {::diagnostics/stage :delegation
                                   :tools [] :tool_choice "none"
                                   :max-output-tokens
-                                  (get args "max_output_tokens" 2048)}))]
+                                  (get args "max_output_tokens"
+                                       (generation-budget config))}))]
                   {:structuredContent
                    (cond-> (project p model (:result/value result) redactions)
                      (get-in result [:result/data :ai/cost])

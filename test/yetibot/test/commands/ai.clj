@@ -55,11 +55,16 @@
     (fact (ai/prompt-cmd {:match input}) => {:result/error ai/usage})))
 
 (facts "tool budget flags are strict and fail before provider preparation"
-  (ai/parse-prompt "--max-tool-calls 12 hello")
-  => {:max-tool-calls 12 :prompt "hello"}
+  (ai/parse-prompt "--max-tool-calls 128 --max-output-tokens 65536 hello")
+  => {:max-tool-calls 128 :max-output-tokens 65536 :prompt "hello"}
+  (ai/parse-prompt "--no-tools --max-output-tokens 32768 hello")
+  => {:no-tools true :max-output-tokens 32768 :prompt "hello"}
   (let [effects (atom 0)]
     (with-redefs [api/config (fn [] (swap! effects inc))]
-      (doseq [flags ["--max-tool-calls 0" "--max-tool-calls 21"
+      (doseq [flags ["--max-tool-calls 0" "--max-tool-calls 129"
+                     "--max-output-tokens 0" "--max-output-tokens 262145"
+                     "--max-output-tokens 2.5" "--max-output-tokens 032768"
+                     "--max-output-tokens 2 --max-output-tokens 3"
                      "--max-tool-calls 1.5" "--max-tool-calls +2"
                      "--max-tool-calls 02"
                      "--max-tool-calls 2 --max-tool-calls 3"
@@ -100,7 +105,7 @@
 (facts "provider and model selection"
   (with-redefs [api/config (constantly config)
                 context/messages (fn [_ prompt] [{:role "user" :content prompt}])
-                api/complete (fn [provider model messages] [(:name provider) model messages])]
+                api/complete (fn [provider model messages _] [(:name provider) model messages])]
     (ai/providers-cmd {})
     => {:result/value ["local" "hosted"]
         :result/data [{:name "local" :default_model "llama3"
@@ -207,7 +212,7 @@
                   context/messages (fn [_ prompt]
                                      [{:role "user" :content prompt}])
                   tools/complete (fn [& _] (throw (AssertionError. "Tool loop")))
-                  api/complete (fn [_ _ msgs] (reset! sent msgs) :plain)]
+                  api/complete (fn [_ _ msgs _] (reset! sent msgs) :plain)]
       (ai/prompt-cmd {:match "--no-tools yo"}) => :plain
       (:role (first @sent)) => "system"
       (boolean (re-find #"running inside Yetibot"
@@ -222,7 +227,7 @@
                                                 :native-tools ["x_search"])]})
                 context/messages (fn [_ prompt]
                                    [{:role "user" :content prompt}])
-                api/complete (fn [provider _ _] (:native-tools provider))]
+                api/complete (fn [provider _ _ _] (:native-tools provider))]
     (ai/prompt-cmd {:match "--no-tools hello"}) => nil))
 
 (fact "tool listing preserves names and adds inert structured metadata"

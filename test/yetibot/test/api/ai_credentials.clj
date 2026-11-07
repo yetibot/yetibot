@@ -116,11 +116,16 @@
                {:max-output-tokens 120})
       (:max_completion_tokens (first @wire)) => 2048
       (:max_output_tokens (second @wire)) => 120
-      (doseq [n [0 -1 2049 "2048" nil]]
+      (doseq [n [0 -1 262145 "2048" nil]]
         (fact (boolean
                 (error #(ai/chat provider "chat" messages
                                  {:max-output-tokens n}))) => true))
-      (count @wire) => 2)))
+      (ai/chat provider "chat" messages {:max-output-tokens 65536})
+      (ai/chat (assoc provider :api "responses") "chat" messages
+               {:max-output-tokens 262144})
+      (:max_completion_tokens (nth @wire 2)) => 65536
+      (:max_output_tokens (nth @wire 3)) => 262144
+      (count @wire) => 4)))
 
 (facts "Cloudflare GET and POST resolve the same private credential"
   (let [file (java.io.File/createTempFile "cf-token" ".txt")

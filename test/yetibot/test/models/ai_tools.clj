@@ -80,7 +80,7 @@
 (fact "plain parent completion also carries host context"
   (let [sent (atom nil)]
     (with-redefs [mcp/config (constantly nil)
-                  ai/complete (fn [_ _ msgs] (reset! sent msgs) :plain)]
+                  ai/complete (fn [_ _ msgs _] (reset! sent msgs) :plain)]
       (tools/complete provider "chat" messages) => :plain
       (:role (first @sent)) => "system"
       (string/includes? (:content (first @sent)) "running inside Yetibot")
@@ -89,7 +89,7 @@
 
 (fact "without MCP settings, host context preserves the original conversation"
   (with-redefs [mcp/config (constantly nil)
-                ai/complete (fn [p m msgs] [p m msgs])]
+                ai/complete (fn [p m msgs _] [p m msgs])]
     (tools/complete provider "chat" messages)
     => [provider "chat" (tools/host-messages messages)]))
 
@@ -107,7 +107,7 @@
       (get-in @requests [0 2 0 :content]) => tools/instructions
       (vec (drop 2 (get-in @requests [0 2]))) => messages
       (string/includes? (get-in @requests [0 2 1 :content])
-                        "total=6 used=0 remaining=6") => true)))
+                        "total=20 used=0 remaining=20") => true)))
 
 (fact "web search results return as tool messages with source links and the original call ID"
   (let [requests (atom []) executions (atom [])]
@@ -331,7 +331,7 @@
             => (into [{:role "system" :content tools/instructions}
                       {:role "system" :content
                        (str "Host tool-call budget: "
-                            "total=6 used=0 remaining=6. "
+                            "total=20 used=0 remaining=20. "
                             "Keep the entire next batch within remaining. "
                             "When exhausted, stop fetching and answer "
                             "with available evidence.")}]
@@ -463,8 +463,8 @@
             (tools/tool-names nil {:user "U2" :adapter "slack"})
             => ["shared/web_search" "shared/get_file_contents"]))))
 
-(facts "request budgets preserve fallback and explicit operator ceilings"
-  (doseq [[cap request expected] [[nil nil 6] [nil 12 12] [6 12 6]
+(facts "request flags override configured defaults without hidden clamps"
+  (doseq [[cap request expected] [[nil nil 20] [nil 12 12] [6 12 12]
                                  [6 2 2] [20 12 12]]]
     (let [sent (atom nil)]
       (with-redefs [mcp/config (constantly
@@ -489,7 +489,7 @@
                   ai/resolve-provider
                   (fn [& _] (swap! effects conj :credential))
                   mcp/with-tools (fn [& _] (swap! effects conj :discovery))]
-      (doseq [budget [0 21 -1 "1.5" "12x" "+2" "02"]]
+      (doseq [budget [0 129 -1 "1.5" "12x" "+2" "02"]]
         (fact (string? (error-message #(tools/complete provider "chat" messages
                                                      {:max-tool-calls budget})))
               => true))
@@ -653,7 +653,7 @@
                                          {:on-progress identity}))]
           (fact (:reason failure) => :provider-failure)
           (fact (:budget failure)
-                => {:limit 6 :used 1 :remaining 5 :requested 0})
+                => {:limit 20 :used 1 :remaining 19 :requested 0})
           (fact (mapv :outcome (:calls failure)) => [:success])
           (fact @effects => 1)
           (fact @turns => 2)
@@ -746,9 +746,9 @@
         (fact (get-in row [:arguments "count"]) => expected)))))
 
 (facts {:midje/description
-        (str "named selection never raises a configured ceiling "
-             "and explicit 12 is usable")}
-  (doseq [[cap limit] [[nil 12] [6 6]]]
+        (str "named selection preserves policy while explicit budgets "
+             "override file defaults")}
+  (doseq [[cap limit] [[nil 12] [6 12]]]
     (let [turns (atom []) effects (atom 0)
           cfg (cond-> (assoc config :toolsets
                              [{:name "first" :kind "search" :native-tools []

@@ -5,12 +5,14 @@
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
+            [yetibot.util.ai-limits :as limits]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-toolsets :as toolsets])
   (:import [java.util Locale]))
 
-(def usage "Usage: cf [--model <model>] [--toolset <name>] <prompt>")
+(def usage (str "Usage: cf [--model <model>] [--toolset <name>] "
+                "[--max-output-tokens <1..262144>] <prompt>"))
 
 (defn- failure [args unknown?]
   ;; Core decorates :result/error with the entire evaluated command. Return
@@ -101,7 +103,8 @@
 (defn prompt-cmd
   "cf <prompt> # ask Cloudflare, text-only, no tools or implicit history
    cf --model <model> <prompt> # choose a catalogued chat model
-   cf --toolset <name> <prompt> # enforce a configured provider/model policy"
+   cf --toolset <name> <prompt> # enforce a configured provider/model policy
+   cf --max-output-tokens <1..262144> <prompt> # override generation budget"
   {:yb/cat #{:ai}}
   [{:keys [match chat-source] :as args}]
   (safely args
@@ -109,10 +112,12 @@
       (let [options (ai/parse-prompt match usage)
             _ (when (or (:provider options) (:max-tool-calls options))
                 (api/fail usage))
-            config (toolsets/select (mcp/config) (:toolset options))
+            config (merge (toolsets/select (mcp/config) (:toolset options))
+                          (limits/effective options))
             result (models/call!
                      config "cf"
-                     (cond-> {"action" "ask" "prompt" (:prompt options)}
+                     (cond-> {"action" "ask" "prompt" (:prompt options)
+                              "max_output_tokens" (:max-output-tokens config)}
                        (:model options) (assoc "model" (:model options)))
                      chat-source)
             data (:structuredContent result)]

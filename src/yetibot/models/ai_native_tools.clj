@@ -137,7 +137,7 @@
       (empty? wise-tools) (filterv #(not= "wise" %))
       (empty? (react/available-tools)) (filterv #(not= "react" %)))))
 
-(defn- adapter [operation]
+(defn- adapter [config operation]
   (cond
     (contains? cron/definitions operation)
     {:definition (get cron/definitions operation)
@@ -154,8 +154,8 @@
     (contains? react/definitions operation)
     {:definition (get react/definitions operation)
      :arguments react/arguments! :call react/call!}
-    (contains? models/definitions operation)
-    {:definition (get models/definitions operation)
+    (#{"ai" "cf"} operation)
+    {:definition (models/definition config operation)
      :arguments models/arguments! :call models/call!}
     (contains? media/definitions operation)
     {:definition (get media/definitions operation)
@@ -170,7 +170,7 @@
 (defn definition
   "Public capability metadata without constructing executable host callbacks."
   [operation]
-  (select-keys (or (:definition (adapter operation))
+  (select-keys (or (:definition (adapter {} operation))
                    (get definitions operation))
                [:description :inputSchema :title :annotations]))
 
@@ -190,7 +190,7 @@
         (execution/sensitive!)
         (mapv
           (fn [operation]
-            (let [capability (adapter operation)]
+            (let [capability (adapter config operation)]
               (assoc (or (:definition capability) (get definitions operation))
                      :name operation :native? true
                      :validate-arguments

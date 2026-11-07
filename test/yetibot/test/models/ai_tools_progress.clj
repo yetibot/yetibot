@@ -59,8 +59,8 @@
     (mapv :call events) => [1 1 2 2]
     (mapv :outcome events) => [:running :success :running :success]
     (mapv :label events) => (vec (repeat 4 "mcp_0_search__web_search"))
-    (first budgets) => {:used 0 :limit 6 :remaining 6}
-    (last budgets) => {:used 2 :limit 6 :remaining 4}
+    (first budgets) => {:used 0 :limit 20 :remaining 20}
+    (last budgets) => {:used 2 :limit 20 :remaining 18}
     (some #(re-find #"PRIVATE" (pr-str %)) (filter map? observations)) => nil
     (last observations) => :closed))
 
@@ -80,7 +80,7 @@
       (fact calls => 1)
       (fact (mapv :outcome (keep :tool-event observations)) => outcomes)
       (fact (last (keep :tool-budget observations))
-            => {:used 1 :limit 6 :remaining 5}))))
+            => {:used 1 :limit 20 :remaining 19}))))
 
 (fact "ai-tools throwing progress cannot change dispatch or cleanup"
   (let [normal (run-fixture nil :turns identity)
@@ -202,6 +202,6 @@
       (mapv (juxt :response :call :outcome)
             (filter #(= :native (:domain %)) (keep :tool-event @seen)))
       => [[1 1 :success] [2 1 :success]]
-      (last (keep :tool-budget @seen)) => {:limit 6 :used 1 :remaining 5}
+      (last (keep :tool-budget @seen)) => {:limit 20 :used 1 :remaining 19}
       (some #(contains? % :progress-response) @requests) => nil
       (some #(re-find #"PRIVATE" (pr-str %)) @seen) => nil)))
