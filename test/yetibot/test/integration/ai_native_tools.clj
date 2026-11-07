@@ -215,7 +215,7 @@
     (:view data) => "running"
     (:untrusted data) => true
     (:build data) => (:build releases/running)
-    (get-in data [:changes 0 :id]) => "paid-text-model-selection"
+    (get-in data [:changes 0 :id]) => "ai-outcomes-and-run-costs"
     (count (:sent result)) => 2))
 
 (fact "whole-batch validation rejects injected release fields before any GET"
@@ -693,12 +693,13 @@
                       ["meme" {"action" "generate" "template_id" "1"
                                  "top" "no" "bottom" "yes"}]])]
         (fact @captions => 0
-              (get-in result [:replies 1 :skipped]) => true
-              (get-in result [:replies 0 :isError]) => true
+              (:replies result) => []
+              (mapv :outcome (get-in result [:result :result/data :execution :calls]))
+              => [:unknown :skipped]
               (get-in result [:result :result/data :mcp :tool-calls]) => 1
               (string/includes? (json/generate-string result)
                                 "private-image-key") => false
-              (get-in result [:sent 1 :options :tool_choice]) => "none")))))
+              (count (:sent result)) => 1)))))
 
 (fact "explicit unavailable media tools report setup errors without API calls"
   (with-redefs [imgflip/configured? false xai/config {}
@@ -921,9 +922,10 @@
           (let [r (run-calls nil [["clef" native-decision]
                                   ["wise" {"action" "balance"}]])]
             (fact @attempts => 1 @wise => []
-                  (get-in r [:replies 0 :isError]) => true
-                  (get-in r [:replies 1 :skipped]) => true
-                  (get-in r [:sent 1 :options :tool_choice]) => "none"
+                  (:replies r) => []
+                  (mapv :outcome (get-in r [:result :result/data :execution :calls]))
+                  => [:unknown :skipped]
+                  (count (:sent r)) => 1
                   (get-in r [:result :result/data :mcp :tool-calls]) => 1
                   (string/includes? (json/generate-string r)
                                     "fake-cloudflare-tool-token")

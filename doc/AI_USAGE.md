@@ -28,6 +28,23 @@ Metadata/catalog GETs, downloads and video status polls are not extra inference.
 Opaque external tools and their service fees are not observable unless included
 in the provider or CLI's reported statistics.
 
+## Per-command captions and execution details
+
+Discord AI/Grok captions use measured wire receipts, not a visible-text size
+estimate. `parent` sums the orchestrating model's text API rounds; `children`
+sums delegated single-hop text requests. Reported USD, partial estimates and
+unpriced requests stay separate. A failed or empty answer can still cost money.
+Already-delivered direct Grok streams get only a terminal cost receipt when
+pricing is available; their answer is not posted again.
+
+This request-local caption scope excludes media, CLI sessions and opaque
+external tool/service fees unless included in a text API's reported bill.
+It is not a provider-account invoice or the full ledger scope below. Frozen
+execution data retains safe per-call outcomes, generation caps, native counters,
+and timings, without reconnecting or replaying anything. Missing units/prices
+are unavailable, never free. Parent/child observations do not create new ledger
+rows or re-add totals to the ledger.
+
 ## Reading the totals
 
 Chat shows spend first, request/session counts, token totals and up to five

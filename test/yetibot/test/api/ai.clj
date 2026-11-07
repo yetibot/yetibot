@@ -43,7 +43,9 @@
     (with-redefs [client/post (fn [url options]
                                (reset! captured [url options])
                                {:status 200 :body body})]
-      (ai/complete provider "other/model" messages)
+      (-> (ai/complete provider "other/model" messages)
+          (update :result/data dissoc :ai/accounting)
+          (dissoc :result/public-data))
       => {:result/value "answer" :result/data body}
       (first @captured) => "https://example.com/custom/v1/chat/completions"
       (select-keys (second @captured) [:as :content-type :form-params :headers
@@ -75,7 +77,7 @@
                {:choices [{:message {:content " "}}]}]]
     (with-redefs [client/post (fn [& _] {:status 200 :body body})]
       (fact (error-message #(ai/complete provider "chat" messages))
-            => "AI provider example returned no text response.")))
+            => "The AI provider returned an invalid text response.")))
   (doseq [body [nil {} {:data [{:id nil}]} {:data "bad"}]]
     (with-redefs [client/get (fn [& _] {:status 200 :body body})]
       (fact (error-message #(ai/models provider))

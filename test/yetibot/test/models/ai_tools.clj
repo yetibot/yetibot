@@ -18,7 +18,8 @@
 
 (defn error-message [f] (try (f) (catch Exception e (.getMessage e))))
 (defn failure-data [f]
-  (try (f) nil (catch Exception e (:ai/tool-failure (ex-data e)))))
+  (try (get-in (f) [:result/data :tool-trace])
+       (catch Exception e (:ai/tool-failure (ex-data e)))))
 (defn answer [text] {:choices [{:message {:role "assistant" :content text}}]})
 (defn tool-call [name id arguments]
   {:id id :type "function" :function {:name name :arguments arguments}})
@@ -43,6 +44,33 @@
         (redact secret) => "[redacted]"
         (redact "page=2") => "page=2"
         @compilations => 1))))
+
+(fact "a changed cap cannot replay a consumed native text request"
+  (let [parents (atom 0)
+        children (atom 0)
+        entry {:name "ai"
+               :tool {:native? true :name "ai" :inputSchema {:type "object"}
+                      :host-call (fn [_]
+                                   (swap! children inc)
+                                   {:isError true :error-code :output-limit})}}]
+    (with-redefs [mcp/config
+                  (constantly (assoc-in config [:servers 0 :tools] ["ai"]))
+                  mcp/with-tools
+                  (fn [_ f] (f [(assoc (:tool entry) :session (:session tool))]))
+                  ai/chat
+                  (fn [& _]
+                    (let [n (swap! parents inc)]
+                      (tool-response
+                        [(tool-call "yetibot_ai" (str n)
+                           (json/generate-string
+                             {"action" "ask" "provider" "zen" "model" "b-paid"
+                              "prompt" "Same question"
+                              "max_output_tokens" (if (= 1 n) 120 2048)}))])))]
+      (let [report (failure-data #(tools/complete provider "chat" messages))]
+        (:reason report) => :repeat-action
+        @children => 1
+        @parents => 2
+        (mapv :outcome (:calls report)) => [:error :rejected]))))
 
 (fact "runner instructions orient the model inside Yetibot"
   (doseq [phrase ["running inside Yetibot" "not a Unix shell"
@@ -211,9 +239,7 @@
                               (answer "The tool timed out. I could not confirm the result.")))]
       (get-in (tools/complete provider "chat" messages) [:result/data :mcp :tool-calls]) => 1
       @executions => 1
-      (get-in @requests [1 :options :tool_choice]) => "none"
-      (:tool_call_id (last (get-in @requests [1 :messages]))) => "two"
-      (string/includes? (:content (last (get-in @requests [1 :messages]))) "not run") => true)))
+      (count @requests) => 1)))
 
 (fact "unsupported tool schemas fail before sending anything to the model"
   (let [sent? (atom false)]
@@ -773,12 +799,12 @@
                                               "three" "{}")])))]
         (let [failure (failure-data #(tools/complete provider "chat" messages))]
           (fact (:reason failure)
-                => (if unknown? :uncertain-result :repeat-action))
+                => (if unknown? :unknown-result :repeat-action))
           (fact (mapv :outcome (:calls failure))
                 => (if unknown?
-                     [:unknown :skipped :rejected] [:error :error :rejected]))
+                     [:unknown :skipped] [:error :error :rejected]))
           (fact (mapv :confirmed (:calls failure))
-                => (if unknown? [false false false] [true true false]))
+                => (if unknown? [false false] [true true false]))
           (fact @effects => (if unknown? 1 2)))))))
 
 (facts "malformed collections and malformed IDs never execute a partial batch"

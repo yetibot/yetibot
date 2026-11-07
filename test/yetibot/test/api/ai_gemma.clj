@@ -3,6 +3,7 @@
             [clj-http.client :as http]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-outcome :as outcome]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.test.api.ai-cloudflare-messages :refer [provider]]
             [yetibot.test.api.gemma-tools :refer [screenshot]]))
@@ -62,8 +63,15 @@
            [provider options
             (body "<|channel>thought\nPRIVATE-THOUGHT<channel|>")]
            [provider options (body "<|tool_response>response:fixture{}")]]]
-    (fact (error #(turn p model opts response))
-          => [gemma/error-message {:ai/error true} nil])))
+    (let [code (if (= "length" (get-in response [:choices 0 :finish_reason]))
+                 :output-limit :unsupported-output)
+          [message data cause] (error #(turn p model opts response))]
+      (fact message => (get outcome/messages code))
+      (fact (:ai/error data) => true)
+      (fact (:ai/output-error data) => code)
+      (fact cause => nil)
+      (fact (boolean (re-find #"PRIVATE|tool_call|thought" (pr-str data)))
+            => false))))
 
 (fact "prose, code and quoted examples are not classified as commands"
   (doseq [text [(str "Example: " screenshot) (str "```" screenshot "```")

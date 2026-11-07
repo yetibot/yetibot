@@ -119,7 +119,11 @@
     (catch Exception _ (fail!))))
 
 (defn- completed [body]
-  (when-not (and (map? body) (= "completed" (:status body))
+  (when-not (and (map? body)
+                 (or (= "completed" (:status body))
+                     (and (= "incomplete" (:status body))
+                          (= "max_output_tokens"
+                             (get-in body [:incomplete_details :reason]))))
                  (sequential? (:output body)))
     (fail!))
   body)
@@ -222,7 +226,8 @@
                     (doseq [[index item] (map-indexed vector (:output body))]
                       (native! {:type "response.output_item.done"
                                 :output_index index :item item})
-                      (publish-answer! index item))
+                      (when (= "completed" (:status body))
+                        (publish-answer! index item)))
                     body))]
     (try
       (publish! @state)
@@ -240,10 +245,10 @@
                             (search-phase event native-tools))]
                 (when-not (string? kind) (fail!))
                 (cond
-                  (contains? #{"response.completed" "response.done"} kind)
+                  (contains? #{"response.completed" "response.done"
+                               "response.incomplete"} kind)
                   (finish! (:response event))
-                  (contains? #{"error" "response.failed" "response.incomplete"}
-                             kind) (fail! (or (:response event) event))
+                  (contains? #{"error" "response.failed"} kind) (fail! (or (:response event) event))
                   :else
                   (do
                     (native! event)

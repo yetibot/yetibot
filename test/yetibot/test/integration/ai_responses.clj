@@ -128,7 +128,7 @@
                          {:on-progress
                           (fn [event]
                             (swap! seen conj event)
-                            (when (:answer event)
+                            (when (:phase event)
                               (deliver observed true)))}))]
           (try
             (fact (deref observed 3000 :timeout) => true
@@ -151,7 +151,7 @@
                       @seen)) => true
               (some #(re-find #"PRIVATE|opaque" (pr-str %)) @seen) => nil
               (vec (keep :answer @seen))
-              => ["I have a lead." "Yetibot."])))))))
+              => [])))))))
 
 (facts "completed SSE batches still validate every call before execution"
   (doseq [kind [:unknown :duplicate :over-budget]]
@@ -399,11 +399,14 @@
                         (fn [& _]
                           (swap! attempts inc)
                           {:isError true :unknownOutcome true :content []})]
-            (fact (:result/value (tools/complete provider "grok-4.7" messages))
-                  => "The outcome is unknown."
-                  @attempts => 1
-                  (:tools (last-turn requests)) => []
-                  (contains? (last-turn requests) :tool_choice) => false)))))))
+            (let [result (tools/complete provider "grok-4.7" messages)]
+              (fact (get-in result [:result/data :execution :reason])
+                    => :unknown-result
+                    @attempts => 1
+                    @turns => 1
+                    (mapv :outcome
+                          (get-in result [:result/data :execution :calls]))
+                    => [:unknown :skipped]))))))))
 
 (fact "at the MCP budget, the final Responses turn cannot perform native search"
   (let [turns (atom 0)]

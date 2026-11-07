@@ -4,6 +4,16 @@
 
 (def redacted-label "[unavailable-or-redacted-tool]")
 (def outcomes [:running :success :error :unknown :skipped :rejected])
+(def failure-labels
+  {:output-limit "output limit; no complete answer"
+   :no-answer "no usable answer"
+   :unsupported-output "unsupported output"
+   :incomplete-output "incomplete output"
+   :request-rejected "provider rejected request"
+   :zen-rate-limit "Zen rate limit"
+   :not-sent "request not sent"
+   :unknown-outcome "delivery uncertain; not retried"
+   :tool-error "tool returned an error"})
 
 (defn clip [^String text limit]
   (let [end (min (.length text) (max 0 limit))
@@ -17,7 +27,7 @@
 
 (defn tool-event
   "Select typed public fields only. Labels must already be privacy checked."
-  [{:keys [domain call response label outcome]}]
+  [{:keys [domain call response label outcome code]}]
   (when (and (#{:host :native} domain) (ordinal? call)
              (some #{outcome} outcomes) (string? label)
              (if (= domain :host)
@@ -26,7 +36,8 @@
                (and (ordinal? response)
                     (#{"web search" "X search"} label))))
     (cond-> {:domain domain :call call :label label :outcome outcome}
-      (= domain :native) (assoc :response response))))
+      (= domain :native) (assoc :response response)
+      (contains? failure-labels code) (assoc :code code))))
 
 (defn tool-budget [{:keys [used limit remaining]}]
   (when (and (integer? used) (integer? limit) (integer? remaining)
@@ -79,9 +90,11 @@
            (str "Tools: " (:used budget) "/" (:limit budget)
                 " · " (:remaining budget) " remaining")
            "Working")]
-        (map (fn [{:keys [domain response call label outcome]}]
+        (map (fn [{:keys [domain response call label outcome code]}]
                (str (when (= domain :native) (str "Search " response " "))
-                    "#" call " " label " — " (name outcome))) rows)
+                    "#" call " " label " — " (name outcome)
+                    (when-let [reason (failure-labels code)]
+                      (str " (" reason ")")))) rows)
         (when (pos? omitted)
           [(str omitted " rows omitted; outcomes seen: "
                 (string/join ", " (map name (filter omitted-outcomes

@@ -1,9 +1,10 @@
 (ns yetibot.commands.ai
   (:require [clojure.string :as string]
             [yetibot.api.ai :as ai]
+            [yetibot.api.ai-outcome :as outcome]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.chat :as chat]
-            [yetibot.core.util.public-result :as public-result]
+            [yetibot.util.ai-public :as public-result]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-defaults :as defaults]
             [yetibot.models.ai-inspection :as inspection]
@@ -20,7 +21,8 @@
             [yetibot.models.ai-proposals :as proposals]
             [yetibot.models.ai-github :as github]
             [yetibot.util.ai-execution :as execution]
-            [yetibot.util.ai-status :as status]))
+            [yetibot.util.ai-status :as status]
+            [yetibot.util.ai-cost :as cost]))
 
 (def usage
   (str "Usage: ai [--provider <name>] [--model <model>] "
@@ -80,27 +82,87 @@
   ([f] (safely nil f))
   ([args f]
    (try
-     (f)
+     (let [result (f)]
+       (when (get-in result [:result/data :isError])
+         (when-let [skip (:skip-next-n args)]
+           (reset! skip (count (:next-cmds args)))))
+       result)
      (catch Exception e
        (let [data (ex-data e)
              report (:ai/tool-failure data)]
-         (when (or report (:ai/piped-input data))
+         (when (or report (:ai/piped-input data) (:ai/output-error data))
            (when-let [skip (:skip-next-n args)]
              (reset! skip (count (:next-cmds args)))))
          (cond
            report
-           {:result/value (trace/summary report)
-            :result/data {:isError true :tool-trace report}}
+           (public-result/reviewed
+            {:result/value
+            (str (trace/summary report (:ai/answers data))
+                 (when-let [label (cost/accounting-label (:ai/accounting data))]
+                   (str "\n\n-# " label)))
+            :result/data
+            (cond-> {:isError true :tool-trace report
+                     :execution (trace/public-report report)}
+              (:ai/accounting data) (assoc :ai/accounting (:ai/accounting data)))
+             :result/public-data
+             (cond-> {:execution (trace/public-report report)}
+               (:ai/accounting data) (assoc :accounting (:ai/accounting data)))
+             :result/public-error (trace/public-report report)})
            (:ai/piped-input data)
            ;; Core error decoration includes the evaluated command/input.
            {:result/value input/error-message
             :result/data {:isError true :error input/error-message}}
+           (:ai/output-error data)
+           (public-result/reviewed
+            {:result/value
+            (str (.getMessage e)
+                 (when-let [label (cost/accounting-label (:ai/accounting data))]
+                   (str "\n\n-# " label)))
+            :result/data (merge {:isError true}
+                                (select-keys data [:ai/response :ai/accounting]))
+             :result/public-data
+             {:response_stats (:ai/response data) :accounting (:ai/accounting data)}
+             :result/public-error (:ai/response data)})
            :else
-           {:result/error
-            (if (:ai/error (ex-data e))
-              (.getMessage e)
-              (str "The AI request failed. Check the provider configuration "
-                   "and try again."))}))))))
+           (let [accounting (:ai/accounting data)
+                 result
+                 {:result/error
+                  (str (if (:ai/error data)
+                         (.getMessage e)
+                         (str "The AI request failed. Check the provider "
+                              "configuration and try again."))
+                       (when-let [label (cost/accounting-label accounting)]
+                         (str "\n\nModel requests: " label)))}]
+             (if-not accounting result
+               (public-result/reviewed
+                 (assoc result
+                        :result/data {:isError true :ai/accounting accounting}
+                        :result/public-data {:accounting accounting}
+                        :result/public-error
+                        {:outcome "No usable terminal response; not retried."}))))))))))
+
+(defn native-output-failure
+  "Host-owned text adapter results only, never arbitrary remote MCP payloads."
+  [args result]
+  (when-let [message (get outcome/messages (:error-code result))]
+    (safely args
+      #(throw (ex-info message
+                       (merge {:ai/error true
+                               :ai/output-error (:error-code result)}
+                              (select-keys (:structuredContent result)
+                                           [:ai/cost :ai/accounting :ai/response])))))))
+
+(defn native-text-result
+  "Publish only accounting authored by the trusted native text adapter."
+  [{:keys [structuredContent]}]
+  (let [data structuredContent
+        result {:result/value (:text data) :result/data data}]
+    (if-not (:ai/accounting data) result
+      (public-result/reviewed
+        (assoc result :result/public-data
+               {:accounting (:ai/accounting data)
+                :request_cost (select-keys (:ai/cost data)
+                                           [:usd :kind :scope :neurons])})))))
 
 (defn usage-cmd
   "ai usage # current UTC month's recorded AI usage and cost subtotals

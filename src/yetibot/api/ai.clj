@@ -7,6 +7,7 @@
             [yetibot.api.opencode :as opencode]
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.ai-diagnostics :as diagnostics]
+            [yetibot.api.ai-outcome :as outcome]
             [yetibot.api.mcp :as mcp]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
@@ -351,40 +352,50 @@
                  {:model model
                   :messages (if (cloudflare/provider-account provider)
                               (cloudflare-messages messages) messages)})]
-    (normalize-gemma
-      provider model options
-      (usage/capture!
-        {:provider (:name provider) :model model :operation "text"
-         :secrets [(:key provider)]}
-        (fn []
-          (request
-            client/post provider
-            (if responses-api? "/responses" "/chat/completions")
-            {:content-type :json
-             :form-params
-             (merge (cond-> params
-                      progress (assoc :stream true)
-                      (:max-output-tokens options)
-                      (assoc (cond
-                               responses-api? :max_output_tokens
-                               (or (cloudflare/provider-account provider)
-                                   (opencode/provider? provider))
-                               :max_tokens
-                               :else :max_completion_tokens)
-                             (:max-output-tokens options)))
-                    (cond-> (select-keys options [:tools :tool_choice])
-                      ;; Responses rejects tool_choice even "none" when no
-                      ;; tools remain. Empty tools still disable every tool.
-                      (or (= "omit" (:tool-choice provider))
-                          (and responses-api? (empty? (:tools options))))
-                      (dissoc :tool_choice)
-                      ;; A stateless Workers AI request has no tool protocol.
-                      ;; Some chat schemas reject even empty tools/none fields.
-                      (and (cloudflare/provider-account provider)
-                           (empty? (:tools options)))
-                      (dissoc :tools :tool_choice)))}
-            progress (::diagnostics/stage options :initial)))
-        (partial cost/ledger-metrics provider model)))))
+    (let [body
+          (try
+            (usage/capture!
+              {:provider (:name provider) :model model :operation "text"
+               :secrets [(:key provider)]}
+              (fn []
+                (request
+                  client/post provider
+                  (if responses-api? "/responses" "/chat/completions")
+                  {:content-type :json
+                   :form-params
+                   (merge
+                     (cond-> params
+                       progress (assoc :stream true)
+                       (:max-output-tokens options)
+                       (assoc (cond
+                                responses-api? :max_output_tokens
+                                (or (cloudflare/provider-account provider)
+                                    (opencode/provider? provider)) :max_tokens
+                                :else :max_completion_tokens)
+                              (:max-output-tokens options)))
+                     (cond-> (select-keys options [:tools :tool_choice])
+                       ;; Responses rejects tool_choice with no tools.
+                       (or (= "omit" (:tool-choice provider))
+                           (and responses-api? (empty? (:tools options))))
+                       (dissoc :tool_choice)
+                       ;; Stateless Workers AI rejects empty tool fields.
+                       (and (cloudflare/provider-account provider)
+                            (empty? (:tools options)))
+                       (dissoc :tools :tool_choice)))}
+                  progress (::diagnostics/stage options :initial)))
+              (partial cost/ledger-metrics provider model))
+            (catch Exception e
+              ;; A failed reservation is not a sent request. Only transport
+              ;; failures/rejections carry the host's request diagnostic.
+              (when (:ai/diagnostic (ex-data e))
+                (cost/observe! provider model nil))
+              (throw e)))]
+      (cost/observe! provider model body)
+      (outcome/check! provider model body options)
+      (try
+        (normalize-gemma provider model options body)
+        (catch Exception _
+          (outcome/fail! :unsupported-output provider model body options))))))
 
 (defn message
   "Normalize only client-side function calls; native searches run at xAI."
@@ -394,8 +405,7 @@
     (do
       (when-not (and (= "completed" (:status body))
                      (sequential? (:output body)))
-        (fail (str "AI provider " (:name provider)
-                   " returned no completed text response.")))
+        (fail "The AI provider returned an invalid Responses envelope."))
       {:role "assistant"
        :content (->> (:output body)
                      (filter #(= "message" (:type %)))
@@ -425,14 +435,30 @@
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
-   (let [provider (prepare-provider provider model)
-         body (chat provider model messages options)
-         accounting (cost/turn provider model body)
-         text (:content (message provider body))]
-     (when-not (nonblank-string? text)
-       (fail (str "AI provider " (:name provider) " returned no "
-                  (when (responses? provider) "completed ")
-                  "text response.")))
-     {:result/value text
-      :result/data (cond-> (dissoc body :ai/cost)
-                     accounting (assoc :ai/cost accounting))})))
+   (cost/capture
+     (fn []
+       (let [provider (prepare-provider provider model)
+             body (chat provider model messages options)
+             accounting (cost/turn provider model body)
+             text (try (:content (message provider body))
+                       (catch Exception e
+                         (throw (ex-info (.getMessage e)
+                                         (assoc (ex-data e)
+                                                :ai/cost accounting)))))]
+         (when-not (nonblank-string? text)
+           (if (or (responses? provider)
+                   (and (= "stop" (get-in body [:choices 0 :finish_reason]))
+                        (map? (get-in body [:choices 0 :message]))
+                        (contains? (get-in body [:choices 0 :message]) :content)
+                        (or (nil? text) (string? text))))
+             (outcome/fail! :no-answer provider model body options)
+             ;; A malformed successful payload is not proof of a terminal
+             ;; provider outcome. Preserve its receipt without replaying it.
+             (let [details (outcome/details provider model body options)]
+               (diagnostics/emit! (assoc details :failure :invalid-output))
+               (throw (ex-info "The AI provider returned an invalid text response."
+                               {:ai/error true :ai/response details
+                                :ai/cost accounting})))))
+         {:result/value text
+          :result/data (cond-> (dissoc body :ai/cost :ai/accounting)
+                         accounting (assoc :ai/cost accounting))})))))

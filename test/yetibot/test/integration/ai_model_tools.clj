@@ -150,8 +150,9 @@
                                        (throw (AssertionError. "recursion")))
                       context/messages (fn [& _]
                                          (throw (AssertionError. "history")))]
-          (:structuredContent
-            (models/call! config "ai" ask (:chat-source request)))
+          (dissoc (:structuredContent
+                    (models/call! config "ai" ask (:chat-source request)))
+                  :ai/accounting)
           => {:untrusted true :provider "child" :model "c" :text "answer"
               :truncated false}
           (first @wire) => "https://child.example/v1/responses"
@@ -392,11 +393,9 @@
                            ["cf" {"action" "ask" "prompt" "later"}]] true)]
     (:effects result) => [:paid]
     (get-in result [:result :result/data :mcp :tool-calls]) => 1
-    (get-in result [:turns 1 :options :tool_choice]) => "none"
-    (count (filter #(and (= "tool" (:role %))
-                        (string/starts-with? (:content %)
-                                            "This tool was not run"))
-                   (get-in result [:turns 1 :messages]))) => 2))
+    (count (:turns result)) => 1
+    (mapv :outcome (get-in result [:result :result/data :execution :calls]))
+    => [:unknown :skipped :skipped]))
 
 (facts "cf CLI uses the real parser, fixed provider and text-only adapter"
   (in-request
@@ -591,19 +590,18 @@
                   records (mapv second
                                 (filter #(= "ai-provider-diagnostic"
                                             (first %)) @logs))]
-              (get-in (ex-data error) [:ai/diagnostic :stage]) => :follow-up
-              (mapv :stage records) => [:delegation :follow-up]
-              (mapv :tool-choice records) => [:omitted :none]
-              (mapv :error-code records)
-              => [:invalid-tool-schema :invalid-tool-schema]
+              (get-in error [:result/data :execution :calls 0 :outcome])
+              => :unknown
+              (mapv :stage records) => [:delegation]
+              (mapv :tool-choice records) => [:omitted]
+              (mapv :error-code records) => [:invalid-tool-schema]
               @effects => []
-              (count @posts) => 3
+              (count @posts) => 2
               (get-in @posts [1 1 :form-params :tools]) => []
               (get-in @posts [1 1 :form-params :max_output_tokens]) => 2048
-              (get-in @posts [2 1 :form-params :tool_choice]) => "none"
               (every? #(not (contains? (second %) ::diagnostics/stage))
                       @posts) => true
-              (string/includes? (pr-str [@logs (ex-data error)]) secret)
+              (string/includes? (pr-str [@logs error]) secret)
               => false
               (some #(re-find #"child-token|Only this text|123456|balance"
                               (pr-str %)) @logs) => nil)))))))

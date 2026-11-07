@@ -1,8 +1,11 @@
 (ns yetibot.util.ai-cost
-  "Public parent-request accounting, never prompts, reasoning or tool payloads."
-  (:require [yetibot.api.cloudflare :as cf]
+  "Request-local measured text accounting, never prompts or tool payloads."
+  (:require [clojure.string :as string]
+            [yetibot.api.cloudflare :as cf]
             [yetibot.api.opencode :as zen]
-            [yetibot.core.util.ai-usage :as usage])
+            [yetibot.core.util.ai-usage :as usage]
+            [yetibot.core.util.public-result :as public]
+            [yetibot.util.ai-public :as ai-public])
   (:import [java.net URI]
            [java.util Locale]))
 
@@ -165,3 +168,84 @@
              :api (if (= :estimate (:kind cost)) "API est. " "API "))
            amount))
     :else "cost n/a"))
+
+(def ^:dynamic *observer* nil)
+(def ^:dynamic *role* :parent)
+
+(defn observe!
+  "One observation per attempted wire request, before output normalization.
+   Only bounded monetary data escapes; no response payload reaches observers."
+  [provider model body]
+  (when *observer*
+    (let [value (when body (turn provider model body))]
+      (*observer* {:role *role*
+                   :cost (when (and (amount? (:usd value))
+                                    (#{:reported :estimate} (:kind value)))
+                           (select-keys value [:usd :kind :scope]))}))))
+
+(def empty-subtotal
+  {:requests 0 :reported_requests 0 :estimated_requests 0
+   :reported_usd 0M :estimated_usd 0M :unpriced 0})
+
+(defn capture
+  "Nestable: each observation reaches the outer run exactly once. HTTP errors
+   remain unpriced, not free. External MCP fees/media/CLI are outside this scope."
+  [f]
+  (let [outer *observer*
+        totals (atom {:scope :parent-and-delegated-text-requests
+                      :parent empty-subtotal :delegated empty-subtotal})
+        seen? #(pos? (+ (get-in @totals [:parent :requests])
+                       (get-in @totals [:delegated :requests])))]
+    (binding [*observer*
+              (fn [{:keys [role cost] :as receipt}]
+                (when outer (outer receipt))
+                (let [role (if (= :delegated role) :delegated :parent)]
+                  (swap! totals
+                         #(-> %
+                              (update-in [role :requests] inc)
+                              (cond-> cost
+                                (update-in
+                                  [role (if (= :reported (:kind cost))
+                                          :reported_requests :estimated_requests)]
+                                  inc))
+                              (update-in
+                                [role (case (:kind cost)
+                                        :reported :reported_usd
+                                        :estimate :estimated_usd :unpriced)]
+                                + (if cost (:usd cost) 1))))))]
+      (try
+        (let [result (f)]
+          (if-not (seen?) result
+            (ai-public/reviewed
+              (-> result
+                  (assoc-in [:result/data :ai/accounting] @totals)
+                  (assoc :result/public-data
+                         (assoc (:result/public-data (public/projection result) {})
+                                :accounting @totals))))))
+        (catch Exception e
+          (throw (ex-info (.getMessage e)
+                          (cond-> (ex-data e) (seen?)
+                            (assoc :ai/accounting @totals)))))))))
+
+(defn accounting-label [accounting]
+  (when (= :parent-and-delegated-text-requests (:scope accounting))
+    (let [parts
+          (for [[role title] [[:parent "parent"] [:delegated "children"]]
+                :let [s (get accounting role)] :when (pos? (:requests s 0))]
+            (str title " "
+                 (string/join
+                   " + "
+                   (concat
+                     (when (pos? (:reported_requests s 0))
+                       [(label {:usd (:reported_usd s)
+                                :kind :reported :scope :api})])
+                     (when (pos? (:estimated_requests s 0))
+                       [(label {:usd (:estimated_usd s)
+                                :kind :estimate :scope :api})])
+                     (when (pos? (:unpriced s 0))
+                       [(str (:unpriced s) " unpriced")])))))]
+      (if (and (zero? (get-in accounting [:delegated :requests] 0))
+               (zero? (get-in accounting [:parent :reported_requests] 0))
+               (zero? (get-in accounting [:parent :estimated_requests] 0)))
+        "cost n/a"
+        (string/join " · " parts)))))

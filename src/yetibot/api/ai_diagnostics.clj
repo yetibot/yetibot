@@ -2,13 +2,24 @@
   "Closed, host-owned failure diagnostics. Never emit provider text."
   (:require [cheshire.core :as json]
             [taoensso.timbre :as log]
-            [yetibot.api.cloudflare :as cloudflare])
+            [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.core.util.ai-usage :as usage])
   (:import [com.fasterxml.jackson.core JsonFactory JsonToken]
            [java.io ByteArrayInputStream InputStream]
            [java.util Locale]
            [java.util.concurrent ScheduledThreadPoolExecutor ThreadFactory
             TimeUnit]
            [org.apache.http.client.methods HttpUriRequest]))
+
+(def ^:dynamic *call* nil)
+
+(defn correlation []
+  (cond-> {}
+    (and (string? usage/*context-id*)
+         (re-matches #"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
+                     usage/*context-id*))
+    (assoc :run-id usage/*context-id*)
+    (and (integer? *call*) (<= 1 *call* 20)) (assoc :call *call*)))
 
 (defn- tag [allowed value fallback]
   (if (or (keyword? value)
@@ -40,7 +51,8 @@
                      "/models" :models} path :unrecognized)
      :stream? (true? (:stream form))
      :provider (tag {"grok" :grok "xai" :grok "openai" :openai
-                     "cloudflare" :cloudflare} (:name provider) :other)
+                     "cloudflare" :cloudflare "zen" :zen}
+                    (:name provider) :other)
      :model (tag {"grok-4.7" :grok "grok-4-1-fast-reasoning" :grok
                   "grok-4-1-fast-non-reasoning" :grok
                   "@cf/openai/gpt-oss-120b" :gpt-oss
@@ -256,5 +268,13 @@
 (defn emit! [record]
   ;; No Throwable, exception text, provider objects or ambient request data.
   ;; A broken logging appender must not interfere with transport cleanup.
-  (try (log/warn "ai-provider-diagnostic" record)
+  (try (log/warn "ai-provider-diagnostic" (merge record (correlation)))
+       (catch Exception _ nil)))
+
+(defn emit-tool! [record]
+  (try (log/warn "ai-tool-diagnostic" (merge record (correlation)))
+       (catch Exception _ nil)))
+
+(defn emit-response! [record]
+  (try (log/info "ai-response-diagnostic" (merge record (correlation)))
        (catch Exception _ nil)))
