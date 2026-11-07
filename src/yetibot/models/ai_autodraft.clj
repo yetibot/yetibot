@@ -39,7 +39,8 @@
     (when (= 1 (count matches)) (first matches))))
 
 (defn- execute-change!
-  [{:keys [provider model messages actor max-tool-calls on-progress]}
+  [{:keys [provider model messages actor max-tool-calls max-output-tokens
+           on-progress]}
    args key router config t repo]
   (let [secret (clef/credential! router)
         private-config (update config :secrets #(concat % [secret (:key provider)]))
@@ -54,6 +55,8 @@
                                            :additional-secrets [secret]}
                                     (some? max-tool-calls)
                                     (assoc :max-tool-calls max-tool-calls)
+                                    (some? max-output-tokens)
+                                    (assoc :max-output-tokens max-output-tokens)
                                     on-progress
                                     (assoc :on-progress on-progress)))
         id (get-in generated [:result/data :proposal])]

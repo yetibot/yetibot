@@ -112,7 +112,7 @@
     (count (child-posts run)) => 1
     (get-in run [:result :result/value]) => "Three models answered Paris."
     (get-in run [:result :result/data :mcp :tool-calls]) => 1
-    (get-in (child-posts run) [0 1 :max_tokens]) => 2048))
+    (get-in (child-posts run) [0 1 :max_tokens]) => 32768))
 
 (fact "native Gemma delegation makes 3 child POSTs and a final parent turn"
   (let [run (run-offline [triple] {})

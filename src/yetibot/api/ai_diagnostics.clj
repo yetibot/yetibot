@@ -19,7 +19,7 @@
          (re-matches #"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}"
                      usage/*context-id*))
     (assoc :run-id usage/*context-id*)
-    (and (integer? *call*) (<= 1 *call* 20)) (assoc :call *call*)))
+    (and (integer? *call*) (<= 1 *call* 128)) (assoc :call *call*)))
 
 (defn- tag [allowed value fallback]
   (if (or (keyword? value)

@@ -143,7 +143,7 @@
                      {:role "user" :content "Say hello"}]
         (:tools options) => []
         (:native-tools provider) => []
-        (:max-output-tokens options) => 2048
+        (:max-output-tokens options) => 32768
         (count @calls) => 1))))
 
 (fact "ai supports Zen explicitly and through complete automatic discovery"
@@ -162,7 +162,7 @@
                   context/messages (fn [_ prompt]
                                      [{:role "user" :content prompt}])
                   ai/complete
-                  (fn [provider model _]
+                  (fn [provider model _ _]
                     (fact (:name provider) => "zen")
                     (fact model => "fixture-chat")
                     {:result/value "Explicit Zen answer"})]

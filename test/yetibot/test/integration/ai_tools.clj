@@ -214,10 +214,11 @@
         (fact (contains? result :error) => false)
         (fact (get-in result [:data :isError]) => true)
         (fact (:reason report) => :budget-exceeded)
-        (fact (:budget report) => {:limit 1 :used 1 :remaining 0 :requested 1})
-        (fact (mapv :outcome (:calls report)) => [:success :rejected])
-        (fact @effects => 1)
-        (fact @turns => 2)
+        (fact (:budget report) => {:limit 12 :used 12 :remaining 0 :requested 1})
+        (fact (mapv :outcome (:calls report))
+              => (conj (vec (repeat 12 :success)) :rejected))
+        (fact @effects => 12)
+        (fact @turns => 13)
         (fact @echoes => 0)
         (fact (boolean (re-find #"PRIVATE|MUST-NOT"
                                 (pr-str (select-keys result

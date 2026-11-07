@@ -13,6 +13,7 @@
             [yetibot.core.config :refer [get-config]]
             [yetibot.core.util.ai-usage :as usage]
             [yetibot.util.ai-config :as settings]
+            [yetibot.util.ai-limits :as limits]
             [yetibot.util.ai-cost :as cost])
   (:import [java.io File FileInputStream]
            [java.net URI]
@@ -69,8 +70,16 @@
   (s/and (s/coll-of ::provider :kind vector? :min-count 1)
          #(apply distinct? (map :name %))))
 (s/def ::default-provider ::name)
+(s/def ::max-output-tokens
+  #(try (boolean (limits/request! :max-output-tokens %))
+        (catch Exception _ false)))
+(s/def ::max-tool-calls
+  #(try (boolean (limits/request! :max-tool-calls %))
+        (catch Exception _ false)))
 (s/def ::settings
-  (s/and (s/keys :req-un [::providers] :opt-un [::default-provider])
+  (s/and (s/keys :req-un [::providers]
+                     :opt-un [::default-provider ::max-output-tokens
+                              ::max-tool-calls])
          #(or (nil? (:default-provider %))
               (some (fn [provider] (= (:default-provider %) (:name provider)))
                     (:providers %)))))
@@ -322,9 +331,10 @@
   [provider model messages options]
   (when (and (contains? options :max-output-tokens)
              (not (and (integer? (:max-output-tokens options))
-                       (<= 1 (:max-output-tokens options) 2048))))
-    (fail "AI output token limit must be an integer from 1 to 2048."))
-  (let [provider (prepare-provider provider model)
+                       (<= 1 (:max-output-tokens options) 262144))))
+    (fail "AI output token limit must be an integer from 1 to 262144."))
+  (let [options (merge (limits/effective options) options)
+        provider (prepare-provider provider model)
         _ (when (and (opencode/provider? provider)
                      (not (opencode/configured-key? (:key provider))))
             (fail (str "OpenCode Zen requires an API key. Configure the "
@@ -437,7 +447,8 @@
   ([provider model messages options]
    (cost/capture
      (fn []
-       (let [provider (prepare-provider provider model)
+       (let [options (merge (limits/effective options) options)
+             provider (prepare-provider provider model)
              body (chat provider model messages options)
              accounting (cost/turn provider model body)
              text (try (:content (message provider body))

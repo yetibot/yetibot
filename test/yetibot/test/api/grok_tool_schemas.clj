@@ -26,7 +26,9 @@
   ;; yetibot_clef; removing the three new tools returned HTTP 200. This is an
   ;; offline regression for that observed contract, not a live xAI test.
   (doseq [[operation definition]
-          (merge inference/definitions wise/definitions models/definitions
+          (merge inference/definitions wise/definitions
+                 (into {} (map (fn [op] [op (models/definition {} op)])
+                               ["ai" "cf"]))
                  util/definitions aliases/definitions)]
     (let [captured (atom nil)
           provider {:name "grok" :url "https://api.x.ai/v1"

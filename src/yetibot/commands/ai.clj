@@ -4,6 +4,7 @@
             [yetibot.api.ai-outcome :as outcome]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.chat :as chat]
+            [yetibot.core.models.admin :as admin]
             [yetibot.util.ai-public :as public-result]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-defaults :as defaults]
@@ -22,11 +23,13 @@
             [yetibot.models.ai-github :as github]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-status :as status]
-            [yetibot.util.ai-cost :as cost]))
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.util.ai-limits :as limits]))
 
 (def usage
   (str "Usage: ai [--provider <name>] [--model <model>] "
-       "[--toolset <name> | --no-tools] [--max-tool-calls <1..20>] <prompt>"))
+       "[--toolset <name> | --no-tools] [--max-tool-calls <1..128>] "
+       "[--max-output-tokens <1..262144>] <prompt>"))
 
 (defn parse-prompt
   "Only leading flags are options. Use -- to start a prompt with a flag."
@@ -61,15 +64,16 @@
            :else
            (let [option ({"--provider" :provider "--model" :model
                           "--toolset" :toolset
-                          "--max-tool-calls" :max-tool-calls} flag)
+                          "--max-tool-calls" :max-tool-calls
+                          "--max-output-tokens" :max-output-tokens} flag)
                  [value rest-args] (when rest-args
                                      (string/split rest-args #"\s+" 2))]
              (when-not (and option (ai/nonblank-string? value)
                             (not (string/starts-with? value "--"))
                             (not (contains? options option)))
                (ai/fail usage))
-             (let [value (if (= option :max-tool-calls)
-                           (try (tools/request-budget! value)
+             (let [value (if (contains? limits/defaults option)
+                           (try (limits/request! option value)
                                 (catch Exception _ (ai/fail usage))) value)]
                (recur (or rest-args "") (assoc options option value))))))
        :else (do
@@ -215,6 +219,41 @@
               (when (:pricing result)
                 (pricing/summary (:pricing result) (:previous result) result)))
          :result/data result} result)))))
+
+(defn limits-cmd
+  "ai limits # inspect effective global generation/tool budgets
+   ai limits --max-output-tokens <n> --max-tool-calls <n> # runtime defaults
+   ai limits reset # restore configured/built-in budgets; no inference"
+  {:yb/cat #{:ai}}
+  [{[_ choice] :match :as args}]
+  (safely args
+    (fn []
+      (let [text (string/trim (or choice ""))
+            usage (str "Usage: ai limits [reset | --max-output-tokens "
+                       "<1..262144> | --max-tool-calls <1..128>]")
+            check! #(do (defaults/authorize! args)
+                        (execution/require-direct! args)
+                        (when-not (admin/user-is-admin? (:user args))
+                          (ai/fail "Changing global AI budgets requires an admin.")))
+            result (cond
+                     (string/blank? text) (limits/view)
+                     (= text "reset") (limits/reset-runtime! check!)
+                     :else
+                     (let [options (parse-prompt text usage {} "limits")]
+                       (when-not (and (= "limits" (:prompt options))
+                                      (every? #{:prompt :max-output-tokens
+                                                :max-tool-calls}
+                                              (keys options)))
+                         (ai/fail usage))
+                       (limits/set-runtime! (dissoc options :prompt) check!)))
+            values (:effective result)]
+        (inspection/reviewed
+          {:result/value
+           (str "AI budgets: " (:generation_limit values)
+                " tokens per model request · " (:tool_call_limit values)
+                " tool calls per run. Global runtime overrides reset "
+                "on restart; explicit flags win. Provider limits still apply.")
+           :result/data result} result)))))
 
 (defn providers-cmd
   "ai providers # list configured AI provider names"
@@ -575,7 +614,14 @@
      (when-not model
        (ai/fail (str "No default model configured for this provider. "
                      "Use --model <model> or configure its model.")))
-     (cond-> (assoc options :provider provider :model model
+     (cond-> (assoc (merge options
+                          (limits/effective
+                            (merge (when-not (:no-tools options)
+                                     (select-keys (mcp/config)
+                                                  [:max-tool-calls]))
+                                   config)
+                            options))
+                    :provider provider :model model
                     :caption? (empty? (:next-cmds args))
                     :messages (context/messages args (:prompt options))
                     :actor (policy/actor args))
@@ -598,13 +644,13 @@
         provider (execution/revalidate-free-followup! route provider)
         messages (context/messages args (:match args))]
     (execution/ensure-followup! route provider)
-    (merge (select-keys route [:no-tools :toolset :max-tool-calls])
+    (merge (select-keys route [:no-tools :toolset :max-tool-calls :max-output-tokens])
            {:provider provider :model (:model route) :messages messages
             :actor actor :prompt (:match args) :caption? true})))
 
-(defn complete-prompt
+(defn- complete-prompt*
   [{:keys [provider model messages no-tools toolset actor on-progress
-           pipeline-input additional-secrets max-tool-calls]}]
+           pipeline-input additional-secrets max-tool-calls max-output-tokens]}]
   (if no-tools
     (let [credential-file (:key-file provider)
           provider (if pipeline-input (ai/resolve-provider provider) provider)
@@ -616,15 +662,27 @@
                      (input/messages messages pipeline-input redactions))]
       (if on-progress
         (ai/complete (dissoc provider :native-tools) model messages
-                     {:on-progress on-progress})
-        (ai/complete (dissoc provider :native-tools) model messages)))
+                     {:on-progress on-progress :max-output-tokens max-output-tokens})
+        (ai/complete (dissoc provider :native-tools) model messages
+                     {:max-output-tokens max-output-tokens})))
     (tools/complete provider model messages
-                    (cond-> {:toolset toolset :actor actor}
+                    (cond-> {:toolset toolset :actor actor
+                             :max-output-tokens max-output-tokens}
                       max-tool-calls (assoc :max-tool-calls max-tool-calls)
                       pipeline-input (assoc :pipeline-input pipeline-input
                                             :additional-secrets
                                             additional-secrets)
                       on-progress (assoc :on-progress on-progress)))))
+
+(defn complete-prompt [prepared]
+  (let [budgets (limits/effective prepared)
+        result (complete-prompt* (merge prepared budgets))]
+    (if-not (map? result) result
+      (public-result/reviewed
+        (-> result
+            (assoc-in [:result/data :ai/limits] (limits/public-values budgets))
+            (assoc-in [:result/public-data :limits]
+                      (limits/public-values budgets)))))))
 
 (defn prompt-cmd
   {:doc (str "ai <prompt> # ask the default AI provider; "
@@ -635,8 +693,11 @@
              "choose a provider and model\n"
              "   ai --model <model> <prompt> # infer a unique provider "
              "by exact advertised model ID\n"
-             "   ai --max-tool-calls <1..20> <prompt> # choose a total "
-             "host-call budget within the configured ceiling\n"
+             "   ai --max-tool-calls <1..128> <prompt> # override the "
+             "host-call budget\n"
+             "   ai --max-output-tokens <1..262144> <prompt> # override "
+             "generation budgets for parent and child models\n"
+             "   ai limits # inspect/set/reset global runtime budgets\n"
              "   ai --no-tools <prompt> # answer without native or MCP tools")
    :yb/cat #{:ai}}
   [args]
@@ -660,6 +721,7 @@
 (cmd-hook #"ai"
   #"(?s)^usage(?:\s+(.*))?\s*$" usage-cmd
   #"^default(?:\s+(.*))?\s*$" default-cmd
+  #"(?s)^limits(?:\s+(.*))?\s*$" limits-cmd
   #"^providers\s*$" providers-cmd
   #"^models(?:\s+(\S+))?\s*$" models-cmd
   #"^toolsets\s*$" toolsets-cmd

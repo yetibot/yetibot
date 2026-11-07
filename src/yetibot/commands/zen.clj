@@ -10,11 +10,13 @@
             [yetibot.models.ai-inspection :as inspection]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.util.ai-status :as status]
+            [yetibot.util.ai-limits :as limits]
             [yetibot.util.ai-execution :as execution]
             [yetibot.models.ai-toolsets :as toolsets]))
 
 (def usage
-  (str "Usage: zen [--model <model>] [--toolset <name>] <prompt>\n"
+  (str "Usage: zen [--model <model>] [--toolset <name>] "
+       "[--max-output-tokens <1..262144>] <prompt>\n"
        "zen models # discover available OpenCode Zen models"))
 
 (defn usage-cmd
@@ -78,7 +80,8 @@
           _ (when-not (or (opencode/configured-key? (:key provider))
                           (:key-file provider))
               (api/fail "Configure the Zen API key first."))
-          config (toolsets/select (mcp/config) (:toolset options))
+          config (merge (toolsets/select (mcp/config) (:toolset options))
+                        (limits/effective options))
           _ (when continuation-route
               (execution/ensure-followup! continuation-route provider)
               (policy/authorize! (:toolset config) (policy/actor args)
@@ -89,7 +92,8 @@
           result (models/chat!
                    config
                    (cond-> {"action" "ask" "provider" "zen"
-                            "prompt" (:prompt options)}
+                            "prompt" (:prompt options)
+                            "max_output_tokens" (:max-output-tokens config)}
                      (:model options) (assoc "model" (:model options)))
                    chat-source
                    #(let [messages (context/messages args (:prompt options))]
@@ -110,6 +114,7 @@
               prepared {:provider provider :model (:model data)
                         :actor (policy/actor args) :no-tools true
                         :toolset (get-in config [:toolset :name])
+                        :max-output-tokens (:max-output-tokens config)
                         :caption? (empty? (:next-cmds args))}]
           (execution/remember-answer! "zen" prepared
             (status/caption prepared
@@ -120,7 +125,8 @@
 (defn prompt-cmd
   "zen <prompt> # ask the configured or automatic verified-free Zen default
    zen --model <id> <prompt> # explicitly select a Zen model, possibly paid
-   zen --toolset <name> <prompt> # apply configured provider/model policy"
+   zen --toolset <name> <prompt> # apply configured provider/model policy
+   zen --max-output-tokens <1..262144> <prompt> # override generation budget"
   {:yb/cat #{:ai}}
   [{:keys [match] :as args}]
   (try (ask-prompt args (ai/parse-prompt match usage))
@@ -128,7 +134,7 @@
 
 (defmethod execution/run-followup "zen" [route args]
   (ask-prompt (assoc args :continuation-route route)
-              (merge (select-keys route [:toolset])
+              (merge (select-keys route [:toolset :max-output-tokens])
                      {:model (:model route) :prompt (:match args)})))
 
 (cmd-hook #"zen"

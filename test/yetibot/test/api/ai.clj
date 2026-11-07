@@ -51,7 +51,8 @@
       (select-keys (second @captured) [:as :content-type :form-params :headers
                                       :redirect-strategy :conn-timeout :socket-timeout])
       => {:as :json :content-type :json
-          :form-params {:model "other/model" :messages messages}
+          :form-params {:model "other/model" :messages messages
+                        :max_completion_tokens 32768}
           :headers {"Accept" "application/json" "Authorization" "Bearer secret"}
           :redirect-strategy :none :conn-timeout 5000 :socket-timeout 120000}
       ((:retry-handler (second @captured)) nil nil nil) => false)))
@@ -114,7 +115,7 @@
           (:result/value (ai/complete provider "model-a" messages)) => "answer"
           (:auth (first @requests)) => "Bearer secret"
           (json/parse-string (:body (second @requests)) true)
-          => {:model "model-a" :messages messages}
+          => {:model "model-a" :messages messages :max_completion_tokens 32768}
           (binding [chat/*adapter* {:config {:endpoint (str base "/slack") :token "slack-secret"}}]
             (context/messages {:chat-source {:adapter :slack
                                              :raw-event {:channel "C1" :thread_ts "1.0" :ts "2.0"}}}

@@ -17,7 +17,8 @@
             [yetibot.models.ai-github :as github]
             [yetibot.util.ai-public :as public]
             [yetibot.util.ai-execution :as execution]
-            [yetibot.util.ai-cost :as cost]))
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.util.ai-limits :as limits]))
 
 (def host-context
   (str "You are Yetibot's chat assistant, running inside Yetibot, "
@@ -134,12 +135,7 @@
   {:doc (str "Validate an explicit request before credentials/discovery; "
              "nil means omitted.")}
   [value]
-  (when (some? value)
-    (let [text (str value)
-          n (when (re-matches #"(?:[1-9]|1[0-9]|20)" text)
-              (Long/parseLong text))]
-      (when-not n (ai/fail "Tool-call budget must be an integer from 1 to 20."))
-      n)))
+  (limits/request! :max-tool-calls value))
 
 (defn- parse-call [call entries seen config]
   (let [id (:id call)
@@ -321,7 +317,7 @@
   (let [entries (mapv #(tool-entry %1 %2 config) (range) tools)
         by-name (into {} (map (juxt :name identity) entries))
         definitions (mapv :definition entries)
-        limit (mcp/number-option (:max-tool-calls config) 6)
+        limit (mcp/number-option (:max-tool-calls config) 20)
         trace-state (atom {:calls [] :omitted 0 :next-call 0
                            :used 0 :requested 0})
         redact (trace/redactor config messages)
@@ -358,6 +354,7 @@
               body (ai/chat provider model turn-messages
                             (cond->
                               {::diagnostics/stage stage
+                               :max-output-tokens (:max-output-tokens config)
                                :tools definitions
                                :tool_choice
                                (if (< used limit) "auto" "none")}
@@ -513,14 +510,13 @@
   ([provider model messages] (complete* provider model messages {}))
   ([provider model messages
     {:keys [toolset actor additional-secrets on-progress pipeline-input
-            max-tool-calls]}]
-   (let [requested (request-budget! max-tool-calls)
+            max-tool-calls max-output-tokens] :as options}]
+   (let [_ (request-budget! max-tool-calls)
+         _ (limits/request! :max-output-tokens max-output-tokens)
          config (adapter-servers (toolsets/select (mcp/config) toolset)
                                  actor)
-         ceiling (mcp/number-option (:max-tool-calls config) 20)
-         config (cond-> (assoc config :on-progress on-progress
-                                     :staged (atom nil))
-                  requested (assoc :max-tool-calls (min ceiling requested)))]
+         config (merge config (limits/effective config options)
+                       {:on-progress on-progress :staged (atom nil)})]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (when (and (seq (get-in config [:toolset :native-tools]))
@@ -563,9 +559,13 @@
          (if on-progress
            (clean-data (ai/complete provider model (host-messages messages)
                                     {::diagnostics/stage :initial
+                                     :max-output-tokens
+                                     (:max-output-tokens config)
                                      :on-progress on-progress
                                      :progress-config config}) config)
-           (ai/complete provider model (host-messages messages))))))))
+           (ai/complete provider model (host-messages messages)
+                        {:max-output-tokens
+                         (:max-output-tokens config)})))))))
 
 (defn complete
   ([provider model messages] (complete provider model messages {}))

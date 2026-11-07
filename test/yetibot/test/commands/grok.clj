@@ -69,7 +69,8 @@
       => "Answer\n\nSent via configured-grok"
       @captured => [provider "configured-grok"
                     [{:role "user" :content "Hi"}]
-                    {:toolset "cloudflare_read" :actor actor}]
+                    {:toolset "cloudflare_read" :actor actor
+                     :max-tool-calls 20 :max-output-tokens 32768}]
       (:result/value (command-ai/prompt-cmd {:match "Hi"})) => "Answer"
       (take 2 @captured) => [other "local-model"]
       (:result/value (grok/grok-cmd {:match "--model grok-custom Hi"}))
@@ -122,7 +123,8 @@
                :api "responses" :model "grok-4.7"
                :native-tools ["web_search" "x_search"]}
               "grok-4.7" [{:role "user" :content "Hi"}]
-              {:toolset "cloudflare_read" :actor nil}])))))
+              {:toolset "cloudflare_read" :actor nil
+               :max-tool-calls 20 :max-output-tokens 32768}])))))
 
 (fact "invalid shared configuration does not fall back to xai.key"
   (with-redefs [config/get-config (constantly {:error :invalid})
@@ -139,7 +141,7 @@
                                      [{:role "user" :content prompt}])
                   tools/complete (fn [& _]
                                    (throw (Exception. "Unexpected MCP call")))
-                  api/complete (fn [p model _]
+                  api/complete (fn [p model _ _]
                                  (reset! captured [p model])
                                  {:result/value "No search answer"})]
       (:result/value

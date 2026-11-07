@@ -44,7 +44,7 @@
                      "failed" :failed} status :other)
        :text-present (boolean present?)}
       (when (and (integer? (:max-output-tokens options))
-                 (<= 1 (:max-output-tokens options) 2048))
+                 (<= 1 (:max-output-tokens options) 262144))
         {:output-cap (:max-output-tokens options)})
       (into {}
             (keep (fn [[source target]]

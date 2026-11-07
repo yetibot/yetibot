@@ -40,10 +40,10 @@
       (f {:classified classified :writes writes :generations generations
           :generation-options generation-options}))))
 
-(fact "automatic code-change routing forwards only explicit tool-call budgets"
+(fact "automatic code-change routing forwards resolved and explicit budgets"
   (doseq [[flag budget] [["--max-tool-calls 12 " 12]
                         ["--max-tool-calls 1 " 1]
-                        ["" nil]]]
+                        ["" 20]]]
     (scenario
       (fn [{:keys [writes generations generation-options]}]
         (let [result (chat/run-command

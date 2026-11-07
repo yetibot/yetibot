@@ -56,7 +56,7 @@
               (and (:command %) (not (contains? % :headers))))))
 (s/def ::servers (s/and (s/coll-of ::server :kind vector? :max-count 16)
                        #(or (empty? %) (apply distinct? (map :name %)))))
-(s/def ::max-tool-calls #(bounded-number? 1 20 %))
+(s/def ::max-tool-calls #(bounded-number? 1 128 %))
 (s/def ::timeout-ms #(bounded-number? 100 120000 %))
 (s/def ::settings (s/keys :req-un [::servers] :opt-un [::max-tool-calls ::timeout-ms]))
 (s/def ::config #(s/valid? ::settings (settings/mcp %)))

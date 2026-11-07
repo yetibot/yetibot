@@ -49,6 +49,7 @@
       => [["https://api.x.ai/v1/responses"
            {:model "grok-other" :input messages :store false
             :include ["reasoning.encrypted_content"] :max_turns 3
+            :max_output_tokens 32768
             :tools [{:type "web_search"} {:type "x_search"}]}]])))
 
 (fact "Zen Responses uses the restored model without xAI-only max_turns"

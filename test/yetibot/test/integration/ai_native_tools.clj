@@ -215,7 +215,7 @@
     (:view data) => "running"
     (:untrusted data) => true
     (:build data) => (:build releases/running)
-    (get-in data [:changes 0 :id]) => "ai-outcomes-and-run-costs"
+    (get-in data [:changes 0 :id]) => "configurable-ai-budgets"
     (count (:sent result)) => 2))
 
 (fact "whole-batch validation rejects injected release fields before any GET"

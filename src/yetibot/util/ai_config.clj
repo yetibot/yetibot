@@ -48,7 +48,8 @@
                                        :write-server :branch-prefix])) %)))))
 
 (defn ai [value]
-  (let [value (lift-fields value [:default-provider :intent-router])]
+  (let [value (lift-fields value [:default-provider :intent-router
+                                         :max-output-tokens :max-tool-calls])]
     (cond-> value
       (map? (:intent-router value))
       (update :intent-router lift-fields [:account-id :key-file :min-probability
