@@ -117,8 +117,9 @@
                      chat-source)
             data (:structuredContent result)]
         (if (:isError result)
-          (failure args (:unknownOutcome result))
-          {:result/value (:text data) :result/data data})))))
+          (or (ai/native-output-failure args result)
+              (failure args (:unknownOutcome result)))
+          (ai/native-text-result result))))))
 
 (cmd-hook #"cf"
   #"(?s)^models(?:\s+(.*))?$" models-cmd

@@ -1,5 +1,17 @@
 # Yetibot changelog
 
+## 2026-11-06 — Model outcomes and measured run costs
+
+- Keep usable child answers and per-call errors on partial failures. Recognize
+  explicit generation limits and empty completed replies without retrying them;
+  transport uncertainty still skips later calls and now ends the loop directly.
+- Publish tool-loop answers only after terminal validation, not intermediate
+  plans. Direct streams keep live delivery with a cost-only terminal receipt.
+- Show measured parent/delegated text costs, separating reported USD, partial
+  estimates and unpriced requests. Keep the durable ledger unchanged.
+- Freeze safe execution statuses, caps, native counters and elapsed times;
+  log only closed diagnostics, never prompts, reasoning text or raw tool errors.
+
 ## 2026-11-06 — Native text-model selection
 
 - Default Zen sampling to supported paid text models with real base rates;

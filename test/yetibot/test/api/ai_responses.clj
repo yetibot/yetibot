@@ -2,7 +2,8 @@
   (:require [clj-http.client :as client]
             [clojure.spec.alpha :as s]
             [midje.sweet :refer [fact facts =>]]
-            [yetibot.api.ai :as ai]))
+            [yetibot.api.ai :as ai]
+            [yetibot.api.ai-outcome :as outcome]))
 
 (def provider
   {:name "grok" :url "https://api.x.ai/v1/" :key "provider-secret"
@@ -40,7 +41,9 @@
                                (swap! requests conj
                                       [url (:form-params options)])
                                {:status 200 :body answer})]
-      (ai/complete provider "grok-other" messages)
+      (-> (ai/complete provider "grok-other" messages)
+          (update :result/data dissoc :ai/accounting)
+          (dissoc :result/public-data))
       => {:result/value "Account: Yetibot (verified)" :result/data answer}
       @requests
       => [["https://api.x.ai/v1/responses"
@@ -113,4 +116,6 @@
                 {:status "completed" :output []}]]
     (with-redefs [client/post (fn [& _] {:status 200 :body body})]
       (fact (error-message #(ai/complete provider "grok-4.7" []))
-            => "AI provider grok returned no completed text response."))))
+            => (get outcome/messages
+                    (if (= "completed" (:status body))
+                      :no-answer :incomplete-output))))))

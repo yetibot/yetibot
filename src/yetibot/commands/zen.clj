@@ -99,8 +99,9 @@
                       messages))
           data (:structuredContent result)]
       (if (:isError result)
-        (failure args (:unknownOutcome result) (:error-code result)
-                 (:retry-after-seconds result))
+        (or (ai/native-output-failure args result)
+            (failure args (:unknownOutcome result) (:error-code result)
+                     (:retry-after-seconds result)))
         (let [provider (cond-> provider
                          (and (not (:model options))
                               (or (nil? (:model provider))
@@ -112,7 +113,7 @@
                         :caption? (empty? (:next-cmds args))}]
           (execution/remember-answer! "zen" prepared
             (status/caption prepared
-              {:result/value (:text data) :result/data data}
+              (ai/native-text-result result)
               (/ (- (System/nanoTime) started) 1000000.0))))))
     (catch Exception _ (failure args false))))
 

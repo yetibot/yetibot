@@ -564,6 +564,19 @@
   ((requiring-resolve 'yetibot.test.support.ai-status/typed-status!)
    :grok true))
 
+(fact "a delivered answer gets a cost-only receipt, never a duplicate answer"
+  (let [result
+        (delivery [{:answer "Delivered"}]
+          {:result/value "Delivered"
+           :result/data
+           {:ai/accounting
+            {:scope :parent-and-delegated-text-requests
+             :parent {:requests 1 :reported_requests 1 :reported_usd 0.257858M
+                      :estimated_requests 0 :estimated_usd 0M :unpriced 0}
+             :delegated {:requests 0}}}})]
+    (count (:live result)) => 1
+    (:final result) => ["Model request cost: parent API $0.26"]))
+
 (facts "Discord progress failures do not discard the final answer"
   (doseq [failure [:create-throws :create-nil :missing-id :delete-throws]]
     (let [posted (promise)]

@@ -183,8 +183,13 @@
                                                  415 422 429}
                                                (:status record)))]
                  (when (:pending (ledger! identity))
-                   (ledger! #(if rejected? (assoc % :pending false)
-                                 (assoc % :stopped true)))))
+                   (ledger! #(if (or rejected?
+                                     (contains? #{:output-limit :no-answer
+                                                  :unsupported-output
+                                                  :incomplete-output}
+                                                (:ai/output-error (ex-data e))))
+                               (assoc % :pending false)
+                               (assoc % :stopped true)))))
                (throw e))))
          ;; Never read real aliases. Exercise the actual native adapter around
          ;; this harmless store fixture, without creating/wiring an alias.
@@ -283,10 +288,12 @@
                   responses? (= "responses" (:api provider))
                   terminal-ok
                   (or (not terminal?)
-                      (if responses?
-                        (= {:tools 0 :choice :omitted :stream? true}
-                           (last @wires))
-                        (= :none (keyword (:choice (last @wires))))))
+                      (if (= case-name "unknown")
+                        (and (= 1 (count @wires)) (= 1 (count @callbacks)))
+                        (if responses?
+                          (= {:tools 0 :choice :omitted :stream? true}
+                             (last @wires))
+                          (= :none (keyword (:choice (last @wires)))))))
                   ok (and (ai/nonblank-string? text)
                           (if greeting? (empty? @callbacks)
                             (= [true] @callbacks))

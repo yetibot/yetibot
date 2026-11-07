@@ -4,10 +4,17 @@
   yetibot.models.ai-tool-trace
   (:refer-clojure :exclude [bytes])
   (:require [cheshire.core :as json]
+            [clojure.string :as string]
+            [yetibot.models.ai-progress :as progress]
+            [yetibot.util.ai-cost :as cost]
             [yetibot.api.mcp :as mcp]))
 
 (def reasons
-  {:malformed-batch
+  {:partial-result "Some model calls returned no usable answer."
+   :unknown-result
+   (str "A tool's delivery outcome is uncertain. Later calls were not run; "
+        "no further parent request was sent.")
+   :malformed-batch
    (str "The AI provider returned a malformed tool-call collection. "
         "No tools from that response were run.")
    :budget-exceeded
@@ -153,17 +160,44 @@
                              :confirmed confirmed) %)
                  rows))))
 
+(defn detail! [state ordinal details]
+  (swap! state
+    (fn [s]
+      (let [rows (mapv #(if (= ordinal (:call %)) (merge % details) %)
+                       (:calls s))
+            rows (if (<= (bytes rows) 11500) rows
+                   (mapv #(assoc % :details-shortened true
+                                  :arguments {:omitted "Execution details retained."})
+                         rows))]
+        (loop [rows rows omitted (:omitted s)]
+          (if (<= (bytes rows) 11500)
+            (assoc s :calls rows :omitted omitted)
+            (recur (pop rows) (inc omitted))))))))
+
 (defn report [state limit reason]
   (let [{:keys [used requested calls omitted]} @state]
     {:reason reason :budget {:limit limit :used used
                              :remaining (max 0 (- limit used))
                              :requested requested}
-     :calls calls :omitted omitted :truncated (pos? omitted)}))
+     :calls calls :omitted omitted
+     :truncated (boolean (or (pos? omitted) (some :details-shortened calls)))}))
 
 (defn fail! [reason]
   (throw (ex-info (get reasons reason) {::reason reason})))
 
-(defn summary [report]
+(defn public-report [report]
+  ;; Deliberately omit arguments and IDs; not a generic tool-payload viewer.
+  (-> (select-keys report [:reason :budget :omitted :truncated])
+      (assoc :calls
+             (mapv #(select-keys % [:call :tool :outcome :attempted :confirmed
+                                    :operation :provider :model :code :elapsed_ms
+                                    :cost :finish :status :text-present :output-cap
+                                    :input_count :output_count :thinking_count
+                                    :http_status :error-class :error-code
+                                    :parameter])
+                   (:calls report)))))
+
+(defn- trace-summary [report]
   (let [{:keys [limit used remaining requested]} (:budget report)
         header (str (get reasons (:reason report)) "\n"
                     "Tool budget: total=" limit " used=" used
@@ -176,6 +210,10 @@
             line (when row
                    (str "\n#" (:call row) " " (:tool row) " "
                         (name (:outcome row)) " "
+                        (when-let [reason (progress/failure-labels (:code row))]
+                          (str "(" reason ") "))
+                        (when (integer? (:elapsed_ms row))
+                          (str (:elapsed_ms row) "ms "))
                         (json/generate-string (:arguments row))))]
         (if (and row (<= (+ (count text) (count line)) 1550)
                  (<= (+ (alength (.getBytes ^String text "UTF-8"))
@@ -188,3 +226,38 @@
                         "inspect tool-trace data,"
                         " which also marks any structured omissions.]"))
                  (when (empty? rows) "\nNo tool calls were attempted."))))))))
+
+(defn summary
+  ([report] (summary report []))
+  ([report answers]
+   (if-not (some #(= :inference (:operation %)) (:calls report))
+     (trace-summary report)
+     (str
+       (get reasons (:reason report)) " " (count answers)
+       " model answer(s) obtained. Consumed requests were not retried."
+       (when (seq answers)
+         (str "\n\n"
+              (string/join "\n\n"
+                (map (fn [{:keys [provider model text truncated ai/cost]}]
+                       (str text (when truncated " [shortened]")
+                            "\n-# " provider "/" model " · "
+                            (yetibot.util.ai-cost/label cost))) answers))))
+       "\n\n"
+       (string/join "\n"
+         (for [row (:calls report)
+               :when (not= :success (:outcome row))]
+           (str "#" (:call row) " "
+                (or (:model row) (:tool row)) " — "
+                (or (progress/failure-labels (:code row))
+                    (name (:outcome row)))
+                (when (= :inference (:operation row))
+                  (str " · " (cost/label (:cost row))))
+                (when-let [n (:http_status row)] (str " · HTTP " n))
+                (when-let [n (:output_count row)] (str " · output=" n))
+                (when-let [n (:thinking_count row)] (str " · thinking=" n))
+                (when-let [n (:output-cap row)] (str " · cap=" n))
+                (when-let [n (:elapsed_ms row)] (str " · " n "ms")))))
+       (when (:truncated report)
+         "\nSome execution details were omitted from this bounded report.")
+       "\nTool budget: used=" (get-in report [:budget :used])
+       "/" (get-in report [:budget :limit]) "."))))

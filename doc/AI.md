@@ -1519,6 +1519,32 @@ entries, not Yetibot's full environment or its other API keys.
 
 ### Tool-loop failure trace
 
+A received, explicit output-limit response is a consumed request, not uncertain
+delivery. Valid completed-but-empty replies and unsupported Gemma envelopes
+also return static output errors. Reasoning can consume the same generation
+budget as visible text. Native discovery exposes advertised thinking capability
+when available; unknown does not mean disabled. Limits/defaults are not silently
+increased and requests are never replayed. Independent preflighted calls may
+continue after known output errors; transport/5xx/malformed uncertainty still
+skips later calls and now returns a host-generated report immediately, without
+paying for another parent summary round.
+
+Tool-loop message items can be plans preceding function calls. They are not
+published as finished answers. Typed tool/search progress remains live. Partial
+sampling reports show the actual sanitized child answers obtained (with explicit
+shortening), not promises of future work. A terminal model failure retains these
+answers. Per-command captions use measured parent/delegated text API receipts;
+reported spend, estimates and unpriced requests remain distinct. External
+MCP/service fees, media and CLI are outside this caption scope unless included
+in a text API's reported bill; `ai usage` retains its broader ledger scope.
+
+Frozen `execution` data omits arguments and raw IDs, and includes safe per-call
+outcomes, elapsed milliseconds, closed failure codes, HTTP status when known,
+requested caps and returned counters/costs. Thinking counters can overlap output;
+do not add them blindly. Closed logs distinguish Zen from generic providers,
+include anonymous run correlation/host ordinals when available, and never emit
+prompts, completions, reasoning text, credentials or raw vendor/tool errors.
+
 A failed tool loop returns a safe error summary with budget total, used,
 remaining and requested batch size, plus ordered redacted calls. Earlier
 completed calls remain visible even if a later HTTP or event-stream request
@@ -1526,7 +1552,9 @@ fails. Ordinal references (`#1`, `#2`, …), not raw provider IDs, identify call
 Only advertised policy-filtered tool identifiers are shown; unknown names are
 withheld. Outcomes distinguish confirmed success/error replies, attempted but
 unconfirmed calls, refused calls (not attempted), and skipped calls after
-uncertainty. No tool output or exception cause is included.
+uncertainty. Raw tool payloads and exception causes are not included in the
+trace; only separately sanitized text-child answers can appear in the partial
+chat report.
 
 Privacy takes precedence over verbatim arguments: freeform prompts, queries,
 input/history, captions, financial values, credentials and paths are withheld.
@@ -1539,9 +1567,11 @@ Structured `:result/data` has `:isError true` and `:tool-trace`, including a
 closed `:reason`, `:budget`, `:calls`, `:omitted` and `:truncated`. The
 structured report
 is bounded to 40 rows and less than 12 KiB of UTF-8 JSON; each redacted argument
-view has depth/node/entry limits and at most 768 UTF-8 JSON bytes. Omissions and
-shortening are explicit. The chat summary fits one physical message and may
-omit more rows, with a notice referring to the bounded structured data; a
+view has depth/node/entry limits and at most 768 UTF-8 JSON bytes. Execution
+receipts take priority over argument summaries if bounds are reached. Omissions
+and shortening are explicit. Generic trace summaries fit one physical message;
+partial model-answer reports can use normal bounded multi-message delivery.
+The chat summary may omit rows with a notice referring to structured data; a
 truncated report is never described as a full trace. Errors stop downstream
 pipeline commands without core's raw-command error decoration. Discord Grok
 still publishes a late error after completed answers or the answer-overflow

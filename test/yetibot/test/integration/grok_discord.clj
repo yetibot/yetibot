@@ -212,7 +212,11 @@
                       => [{:method "POST" :path "/v1/responses"}]
                       (get-in @requests [0 :body :model]) => "selected"
                       (get-in @requests [0 :body :stream]) => true
-                      (seq (get-in @requests [0 :body :tools])) => nil))
+                      (seq (get-in @requests [0 :body :tools])) => nil
+                      (get-in @(get-in @conn
+                                 [:commands ["parent" "command"] :inspection])
+                              [:data 0 "accounting" "parent" "requests"])
+                      => 1))
               ;; Same core command entry, new revision: reuse live answer IDs.
               (reset! calls [])
               (await! (discord/handle-event

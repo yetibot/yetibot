@@ -43,8 +43,11 @@
                           (to-array [(/ elapsed-ms 1000.0)])))
                   (and (integer? tools) (<= 0 tools 100000))
                   (conj (str tools " tool" (when (not= 1 tools) "s")))
-                  true (conj (cost/label
-                               (get-in result [:result/data :ai/cost])))))))
+                  true (conj
+                         (or (cost/accounting-label
+                               (get-in result [:result/data :ai/accounting]))
+                             (cost/label
+                               (get-in result [:result/data :ai/cost]))))))))
       result)))
 
 (defn with-status

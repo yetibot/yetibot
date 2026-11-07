@@ -15,6 +15,7 @@
             [yetibot.core.config :refer [get-config]]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.util.xai :as xai]
+            [yetibot.core.util.public-result :as public]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-cost :as cost]
             [yetibot.util.ai-status :as status]))
@@ -24,15 +25,13 @@
        "[--toolset <name> | --no-tools] [--max-tool-calls <1..20>] "
        "[--no-thread] <prompt>"))
 
-(defn- answer-text [prepared text]
-  (if (status/discord? prepared)
-    (:result/value
-      (status/caption prepared
-        {:result/value text
-         :result/data {:ai/cost
-                       (cost/visible-estimate (:provider prepared)
-                         (:model prepared) (:messages prepared) text)}} nil))
-    (str text "\n\nSent via " (:model prepared))))
+(defn- answer-text
+  ([prepared text] (answer-text prepared text nil))
+  ([prepared text data]
+   (if (status/discord? prepared)
+     (:result/value
+       (status/caption prepared {:result/value text :result/data data} nil))
+     (str text "\n\nSent via " (:model prepared)))))
 
 (defn- generate [prepared]
   (let [result (ai/complete-prompt prepared)]
@@ -40,14 +39,20 @@
                (not (string? (:result/value result))))
       (api/fail "Grok did not return a text answer."))
     (execution/remember-answer! "grok" prepared
-      (walk/postwalk
-        #(if (string? %)
-           (mcp/redact % {:secrets [(get-in prepared [:provider :key])]}) %)
-        (-> result
-            (update :result/value #(answer-text prepared %))
-            (update :result/data assoc
-                    :provider (get-in prepared [:provider :name])
-                    :model (:model prepared)))))))
+      (vary-meta
+        (walk/postwalk
+          #(if (string? %)
+             (mcp/redact % {:secrets [(get-in prepared [:provider :key])]}) %)
+          (-> result
+              (update :result/value
+                      #(answer-text prepared % (:result/data result)))
+              (update :result/data assoc
+                      :provider (get-in prepared [:provider :name])
+                      :model (:model prepared))))
+        assoc ::raw-answer
+        (when (string? (:result/value result))
+          (mcp/redact (:result/value result)
+                      {:secrets [(get-in prepared [:provider :key])]}))))))
 
 (defn- answer-chunks
   ([text] (answer-chunks text host-discord/discord-max-message-length))
@@ -123,16 +128,26 @@
                (when (string? (:answer event))
                  (admit! (:answer event) (render (:answer event)) post!))))))
        :finish!
-       (fn [value]
+       (fn [value raw data]
          (locking state
-           (when-not (or (blocked?) (posted? value))
-             ;; Ordinary terminal output still uses the collector, but must
-             ;; pass the same whole-answer admission and safe splitting.
-             (admit! nil value
-                     (fn [chunks]
-                       (doseq [chunk chunks]
-                         (chat/chat-data-structure chunk))
-                       true)))))
+           (when-not (blocked?)
+             (let [already? (or (posted? value)
+                                (and (string? raw)
+                                     (some #(= raw (string/join
+                                                    (subvec (:answers @state) %)))
+                                           (range (count (:answers @state))))))
+                   receipt (cost/accounting-label (:ai/accounting data))]
+               (when-not (and already? (or (nil? receipt)
+                                           (= "cost n/a" receipt)))
+                 ;; A direct no-tools stream may already have delivered text.
+                 ;; Publish only its measured terminal cost, never the answer
+                 ;; again and never a visible-text estimate as a run bill.
+                 (admit! nil (if already?
+                               (str "Model request cost: " receipt) value)
+                         (fn [chunks]
+                           (doseq [chunk chunks]
+                             (chat/chat-data-structure chunk))
+                           true)))))))
        :stale? #(:stale? @state)
        :failed? #(:failed? @state)})))
 
@@ -157,14 +172,22 @@
                                 (:result/value result)))]
               (chat/chat-data-structure error)
               (when-not ((:failed? answers))
-                ((:finish! answers) (:result/value result)))))
+                ((:finish! answers) (:result/value result)
+                 (::raw-answer (meta result)) (:result/data result)))))
           (when (and ((:failed? answers)) (not ((:stale? answers))))
             (chat/chat-data-structure
               "Grok answer delivery failed; some messages may have arrived.")))
-        (chat/suppress
-          (if (get-in result [:result/data :tool-trace])
-            {:result/value (chat/suppress {}) :result/data (:result/data result)}
-            {}))))))
+        (public/forward {:public-result result}
+         (chat/suppress
+          (let [data (:result/data result)
+                safe (if (:tool-trace data) data
+                       (select-keys data [:execution :ai/accounting
+                                          :ai/cost :ai/response :isError]))]
+            (if (seq safe)
+              (cond-> {:result/value (chat/suppress {}) :result/data safe}
+                (public/projection result)
+                (assoc :result/public-error (:result/public-error result)))
+              {}))))))))
 
 (defn- grok-config []
   (let [config (if (= :not-found (:error (get-config map? [:ai])))

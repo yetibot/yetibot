@@ -15,6 +15,7 @@
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-proposals :as proposals]
             [yetibot.models.ai-github :as github]
+            [yetibot.util.ai-public :as public]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-cost :as cost]))
 
@@ -162,6 +163,14 @@
                                 (get-in entries [name :tool :name]) parsed)))
          (catch Exception _ (trace/fail! :invalid-arguments)))})))
 
+(defn- request-action [{:keys [entry arguments]}]
+  ;; A changed cap must not turn a consumed text request into a fresh action.
+  (let [tool (:tool entry)
+        inference? (and (:native? tool) (fn? (:host-call tool))
+                        (#{"ai" "cf"} (:name tool))
+                        (= "ask" (get arguments "action" "ask")))]
+    [(:name entry) (cond-> arguments inference? (dissoc "max_output_tokens"))]))
+
 (defn- text-content [item]
   (case (:type item)
     "text" (select-keys item [:type :text])
@@ -176,6 +185,12 @@
                  (host-call arguments)
                  (mcp/call-tool (:session tool) (:name tool) arguments))
         unknown-outcome (:unknownOutcome result)
+        error-code (:error-code result)
+        inference? (and (:native? tool) (fn? (:host-call tool))
+                        (#{"ai" "cf"} (:name tool))
+                        (= "ask" (get arguments "action" "ask")))
+        data (when inference?
+               (clean-data (:structuredContent result) config))
         ;; Text and structured results work with every chat model. Do not forward
         ;; binary image/audio content or server metadata into the conversation.
         result (-> result
@@ -196,7 +211,26 @@
                     (str (subs content 0 20000)
                          "\n[Tool result shortened to 20000 characters.]")))]
     (with-meta {:role "tool" :tool_call_id id :content content}
-      {::unknown-outcome unknown-outcome ::tool-error (:isError result)})))
+      {::unknown-outcome unknown-outcome ::tool-error (:isError result)
+       ::detail
+       (when inference?
+         (merge {:operation :inference}
+                (select-keys data [:provider :model :http_status :error-class
+                                   :error-code :parameter])
+                (select-keys (:ai/response data)
+                            [:finish :status :text-present :output-cap
+                             :input_count :output_count :thinking_count])
+                {:cost (:ai/cost data)
+                 :code (cond unknown-outcome :unknown-outcome
+                             (get progress/failure-labels error-code)
+                             error-code
+                             (:isError result) :tool-error)}))
+       ::answer
+       (when (and inference? (not (:isError result)) (string? (:text data)))
+         (-> (select-keys data [:provider :model :truncated :ai/cost])
+             (assoc :text (progress/clip (:text data) 1200)
+                    :truncated (or (:truncated data)
+                                   (> (count (:text data)) 1200)))))})))
 
 (defn- notify-tool! [config trace-state ordinal outcome]
   (let [row (some #(when (= ordinal (:call %)) %) (:calls @trace-state))
@@ -212,7 +246,8 @@
                      :skipped "Skipped "
                      :rejected "Rejected "
                      "Finished ") label)
-       :tool-event {:domain :host :call ordinal :label label :outcome outcome}
+       :tool-event {:domain :host :call ordinal :label label :outcome outcome
+                    :code (:code row)}
        :tool-budget {:used used :limit limit
                      :remaining (max 0 (- limit used))}})))
 
@@ -233,8 +268,19 @@
           (let [_ (swap! trace-state update :used inc)
                 _ (trace/outcome! trace-state ordinal :unknown true false)
                 _ (notify-tool! config trace-state ordinal :running)
-                reply (try (execute-call call config)
+                started (System/nanoTime)
+                reply (try (binding [diagnostics/*call* ordinal]
+                             (execute-call call config))
                            (catch Exception _
+                             (let [elapsed (min 300000
+                                             (long (/ (- (System/nanoTime) started)
+                                                      1000000)))]
+                               (trace/detail! trace-state ordinal
+                                              {:code :unknown-outcome
+                                               :elapsed_ms elapsed})
+                               (diagnostics/emit-tool!
+                                 {:call ordinal :outcome :unknown
+                                  :code :unknown-outcome :elapsed_ms elapsed}))
                              (notify-tool! config trace-state ordinal :unknown)
                              (doseq [n (range (inc ordinal)
                                              (+ start (count calls) 1))]
@@ -243,6 +289,20 @@
                                (notify-tool! config trace-state n :skipped))
                              (trace/fail! :tool-exception)))
                 unknown? (boolean (::unknown-outcome (meta reply)))]
+            (trace/detail! trace-state ordinal
+                           (assoc (::detail (meta reply))
+                                  :elapsed_ms
+                                  (min 300000
+                                    (long (/ (- (System/nanoTime) started)
+                                             1000000)))))
+            (when (or unknown? (::tool-error (meta reply)))
+              (let [row (some #(when (= ordinal (:call %)) %) (:calls @trace-state))]
+                (diagnostics/emit-tool!
+                  (merge {:call ordinal
+                          :outcome (if unknown? :unknown :error)}
+                         (select-keys row [:code :elapsed_ms :http_status])))))
+            (when-let [answer (::answer (meta reply))]
+              (swap! trace-state update :answers (fnil conj []) answer))
             (trace/outcome! trace-state ordinal
                             (cond unknown? :unknown
                                   (::tool-error (meta reply)) :error
@@ -282,7 +342,7 @@
                     {:tool-budget {:used 0 :limit limit :remaining limit}})
     (try
       (loop [messages (into [{:role "system" :content instructions}] messages)
-             used 0 seen #{} actions #{} halted false stage :initial
+             used 0 seen #{} actions #{} stage :initial
              response 1 accounting cost/initial]
         (let [_ (swap! trace-state assoc :requested 0)
               turn-messages
@@ -300,10 +360,14 @@
                               {::diagnostics/stage stage
                                :tools definitions
                                :tool_choice
-                               (if (and (< used limit) (not halted))
-                                 "auto" "none")}
+                               (if (< used limit) "auto" "none")}
                               (:on-progress config)
-                              (assoc :on-progress (:on-progress config)
+                              (assoc :on-progress
+                                     (fn [event]
+                                       ;; A message preceding function calls is
+                                       ;; a plan, not the run's final answer.
+                                       ((:on-progress config)
+                                        (dissoc event :answer :answer-limit?)))
                                      :progress-config
                                      (assoc config :progress-response
                                             response))))
@@ -316,7 +380,6 @@
                                           (if collection? calls [])
                                           by-name redact)]
               (when-not (vector? calls) (trace/fail! :malformed-batch))
-              (when halted (trace/fail! :uncertain-result))
               (when-not (every? #(and (map? %) (= "function" (:type %))
                                      (ai/nonblank-string? (:id %))
                                      (<= (count (:id %)) 256)) calls)
@@ -327,8 +390,7 @@
                 (trace/fail! :budget-exceeded))
               (let [parsed (mapv #(parse-call % by-name seen config) calls)
                     requested-actions
-                    (mapv #(vector (get-in % [:entry :name]) (:arguments %))
-                          parsed)]
+                    (mapv request-action parsed)]
                 (when (or (not= (count requested-actions)
                                 (count (distinct requested-actions)))
                           (some actions requested-actions))
@@ -338,24 +400,61 @@
                   (trace/fail! :exclusive-batch))
                 (let [{:keys [replies attempted halted]}
                       (execute-batch parsed config trace-state start)]
-                  (if-let [p (some-> (:staged config) deref)]
-                    {:result/value (proposals/preview p)
+                  (cond
+                    halted
+                    (let [report (trace/report trace-state limit :unknown-result)]
+                      (public/reviewed
+                        {:result/value
+                         (trace/summary report (:answers @trace-state))
+                         :result/data
+                         {:isError true :tool-trace report
+                          :execution (trace/public-report report)
+                          :mcp {:tool-calls (+ used attempted)}
+                          :ai/cost accounting}
+                         :result/public-data {:execution (trace/public-report report)}
+                         :result/public-error (trace/public-report report)}))
+                    (some-> (:staged config) deref)
+                    (let [p @(:staged config)]
+                      {:result/value (proposals/preview p)
                      :result/data
                      {:proposal (:id p)
-                      :mcp {:tool-calls (+ used attempted)} :ai/cost accounting}}
+                      :mcp {:tool-calls (+ used attempted)} :ai/cost accounting}})
+                    :else
                     (recur (ai/continue-messages provider messages body replies)
                            (long (+ used attempted))
                            (into seen (map :id calls))
-                           (into actions requested-actions) halted
+                           (into actions requested-actions)
                            :follow-up (inc response) accounting)))))
             (let [text (:content message)]
               (when-not (ai/nonblank-string? text)
                 (ai/fail (str "AI provider " (:name provider)
                               " returned no text response.")))
-              {:result/value (mcp/redact text config)
-               :result/data
-               (clean-data (assoc body :mcp {:tool-calls used}
-                                     :ai/cost accounting) config)}))))
+              (let [partial? (some #(and (= :inference (:operation %))
+                                         (= :error (:outcome %)))
+                                   (:calls @trace-state))
+                    report (when partial?
+                             (trace/report trace-state limit :partial-result))]
+                (public/reviewed
+                 {:result/value
+                 (if partial?
+                   (trace/summary report (:answers @trace-state))
+                   (mcp/redact text config))
+                 :result/data
+                 (cond->
+                   (clean-data
+                     (assoc body :mcp {:tool-calls used} :ai/cost accounting
+                                 :execution
+                                 (trace/public-report
+                                   (or report
+                                       (trace/report trace-state limit :completed))))
+                     config)
+                   partial? (assoc :isError true :tool-trace report
+                                   :execution (trace/public-report report)))
+                  :result/public-data
+                  {:execution (trace/public-report
+                                (or report
+                                    (trace/report trace-state limit :completed)))}
+                  :result/public-error (when partial? (trace/public-report report))}))))))
       (catch Exception e
         (let [reason (or (::trace/reason (ex-data e)) :provider-failure)
               report (trace/report trace-state limit reason)]
@@ -363,7 +462,8 @@
                   :when (= :rejected (:outcome row))]
             (notify-tool! config trace-state (:call row) :rejected))
           (throw (ex-info (get trace/reasons reason)
-                          (cond-> {:ai/error true :ai/tool-failure report}
+                          (cond-> {:ai/error true :ai/tool-failure report
+                                   :ai/answers (:answers @trace-state)}
                             (:ai/diagnostic (ex-data e))
                             (assoc :ai/diagnostic
                                    (:ai/diagnostic (ex-data e)))))))))))
@@ -409,8 +509,8 @@
                       %))
     config))
 
-(defn complete
-  ([provider model messages] (complete provider model messages {}))
+(defn- complete*
+  ([provider model messages] (complete* provider model messages {}))
   ([provider model messages
     {:keys [toolset actor additional-secrets on-progress pipeline-input
             max-tool-calls]}]
@@ -466,6 +566,11 @@
                                      :on-progress on-progress
                                      :progress-config config}) config)
            (ai/complete provider model (host-messages messages))))))))
+
+(defn complete
+  ([provider model messages] (complete provider model messages {}))
+  ([provider model messages options]
+   (cost/capture #(complete* provider model messages options))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))

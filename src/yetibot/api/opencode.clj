@@ -166,7 +166,13 @@
         priced? (and (rate? input) (rate? output))]
     {:id id :interface (if (and text? protocol) :chat :model-specific)
      :task {:name (if text? "Text Generation" (or type "Unknown"))}
-     :schema-summary {:api protocol}
+     :schema-summary
+     {:api protocol
+      :thinking_support
+      (let [flag (get-in model [:capabilities :reasoning] (:reasoning model))]
+        (cond (true? flag) "advertised"
+              (false? flag) "not-advertised" :else "unknown"))
+      :generation_budget "May include thinking, not just visible answer text."}
      :pricing (cond-> {:kind (cond (free-model? model) "free"
                                    (and priced? (pos? (+ input output))) "paid"
                                    :else "unknown")

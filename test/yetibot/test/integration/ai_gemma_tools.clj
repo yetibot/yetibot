@@ -185,10 +185,10 @@
         replies (filter #(= "tool" (:role %)) follow-up)]
     (count (:callbacks run)) => 1
     (count (child-posts run)) => 1
-    (count (:posts run)) => 3
-    (count (filter #(string/starts-with? (:content %) "This tool was not run")
-                   replies)) => 2
-    (get-in (last (parent-posts run)) [1 :tool_choice]) => "none"
+    (count (:posts run)) => 2
+    (count (parent-posts run)) => 1
+    (mapv :outcome (get-in run [:result :result/data :execution :calls]))
+    => [:unknown :skipped :skipped]
     (get-in run [:result :result/data :mcp :tool-calls]) => 1))
 
 (fact "untrusted actors cannot reach native callbacks or HTTP"
