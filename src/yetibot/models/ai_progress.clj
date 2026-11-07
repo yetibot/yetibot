@@ -11,9 +11,22 @@
    :incomplete-output "incomplete output"
    :request-rejected "provider rejected request"
    :zen-rate-limit "Zen rate limit"
+   :zen-free-usage-limit "Zen free-usage limit reached"
+   :zen-access-denied "Zen denied access"
    :not-sent "request not sent"
    :unknown-outcome "delivery uncertain; not retried"
-   :tool-error "tool returned an error"})
+   :tool-error "tool returned an error"
+   :invalid-arguments "invalid tool arguments"
+   :credential-input "credential-bearing input blocked"
+   :configuration-unavailable "provider configuration unavailable"
+   :credentials-unavailable "provider credentials unavailable"
+   :untrusted-source "trusted chat request required"
+   :policy-denied "operation denied by toolset policy"
+   :model-ineligible "model is not eligible for text chat"
+   :routing-unavailable "model routing metadata unavailable"
+   :catalog-invalid "provider returned invalid model metadata"
+   :catalog-unavailable "could not reach the provider's model catalog"
+   :conversation-unavailable "conversation context unavailable"})
 
 (defn clip [^String text limit]
   (let [end (min (.length text) (max 0 limit))

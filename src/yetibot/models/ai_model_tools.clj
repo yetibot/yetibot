@@ -25,7 +25,8 @@
     (catch Exception _ [])))
 
 (defn- invalid! []
-  (ai/fail "Invalid arguments for native AI text delegation."))
+  (ai/fail "Invalid arguments for native AI text delegation."
+           :invalid-arguments))
 
 (defn- text? [value maximum]
   (and (ai/nonblank-string? value) (<= (count value) maximum)))
@@ -34,7 +35,8 @@
   ;; Inspect raw strings, not JSON-escaped representations of credentials.
   (when (some #(and (string? %) (not= % (mcp/metadata-redact % config)))
               (tree-seq coll? seq value))
-    (ai/fail "AI delegation input contains configured credentials.")))
+    (ai/fail "AI delegation input contains configured credentials."
+             :credential-input)))
 
 (defn- selected
   ([config operation args] (selected config operation args false))
@@ -57,7 +59,8 @@
                     (and automatic? resolve? model)
                     (assoc :ai/verified-free true))]
      (when (and (= "cf" operation) (not (cf/provider-account provider)))
-       (ai/fail "Configure the Cloudflare Workers AI provider first."))
+       (ai/fail "Configure the Cloudflare Workers AI provider first."
+                :configuration-unavailable))
      (when (or model (not automatic?))
        (when-not (text? model 200) (invalid!))
        (policy/authorize! t actor provider model))
@@ -136,7 +139,7 @@
             (when (and (:providers (:toolset config))
                        (not-any? #(= (:name p) (:name %))
                                  (:providers (:toolset config))))
-              (ai/fail "Provider is not allowed for this toolset."))))))
+              (ai/fail "Provider is not allowed for this toolset." :policy-denied))))))
     (when (> (count (json/generate-string args)) 16384) (invalid!))
     (credential-input!
       (update config :secrets concat (keep :key (:providers (ai/config))))
@@ -221,7 +224,8 @@
     (when-not (and execution/*sensitive* actor
                    (= source (:chat-source execution/*event*))
                    (ai/nonblank-string? (:room source)))
-      (ai/fail "AI delegation requires a trusted chat request."))
+      (ai/fail "AI delegation requires a trusted chat request."
+               :untrusted-source))
     (execution/sensitive!)
     (policy/authorize! (:toolset config) actor)))
 
@@ -341,10 +345,9 @@
                                    (keep :key (:providers (ai/config)))
                                    [(:key p) credential-file])
                 _ (credential-input! redactions args)
-                _ (when (= "ask" action)
-                    (reset! selection
-                            {:provider (safe-text (:name p) redactions)
-                             :model (safe-text model redactions)}))
+                _ (reset! selection
+                          (cond-> {:provider (safe-text (:name p) redactions)}
+                            model (assoc :model (safe-text model redactions))))
                 models (when (or (#{"models" "categories"} action)
                                   (cf/provider-account p)) (ai/models p))
                 catalog (:catalog (meta models))]
@@ -362,7 +365,8 @@
                            (not-any? #(and (= model (:id %))
                                            (= :chat (:interface %)))
                                      (:models catalog)))
-                  (ai/fail "Model is not a catalogued chat interface."))
+                  (ai/fail "Model is not a catalogued chat interface."
+                           :model-ineligible))
                 (let [messages (if read-messages (read-messages)
                                  [{:role "user" :content (get args "prompt")}])
                       _ (credential-input! redactions messages)
@@ -413,7 +417,11 @@
           {:isError true :unknownOutcome (boolean (and @attempted? (not message)
                                                        (not not-sent?)))
            :error-code (or output-error
+                           (:ai/error-code data)
                            (when context-error? :conversation-unavailable)
+                           (when (and (not @attempted?)
+                                      (= :transport (:failure (:ai/diagnostic data))))
+                             :catalog-unavailable)
                            (when message (:code rejection))
                            (when rejected? :request-rejected)
                            (when not-sent? :not-sent))

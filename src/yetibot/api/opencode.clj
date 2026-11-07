@@ -184,7 +184,8 @@
   (when-not (= :chat (:interface record))
     (throw (ex-info
              "Zen model needs a catalogued text Chat Completions or Responses API. No inference was sent."
-             {:ai/error true :ai/request-not-sent true})))
+             {:ai/error true :ai/request-not-sent true
+              :ai/error-code :model-ineligible})))
   (when (and (:ai/verified-free provider)
              (not= "free" (get-in record [:pricing :kind])))
     (throw (ex-info

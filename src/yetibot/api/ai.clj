@@ -86,8 +86,11 @@
 
 (s/def ::config #(s/valid? ::settings (settings/ai %)))
 
-(defn fail [message]
-  (throw (ex-info message {:ai/error true})))
+(defn fail
+  ([message] (fail message nil))
+  ([message code]
+   (throw (ex-info message (cond-> {:ai/error true}
+                            code (assoc :ai/error-code code))))))
 
 ;; Store only the atomic choice, never provider records or credentials.
 (defonce runtime-default (atom nil))
@@ -99,7 +102,7 @@
       (fail (if (= :not-found error)
               "AI is not configured. Configure ai.providers first."
               (str "AI configuration is invalid. Check provider names, "
-                   "URLs and defaults."))))
+                   "URLs and defaults.")) :configuration-unavailable))
     (let [config (settings/ai value)
           {:keys [provider model]} @runtime-default]
       (if-not provider config
@@ -118,7 +121,7 @@
                           (:name (first (:providers config))))]
     (or (some #(when (= provider-name (:name %)) %) (:providers config))
         (fail (str "Unknown AI provider. Use ai providers to list "
-                   "available providers.")))))
+                   "available providers.") :configuration-unavailable))))
 
 (defn resolve-provider
   "Resolve only a selected request's credential (including metadata discovery).
@@ -138,7 +141,8 @@
             (throw (Exception.)))
           (-> provider (dissoc :key-file) (assoc :key token))))
       (catch Exception _
-        (fail "AI provider credentials are unavailable or invalid.")))))
+        (fail "AI provider credentials are unavailable or invalid."
+              :credentials-unavailable)))))
 
 (defn- request [method provider path params & [progress stage]]
   (let [context (diagnostics/context provider path (:form-params params) stage)
@@ -219,6 +223,7 @@
                 (str "Could not reach AI provider " (:name provider)
                      " or read its response."))
               (cond-> {:ai/error true :ai/diagnostic record}
+                (:ai/error-code data) (assoc :ai/error-code (:ai/error-code data))
                 @zen-rejection (assoc :ai/zen-rejection @zen-rejection)))))))))
 
 (defn default-model
@@ -244,7 +249,7 @@
             (when-not (and (sequential? data)
                            (every? #(nonblank-string? (:id %)) data))
               (fail (str "AI provider " (:name provider)
-                         " returned an invalid model list.")))
+                         " returned an invalid model list.") :catalog-invalid))
             ;; Unknown envelopes cannot establish uniqueness. Listing and
             ;; explicit requests still work without this readiness signal.
             (with-meta (vec (sort (distinct (map :id data))))
@@ -275,10 +280,12 @@
         (let [catalog (:catalog (meta (models provider)))
               record (some #(when (= model (:id %)) %) (:models catalog))]
           (opencode/model-provider provider record))
-        (catch Exception _
+        (catch Exception e
           (throw (ex-info
                    "Zen text model routing is unavailable. No inference was sent."
-                   {:ai/error true :ai/request-not-sent true}))))
+                   {:ai/error true :ai/request-not-sent true
+                    :ai/error-code (or (:ai/error-code (ex-data e))
+                                       :routing-unavailable)}))))
       provider)))
 
 (defn- cloudflare-messages [messages]

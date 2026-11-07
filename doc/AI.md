@@ -1599,6 +1599,25 @@ before bounds; safe action/schema selectors and numeric pagination can remain.
 This is not a general PII detector. The request-local trace is not persisted
 in a new store or global cache. Normal platform history/logging still applies.
 
+Failure notices identify the call ordinal, operation and public provider/model
+when retained, with an authored explanation from closed diagnostics. Catalog
+lookups retain diagnostics too; they are not mistaken for inference. For example,
+a model-list HTTP401 becomes authentication failure, while HTTP413 means the
+request was rejected as too large (the particular size limit may be unavailable).
+No raw provider messages or exception strings are exported. Unknown causes say
+that a specific reason was not retained; viewing errors never retries a request.
+
+Error details freezes only unsuccessful calls, with uncertainty first, at most
+three detailed rows. This fits the adapter's existing64-node/4000-character error
+budget instead of losing later failures behind success rows. These three receipts
+and aggregate failure counts are kept independently of the40-row chronological
+trace, including when failures occur after that trace fills. `omitted` counts
+additional unsuccessful rows; `trace_omitted` separately records omissions from
+the underlying trace. `truncated` marks either kind of omission/shortening. Full
+chronology and technical receipts remain in execution data, subject to its bounds.
+A non-inference tool failure preserves an independent terminal answer and adds
+failure notices; it does not silently turn the whole run into success.
+
 Structured `:result/data` has `:isError true` and `:tool-trace`, including a
 closed `:reason`, `:budget`, `:calls`, `:omitted` and `:truncated`. The
 structured report

@@ -32,11 +32,12 @@
    (doseq [[rule field] [[:users :user] [:adapters :adapter]]]
      (when (and (contains? t rule)
                 (not (some #{(get actor field)} (get t rule))))
-       (ai/fail "You do not have access to this AI toolset here.")))
+       (ai/fail "You do not have access to this AI toolset here." :policy-denied)))
    (when (and provider (:providers t)
               (not (some #(and (= (:name provider) (:name %))
                                (some #{model} (:models %))) (:providers t))))
-     (ai/fail "This provider/model is not allowed for the selected toolset."))
+     (ai/fail "This provider/model is not allowed for the selected toolset."
+              :policy-denied))
    t))
 
 (defn authorize-provider!
@@ -46,7 +47,8 @@
   (when (and (:providers t)
              (not-any? #(and (= (:name provider) (:name %)) (seq (:models %)))
                        (:providers t)))
-    (ai/fail "This provider/model is not allowed for the selected toolset."))
+    (ai/fail "This provider/model is not allowed for the selected toolset."
+             :policy-denied))
   t)
 
 (defn model-allowed? [t actor provider model]

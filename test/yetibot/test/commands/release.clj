@@ -15,7 +15,7 @@
     (get-in result [:result/data :view]) => "running"
     (string/includes? (:result/value result) "included in this running build")
     => true
-    (string/includes? (:result/value result) "!version") => true))
+    (string/includes? (:result/value result) "!grok") => true))
 
 (fact "latest/date/limit are passed as bounded typed options"
   (let [seen (atom nil)]
