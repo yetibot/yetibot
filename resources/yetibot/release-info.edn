@@ -7,7 +7,7 @@
    :summary "Keep safe diagnostics for model discovery as well as inference. Show the failed operation and model/provider with an authored reason such as authentication failure, denied access, unsupported generation parameter or request too large. Error details contains a bounded unsuccessful-call summary, not the successful rows that previously exhausted its snapshot budget. Explicitly mark unavailable reasons and omitted calls. Preserve independent answers, measured costs, policy, budgets and uncertainty stops; never expose raw exceptions or replay paid requests."
    :commands ["ai" "grok"]
    :requires []
-   :links []}
+   :links ["https://github.com/yetibot/yetibot/pull/1333"]}
   {:id "error-details-tree-controls"
    :date "2026-11-07"
    :component "core"
