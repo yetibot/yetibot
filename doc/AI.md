@@ -1532,8 +1532,12 @@ paying for another parent summary round.
 Tool-loop message items can be plans preceding function calls. They are not
 published as finished answers. Typed tool/search progress remains live. Partial
 sampling reports show the actual sanitized child answers obtained (with explicit
-shortening), not promises of future work. A terminal model failure retains these
-answers. Per-command captions use measured parent/delegated text API receipts;
+shortening), not promises of future work. Obtained answers lead the message,
+followed by a compact outcome count (for example, "1 answered · 1 hit its output
+limit"). Per-call caps, counters, timings and costs stay in frozen details rather
+than ordinary chat. Unknown outcomes still carry a visible no-automatic-retry
+warning. A terminal model failure retains earlier answers. Per-command captions
+use measured parent/delegated text API receipts;
 reported spend, estimates and unpriced requests remain distinct. External
 MCP/service fees, media and CLI are outside this caption scope unless included
 in a text API's reported bill; `ai usage` retains its broader ledger scope.
@@ -1545,8 +1549,8 @@ do not add them blindly. Closed logs distinguish Zen from generic providers,
 include anonymous run correlation/host ordinals when available, and never emit
 prompts, completions, reasoning text, credentials or raw vendor/tool errors.
 
-A failed tool loop returns a safe error summary with budget total, used,
-remaining and requested batch size, plus ordered redacted calls. Earlier
+A generic (non-model) tool-loop failure keeps its safe trace summary with budget
+total, used, remaining and requested batch size, plus ordered redacted calls. Earlier
 completed calls remain visible even if a later HTTP or event-stream request
 fails. Ordinal references (`#1`, `#2`, …), not raw provider IDs, identify calls.
 Only advertised policy-filtered tool identifiers are shown; unknown names are

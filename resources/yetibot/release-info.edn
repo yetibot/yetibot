@@ -4,10 +4,11 @@
    :date "2026-11-06"
    :component "app"
    :title "Keep real model answers, failures and measured costs"
-   :summary "Distinguish consumed output-limit, empty-answer and unsupported-output replies from uncertain delivery. Keep actual child answers and costs on partial failures, continue independent calls after known output errors, and stop without another parent request after uncertainty. Do not publish intermediate tool-loop plans as final answers. Discord captions use measured parent and delegated text-request accounting, with reported, estimated and unpriced amounts separate; already-delivered direct streams receive only a terminal cost receipt. Frozen execution details and closed diagnostics include safe statuses, caps, counters and timings without prompts, reasoning text or raw errors. No paid replay, silent budget increase or provider/default changes."
+   :summary "Keep actual child answers first, followed by compact outcome counts. Technical receipts stay in frozen details. Distinguish consumed output failures from uncertainty; continue independent authorized calls after known errors, but stop uncertainty without another parent request. Publish terminal answers, not intermediate plans. Captions separate measured parent/child reported, estimated and unpriced costs; direct streams receive only a terminal cost receipt. Retain safe statuses, caps, counters and timings without private payloads. No paid replay, silent budget increase or provider/default changes."
    :commands ["grok" "ai" "zen" "cf"]
    :requires ["Updated application; existing configured model/tool access"]
-   :links ["https://github.com/yetibot/yetibot/pull/1327"]}
+   :links ["https://github.com/yetibot/yetibot/pull/1327"
+           "https://github.com/yetibot/yetibot/pull/1328"]}
   {:id "paid-text-model-selection"
    :date "2026-11-06"
    :component "app"
