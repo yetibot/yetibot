@@ -1549,8 +1549,8 @@ do not add them blindly. Closed logs distinguish Zen from generic providers,
 include anonymous run correlation/host ordinals when available, and never emit
 prompts, completions, reasoning text, credentials or raw vendor/tool errors.
 
-A failed tool loop returns a safe error summary with budget total, used,
-remaining and requested batch size, plus ordered redacted calls. Earlier
+A generic (non-model) tool-loop failure keeps its safe trace summary with budget
+total, used, remaining and requested batch size, plus ordered redacted calls. Earlier
 completed calls remain visible even if a later HTTP or event-stream request
 fails. Ordinal references (`#1`, `#2`, …), not raw provider IDs, identify calls.
 Only advertised policy-filtered tool identifiers are shown; unknown names are
