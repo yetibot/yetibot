@@ -6,7 +6,6 @@
   (:require [cheshire.core :as json]
             [clojure.string :as string]
             [yetibot.models.ai-progress :as progress]
-            [yetibot.util.ai-cost :as cost]
             [yetibot.api.mcp :as mcp]))
 
 (def reasons
@@ -227,37 +226,61 @@
                         " which also marks any structured omissions.]"))
                  (when (empty? rows) "\nNo tool calls were attempted."))))))))
 
+(defn- outcome-kind [{:keys [outcome operation code]}]
+  (cond
+    (= :unknown outcome) :unknown
+    (#{:skipped :rejected} outcome) :not-run
+    (= :inference operation)
+    (case code
+      :output-limit :limit
+      :no-answer :empty
+      :unsupported-output :unsupported
+      :incomplete-output :incomplete
+      :request-rejected :rejected
+      :model-failed)
+    :else :tool-failed))
+
+(defn- outcome-line [report answers]
+  (let [counts (frequencies
+                 (map outcome-kind
+                      (remove #(= :success (:outcome %)) (:calls report))))
+        labels [[:limit "hit its output limit" "hit their output limit"]
+                [:empty "returned no text" "returned no text"]
+                [:unsupported "returned unsupported output"
+                 "returned unsupported output"]
+                [:incomplete "returned incomplete output"
+                 "returned incomplete output"]
+                [:rejected "request rejected" "requests rejected"]
+                [:model-failed "model failed" "models failed"]
+                [:tool-failed "tool failed" "tools failed"]
+                [:unknown "unconfirmed" "unconfirmed"]
+                [:not-run "not run" "not run"]]
+        parts (concat
+                (when (seq answers) [(str (count answers) " answered")])
+                (for [[kind singular plural] labels
+                      :let [n (get counts kind 0)] :when (pos? n)]
+                  (str n " " (if (= 1 n) singular plural))))]
+    (when (seq parts) (str (string/join " · " parts) "."))))
+
 (defn summary
   ([report] (summary report []))
   ([report answers]
-   (if-not (some #(= :inference (:operation %)) (:calls report))
+   (if-not (or (seq answers)
+               (some #(= :inference (:operation %)) (:calls report)))
      (trace-summary report)
-     (str
-       (get reasons (:reason report)) " " (count answers)
-       " model answer(s) obtained. Consumed requests were not retried."
-       (when (seq answers)
-         (str "\n\n"
-              (string/join "\n\n"
-                (map (fn [{:keys [provider model text truncated ai/cost]}]
-                       (str text (when truncated " [shortened]")
-                            "\n-# " provider "/" model " · "
-                            (yetibot.util.ai-cost/label cost))) answers))))
-       "\n\n"
-       (string/join "\n"
-         (for [row (:calls report)
-               :when (not= :success (:outcome row))]
-           (str "#" (:call row) " "
-                (or (:model row) (:tool row)) " — "
-                (or (progress/failure-labels (:code row))
-                    (name (:outcome row)))
-                (when (= :inference (:operation row))
-                  (str " · " (cost/label (:cost row))))
-                (when-let [n (:http_status row)] (str " · HTTP " n))
-                (when-let [n (:output_count row)] (str " · output=" n))
-                (when-let [n (:thinking_count row)] (str " · thinking=" n))
-                (when-let [n (:output-cap row)] (str " · cap=" n))
-                (when-let [n (:elapsed_ms row)] (str " · " n "ms")))))
-       (when (:truncated report)
-         "\nSome execution details were omitted from this bounded report.")
-       "\nTool budget: used=" (get-in report [:budget :used])
-       "/" (get-in report [:budget :limit]) "."))))
+     (string/join "\n\n"
+       (remove string/blank?
+         [(if (seq answers)
+            (string/join "\n\n"
+              (map (fn [{:keys [provider model text truncated]}]
+                     (str text (when truncated " [shortened]")
+                          "\n-# " provider "/" model)) answers))
+            "No model answers returned.")
+          (outcome-line report answers)
+          (if (= :unknown-result (:reason report))
+            (str "Stopped after an uncertain outcome. "
+                 "Do not retry unconfirmed calls automatically.")
+            (when-not (#{:partial-result :completed} (:reason report))
+              (get reasons (:reason report))))
+          (when (:truncated report)
+            "Some execution details were omitted.")])))))
