@@ -1,6 +1,15 @@
 {:schema_version 1
  :changes
- [{:id "configurable-ai-budgets"
+ [{:id "error-details-tree-controls"
+   :date "2026-11-07"
+   :component "core"
+   :title "Explore errors with the same expand and collapse controls as data"
+   :summary "Error details now use the same whole-tree depth and paging controls as Explore data, rather than a separate field dropdown. Start with two levels, expand or collapse nested call diagnostics, and hide the view to restore the exact original answer. Read only retained public snapshots; preserve ownership, revision and nonce checks, attachments, elapsed time and privacy. Inspection does not rerun tools or make model requests."
+   :commands []
+   :requires ["Updated Discord adapter in core"]
+   :links ["https://github.com/yetibot/yetibot/pull/1332"
+           "https://github.com/yetibot/core/pull/345"]}
+  {:id "configurable-ai-budgets"
    :date "2026-11-07"
    :component "app"
    :title "Raise AI budgets and make defaults overridable"
