@@ -17,7 +17,8 @@
             [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.test.support.ai-execution :as execution]
-            [yetibot.util.ai-limits :as limits]))
+            [yetibot.util.ai-limits :as limits]
+            [yetibot.util.ai-capacity :as capacity]))
 
 (fact "structured model output compiles redaction patterns once per traversal"
   (let [compile-pattern re-pattern
@@ -60,6 +61,8 @@
 (def catalog
   {:source :cloudflare-workers-ai
    :models [{:id "@cf/vendor/chat" :task {:name "Text Generation"}
+             :limits {:context_window {:value 131072}
+                      :max_output_tokens {:value 65536}}
              :interface :chat}
             {:id "@cf/cloudflare/clef" :interface :decision}
             {:id "@cf/cloudflare/clairic" :interface :extraction}
@@ -653,10 +656,12 @@
 
 (def zen-catalog
   [{:id "a-free" :type "chat"
+    :limit {:context 131072 :output 65536}
     :modalities {:input ["text"] :output ["text"]}
     :api {:chat-completions {:base_url "https://ignored.invalid"}}
     :cost {:text {:input {:price 0} :output {:price 0}}}}
    {:id "b-paid" :type "chat"
+    :limit {:context 131072 :output 65536}
     :modalities {:input ["text"] :output ["text"]}
     :api {:chat-completions {:base_url "https://ignored.invalid"}}
     :cost {:text {:input {:price 0.3M} :output {:price 1.2M}}}}
@@ -762,6 +767,130 @@
           (:unknownOutcome result) => false
           (string/includes? (get-in result [:structuredContent :error]) "400")
           => true)))))
+
+(fact "capacity checks use reported maxima, never defaults or token estimates"
+  (doseq [value [nil false 0 -1 12.5 ##Inf "32,000" "3e4" "9999999999"]]
+    (fact (:status (capacity/generation
+                     {:limits {:context_window {:value value}}} 32768))
+          => "unknown"))
+  (:status (capacity/generation
+             {:schema-summary {:token-parameters {:max_tokens {:default 256}}}}
+             32768)) => "unknown"
+  (:output_limit (capacity/generation
+                   {:limits {:max_output_tokens {:value "65536"}}
+                    :schema-summary {:token-parameters
+                                     {:max_tokens {:maximum 8192}}}} 32768))
+  => 8192)
+
+(fact "Zen published output maximum stops before reservation or inference"
+  (with-zen-catalog
+    (fn [_ _]
+      (let [effects (atom [])
+            records (mapv #(assoc % :limit {:context 131072 :output 32000})
+                          zen-catalog)]
+        (with-redefs [http/get (fn [& _] {:status 200 :body {:data records}})
+                      http/post (fn [& _] (swap! effects conj :inference))
+                      yetibot.core.util.ai-usage/capture!
+                      (fn [& _] (swap! effects conj :reservation))]
+          (let [e (try
+                    (ai/chat (ai/provider (ai/config) "zen") "b-paid"
+                             [{:role "user" :content "question"}]
+                             {:max-output-tokens 32768})
+                    (catch Exception e e))]
+            (:ai/request-not-sent (ex-data e)) => true
+            (:ai/error-code (ex-data e)) => :model-capacity-exceeded
+            (get-in (ex-data e) [:ai/capacity :output_limit]) => 32000
+            @effects => []))))))
+
+(fact "excluded automatic discovery makes no credential or model-list request"
+  (in-request
+    (fn [request]
+      (let [local (assoc parent :name "local" :automatic-discovery false)
+            cfg (-> settings (update :providers conj local)
+                    (assoc :default-provider "local"))
+            host (update-in config [:toolset :providers] conj
+                            {:name "local" :models ["p"]})
+            effects (atom [])]
+        (with-redefs [ai/config (constantly cfg)
+                      ai/resolve-provider (fn [p] (swap! effects conj :credential) p)
+                      ai/models (fn [_] (swap! effects conj :models) ["p"])
+                      ai/complete (fn [& _] {:result/value "explicit answer"})]
+          (get-in (models/call! host "ai" {"action" "providers"}
+                               (:chat-source request))
+                  [:structuredContent :providers])
+          => ["parent" "child" "cloudflare"]
+          (let [result (models/call! host "ai"
+                         {"action" "models" "provider" "local"}
+                         (:chat-source request))]
+            (:isError result) => true
+            (:unknownOutcome result) => false
+            (:error-code result) => :discovery-excluded)
+          @effects => []
+          (:name (ai/provider (ai/config) nil)) => "local"
+          ;; Direct inspection and trusted top-level chat are not auto-discovery.
+          (ai/models local) => ["p"]
+          (get-in (models/chat! host {"provider" "local" "prompt" "explicit"}
+                    (:chat-source request)
+                    (fn [] [{:role "user" :content "explicit"}]))
+                  [:structuredContent :text]) => "explicit answer")))))
+
+(fact "known oversized generation is rejected before child inference without clamping"
+  (in-request
+    (fn [request]
+      (let [sent (atom []) host (assoc config :max-output-tokens 32768)
+            record (first (:models catalog))]
+        (with-redefs [ai/complete (fn [_ _ _ options]
+                                   (swap! sent conj (:max-output-tokens options))
+                                   {:result/value "answer"})]
+          (doseq [bad [(assoc record :limits {:context_window {:value "32000"}})
+                       (assoc record :limits {:context_window {:value 32768}})
+                       (assoc record :limits {:max_output_tokens {:value 8192}})
+                       (assoc record :schema-summary
+                                     {:token-parameters {:max_tokens {:maximum 4096}}})]]
+            (with-redefs [cf/catalog (constantly (assoc catalog :models [bad]))]
+              (let [result (models/call! host "cf"
+                             {"action" "ask" "prompt" "question"}
+                             (:chat-source request))]
+                (fact (:isError result) => true)
+                (fact (:unknownOutcome result) => false)
+                (fact (:error-code result) => :model-capacity-exceeded))))
+          (fact @sent => [])
+          (with-redefs [cf/catalog (constantly
+                                    (assoc catalog :models
+                                      [(assoc record :limits
+                                         {:context_window {:value 131072}
+                                          :max_output_tokens {:value 65536}})]))]
+            (:isError (models/call! host "cf"
+                         {"action" "ask" "prompt" "question"}
+                         (:chat-source request))) => nil)
+          @sent => [32768])))))
+
+(fact "automatic candidate pages exclude incompatible and unknown generation limits"
+  (in-request
+    (fn [request]
+      (let [record (first (:models catalog))
+            records [(assoc record :id "@cf/test/small"
+                                  :limits {:context_window {:value 32000}})
+                     (dissoc (assoc record :id "@cf/test/unknown") :limits)
+                     (assoc record :id "@cf/test/large"
+                                   :limits {:context_window {:value 131072}
+                                            :max_output_tokens {:value 65536}})]]
+        (with-redefs [cf/catalog (constantly (assoc catalog :models records))]
+          (let [invoke (fn [args]
+                         (:structuredContent
+                           (models/call! (assoc config :max-output-tokens 32768)
+                             "cf" args (:chat-source request))))
+                page (invoke {"action" "models"})
+                all (invoke {"action" "models" "category" "all"})]
+            (mapv :id (:models page)) => ["@cf/test/large"]
+            (:generation_incompatible page) => 1
+            (:generation_unknown page) => 1
+            (mapv :id (:models all))
+            => ["@cf/test/large" "@cf/test/small" "@cf/test/unknown"]
+            (mapv #(get-in % [:generation_compatibility :status]) (:models all))
+            => ["within-known-limits" "incompatible" "unknown"]
+            (every? #(= "not-verified" (get-in % [:generation_compatibility :input_fit]))
+                    (:models all)) => true))))))
 
 (fact "initial parent failure retains actual stage, count and choice"
   (in-request

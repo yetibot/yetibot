@@ -49,6 +49,35 @@ a compatible explicit value rather than retrying automatically. No consumed
 request is replayed, no uncertain outcome is retried, and no cap is silently
 raised. Existing context, response-display and inspection bounds are separate.
 
+## Capacity checks and automatic discovery
+
+Generation allowances are not automatically reduced to make a model accept a
+request. Native candidate pages use published Cloudflare bounds and Zen's
+`limit.context`, `limit.input` and `limit.output` metadata. They omit models
+whose known generation bounds reject the pinned allowance, and omit unknown
+bounds from the default candidate pool. `category=all` inspects those records;
+`generation_incompatible` and `generation_unknown` count the considered records
+before generation filtering. The cursor follows returned records, not hidden
+ones. Explicit choices still undergo known-capacity preflight before inference.
+
+A context window includes input, reasoning and output. The output allowance
+alone must leave input room; a reported output maximum is separate. A schema's
+`default` is not a maximum. `generation_compatibility.input_fit` remains
+`not-verified`: necessary generation bounds do not prove the actual tokenized
+input fits. Unknown limits never become compatibility guarantees. A host
+rejection performs no inference or usage reservation and does not authorize an
+automatic lower-cap retry, model rotation or paid fallback. Low-level callers
+without advertised metadata cannot establish capacity from missing information.
+
+A provider record may set `:automatic-discovery false` (default true). This
+excludes it from native provider/model discovery, unqualified `ai models`,
+background catalog refresh and implicit model-ID routing. Queued refreshes
+recheck current configuration. It does not remove the provider, change the
+global default, rotate credentials, or block explicit `ai models <provider>`
+and direct chat. `ai providers` still lists configured providers with an
+`automatic_discovery` field. This is a discovery-pool choice, not a claim that
+authentication is repaired or that catalog access proves inference access.
+
 ## Usage and cost reports
 
 Use `ai usage` for the current UTC month, `ai usage YYYY-MM` for a calendar

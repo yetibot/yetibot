@@ -60,7 +60,8 @@
                        (let [normalized
                              (lift-fields p [:tool-calling :tool-choice
                                              :native-tools :max-turns
-                                             :gateway-id :key-file])]
+                                             :gateway-id :key-file
+                                             :automatic-discovery])]
                          (cond-> normalized
                            (and (map? (:key p))
                                 (contains? normalized :key-file))

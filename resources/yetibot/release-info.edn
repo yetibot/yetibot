@@ -1,6 +1,14 @@
 {:schema_version 1
  :changes
- [{:id "actionable-tool-errors"
+ [{:id "prevent-invalid-ai-requests"
+   :date "2026-11-07"
+   :component "app"
+   :title "Skip models that cannot fit the generation budget"
+   :summary "Keep requested budgets unchanged. Native candidate pages exclude unknown or incompatible generation bounds; explicit incompatible choices fail before inference rather than silently shrinking the cap. Retain published Zen context and output limits as well as Cloudflare constraints, without treating defaults or token estimates as maxima or full input-fit proof. A provider can opt out of automatic discovery and background routing observations while keeping explicit access, credentials and the global default unchanged. No consumed request replay, paid fallback or automatic retry."
+   :commands ["ai" "grok" "cf" "zen"]
+   :requires []
+   :links []}
+  {:id "actionable-tool-errors"
    :date "2026-11-07"
    :component "app"
    :title "Explain failed AI tool calls instead of hiding them behind success rows"

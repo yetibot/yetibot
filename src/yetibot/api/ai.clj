@@ -14,6 +14,7 @@
             [yetibot.core.util.ai-usage :as usage]
             [yetibot.util.ai-config :as settings]
             [yetibot.util.ai-limits :as limits]
+            [yetibot.util.ai-capacity :as capacity]
             [yetibot.util.ai-cost :as cost])
   (:import [java.io File FileInputStream]
            [java.net URI]
@@ -43,6 +44,7 @@
                           (re-matches #"[a-zA-Z0-9_-]{1,64}" %)))
 (s/def ::tool-calling #(or (boolean? %) (contains? #{"true" "false"} %)))
 (s/def ::tool-choice #{"standard" "omit"})
+(s/def ::automatic-discovery boolean?)
 (s/def ::api #{"chat-completions" "responses"})
 (s/def ::native-tools
   (s/and (s/coll-of #{"web_search" "x_search"} :kind vector?)
@@ -56,7 +58,8 @@
   (s/and
     (s/keys :req-un [::name ::url]
             :opt-un [::key ::key-file ::model ::tool-calling ::tool-choice ::api
-                     ::native-tools ::max-turns ::gateway-id])
+                     ::native-tools ::max-turns ::gateway-id
+                     ::automatic-discovery])
     #(not (and (contains? % :key) (contains? % :key-file)))
     #(or (= "responses" (:api %))
          (not (or (seq (:native-tools %)) (contains? % :max-turns))))))
@@ -122,6 +125,12 @@
     (or (some #(when (= provider-name (:name %)) %) (:providers config))
         (fail (str "Unknown AI provider. Use ai providers to list "
                    "available providers.") :configuration-unavailable))))
+
+(defn automatic-discovery? [provider]
+  (not (false? (:automatic-discovery provider))))
+
+(defn discovery-providers [config]
+  (filterv automatic-discovery? (:providers config)))
 
 (defn resolve-provider
   "Resolve only a selected request's credential (including metadata discovery).
@@ -342,6 +351,9 @@
     (fail "AI output token limit must be an integer from 1 to 262144."))
   (let [options (merge (limits/effective options) options)
         provider (prepare-provider provider model)
+        _ (when-let [record (::capacity/model provider)]
+            (when (= model (:id record))
+              (capacity/check! record (:max-output-tokens options))))
         _ (when (and (opencode/provider? provider)
                      (not (opencode/configured-key? (:key provider))))
             (fail (str "OpenCode Zen requires an API key. Configure the "
