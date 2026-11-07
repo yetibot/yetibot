@@ -265,6 +265,8 @@
            data (mapv (fn [p]
                         {:name (:name p) :default_model (:model p)
                          :selected (= selected (:name p))
+                         :automatic_discovery
+                         (ai/automatic-discovery? p)
                          :interface (or (:api p) "chat-completions")})
                       (:providers config))]
        (inspection/reviewed {:result/value (mapv :name data)
@@ -278,7 +280,8 @@
   (safely
     (fn []
       (let [config (ai/config)
-            providers (if provider-name [(ai/provider config provider-name)] (:providers config))
+            providers (if provider-name [(ai/provider config provider-name)]
+                        (ai/discovery-providers config))
             results (mapv (fn [provider]
                             (safely #(let [models (ai/models provider)]
                                        (cond-> {:models models}

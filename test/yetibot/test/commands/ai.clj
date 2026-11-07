@@ -109,12 +109,16 @@
     (ai/providers-cmd {})
     => {:result/value ["local" "hosted"]
         :result/data [{:name "local" :default_model "llama3"
+                       :automatic_discovery true
                        :selected false :interface "chat-completions"}
                       {:name "hosted" :default_model "chat"
+                       :automatic_discovery true
                        :selected true :interface "chat-completions"}]
         :result/public-data [{:name "local" :default_model "llama3"
+                              :automatic_discovery true
                               :selected false :interface "chat-completions"}
                              {:name "hosted" :default_model "chat"
+                              :automatic_discovery true
                               :selected true :interface "chat-completions"}]}
     (ai/prompt-cmd {:match "hello"})
     => ["hosted" "chat"
@@ -134,6 +138,20 @@
     (ai/prompt-cmd {:match "hello"})
     => {:result/error "No default model configured for this provider. Use --model <model> or configure its model."})
   (api/provider (dissoc config :default-provider) nil) => local-provider)
+
+(fact "automatic discovery excludes an opted-out default without removing explicit access"
+  (let [cfg (-> config (assoc-in [:providers 0 :automatic-discovery] false)
+                (assoc :default-provider "local"))
+        queried (atom [])]
+    (with-redefs [api/config (constantly cfg)
+                  api/models (fn [p] (swap! queried conj (:name p)) ["model"])]
+      (get-in (ai/providers-cmd {}) [:result/data 0 :automatic_discovery]) => false
+      (:result/value (ai/models-cmd {:match ["models" nil]}))
+      => ["hosted: model"]
+      @queried => ["hosted"]
+      (:result/value (ai/models-cmd {:match ["models local" "local"]}))
+      => ["local: model"]
+      (:name (api/provider (api/config) nil)) => "local")))
 
 (facts "models stay grouped, even when one provider fails"
   (with-redefs [api/config (constantly config)

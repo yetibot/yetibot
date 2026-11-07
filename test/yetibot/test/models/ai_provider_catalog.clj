@@ -55,6 +55,28 @@
                   (fn [_ prompt] [{:role "user" :content prompt}])]
       (try (f) (finally (catalog/stop!))))))
 
+(deftest disabled-discovery-cancels-queued-work-and-routing-observations
+  (let [{:keys [cache jobs current]} (fixture)
+        requested (atom [])]
+    (with-redefs [ai/models (fn [p] (swap! requested conj (:name p)) (catalogs p))]
+      (catalog/warm! cache)
+      ;; Disable after enqueue, before the worker resolves current config.
+      (swap! current assoc-in [:providers 0 :automatic-discovery] false)
+      (drain! jobs)
+      (is (= ["two"] @requested))
+      (catalog/warm! cache)
+      (drain! jobs)
+      (is (= 1 (count @(:state cache))))
+      (is (= "two" (infer cache @current "two-only")))
+      (is (:result/error (safe-infer cache @current model)))
+      (is (= "one" (:name (ai/provider @current "one"))))
+      (is (= "two" (:default-provider @current)))
+      (swap! current update-in [:providers 0] dissoc :automatic-discovery)
+      (catalog/warm! cache)
+      (drain! jobs)
+      (is (= ["two" "one"] @requested))
+      (is (= "one" (infer cache @current model))))))
+
 (deftest unique-exact-id-and-collisions
   (let [{:keys [cache jobs]} (fixture)]
     (with-redefs [ai/models catalogs catalog/shared-cache cache]

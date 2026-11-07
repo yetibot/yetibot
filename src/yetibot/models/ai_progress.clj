@@ -23,6 +23,8 @@
    :untrusted-source "trusted chat request required"
    :policy-denied "operation denied by toolset policy"
    :model-ineligible "model is not eligible for text chat"
+   :discovery-excluded "provider excluded from automatic discovery"
+   :model-capacity-exceeded "generation allowance exceeds advertised model capacity; request not sent"
    :routing-unavailable "model routing metadata unavailable"
    :catalog-invalid "provider returned invalid model metadata"
    :catalog-unavailable "could not reach the provider's model catalog"

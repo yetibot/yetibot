@@ -2,7 +2,8 @@
   "OpenCode Zen's catalog lives outside the OpenAI chat API base path."
   (:require [cheshire.core :as json]
             [clj-http.client :as http]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [yetibot.util.ai-capacity :as capacity])
   (:import [java.io ByteArrayOutputStream InputStream]
            [java.net URI]))
 
@@ -166,6 +167,14 @@
         priced? (and (rate? input) (rate? output))]
     {:id id :interface (if (and text? protocol) :chat :model-specific)
      :task {:name (if text? "Text Generation" (or type "Unknown"))}
+     :limits (into {}
+               (keep (fn [[field remote]]
+                       (when-let [n (capacity/token-count
+                                      (get-in model [:limit remote]))]
+                         [field {:value n :unit "tokens"
+                                 :source (str "limit." (name remote))}])))
+               [[:context_window :context] [:max_input_tokens :input]
+                [:max_output_tokens :output]])
      :schema-summary
      {:api protocol
       :thinking_support
@@ -191,9 +200,10 @@
     (throw (ex-info
              "This conversation's model is no longer verified free. No inference was sent."
              {:ai/error true :ai/request-not-sent true})))
-  ;; Only the protocol changes; no remote host/base_url is ever followed.
+  ;; Retain closed model metadata; never follow a remote host/base_url.
   (assoc provider :api (get-in record [:schema-summary :api])
-                  ::selected-model (:id record) ::pricing (:pricing record)))
+                  ::selected-model (:id record) ::pricing (:pricing record)
+                  ::capacity/model record))
 
 (defn model-prices
   "Public USD/1M text-token list rates. No credentials or advertised URLs.

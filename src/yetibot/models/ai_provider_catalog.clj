@@ -22,7 +22,8 @@
   ;; selected discovery request. No connection or credential enters state/jobs.
   (let [value (mapv #(get provider %)
                     [:name :url :key :key-file :gateway-id :model :api
-                     :tool-calling :tool-choice :native-tools :max-turns])]
+                     :tool-calling :tool-choice :native-tools :max-turns
+                     :automatic-discovery])]
     (string/join
       (map #(format "%02x" (bit-and 255 %))
            (.digest (MessageDigest/getInstance "SHA-256")
@@ -93,7 +94,7 @@
   "Background-only scheduling. Reconcile current config before bounded jobs."
   ([cache] (warm! cache ((:current-config cache))))
   ([cache config]
-   (let [providers (:providers config)
+   (let [providers (ai/discovery-providers config)
          keys (if (<= (count providers) max-entries)
                 (set (map fingerprint providers)) #{})]
      (swap! (:state cache) select-keys keys)
@@ -101,13 +102,13 @@
 
 (defn infer-provider
   "Immediate exact-ID routing, requiring fresh complete observations of ALL
-   current providers. No IO, queueing, fallback, or credential file reads."
+   discovery-enabled providers. No IO, queueing, fallback or credential reads."
   [cache config model]
-  (let [providers (:providers config)
+  (let [providers (ai/discovery-providers config)
         state @(:state cache)
         now ((:clock cache))
         entries (mapv #(get state (fingerprint %)) providers)]
-    (when-not (and (<= 2 (count providers) max-entries)
+    (when-not (and (<= 1 (count providers) max-entries)
                    (every? #(and (:good-at %)
                                  (< (- now (:good-at %)) freshness-ms)
                                  (contains? % :ids)) entries))

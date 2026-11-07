@@ -116,7 +116,7 @@
                           (mapv #(assoc % :description "fixture-key details"
                                          :unknown "private remote field")
                                 entries)))
-        config {:servers []}]
+        config {:servers [] :max-output-tokens 1024}]
     (execution/in-event execution/request "cf models"
       (fn [request]
         (with-redefs [ai/config (constantly settings)
@@ -144,7 +144,8 @@
         catalog (assoc catalog :models
                        (mapv #(assoc oversized :id (format "@cf/test/m%02d" %))
                              (range 8)))
-        config {:servers [] :toolset {:name "test" :providers
+        config {:servers [] :max-output-tokens 1024
+                :toolset {:name "test" :providers
                                      [{:name "cloudflare"}]}}]
     (execution/in-event execution/request "cf models"
       (fn [request]
