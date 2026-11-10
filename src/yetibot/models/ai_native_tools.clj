@@ -8,6 +8,7 @@
             [yetibot.models.ai-cron-tools :as cron]
             [yetibot.models.ai-history :as history]
             [yetibot.models.ai-inference-tools :as inference]
+            [yetibot.models.ai-kroki-tools :as kroki]
             [yetibot.models.ai-media-tools :as media]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-react-tools :as react]
@@ -131,14 +132,20 @@
                                  (util/available-tools)
                                  (aliases/available-tools)
                                  (weather/available-tools)
-                                 (cron/available-tools))))
+                                 (cron/available-tools)
+                                 (kroki/available-tools))))
         selected (get t :native-tools defaults)]
     (cond->> selected
       (empty? wise-tools) (filterv #(not= "wise" %))
-      (empty? (react/available-tools)) (filterv #(not= "react" %)))))
+      (empty? (react/available-tools)) (filterv #(not= "react" %))
+      (empty? (kroki/available-tools))
+      (filterv #(not (contains? kroki/definitions %))))))
 
 (defn- adapter [config operation]
   (cond
+    (contains? kroki/definitions operation)
+    {:definition (get kroki/definitions operation)
+     :arguments kroki/arguments! :call kroki/call!}
     (contains? cron/definitions operation)
     {:definition (get cron/definitions operation)
      :arguments cron/arguments! :call cron/call!}

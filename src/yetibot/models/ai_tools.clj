@@ -7,6 +7,7 @@
             [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
+            [yetibot.core.util.public-result :as public-result]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tool-trace :as trace]
             [yetibot.models.ai-progress :as progress]
@@ -143,7 +144,12 @@
         arguments (get-in call [:function :arguments])]
     (when (contains? seen id) (trace/fail! :repeated-id))
     (when-not (contains? entries name) (trace/fail! :unavailable-tool))
-    (when-not (and (string? arguments) (<= (count arguments) 16384))
+    (when-not (and (string? arguments)
+                   (<= (count arguments)
+                       (if (and (get-in entries [name :tool :native?])
+                                (= "kroki_render" (get-in entries [name :tool :name])))
+                         (get-in entries [name :tool :max-argument-length] 16384)
+                         16384)))
       (trace/fail! :invalid-arguments))
     (let [parsed (try (json/parse-string arguments) (catch Exception _ nil))]
       (when-not (map? parsed)
@@ -544,7 +550,9 @@
          config (adapter-servers (toolsets/select (mcp/config) toolset)
                                  actor)
          config (merge config (limits/effective config options)
-                       {:on-progress on-progress :staged (atom nil)})]
+                       {:on-progress on-progress :staged (atom nil)
+                        :kroki-artifacts (:kroki-artifacts options)
+                        :kroki-errors (:kroki-errors options)})]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (when (and (seq (get-in config [:toolset :native-tools]))
@@ -595,10 +603,56 @@
                         {:max-output-tokens
                          (:max-output-tokens config)})))))))
 
+(defn- with-kroki-results [result artifacts errors]
+  (if (and (empty? artifacts) (empty? errors)) result
+    (let [artifacts (vec (distinct artifacts))
+          text (str (:result/value result))
+          missing (remove #(some #{(:url %)} (string/split-lines text)) artifacts)]
+      (public/reviewed
+        (-> result
+            (assoc :result/value
+                   (str text (when (seq missing)
+                               (str "\n\nGenerated diagrams:\n"
+                                    (string/join "\n" (map :url missing))))))
+            (cond-> (seq artifacts)
+              (assoc-in [:result/data :artifacts] artifacts)
+              (seq artifacts)
+              (assoc :result/public-data
+                     (assoc (:result/public-data (public-result/projection result) {})
+                            :artifacts artifacts))
+              (seq errors)
+              (assoc-in [:result/data :kroki_errors] errors)
+              (seq errors)
+              (update :result/public-error #(assoc (or % {}) :kroki errors))))))))
+
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
-   (cost/capture #(complete* provider model messages options))))
+   (let [artifacts (atom []) errors (atom [])]
+     (cost/capture
+       #(with-kroki-results
+          (try
+            (complete* provider model messages
+                       (assoc options :kroki-artifacts artifacts :kroki-errors errors))
+            (catch Exception e
+              (if (and (empty? @artifacts) (empty? @errors)) (throw e)
+                (let [report (:ai/tool-failure (ex-data e))
+                      notice (if (seq @artifacts)
+                               "The assistant did not finish; generated diagrams were retained."
+                               "The assistant did not finish; Kroki diagnostics were retained.")]
+                  (public/reviewed
+                    {:result/value
+                     (if report
+                       (trace/summary report (:ai/answers (ex-data e)) notice)
+                       notice)
+                     :result/data (cond-> {:isError true}
+                                    report (assoc :tool-trace report
+                                                  :execution (trace/public-report report)))
+                     :result/public-data (when report {:execution (trace/public-report report)})
+                     :result/public-error
+                     (or (when report (trace/public-errors report))
+                         {:service "ai" :stage "answer" :kind "assistant-failure"})})))))
+          @artifacts @errors)))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))

@@ -94,6 +94,15 @@ means free, and CLI summaries are aggregates rather than HTTP traces.
 See [AI usage and cost reports](AI_USAGE.md) for syntax, units, failure behavior,
 frozen data and coverage limits. No new provider billing credentials are needed.
 
+## Kroki diagrams
+
+With the upgraded Kroki plugin, native `kroki_types` discovers registered diagram
+engines and `kroki_render` renders literal source into verified artifacts. Both
+use normal caller/toolset/provider authorization; they do not execute command
+strings. The host delivers generated media independently of the model's prose,
+with structured artifact data and reviewed Kroki error diagnostics. See
+[Kroki commands, native tools and release ordering](KROKI.md).
+
 ## Configuration
 
 Add `:ai` inside `:yetibot` in `config/config.edn` (or your `CONFIG_PATH` file):
