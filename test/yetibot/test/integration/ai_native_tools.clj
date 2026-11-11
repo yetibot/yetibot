@@ -2,6 +2,7 @@
   (:require [cheshire.core :as json]
             [clj-http.client :as client]
             [clojure.java.jdbc :as jdbc]
+            [clojure.java.io :as io]
             [clojure.string :as string]
             [midje.sweet :refer [fact facts => contains]]
             [yetibot.api.ai :as ai]
@@ -43,6 +44,16 @@
 (def implicit-config (update-in config [:toolsets 0] dissoc :native-tools))
 (def provider {:name "grok" :url "http://localhost/v1"})
 (def messages [{:role "user" :content "Find the launch discussion."}])
+
+(defn with-plugin-tools [names]
+  (into names (when (io/resource "yetibot_kroki/client.clj")
+                ["yetibot/kroki_types" "yetibot/kroki_render"])))
+
+(def default-tool-names
+  (with-plugin-tools
+    ["yetibot/help" "yetibot/history" "yetibot/history_count"
+     "yetibot/release_info" "yetibot/util" "yetibot/aliases"
+     "yetibot/weather" "yetibot/cron"]))
 
 (defn error-message [f]
   (try (f)
@@ -142,17 +153,11 @@
                         mcp/with-tools
                         (fn [cfg f] (f (if (seq (:servers cfg)) [remote] [])))]
             (fact (tools/tool-names "yetibot" actor)
-                  => ["yetibot/help" "yetibot/history"
-                      "yetibot/history_count" "yetibot/release_info"
-                      "yetibot/util" "yetibot/aliases"
-                      "yetibot/weather" "yetibot/cron"])
+                  => default-tool-names)
             (fact (tools/tool-names nil actor)
                   => (vec (concat (when (seq (:servers settings))
                                     ["exa/search"])
-                                  ["yetibot/help" "yetibot/history"
-                                   "yetibot/history_count" "yetibot/release_info"
-                                   "yetibot/util" "yetibot/aliases"
-                                   "yetibot/weather" "yetibot/cron"])))))))))
+                                  default-tool-names)))))))))
 
 (fact "real listing commands preserve names and expose inert structured data"
   (with-redefs [mcp/config (constantly nil)
@@ -162,13 +167,9 @@
           data (execution/run-command execution/request
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
-            => ["`yetibot/help`" "`yetibot/history`" "`yetibot/history_count`"
-                "`yetibot/release_info`" "`yetibot/util`" "`yetibot/aliases`"
-                "`yetibot/weather`" "`yetibot/cron`"]
+            => (mapv #(str "`" % "`") default-tool-names)
             (mapv :id (get-in normal [:data :tools]))
-            => ["yetibot/help" "yetibot/history" "yetibot/history_count"
-                "yetibot/release_info" "yetibot/util" "yetibot/aliases"
-                "yetibot/weather" "yetibot/cron"]
+            => default-tool-names
             (every? #(and (string? (:description %))
                           (= "object" (get-in % [:inputSchema :type])))
                     (get-in normal [:data :tools])) => true
@@ -186,7 +187,7 @@
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
     (let [result (execution/run-command execution/request
                    "ai tools | tail 3 | xargs ai tools")
-          ids ["yetibot/aliases" "yetibot/weather" "yetibot/cron"]]
+          ids (vec (take-last 3 default-tool-names))]
       (mapv #(some-> % string/split-lines first) (:value result)) => ids
       (mapv :id (:data result)) => ids
       (every? #(and (string? %) (string/includes? % "Inputs:"))
@@ -199,10 +200,7 @@
             defaults implicit-config]
         (with-redefs [mcp/config (constantly defaults)]
           (fact (tools/tool-names "yetibot" actor)
-                => ["yetibot/help" "yetibot/history"
-                    "yetibot/history_count" "yetibot/release_info"
-                    "yetibot/util" "yetibot/aliases"
-                    "yetibot/weather" "yetibot/cron"])
+                => default-tool-names)
           (fact (tools/server-names (assoc actor :user "U2")) => []))
         (with-redefs [mcp/config
                       (constantly (assoc-in config [:toolsets 0 :native-tools]
@@ -566,11 +564,12 @@
                         mcp/config (constantly nil)]
             (let [catalog (tools/tool-catalog "yetibot" actor)]
               (fact (:names catalog)
-                    => (conj (cond-> defaults
-                               meme? (conj "yetibot/meme")
-                               image? (conj "yetibot/gi"))
-                             "yetibot/util" "yetibot/aliases"
-                             "yetibot/weather" "yetibot/cron")
+                    => (with-plugin-tools
+                         (conj (cond-> defaults
+                                 meme? (conj "yetibot/meme")
+                                 image? (conj "yetibot/gi"))
+                               "yetibot/util" "yetibot/aliases"
+                               "yetibot/weather" "yetibot/cron"))
                     (mapv :id (:tools catalog)) => (:names catalog)
                     (every? #(= "object" (get-in % [:inputSchema :type]))
                             (:tools catalog)) => true))
@@ -828,10 +827,11 @@
                           (fn [& _] (throw (AssertionError. "Token read")))]
               (let [catalog (tools/tool-catalog "yetibot" actor)]
                 (fact (:names catalog)
-                      => (into reads ["yetibot/clef" "yetibot/clairic"
-                                      "yetibot/wise" "yetibot/util"
-                                      "yetibot/aliases"
-                                      "yetibot/weather" "yetibot/cron"])
+                      => (with-plugin-tools
+                           (into reads ["yetibot/clef" "yetibot/clairic"
+                                        "yetibot/wise" "yetibot/util"
+                                        "yetibot/aliases"
+                                        "yetibot/weather" "yetibot/cron"]))
                       (mapv :id (:tools catalog)) => (:names catalog)
                       (every? #(= "object" (get-in % [:inputSchema :type]))
                               (:tools catalog)) => true)))

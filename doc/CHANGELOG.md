@@ -29,6 +29,12 @@ as well.
 
 ## Unreleased
 
+- Add native Kroki engine discovery and verified diagram rendering with
+  coordinated published core/plugin dependencies. Keep generated artifacts even
+  when the assistant omits a URL or a later step fails, and expose safe
+  type/status/line diagnostics in Error details. Preserve ordinary trust,
+  toolset policy and budgets; see [Kroki](KROKI.md).
+
 - Add `ai usage` for the current UTC month, an explicit month or an arbitrary
   start-inclusive/end-exclusive timeframe. Any trusted human can read bot-wide
   provider/model totals; bots and forged requests cannot. Record every supported

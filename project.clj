@@ -52,7 +52,7 @@
                      "\u001B[m"))
                    (println))}
   :dependencies [[org.clojure/clojure "1.10.3"]
-                 [yetibot/core "20261107.160337.60bd0f0"]
+                 [yetibot/core "20261111.163113.0605945"]
                  ; not sure why we need to include this at the top level since
                  ; it's already included in yetibot/core, but things don't work
                  ; without it.
@@ -62,7 +62,7 @@
                  ; image instead of loading them dynamically at runtime because
                  ; we found that pomegranate does not work inside a docker
                  ; container (need to investigate more).
-                 [yetibot/kroki "20260605.152659.c135d20"]
+                 [yetibot/kroki "20261111.164625.6559feb"]
                  [yetibot/github "20230419.011409.5dac8f7"]
 
                  ; apis
