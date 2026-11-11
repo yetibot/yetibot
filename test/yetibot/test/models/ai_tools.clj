@@ -838,3 +838,103 @@
       (fact (string? (error-message
                        #(tools/complete provider "chat" messages))) => true
             @calls => []))))
+
+(defn native-rejection [args & [remote? validation-config]]
+  (let [dispatches (atom 0) events (atom [])
+        definition (get (var-get (requiring-resolve
+                                  'yetibot.models.ai-kroki-tools/definitions))
+                        "kroki_render")
+        definition (cond-> definition
+                     remote? (assoc :inputSchema
+                                    {:type "object" :required ["PRIVATE@everyone\n秘密"]
+                                     :properties {:PRIVATE {:type "string"}}}))
+        validate (requiring-resolve 'yetibot.models.ai-kroki-tools/arguments!)
+        advertised (assoc definition :name "kroki_render" :native? (not remote?)
+                          :session (:session tool)
+                          :validate-arguments #(if remote?
+                                                 (if (= 3 (get % "type"))
+                                                   (throw (ex-info "PRIVATE upstream" {:ai/problem {:field "PRIVATE"}})) %)
+                                                 (validate (or validation-config {}) "kroki_render" %))
+                          :host-call (fn [_] (swap! dispatches inc)))]
+    (with-redefs [mcp/config (constantly (merge config validation-config))
+                  mcp/with-tools (fn [_ f] (f [advertised]))
+                  ai/chat (fn [_ _ _ opts]
+                            (let [name (first-name opts)]
+                              (tool-response
+                                [(tool-call name "valid" "{\"type\":\"mermaid\",\"source\":\"graph TD; A-->B\"}")
+                                 (tool-call name "invalid" (json/generate-string args))])))]
+      (let [failure (try
+                      (tools/complete provider "chat" []
+                                      {:on-progress #(swap! events conj %)})
+                      (catch Exception e
+                        {:report (:ai/tool-failure (ex-data e))
+                         :primary-error (.getMessage e)}))]
+        (assoc failure :dispatches @dispatches :events @events)))))
+
+(facts "authored native field errors survive whole-batch preflight without effects"
+  (doseq [[args field code expected]
+          [[{"type" "mermaid" "source" "PRIVATE" "options" []} "options" :type :object]
+           [{"type" "mermaid"} "source" :required nil]
+           [{"type" "mermaid" "source" "PRIVATE" "format" "PRIVATE"} "format" :enum nil]
+           [{"type" "mermaid" "source" (apply str (repeat 262145 "x"))} "source" :size :source-bytes]
+           [{"type" "mermaid" "source" "PRIVATE" "@everyone\n秘密" "PRIVATE"} "*" :unknown-field nil]
+           [{"type" "mermaid" "source" "PRIVATE" "options" {"@everyone\n秘密" "PRIVATE"}} "options.*" :format :option-name]
+           [{"type" "mermaid" "source" "PRIVATE" "options" {"layout" []}} "options.*" :type :scalar]]]
+    (let [{:keys [report dispatches events primary-error]} (native-rejection args)
+          problem (get-in report [:calls 1 :problem])
+          text (trace/summary report)
+          public (trace/public-errors report)]
+      (fact dispatches => 0)
+      (fact (select-keys problem [:stage :field :code :execution-began])
+            => {:stage :arguments :field field :code code :execution-began false})
+      (when expected (fact (:expected problem) => expected))
+      (fact (get-in report [:budget :used]) => 0)
+      (fact (mapv :attempted (:calls report)) => [false false])
+      (fact (string/includes? text field) => true)
+      (fact (string/includes? text "execution did not begin") => true)
+      (fact (string/includes? primary-error field) => true)
+      (fact (string/includes? primary-error "execution did not begin") => true)
+      (fact (string/includes? primary-error (:remedy problem)) => true)
+      (fact (string/includes? (get-in public [:calls 0 :reason]) field) => true)
+      (fact (get-in (trace/public-report report) [:calls 1 :problem]) => problem)
+      (fact (get-in (last (keep :tool-event events)) [:problem :field]) => field)
+      (fact (boolean (re-find #"PRIVATE|@everyone|秘密" (pr-str [public events problem]))) => false))))
+
+(fact "remote schemas and arbitrary upstream diagnostics cannot author field paths"
+  (let [{:keys [report dispatches]} (native-rejection {"type" 3} true)
+        problem (get-in report [:calls 1 :problem])]
+    dispatches => 0
+    (:field problem) => "*"
+    (:code problem) => :invalid-arguments
+    (boolean (re-find #"PRIVATE|type" (pr-str problem))) => false))
+
+(fact "opaque native validation failure reports only the truthful root fallback"
+  (let [dispatches (atom 0) messages (atom [])
+        advertised {:name "help" :native? true :inputSchema {:type "object"}
+                    :validate-arguments (fn [_]
+                                          (throw (ex-info "PRIVATE upstream" {:source "PRIVATE"})))
+                    :host-call (fn [_] (swap! dispatches inc))}]
+    (with-redefs [mcp/config (constantly config)
+                  mcp/with-tools (fn [_ f] (f [advertised]))
+                  ai/chat (fn [& _]
+                            (tool-response [(tool-call "yetibot_help" "private-id" "{}")]))]
+      (let [r (try (tools/complete provider "chat" [])
+                   (catch Exception e (swap! messages conj (.getMessage e))
+                     (:ai/tool-failure (ex-data e))))]
+        @dispatches => 0
+        (get-in r [:calls 0 :problem :field]) => "*"
+        (get-in r [:calls 0 :problem :code]) => :invalid-arguments
+        (string/includes? (first @messages) "execution did not begin") => true
+        (string/includes? (pr-str [r @messages]) "PRIVATE") => false))))
+
+(fact "credential rejection remains useful without exposing rejected values in any public projection"
+  (let [{:keys [report events dispatches]}
+        (native-rejection {"type" "mermaid" "source" "graph TD; PRIVATE-CREDENTIAL-->B"}
+                          false {:secrets ["PRIVATE-CREDENTIAL"]})
+        public [(trace/public-report report) (trace/public-errors report)
+                (trace/summary report) events]]
+    dispatches => 0
+    (get-in report [:calls 1 :problem :code]) => :credential-input
+    (get-in report [:calls 1 :problem :execution-began]) => false
+    (string/includes? (trace/summary report) "Remove credentials") => true
+    (string/includes? (pr-str public) "PRIVATE-CREDENTIAL") => false))

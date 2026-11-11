@@ -138,33 +138,45 @@
   [value]
   (limits/request! :max-tool-calls value))
 
-(defn- parse-call [call entries seen config]
+(defn- parse-call [call entries seen config trace-state ordinal]
   (let [id (:id call)
         name (get-in call [:function :name])
-        arguments (get-in call [:function :arguments])]
+        arguments (get-in call [:function :arguments])
+        tool (get-in entries [name :tool])
+        reject! (fn [problem code]
+                  (let [problem (assoc (or (trace/sanitize-problem problem)
+                                          (trace/argument-problem nil nil))
+                                       :stage :arguments :execution-began false)
+                        row (some #(when (= ordinal (:call %)) %) (:calls @trace-state))]
+                    (trace/detail! trace-state ordinal {:problem problem})
+                    (trace/remember-failure! trace-state
+                                             (assoc row :call ordinal :outcome :rejected
+                                                        :problem problem))
+                    (trace/fail! :invalid-arguments code)))]
     (when (contains? seen id) (trace/fail! :repeated-id))
     (when-not (contains? entries name) (trace/fail! :unavailable-tool))
     (when-not (and (string? arguments)
                    (<= (count arguments)
-                       (if (and (get-in entries [name :tool :native?])
-                                (= "kroki_render" (get-in entries [name :tool :name])))
-                         (get-in entries [name :tool :max-argument-length] 16384)
-                         16384)))
-      (trace/fail! :invalid-arguments))
+                       (if (and (:native? tool) (= "kroki_render" (:name tool)))
+                         (:max-argument-length tool 16384) 16384)))
+      (reject! nil nil))
     (let [parsed (try (json/parse-string arguments) (catch Exception _ nil))]
-      (when-not (map? parsed)
-        (trace/fail! :invalid-arguments))
+      (when-not (map? parsed) (reject! nil nil))
       {:id id :entry (get entries name)
        :arguments
        (try
-         (if-let [validate (get-in entries [name :tool :validate-arguments])]
+         (if-let [validate (:validate-arguments tool)]
            (validate parsed)
-           (if (get-in entries [name :tool :host-call])
+           (if (:host-call tool)
              parsed
-             (policy/arguments! (:toolset config)
-                                (get-in entries [name :tool :name]) parsed)))
+             (policy/arguments! (:toolset config) (:name tool) parsed)))
          (catch Exception e
-           (trace/fail! :invalid-arguments (:ai/error-code (ex-data e)))))})))
+           ;; Only host-authored native validation may explain a field. Never
+           ;; interpret a remote schema or arbitrary exception/source prose.
+           (reject! (when (:native? tool)
+                      (or (trace/sanitize-problem (:ai/problem (ex-data e)))
+                          (trace/argument-problem (:inputSchema tool) parsed)))
+                    (:ai/error-code (ex-data e)))))})))
 
 (defn- request-action [{:keys [entry arguments]}]
   ;; A changed cap must not turn a consumed text request into a fresh action.
@@ -265,7 +277,7 @@
                      :rejected "Rejected "
                      "Finished ") label)
        :tool-event {:domain :host :call ordinal :label label :outcome outcome
-                    :code (:code row)}
+                    :code (:code row) :problem (:problem row)}
        :tool-budget {:used used :limit limit
                      :remaining (max 0 (- limit used))}})))
 
@@ -416,7 +428,8 @@
                 (trace/fail! :duplicate-ids))
               (when (> (+ used (count calls)) limit)
                 (trace/fail! :budget-exceeded))
-              (let [parsed (mapv #(parse-call % by-name seen config) calls)
+              (let [parsed (mapv #(parse-call %1 by-name seen config trace-state (+ start %2 1))
+                                 calls (range))
                     requested-actions
                     (mapv request-action parsed)]
                 (when (or (not= (count requested-actions)
@@ -492,7 +505,7 @@
           (doseq [row (:calls report)
                   :when (= :rejected (:outcome row))]
             (notify-tool! config trace-state (:call row) :rejected))
-          (throw (ex-info (get trace/reasons reason)
+          (throw (ex-info (trace/failure-message report)
                           (cond-> {:ai/error true :ai/tool-failure report
                                    :ai/answers (:answers @trace-state)}
                             (:ai/diagnostic (ex-data e))

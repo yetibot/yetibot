@@ -68,3 +68,18 @@
     (progress :clip (str (string/join (repeat 1798 "a")) "😀") 1800)
     => (str (string/join (repeat 1798 "a")) "😀")
     (string/includes? text "1 rows omitted") => true))
+
+(fact "typed progress retains safe diagnostics and closed stage timings"
+  (let [p {:stage :arguments :field "options" :code :type :expected :object
+           :execution-began false :remedy "PRIVATE"}
+        event (assoc-in (host-event 1 :rejected) [:tool-event :problem] p)
+        state (progress :advance (progress :initial-state)
+                        (assoc event :stage-timings [{:stage :planning :elapsed-ms 42}
+                                                    {:stage :PRIVATE :elapsed-ms 1}]
+                                     :planning-responses 2))]
+    (get-in state [:rows 0 :problem :remedy]) => "Use an object."
+    (string/includes? (progress :render state) "options: Use an object.") => true
+    (string/includes? (pr-str state) "PRIVATE") => false
+    (:stage-timings state) => [{:stage :planning :elapsed-ms 42}]
+    (:planning-responses state) => 2
+    (string/includes? (progress :render state) "planning 42ms") => true))
