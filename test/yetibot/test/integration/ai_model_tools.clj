@@ -11,6 +11,7 @@
             [yetibot.commands.cf :as cli]
             [yetibot.core.commands.echo :as echo]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-kroki-tools :as kroki]
             [yetibot.models.ai-model-tools :as models]
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-tool-policy :as policy]
@@ -120,7 +121,8 @@
       (models/available-tools) => ["ai" "cf"]
       (native/names {:toolset (assoc toolset :native-tools ["help"])})
       => ["help"]
-      (with-redefs [wise/available-tools (constantly [])]
+      (with-redefs [wise/available-tools (constantly [])
+                    kroki/available-tools (constantly [])]
         (take-last 6 (native/names {}))
         => ["ai" "cf" "util" "aliases" "weather" "cron"])
       @reads => 0))

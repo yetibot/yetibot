@@ -19,4 +19,6 @@
                            "kroki-20261111.164625.6559feb.jar")) => true
     (string/join (map #(format "%02x" (bit-and 255 %)) (.digest digest)))
     => "5680fa44e3b76a8f896c1e818b526448024a2ab5611d2ab4688bf5d7275ae9fb"
-    (kroki/available-tools) => ["kroki_types" "kroki_render"]))
+    (with-redefs [kroki/client-call
+                  (fn [& _] (throw (AssertionError. "Availability must not call Kroki")))]
+      (kroki/available-tools) => ["kroki_types" "kroki_render"])))
