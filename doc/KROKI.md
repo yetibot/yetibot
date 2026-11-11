@@ -79,14 +79,21 @@ redirect, automatic HTTP retry, model retry or fallback service is introduced.
 
 ## Release ordering
 
-These are separately published repositories. Adopt core's MIME-safe generated
-artifact routes/Discord downloads and literal fences first, publish the updated
-Kroki plugin second, then update the app to their actual published versions.
+These are separately published repositories. Core's MIME-safe generated
+artifact routes/Discord downloads and literal fences must ship first, the
+updated Kroki plugin second, and the app's concrete dependency pins last.
+This app adopts these genuine published releases:
+
+- `yetibot/core` **`20261111.163113.0605945`**
+- `yetibot/kroki` **`20261111.164625.6559feb`**
+
 The app adapter detects the shared plugin module before advertising tools;
 old plugin artifacts do not expose nonfunctional capabilities. That readiness
 check does not replace adopting the required core release.
 
-The development tests use source-composed changed repositories and offline
-transports in addition to genuine pinned dependencies. This does not prove
-unpublished artifacts are present in a deployed bot. No production configuration
+Cross-repository development used source-composed checkouts and offline
+transports before publication. Those checks do not prove deployed artifacts.
+The release integration identity fixtures require the genuine pinned core and
+plugin JARs; source overlays are not published-artifact qualification. A deployed
+bot must separately verify its installed identities. No production configuration
 or provider defaults need changing to adopt the feature.
