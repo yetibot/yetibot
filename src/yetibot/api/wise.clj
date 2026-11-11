@@ -14,6 +14,12 @@
 
 (def endpoint "https://api.wise.com/2026Q4")
 
+(def ^:dynamic *dataset-observer*
+  "Optional host callback for one complete, validated, token-free envelope.
+   The binder reports retention errors separately; they must not fail or replay
+   an already completed read. Nil for ordinary command/native invocations."
+  nil)
+
 (defn- fail! [message]
   (throw (ex-info message {:ai/error true :wise/error true})))
 
@@ -233,24 +239,35 @@
                    (or (not (contains? query :accountId))
                        (= (id (:id b)) (id (:accountId query)))))
       (fail! "Wise statement did not match the configured balance."))
-    (mapv
-      (fn [tx]
-        (let [date (Instant/parse (:date tx))
-              raw-description (get-in tx [:details :description] "")
-              description (when (string? raw-description)
-                            (string/replace raw-description token
-                                            "[redacted]"))]
-          (when-not (and (not (.isBefore date start))
-                         (not (.isAfter date end))
-                         (#{"CREDIT" "DEBIT"} (:type tx))
-                         (string? description))
-            (fail! "Wise returned an invalid transaction."))
-          {:date (str date) :type (:type tx) :currency (:currency b)
-           :amount (amount! (:amount tx) (:currency b))
-           :fees (amount! (or (:totalFees tx)
-                              {:value 0 :currency (:currency b)}) (:currency b))
-           :description (subs description 0 (min 200 (count description)))}))
-      (list! (:transactions body) 10000))))
+    (let [rows
+          (mapv
+            (fn [tx]
+              (let [date (Instant/parse (:date tx))
+                    raw-description (get-in tx [:details :description] "")
+                    description (when (string? raw-description)
+                                  (string/replace raw-description token
+                                                  "[redacted]"))]
+                (when-not (and (not (.isBefore date start))
+                               (not (.isAfter date end))
+                               (#{"CREDIT" "DEBIT"} (:type tx))
+                               (string? description))
+                  (fail! "Wise returned an invalid transaction."))
+                {:date (str date) :type (:type tx) :currency (:currency b)
+                 :amount (amount! (:amount tx) (:currency b))
+                 :fees (amount! (or (:totalFees tx)
+                                   {:value 0 :currency (:currency b)}) (:currency b))
+                 :description (subs description 0 (min 200 (count description)))
+                 ;; Optional points are never inferred from current money,
+                 ;; amounts or fees. Bad/missing optional authority does not
+                 ;; invalidate the existing transaction reader.
+                 :running-balance (when (contains? tx :runningBalance)
+                                    (try (amount! (:runningBalance tx) (:currency b))
+                                         (catch Exception _ nil)))}))
+            (list! (:transactions body) 10000))]
+      {:rows rows
+       :end-balance (when (contains? body :endOfStatementBalance)
+                      (try (amount! (:endOfStatementBalance body) (:currency b))
+                           (catch Exception _ nil)))})))
 
 (defn- totals [transactions]
   (mapv
@@ -263,6 +280,53 @@
          :net (money (- credits debits))
          :fees (money (reduce + 0M (map #(bigdec (:fees %)) rows)))}))
     (sort-by key (group-by :currency transactions))))
+
+(defn- field [name type & [semantic]]
+  (cond-> {:name name :path [name] :type type}
+    semantic (assoc :semantic semantic :unit-field "currency")))
+
+(defn- string-keys [row]
+  (into {} (map (fn [[k v]] [(name k) v])) row))
+
+(defn- dataset-envelope [target action result statements start end]
+  (let [current (mapv (fn [i b]
+                        {"balance" (str (:currency b) " balance " (inc i))
+                         "currency" (:currency b) "available" (:available b)})
+                      (range) (:balances result))
+        full-rows (vec (mapcat (fn [s b]
+                                (map #(assoc (string-keys %) "balance" (get b "balance"))
+                                     (:rows s))) statements current))
+        history? (boolean (and (seq full-rows) (every? #(some? (get % "running-balance")) full-rows)))
+        rows (case action
+               "balance" (mapv #(assoc % "date" (str end)) current)
+               "summary" (mapv string-keys (:totals result))
+               (if history? full-rows (mapv #(dissoc % "running-balance") full-rows)))
+        fields (case action
+                 "balance" [(field "balance" :nominal) (field "currency" :nominal)
+                            (field "available" :quantitative :current-balance) (field "date" :temporal)]
+                 "summary" (into [(field "currency" :nominal) (field "transaction-count" :quantitative)]
+                                 (map #(field % :quantitative :transaction-amount) ["credits" "debits" "net" "fees"]))
+                 (cond-> [(field "date" :temporal) (field "type" :nominal)
+                          (field "currency" :nominal) (field "amount" :quantitative :transaction-amount)
+                          (field "fees" :quantitative :transaction-amount) (field "description" :nominal)
+                          (field "balance" :nominal)]
+                   history? (conj (field "running-balance" :quantitative :running-balance))))]
+    (cond-> {:source "wise" :account (:name target) :captured-at (str end)
+             :rows rows :fields fields :series-field (if (= action "summary") "currency" "balance")
+             :current-balances current
+             :historical-balance-available? (and (= action "transactions") history?)
+             :coverage (cond-> {:status :complete :row-count (count rows) :has-more false}
+                         (not= action "balance") (assoc :from (str start) :to (str end))
+                         (and (= action "transactions") (not history?))
+                         (assoc :limitations ["Historical balances unavailable: complete same-currency running-balance points were not supplied. Current balances are not historical baselines."]))}
+      (not= action "balance")
+      (assoc :from (str start) :to (str end)
+             :statement-balances
+             (vec (keep (fn [[s b]]
+                          (when (:end-balance s)
+                            {"balance" (get b "balance") "currency" (get b "currency")
+                             "date" (str end) "amount" (:end-balance s)}))
+                        (map vector statements current)))))))
 
 (defn query! [actor args]
   (execution/sensitive!)
@@ -282,24 +346,36 @@
                                        :available (amount! (:amount %)
                                                            (:currency %)))
                                     balances)}
+            statements (when-not (= "balance" (get args "action"))
+                         (mapv #(transactions! % token deadline start end) balances))
+            rows (vec (mapcat :rows statements))
             result
             (if (= "balance" (get args "action")) result
-              (let [rows (vec (mapcat
-                                #(transactions! % token deadline start end)
-                                balances))
-                    result (assoc result :from (str start) :to (str end)
+              (let [result (assoc result :from (str start) :to (str end)
                                          :transaction-count (count rows))]
                 (if (= "summary" (get args "action"))
                   (assoc result :totals (totals rows))
-                  (assoc result
-                         :transactions
-                         (->> rows
-                              (sort-by #(Instant/parse (:date %))
-                                       #(compare %2 %1))
-                              (take (get args "limit" 10)) vec)
-                         :has-more (> (count rows) (get args "limit" 10))))))]
-        (walk/postwalk #(if (string? %)
-                         (string/replace % token "[redacted]") %) result))
+                  result)))
+            redact #(walk/postwalk (fn [v] (if (string? v)
+                                            (string/replace v token "[redacted]") v)) %)
+            result (redact result)]
+        (when *dataset-observer*
+          ;; This is after every selected statement has passed identity/scope
+          ;; checks and before any display prefix escapes. Never emit on a
+          ;; partially failed source, and never let retention cause a replay.
+          (try (*dataset-observer* (redact (dataset-envelope target (get args "action")
+                                                           result statements start end)))
+               (catch Exception _ nil)))
+        (redact
+          (if (= "transactions" (get args "action"))
+            (assoc result
+                   :transactions
+                   (->> rows
+                        (sort-by #(Instant/parse (:date %)) #(compare %2 %1))
+                        (take (get args "limit" 10))
+                        (mapv #(dissoc % :running-balance)))
+                   :has-more (> (count rows) (get args "limit" 10)))
+            result)))
       (catch Exception e
         (if (:wise/error (ex-data e)) (throw e)
           (fail! "Wise returned an invalid response."))))))
