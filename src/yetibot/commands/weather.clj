@@ -237,12 +237,19 @@
                (if (or (= unit "-i") (= unit "-f")) :i :m))]
     [unit args]))
 
+(def ^:dynamic *lookup-observer*
+  "Host-only current-weather input/outcome capture; never receives error prose."
+  nil)
+
 (defn weather-cmd
   "weather <location> # look up current weather for <location> by name or postal code, optional country code, -c or -f to force units"
   {:yb/cat #{:info}}
   [{:keys [match]}]
   (let [[unit loc] (parse-args match)
-        result (current loc)]
+        result (current loc)
+        _ (when *lookup-observer*
+            (try (*lookup-observer* {:input loc :failed? (boolean (:error result))})
+                 (catch Exception _ nil)))]
     (or
       (error-response result)
       (let [{[cs] :data} result

@@ -111,6 +111,7 @@
     (count turns) => 3
     (get-in (json/parse-string (:source (first renders)) true) [:encoding :y :title]) => "temp (C)"
     (string/includes? (:result/value result) "4 of 5 inputs") => true
+    (string/includes? (:result/value result) "nyc") => true
     (count renders) => 1
     (count (get-in (json/parse-string (:source (first renders)) true) [:data :values])) => 4
     (frequencies collected) => (zipmap fixtures/locations (repeat 1))

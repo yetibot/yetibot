@@ -127,3 +127,12 @@
     (deliver resume true)
     (deref task 1000 :timeout) => :refused
     (datasets/retain! store owner envelope) => (throws clojure.lang.ExceptionInfo)))
+
+(fact "namespaced sensitive key semantics match piped AI input for keyword and string keys"
+  (doseq [key [:auth/token "auth/token" :auth/api-key "auth/api-key"]]
+    (let [store (datasets/create-store owner)
+          descriptor (datasets/retain! store owner (assoc envelope :rows [{:city "A" :temp 1 key 987654321}]))]
+      (get-in descriptor [:preview 0 (if (keyword? key) (subs (str key) 1) key)]) => "[redacted]"
+      (string/includes? (json/generate-string descriptor) "987654321") => false
+      (get-in (datasets/lookup! store owner (:dataset-id descriptor))
+              [:rows 0 (if (keyword? key) (subs (str key) 1) key)]) => 987654321)))

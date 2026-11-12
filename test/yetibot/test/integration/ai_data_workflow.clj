@@ -6,6 +6,15 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai-command]
             [yetibot.commands.cf :as cf]
+            [yetibot.commands.zen :as zen]
+            [yetibot.commands.openai :as openai]
+            [yetibot.commands.system-one :as system-one]
+            [yetibot.commands.weather :as weather]
+            [yetibot.api.clef :as clef]
+            [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.api.cloudflare-images :as images]
+            [yetibot.core.config :as config]
+            [clj-http.client :as http]
             [yetibot.commands.wise :as wise-command]
             [yetibot.core.commands.alias :as alias]
             [yetibot.core.handler :as handler]
@@ -14,6 +23,7 @@
             [yetibot.core.models.history :as history]
             [yetibot.core.util.public-result :as public]
             [yetibot.models.ai-data-tools :as data]
+            [yetibot.models.ai-context :as context]
             [yetibot.models.ai-datasets :as datasets]
             [yetibot.models.ai-kroki-tools :as kroki]
             [yetibot.models.ai-tool-policy :as policy]
@@ -22,6 +32,7 @@
             [yetibot.test.api.wise-dataset :as finance]
             [yetibot.test.commands.wise :as wise-fixture]
             [yetibot.test.integration.ai-command-charts :as charts]
+            [yetibot.test.integration.ai-command-capture :as capture]
             [yetibot.test.support.ai-execution :as support]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-status :as status]))
@@ -203,6 +214,13 @@
                       {:options {:additional-secrets ["SYNTHETIC-CREDENTIAL"]
                                  :pipeline-input {:data [{"x" "SYNTHETIC-CREDENTIAL" "y" 1}]}}})]
     (:renders r) => []
+    (count (:turns r)) => 1
+    (get-in r [:result :result/data :execution :calls 0 :problem])
+    => {:stage :arguments :field "*" :code :credential-input
+        :remedy "Remove credentials from the request." :execution-began false}
+    (string/includes? (get-in r [:result :result/value]) "execution did not begin") => true
+    (string/includes? (str (get-in r [:result :result/value])) "Remove credentials") => true
+    (string/includes? (pr-str (get-in r [:result :result/public-error])) "credential-input") => true
     (string/includes? (pr-str (:result r)) "SYNTHETIC-CREDENTIAL") => false))
 
 (fact "complete finance dataset flows to public chart automatically, not the 20-row display page"
@@ -336,3 +354,169 @@
                   {:toolsets [charts/toolset narrowed]
                    :wire #(hooks/cmd-hook #"nested-narrow" #".*" nested-narrow-fixture)})
       @checked => 1)))
+
+(fact "namespaced keyword and string credentials stay out of model previews and public charts"
+  (doseq [key [:auth/token "auth/token"]]
+    (let [r (run-script
+              (fn [n messages _]
+                (string/includes? (pr-str messages) "987654321") => false
+                (get-in (dataset-in messages) ["preview" 0 "auth/token"]) => "[redacted]"
+                (charts/call (str n) "chart"
+                  {"dataset_id" (get (dataset-in messages) "dataset-id")
+                   "kind" "bar" "x" "label" "y" "auth/token"}))
+              {:options {:pipeline-input {:data [{"label" "A" key 987654321}]}}})]
+      (:renders r) => []
+      (string/includes? (pr-str (:result r)) "987654321") => false
+      (get-in r [:result :result/data :execution :calls 0 :problem :code]) => :credential-input
+      (string/includes? (str (get-in r [:result :result/value])) "Remove credentials") => true)))
+
+(def zen-provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                   :key "synthetic-zen-key" :model "paid"})
+(def original-get-config config/get-config)
+(def inference-policies
+  (assoc charts/toolset :providers [{:name "fake" :models ["fake"]}
+                                    {:name "zen" :models ["paid"]}
+                                    {:name "openai" :models ["gpt-4"]}
+                                    {:name "cloudflare" :models ["@cf/cloudflare/clef" "@cf/cloudflare/clairic"]}]))
+(defn inference-wire []
+  (hooks/cmd-hook #"zen" #"(?s)^.+$" zen/prompt-cmd)
+  (hooks/cmd-hook #"openai" #"(?s)^.+$" openai/openai-cmd)
+  (hooks/cmd-hook #"clef" #"(?s)(.*)" system-one/clef-cmd)
+  (hooks/cmd-hook #"clairic" #"(?s)(.*)" system-one/clairic-cmd))
+
+(defn command-plan [command]
+  (fn [n _ _] (if (= n 1) (charts/call "collect" "command" {"command" command}) (answer "Done"))))
+
+(fact "actual xargs inference commands cannot bypass exhausted budgets, denied providers or wider scopes"
+  (doseq [command ["list A B | xargs zen --model paid"
+                   "list A B | xargs openai"
+                   "list A B | xargs clef Is it A?"
+                   "list A B | xargs clairic demo"]
+          [t limit] [[inference-policies 1] [charts/toolset 20]
+                     [(update inference-policies :providers
+                              #(mapv (fn [p] (if (= "fake" (:name p)) p
+                                               (assoc p :models ["denied-model"]))) %)) 20]]]
+    (let [sends (atom [])]
+      (with-redefs [ai/config (constantly {:providers [zen-provider]})
+                    ai/prepare-provider (fn [p _] p)
+                    context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                    ai/complete (fn [& args] (swap! sends conj args) {:result/value "child"})
+                    http/post (fn [& args] (swap! sends conj args) {:body {:choices [{:message {:content "child"}}]}})
+                    config/get-config (fn [spec path]
+                                        (if (= path [:ai])
+                                          {:value {:intent-router {:account-id (apply str (repeat 32 "a"))}}}
+                                          (original-get-config spec path)))
+                    clef/credential! (constantly "synthetic-structured-key")
+                    images/images (constantly [])
+                    cloudflare/infer! (fn [& args] (swap! sends conj args) {:answers {}})]
+        (let [r (run-script (command-plan command)
+                           {:wire inference-wire :toolset t :options {:max-tool-calls limit}})]
+          @sends => []
+          (:used @(:budget (:request r))) => (if (= limit 1) 1 3)))))
+  (let [sends (atom 0) wide (assoc inference-policies :name "wide" :native-tools ["command" "chart" "help"])]
+    (with-redefs [ai/config (constantly {:providers [zen-provider]})
+                    ai/prepare-provider (fn [p _] p)
+                    context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                  ai/complete (fn [& _] (swap! sends inc) {:result/value "child"})]
+      (run-script (command-plan "list A B | xargs zen --toolset wide --model paid")
+                  {:wire inference-wire :toolsets [inference-policies wide]})
+      @sends => 0)))
+
+(fact "authorized xargs Zen and legacy OpenAI retain actor, shared attempts and generation ceilings"
+  (doseq [command ["list A B | xargs zen --model paid --max-output-tokens 262144"
+                   "list A B | xargs openai"]]
+    (let [children (atom [])]
+      (with-redefs [ai/config (constantly {:providers [zen-provider]})
+                    ai/prepare-provider (fn [p _] p)
+                    context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                    ai/complete (fn [_ _ _ opts]
+                                  (swap! children conj [(:max-output-tokens opts)
+                                                        (policy/actor execution/*event*)
+                                                        (:used @(:budget execution/*request*))])
+                                  {:result/value "child"})
+                    http/post (fn [_ opts]
+                                (swap! children conj [(get-in opts [:form-params :max_tokens])
+                                                      (policy/actor execution/*event*)
+                                                      (:used @(:budget execution/*request*))])
+                                {:body {:choices [{:message {:content "child"}}]}})]
+        (let [r (run-script (command-plan command)
+                           {:wire inference-wire :toolset inference-policies
+                            :options {:max-output-tokens 1200 :max-tool-calls 3}})]
+          (mapv first @children) => [1200 1200]
+          (mapv #(get-in % [1 :user]) @children) => ["U1" "U1"]
+          (count @children) => 2
+          (every? #(<= 2 (last %) 3) @children) => true
+          (:used @(:budget (:request r))) => 3)))))
+
+(fact "failed weather labels come from bounded redacted source outcomes, not error prose or command text"
+  (with-redefs [weather/current
+                (fn [location]
+                  (if (= location "A")
+                    {:data [(assoc (first capture/rows) :city_name "A")]}
+                    {:error "PRIVATE-ERROR-TREE-COMMAND"}))]
+    (let [r (run-script
+              (fn [n messages _]
+                (if (= n 1)
+                  (charts/call "collect" "command"
+                    {"command" "list A SYNTHETIC-CREDENTIAL | xargs weather"})
+                  (let [d (charts/descriptor messages)]
+                    (get-in d ["coverage" "failed-inputs"]) => ["[redacted]"]
+                    (charts/call "chart" "chart"
+                      {"dataset_id" (get d "dataset-id") "kind" "bar" "x" "city_name" "y" "temp"}))))
+              {:wire #(hooks/cmd-hook #"weather" #".+" weather/weather-cmd)
+               :options {:additional-secrets ["SYNTHETIC-CREDENTIAL"]}})]
+      (count (:renders r)) => 1
+      (string/includes? (get-in r [:result :result/value]) "Missing inputs: [redacted]") => true
+      (string/includes? (pr-str (:result r)) "SYNTHETIC-CREDENTIAL") => false
+      (string/includes? (pr-str (:result r)) "PRIVATE-ERROR-TREE-COMMAND") => false)
+    (run-script
+      (fn [n messages _]
+        (if (= n 1)
+          (charts/call "collect" "command" {"command" "list A b c d e f g | xargs weather"})
+          (let [labels (get-in (charts/descriptor messages) ["coverage" "failed-inputs"])]
+            (count labels) => 5
+            (every? #{"b" "c" "d" "e" "f" "g"} labels) => true
+            (answer "Partial source coverage"))))
+      {:wire #(hooks/cmd-hook #"weather" #".+" weather/weather-cmd)})))
+
+(fact "structured classifiers remain automatic when inherited policy allows the real wire model"
+  (doseq [command ["list A B | xargs clef Is this A?" "list A B | xargs clairic demo"]]
+    (let [sends (atom [])]
+      (with-redefs [config/get-config (fn [spec path]
+                                        (if (= path [:ai])
+                                          {:value {:intent-router {:account-id (apply str (repeat 32 "a"))}}}
+                                          (original-get-config spec path)))
+                    clef/credential! (constantly "synthetic-structured-key")
+                    images/images (constantly [])
+                    cloudflare/infer! (fn [_ _ model _] (swap! sends conj model) {:answers {}})]
+        (let [r (run-script (command-plan command)
+                           {:wire inference-wire :toolset inference-policies
+                            :options {:max-tool-calls 2}})]
+          (count @sends) => 1
+          (:used @(:budget (:request r))) => 2)))))
+
+(def credential-collections (atom 0))
+(defn credential-records [_]
+  (swap! credential-collections inc)
+  {:result/value "Collected one synthetic row"
+   :result/data-collection [{:x "SYNTHETIC-CREDENTIAL" :y 1}]})
+
+(fact "compiled source preflight preserves known nonexecution diagnostics without replaying collection"
+  (reset! credential-collections 0)
+  (let [r (run-script
+            (fn [n messages _]
+              (if (= n 1) (charts/call "collect" "command" {"command" "credential-records"})
+                (charts/call "chart" "chart"
+                  {"dataset_id" (get (charts/descriptor messages) "dataset-id")
+                   "kind" "bar" "x" "x" "y" "y"})))
+            {:wire #(hooks/cmd-hook #"credential-records" #".*" credential-records)
+             :options {:additional-secrets ["SYNTHETIC-CREDENTIAL"]}})]
+    @credential-collections => 1
+    (count (:turns r)) => 2
+    (:renders r) => []
+    (get-in r [:result :result/data :execution :calls 1 :problem])
+    => {:stage :arguments :field "*" :code :credential-input
+        :remedy "Remove credentials from the request." :execution-began false}
+    (string/includes? (get-in r [:result :result/value]) "before rendering") => true
+    (string/includes? (get-in r [:result :result/value]) "execution did not begin") => true
+    (string/includes? (pr-str (:result r)) "SYNTHETIC-CREDENTIAL") => false))

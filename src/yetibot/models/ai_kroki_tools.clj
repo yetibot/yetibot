@@ -170,5 +170,9 @@
             (when (and (= operation "kroki_render") (:kroki-artifacts config))
               (swap! (:kroki-artifacts config) conj data))
             {:structuredContent (assoc data :untrusted true)}))))
-    (catch Exception _
-      {:isError true :structuredContent {:error "Kroki could not complete this request."}})))
+    (catch Exception e
+      {:isError true
+       :structuredContent
+       (cond-> {:error "Kroki could not complete this request."}
+         (:ai/problem (ex-data e))
+         (assoc :problem (trace/sanitize-problem (:ai/problem (ex-data e)))))})))

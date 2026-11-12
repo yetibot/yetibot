@@ -2,14 +2,13 @@
   "Private, bounded datasets owned by one live host request. No global registry."
   (:require [cheshire.core :as json]
             [yetibot.api.ai :as ai]
-            [yetibot.api.mcp :as mcp])
+            [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-input :as input])
   (:import [java.time Instant LocalDate OffsetDateTime]
            [java.util UUID]))
 
 (def ^:private max-bytes (* 2 1024 1024))
 (def ^:private descriptor-bytes (* 12 1024))
-(def ^:private sensitive-field
-  #"(?i)^(authorization|password|token|secret|key|api[-_]?key|key[-_]?file|account[-_]?id)$")
 
 (defn- invalid! [code]
   (throw (ex-info "Dataset unavailable: invalid data, scope or resource bound."
@@ -157,7 +156,7 @@
     (map? v) (into {} (map (fn [[k cell]]
                            [(let [safe (mcp/metadata-redact (spelling k) config)]
                               (if (= safe (spelling k)) k safe))
-                            (if (re-find sensitive-field (spelling k))
+                            (if (input/sensitive-key? k)
                               "[redacted]" (protect config cell))]) v))
     (sequential? v) (mapv #(protect config %) v)
     :else (let [s (json/generate-string v)]

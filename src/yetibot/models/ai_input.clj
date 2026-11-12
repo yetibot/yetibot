@@ -94,14 +94,18 @@
     (str "(?i)^(authorization|password|token|secret|key|api[-_]?key|"
          "key[-_]?file|account[-_]?id)$")))
 
-(defn- sensitive? [k]
-  (boolean (re-matches sensitive-field (last (string/split k #"/" -1)))))
+(defn sensitive-key?
+  "Sensitive names use the final namespace component for keyword/string keys."
+  [k]
+  (let [k (spelling k)]
+    (and (string? k)
+         (boolean (re-matches sensitive-field (last (string/split k #"/" -1)))))))
 
 (defn- sensitive-copies [data]
   ;; Aliases can embed the rendered value in the prompt. Mask copies there and
   ;; in sibling fields too. Literal replacement keeps large values out of regex.
   (->> (for [node (tree-seq coll? seq data) :when (map? node)
-             [k v] node :when (sensitive? k)
+             [k v] node :when (sensitive-key? k)
              leaf (tree-seq coll?
                             #(if (map? %) (vals %) (seq %)) v)
              :when (or (string? leaf) (number? leaf))]
@@ -121,7 +125,7 @@
       (fn [out k v]
         (let [safe-k (clean k)]
           (when (contains? out safe-k) (invalid!))
-          (assoc out safe-k (if (sensitive? k)
+          (assoc out safe-k (if (sensitive-key? k)
                              "[redacted]" (protect v clean))))) {} value)
     (vector? value) (mapv #(protect % clean) value)
     :else (let [text (json/generate-string value)]

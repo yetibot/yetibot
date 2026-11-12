@@ -6,6 +6,8 @@
             [yetibot.core.util.public-result :as public]
             [yetibot.models.ai-command-tools :as commands]
             [yetibot.models.ai-datasets :as datasets]
+            [yetibot.models.ai-input :as input]
+            [yetibot.commands.weather :as weather]
             [yetibot.models.ai-charts :as charts]
             [yetibot.models.ai-kroki-tools :as kroki]
             [yetibot.models.ai-tool-policy :as policy]
@@ -167,12 +169,20 @@
                (select-keys artifact [:type :format :mime-type :bytes :id :url :ephemeral]))))))
 
 (defn- command! [config args source]
-  (let [{:keys [result datasets problems]}
+  (let [failed-inputs (atom [])
+        {:keys [result datasets problems]}
         (observe config
           #(timed config :collection
              (fn []
                (binding [execution/*command-capture* true
-                         public/*capture* (partial retain-artifacts! config)]
+                         public/*capture* (partial retain-artifacts! config)
+                         weather/*lookup-observer*
+                         (fn [{:keys [input failed?]}]
+                           (when (and failed? (string? input) (<= 1 (count input) 128))
+                             (let [label (-> (mcp/metadata-redact input config)
+                                             (string/replace #"[\p{Cntrl}]" " ") string/trim)]
+                               (when (seq label)
+                                 (swap! failed-inputs (fn [labels] (vec (take 5 (conj labels label)))))))))]
                  (commands/execute! (get args "command")
                    {:chat-source source :user (:user execution/*event*)
                     :yetibot-user (:yetibot-user execution/*event*)
@@ -185,7 +195,9 @@
                      (when-let [e (envelope (:pipeline result) (:expressions result))]
                        ;; The observer's complete statement is reusable separately; a transformed
                        ;; pipeline is a distinct scope, never replaced with an enclosing statement.
-                       (retain! config e)))
+                       (retain! config (cond-> e
+                                         (and (= "weather" (:source e)) (seq @failed-inputs))
+                                         (assoc-in [:coverage :failed-inputs] @failed-inputs)))))
                    (catch Exception e
                      (reset! retention-problem
                              (problem :collection "dataset"
@@ -205,7 +217,7 @@
 (defn- credential-field? [dataset args]
   (some (fn [field]
           (and (some #{(:name field)} (keep args ["x" "y" "series"]))
-               (some #(re-find #"(?i)^(authorization|password|token|secret|key|api[-_]?key|key[-_]?file|account[-_]?id)$" %) (:path field))))
+               (some input/sensitive-key? (:path field))))
         (:fields dataset)))
 
 (defn- chart! [config args source]
@@ -223,7 +235,11 @@
                        #(kroki/call! config "kroki_render"
                           (into {} (map (fn [[k v]] [(name k) v]) (:request compiled))) source))]
         (if (:isError rendered)
-          (do (reset! (:chart-stop config) "Chart rendering failed; collected data was not replayed.") rendered)
+          (do (reset! (:chart-stop config)
+                      (if (get-in rendered [:structuredContent :problem])
+                        "Chart request was rejected before rendering; collected data was not replayed."
+                        "Chart rendering failed; collected data was not replayed."))
+              rendered)
           (do
             ;; This atom is host-held, not a model/remote result property.
             (reset! (:chart-terminal config)

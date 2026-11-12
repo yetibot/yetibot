@@ -4,7 +4,10 @@
    [clj-http.client :as client]
    [yetibot.core.hooks :refer [cmd-hook]]
    [yetibot.core.config :refer [get-config]]
-   [yetibot.core.util.ai-usage :as usage]))
+   [yetibot.core.util.ai-usage :as usage]
+   [yetibot.models.ai-tool-policy :as policy]
+   [yetibot.util.ai-execution :as execution]
+   [yetibot.util.ai-limits :as limits]))
 
 (s/def ::key string?)
 
@@ -17,6 +20,10 @@
 (defn openai-completions
   {:yb/cat #{:info :fun}}
   [messages]
+  (when execution/*command-capture*
+    (execution/charge!)
+    (policy/authorize! (:toolset-policy execution/*request*)
+                       (policy/actor execution/*event*) {:name "openai"} model))
   (usage/capture!
     {:provider "openai" :model model :operation "text" :secrets [(:key config)]}
     (fn []
@@ -24,10 +31,12 @@
         "https://api.openai.com/v1/chat/completions"
         {:as :json
          :content-type :json
-         :form-params {:model model
-                       ;; https://platform.openai.com/docs/guides/text-generation/faq
-                       :temperature 0.9
-                       :messages messages}
+         :form-params (cond-> {:model model
+                              ;; https://platform.openai.com/docs/guides/text-generation/faq
+                              :temperature 0.9
+                              :messages messages}
+                        execution/*command-capture*
+                        (assoc :max_tokens (:max-output-tokens (limits/effective {}))))
          :throw-exceptions false :redirect-strategy :none
          :retry-handler (fn [& _] false)
          :headers {:Authorization (str "Bearer " (:key config))}}))
@@ -61,17 +70,22 @@
 (defn openai-cmd
   "openai <prompt> # prompt OpenAI completions API"
   [{chat-source :chat-source msg :match}]
-  (let [{:keys [uuid room]} chat-source
-        context-key (str uuid "/" room)
-        channel-context (get @context context-key [initial-context])
-        user-content {:role "user" :content msg}
-        response (openai-completions (conj channel-context user-content))
-        response-content (-> response :body :choices first :message)
-        text (:content response-content)]
-    (swap! context assoc context-key (conj channel-context
-                                           user-content response-content))
-    {:result/data response
-     :result/value text}))
+  (try
+    (let [{:keys [uuid room]} chat-source
+          context-key (str uuid "/" room)
+          channel-context (get @context context-key [initial-context])
+          user-content {:role "user" :content msg}
+          response (openai-completions (conj channel-context user-content))
+          response-content (-> response :body :choices first :message)
+          text (:content response-content)]
+      (swap! context assoc context-key (conj channel-context
+                                             user-content response-content))
+      {:result/data response
+       :result/value text})
+    (catch Exception e
+      (if-not execution/*command-capture* (throw e)
+        {:result/value "OpenAI child request did not complete; do not retry automatically."
+         :result/data {:isError true}}))))
 
 (defn reset-cmd
   "openai reset # reset the OpenAI context for this channel"

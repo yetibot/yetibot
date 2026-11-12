@@ -50,11 +50,16 @@
                          (or (nil? (:model provider))
                              (:ai/free-default provider))
                          (not (contains? args "model")))
-         _ (when automatic? (policy/authorize-provider! t actor provider))
+         _ (when automatic?
+             (policy/authorize-provider! t actor provider)
+             (when execution/*command-capture*
+               (policy/authorize-provider! (:toolset-policy execution/*request*) actor provider)))
          model (if automatic?
                  (when resolve?
                    (ai/default-model provider
-                     #(policy/model-allowed? t actor provider %)))
+                     #(and (policy/model-allowed? t actor provider %)
+                           (or (not execution/*command-capture*)
+                               (policy/model-allowed? (:toolset-policy execution/*request*) actor provider %)))))
                  (or (get args "model") (:model provider)))
          provider (cond-> provider
                     (and automatic? resolve? model)
@@ -64,7 +69,9 @@
                 :configuration-unavailable))
      (when (or model (not automatic?))
        (when-not (text? model 200) (invalid!))
-       (policy/authorize! t actor provider model))
+       (policy/authorize! t actor provider model)
+       (when execution/*command-capture*
+         (policy/authorize! (:toolset-policy execution/*request*) actor provider model)))
      [provider model])))
 
 (defn- generation-budget [config]

@@ -11,7 +11,8 @@
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.util.image-input :as image-input]
             [yetibot.util.ai-config :as settings]
-            [yetibot.util.ai-execution :as execution])
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.models.ai-tool-policy :as policy])
   (:import [java.io PushbackReader StringReader]))
 
 (defn- schema! [text]
@@ -218,6 +219,13 @@
 (defn- run [model args]
   (try
     (execution/sensitive!)
+    (when execution/*command-capture*
+      (execution/charge!)
+      ;; These typed classifiers have no autoregressive generation allowance.
+      ;; Use the actual wire provider/model identity, not a chat-model default.
+      (policy/authorize! (:toolset-policy execution/*request*)
+                         (policy/actor execution/*event*)
+                         {:name "cloudflare"} (str "@cf/cloudflare/" model)))
     (let [{:keys [urls payload mode demo?]} (prepare model args)
           {:keys [value error]} (config/get-config map? [:ai])
           config (:intent-router (settings/ai value))
