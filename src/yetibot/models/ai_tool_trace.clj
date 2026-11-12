@@ -37,7 +37,7 @@
    :invalid-arguments
    (str "The AI provider sent invalid tool arguments. "
         "No tools from that response were run.")
-   :exclusive-batch "Stage changes in a separate, single-tool response."
+   :exclusive-batch "Call this tool alone in a single-tool response."
    :uncertain-result
    (str "The AI provider requested more tools after an uncertain result. "
         "No further tools were run.")

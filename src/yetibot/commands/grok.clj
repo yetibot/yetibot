@@ -207,7 +207,7 @@
   (let [event (get-in args [:chat-source :raw-event])
         channel-id (or (:channel-id event) chat/*target*)
         message-id (:id event)]
-    (if (and (legacy/discord?) channel-id message-id)
+    (if (and (not execution/*command-capture*) (legacy/discord?) channel-id message-id)
       (in-discord prepared args channel-id)
       (generate prepared))))
 

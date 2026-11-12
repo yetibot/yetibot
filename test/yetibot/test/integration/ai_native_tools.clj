@@ -46,8 +46,10 @@
 (def messages [{:role "user" :content "Find the launch discussion."}])
 
 (defn with-plugin-tools [names]
-  (into names (when (io/resource "yetibot_kroki/client.clj")
-                ["yetibot/kroki_types" "yetibot/kroki_render"])))
+  (let [plugin? (io/resource "yetibot_kroki/client.clj")]
+    (vec (concat (take 4 names) ["yetibot/command"]
+                 (when plugin? ["yetibot/chart"]) (drop 4 names)
+                 (when plugin? ["yetibot/kroki_types" "yetibot/kroki_render"])))))
 
 (def default-tool-names
   (with-plugin-tools
@@ -71,6 +73,14 @@
                          (:calls report))
                  => (not= :tool-exception (:reason report))))
          (.getMessage e))))
+
+(defn invalid-arguments-message? [message]
+  (and (string? message)
+       (string/starts-with? message
+         (str "The AI provider sent invalid tool arguments. "
+              "No tools from that response were run."))
+       (string/includes? message "execution did not begin.")
+       (<= (count message) 500)))
 
 (defn with-history [f]
   (let [config (assoc (db/config) :table
@@ -284,8 +294,7 @@
                                (throw (AssertionError. "Database accessed")))]
       (fact (error-message #(run-calls config
                              [["history_count" {}] ["history" args]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run.")))))
+            => invalid-arguments-message?))))
 
 (facts "help reads docs without executing a command or leaking alias bodies"
   (with-redefs [help/get-docs (constantly {"echo" #{"echo <text> # repeat"}
@@ -661,8 +670,7 @@
                          "top" (apply str (repeat 1001 "x")) "bottom" "y"}]]]
         (fact (error-message #(run-calls nil
                                [["gi" {"prompt" "valid image"}] [op args]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @calls => []))))
 
 (fact "configured credentials cannot become media prompts or captions"
@@ -676,8 +684,7 @@
                       "private-model-key"]]
         (fact (error-message #(run-calls nil
                                [["gi" {"prompt" (str "render " secret)}]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @calls => []))))
 
 (fact "an uncertain image call is sanitized and halts the rest of the batch"
@@ -721,8 +728,7 @@
                                               :name (str "meme " secret)}]}})]
       (fact (error-message #(run-calls nil
                              [["gi" {"prompt" (str "render " secret)}]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run.")
+            => invalid-arguments-message?
             (get-in (run-calls nil [["meme" {"action" "search"
                                              "query" "meme"}]])
                     [:replies 0 :structuredContent :templates 0 :name])
@@ -886,8 +892,7 @@
               #(run-calls nil [["clef" native-decision]
                                 ["wise" {"action" "balance"
                                          "account" "unconfigured"}]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run.")
+            => invalid-arguments-message?
             @inference => [] @wise => []))))
 
 (fact "Wise conversation policy also narrows explicit native discovery"
@@ -957,8 +962,7 @@
       (fact (error-message
               #(run-calls nil [["gi" {"prompt" "a yeti"}]
                                 ["util" (util-args "sum" ["not a number"])]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run."))
+            => invalid-arguments-message?)
       (fact @paid => 0)))
   (let [calls (atom 0)]
     (with-redefs [help/get-docs (fn [] (swap! calls inc) {})
@@ -972,8 +976,7 @@
                 #(run-calls nil [["help" {}]
                                   ["util" (util-args "random" [1 2])]
                                   ["util" bad]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @calls => 0))))
 
 (facts "util shares duplicate and total call budgets before any effect"
@@ -1021,6 +1024,5 @@
                 #(run-calls nil
                    [["wise" {"action" "balance"}]
                     ["clairic" {"fields" {"x" field} "input" "Value 42"}]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @wise => [] @inference => []))))

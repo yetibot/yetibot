@@ -19,6 +19,40 @@
 (def ^:dynamic *direct-command* nil)
 (def ^:dynamic *direct-input* nil)
 (def ^:dynamic *sensitive* nil)
+(def ^:dynamic *request* nil)
+(def ^:dynamic *command-capture* false)
+
+(defn charge!
+  "Consume one inherited host attempt before dispatch, never after a side effect."
+  []
+  (when *request*
+    (let [state (:budget *request*)]
+      (locking state
+        (when (or (:closed? @state) (>= (:used @state) (:limit @state)))
+          (throw (ex-info "Inherited AI host-call budget exhausted."
+                          {:ai/error true :ai/request-not-sent true
+                           :yetibot.models.ai-tool-trace/reason :budget-exceeded})))
+        (swap! state update :used inc)))))
+
+(defn remaining []
+  (when *request*
+    (let [{:keys [limit used]} @(:budget *request*)] (max 0 (- limit used)))))
+
+(defn clamp-budgets [budgets]
+  (if-not *request* budgets
+    (-> budgets
+        (update :max-output-tokens min (:generation-limit *request*))
+        (update :max-tool-calls min (:limit @(:budget *request*))))))
+
+(defn inherited-toolset [requested]
+  (if-not *request* requested
+    (let [original (:toolset-name *request*)]
+      (when (and requested (not= requested original)
+                 (not (when-let [narrow? (:narrow-toolset? *request*)]
+                        (narrow? requested))))
+        (throw (ex-info "Nested AI cannot widen its inherited toolset."
+                        {:ai/error true :ai/request-not-sent true})))
+      (or requested original))))
 
 (defn sensitive! []
   (when-not *sensitive*
@@ -64,7 +98,7 @@
    can open another turn. Never retain a prompt, credentials or pipeline text."
   [command {:keys [provider model caption? pipeline-input actor] :as prepared}
    result]
-  (when (and actor caption? (not pipeline-input)
+  (when (and (not *command-capture*) actor caption? (not pipeline-input)
              (string? (:result/value result))
              (not (string/blank? (:result/value result)))
              (not (:result/error result))
@@ -126,7 +160,8 @@
                                        (:?ns-str data)))
                     data))]
     (binding [*event* {:chat-source chat-source :user user
-                      :event-type event-type :body (:body event-info)}
+                      :event-type event-type :body (:body event-info)
+                      :yetibot-user yetibot-user}
               *direct-command* nil
               *direct-input* nil
               *sensitive* sensitive
@@ -187,12 +222,12 @@
     (string/replace-first (string/trim (:raw *direct-input*)) #"^ai\s+" "")))
 
 (defn with-direct-expression [callback chat-source user yetibot-user tree]
-  (binding [*direct-command* (direct-expression chat-source user tree)
-            *direct-input* (direct-input chat-source user tree)]
+  (binding [*direct-command* (when-not *command-capture* (direct-expression chat-source user tree))
+            *direct-input* (when-not *command-capture* (direct-input chat-source user tree))]
     (callback chat-source user yetibot-user tree)))
 
 (defn require-direct! [args]
-  (when-not (and *direct-command*
+  (when-not (and (not *command-capture*) *direct-command*
                  (= *direct-command*
                     (str "ai " (string/join " "
                                 (string/split (string/trim (:args args "")) #"\s+")))))

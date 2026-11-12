@@ -103,6 +103,56 @@ strings. The host delivers generated media independently of the model's prose,
 with structured artifact data and reviewed Kroki error diagnostics. See
 [Kroki commands, native tools and release ordering](KROKI.md).
 
+## Command data charts
+
+Trusted general/search requests advertise `command` and, when the Kroki client is
+available, `chart`. Explicit `:native-tools` lists remain authoritative: add
+`"command"`/`"chart"` to opt in. Empty lists, GitHub-only scopes, untrusted HTTP
+callers and `--no-tools` do not acquire these capabilities.
+
+For example, `!ai Chart temps as a temperature comparison` can execute the actual
+`temps` alias and chart its structured observations. The valid known-alias path
+uses two planning responses and one render, with no summary model turn. Supplied
+structured pipeline input can be charted directly. The host delivers its coverage
+caption and actual artifact even when model prose omits the URL; model image
+placeholders are not artifact evidence.
+
+`command` runs one literal Yetibot expression through the normal parser,
+interpreter, aliases and permissions as the original caller. **All authorized
+commands, including writes, run automatically** without a new AI confirmation or
+per-command allowlist. Existing admin, category, source and original-direct AI
+control restrictions still apply. A five-second timeout can leave effects
+uncertain: the host does not replay collection or writes to repair a chart.
+Nested command-driven AI shares the original tool allowance, generation ceiling,
+actor and toolset; it cannot reset budgets, change global AI controls or publish a
+duplicate child status/answer. Built-in defaults remain **32768/20**.
+
+Datasets exist only for the live root request: at most eight, 2 MiB total, 10,000
+rows each and 64 fields. The model sees opaque handles, checked field types/units,
+coverage and at most five redacted preview rows, not a requirement to copy all
+values into chart source. Every retained row is compiled; oversize data/source is
+refused, never silently sampled. Generic upstream completeness is unknown;
+failed locations and missing measurements stay explicit. A known chart validation
+failure gets at most one chart-only correction using the same data. Rendering
+failure/uncertainty does not trigger a retry. Handles expire and private rows are
+cleared when the root request finishes, including failures.
+
+Wise charts reuse the entire already-validated statement, even when ordinary
+command/native display is limited to 20 rows. No extra statement request or
+invented paging/baseline is used. Current balances are snapshots; historical
+lines require complete authoritative same-currency running-balance points.
+Internal moves are not automatically income/spending, fees are not deducted
+again, and unlike currencies use separate scales. See [Kroki](KROKI.md).
+
+Chart values, **including financial data**, automatically use the configured
+renderer (currently public Kroki by default) and public temporary artifact URLs;
+there is no privacy confirmation. Configured credentials and sensitive selected
+fields remain blocked/redacted. This is not a universal secret detector. Safe
+field-level errors explain what to change without exposing rejected arguments,
+command/source text or private transport errors. Bounded execution timings
+separate planning, collection, preparation, rendering and host handoff; handoff
+is not proof of Discord delivery or live-provider latency.
+
 ## Configuration
 
 Add `:ai` inside `:yetibot` in `config/config.edn` (or your `CONFIG_PATH` file):
@@ -1047,7 +1097,8 @@ percent regardless of display units. These `current` fields are the **root**
 fields available to `weather ... | render {{temp}}°C {{city_name}}`; do not
 put `current.` in that command's template. AQI may be unavailable. A failed
 lookup reports unavailable weather, never a fabricated or historical reading.
-This does not grant a general command interpreter or execute templates/aliases.
+The `weather` capability itself does not execute templates/aliases; the separate
+`command` capability uses normal caller authorization as described above.
 
 The `cron` tool accepts `action` (`list`, `get`, `create`, `update`, `delete`;
 default `list`). All access is scoped to the requesting adapter/channel, never
@@ -1557,7 +1608,9 @@ entries, not Yetibot's full environment or its other API keys.
   accepts 1–128 as a legacy startup default. The built-in fallback is **20**.
   This total host invocation budget spans selected MCP servers, native tools,
   batches and parent-model turns, not nesting depth or a per-round allowance.
-  A stateless delegated child counts as one host call.
+  A stateless delegated child counts as one host call. Command-driven nested
+  inference entries also consume the original allowance; child tool loops cannot
+  start fresh budgets or widen the active toolset.
 - Leading `ai --max-tool-calls N` and `grok --max-tool-calls N` choose a strict
   integer 1–128, overriding runtime/startup defaults. Named toolset selection
   narrows access; it does not grant additional calls or permissions. There is no

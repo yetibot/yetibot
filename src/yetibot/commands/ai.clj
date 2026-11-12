@@ -678,7 +678,12 @@
                       on-progress (assoc :on-progress on-progress)))))
 
 (defn complete-prompt [prepared]
-  (let [budgets (limits/effective prepared)
+  (let [_ (when execution/*command-capture*
+                  (execution/charge!)
+                  (policy/authorize! (:toolset-policy execution/*request*)
+                                     (policy/actor execution/*event*)
+                                     (:provider prepared) (:model prepared)))
+        budgets (limits/effective prepared)
         result (complete-prompt* (merge prepared budgets))]
     (if-not (map? result) result
       (public-result/reviewed
