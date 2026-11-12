@@ -938,3 +938,10 @@
     (get-in report [:calls 1 :problem :execution-began]) => false
     (string/includes? (trace/summary report) "Remove credentials") => true
     (string/includes? (pr-str public) "PRIVATE-CREDENTIAL") => false))
+
+(fact "reserved allowance is unavailable, not reported as spent"
+  (let [budget (atom {:limit 20 :used 3 :reserved 17 :closed? false})]
+    (binding [yetibot.util.ai-execution/*request* {:budget budget}]
+      (yetibot.util.ai-execution/remaining) => 0
+      (yetibot.util.ai-execution/charge!) => (midje.sweet/throws clojure.lang.ExceptionInfo)
+      (:used @budget) => 3)))

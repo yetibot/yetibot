@@ -1,6 +1,7 @@
 (ns yetibot.util.ai-execution
   "Host-owned adapter provenance and request-scoped private-output logging."
   (:require [clojure.string :as string]
+            [clojure.set :as set]
             [clojure.core.async :as async]
             [yetibot.api.mcp :as mcp]
             [yetibot.api.opencode :as zen]
@@ -8,6 +9,7 @@
             [yetibot.core.interpreter :as interp]
             [yetibot.core.util.public-result :as public]
             [yetibot.core.util.ai-usage :as usage]
+            [yetibot.core.util.agent-execution :as agent]
             [robert.hooke :as hooke]
             [taoensso.timbre :as log]
             [yetibot.core.handler :as handler]
@@ -22,21 +24,112 @@
 (def ^:dynamic *request* nil)
 (def ^:dynamic *command-capture* false)
 
-(defn charge!
-  "Consume one inherited host attempt before dispatch, never after a side effect."
-  []
-  (when *request*
-    (let [state (:budget *request*)]
-      (locking state
-        (when (or (:closed? @state) (>= (:used @state) (:limit @state)))
-          (throw (ex-info "Inherited AI host-call budget exhausted."
-                          {:ai/error true :ai/request-not-sent true
-                           :yetibot.models.ai-tool-trace/reason :budget-exceeded})))
-        (swap! state update :used inc)))))
+(defn- exhausted! []
+  (throw (ex-info "Inherited AI host-call budget exhausted or closed."
+                  {:ai/error true :ai/request-not-sent true
+                   :yetibot.models.ai-tool-trace/reason :budget-exceeded})))
 
 (defn remaining []
   (when *request*
-    (let [{:keys [limit used]} @(:budget *request*)] (max 0 (- limit used)))))
+    (let [{:keys [limit used reserved]} @(:budget *request*)]
+      (max 0 (- limit used (or reserved 0))))))
+
+(defn charge!
+  "Compatibility entry charge. Metered families charge at the actual send."
+  []
+  (when (and *request* (not (:metered? *request*)))
+    (let [state (:budget *request*)]
+      (locking state
+        (when (or (:closed? @state) (not (pos? (remaining)))) (exhausted!))
+        (swap! state update :used inc)))))
+
+(defn close-family! [request]
+  (locking (:budget request)
+    (swap! (:budget request) assoc :closed? true)))
+
+(defn family
+  "Create a host-owned finite source family. Dataset lifetime is separate.
+   The outer evaluator closes it; without a scope the owning loop closes it."
+  [limit generation-limit]
+  (when-not (and (integer? limit) (<= 0 limit 128)
+                 (integer? generation-limit) (<= 1 generation-limit 262144))
+    (exhausted!))
+  (let [request {:family-id (str (java.util.UUID/randomUUID)) :metered? true
+                 :usage-context-id (usage/context-id)
+                 :budget (atom {:limit limit :used 0 :reserved 0
+                                :receipts [] :closed? false})
+                 :generation-limit generation-limit :tool-ceiling (atom nil)
+                 :accepted-jobs (atom [])}]
+    (when agent/*scope*
+      (agent/on-close! (:family-id request) #(close-family! request)))
+    request))
+
+(defn admit-operation!
+  "Host ordinal, not a model tool ID. Always called before external effects."
+  [kind]
+  (when *request*
+    (let [request *request* state (:budget request)]
+      (if-let [admit (:admit! request)]
+        (admit kind agent/*operation*)
+        (if-not (:metered? request) (do (charge!) nil)
+          (locking state
+            (let [{:keys [closed? unknown? used receipts]} @state
+                  parent (:ordinal agent/*operation*)]
+              (when (or closed? unknown? (not (pos? (remaining)))
+                        (if parent
+                          (not= :intent (:state (get receipts (dec parent))))
+                          (some #(= :intent (:state %)) receipts)))
+                (exhausted!))
+              (let [handle {:family-id (:family-id request) :ordinal (inc used)
+                            :parent-ordinal parent :kind kind :state :intent}]
+                (swap! state #(-> % (update :used inc)
+                                  (update :receipts conj handle)))
+                handle))))))))
+
+(defn finish-operation! [handle outcome]
+  (when handle
+    (if-let [finish (:finish! *request*)]
+      (finish handle outcome)
+      (let [state (:budget *request*) i (dec (:ordinal handle))]
+        (locking state
+          (when-not (and (not (:closed? @state))
+                         (= (:family-id *request*) (:family-id handle))
+                         (= :intent (get-in @state [:receipts i :state])))
+            (exhausted!))
+          (when (and (= :definitive (:state outcome))
+                     (some #(and (= (:ordinal handle) (:parent-ordinal %))
+                                 (not= :definitive (:state %))) (:receipts @state)))
+            (exhausted!))
+          (swap! state #(cond-> (assoc-in % [:receipts i :state] (:state outcome))
+                         (= :unknown (:state outcome)) (assoc :unknown? true))))))))
+
+(defn save-loop!
+  "Only the owning outer loop saves continuation. Inner receipts never do."
+  ([state] (save-loop! state nil))
+  ([state handle]
+   (if (or agent/*operation* (:parent-ordinal handle))
+     (when handle (finish-operation! handle {:state :definitive}))
+     (if-let [save (:checkpoint-loop! *request*)]
+       (save state handle)
+       (when handle (finish-operation! handle {:state :definitive}))))))
+
+(defn with-request* [request f]
+  (binding [*request* request
+            usage/*context-id* (or (:usage-context-id request) usage/*context-id*)
+            usage/*admit-inference*
+            (when (:metered? request)
+              (fn [attrs]
+                (when-let [authorize (:authorize-inference! request)] (authorize attrs))
+                (admit-operation! :inference)))
+            usage/*finish-inference*
+            (when (:metered? request) finish-operation!)]
+    (f)))
+
+(defn require-open! []
+  (when *request*
+    (let [state @(:budget *request*)]
+      (when (or (:closed? state) (:unknown? state) (not (pos? (remaining))))
+        (exhausted!)))))
 
 (defn clamp-budgets [budgets]
   (if-not *request* budgets
@@ -53,6 +146,26 @@
         (throw (ex-info "Nested AI cannot widen its inherited toolset."
                         {:ai/error true :ai/request-not-sent true})))
       (or requested original))))
+
+(defn intersect-policy
+  "Absent constraints are unrestricted, never an excuse to discard a ceiling."
+  [original current]
+  (let [intersect-values (fn [a b]
+                           (cond (nil? a) b (nil? b) a
+                                 :else (filterv (set b) a)))
+        policy (reduce (fn [out k]
+                         (if (or (contains? original k) (contains? current k))
+                           (assoc out k (intersect-values (get original k) (get current k))) out))
+                       current [:users :adapters :repositories :native-tools])
+        providers (fn [p] (set (for [entry p model (:models entry)] [(:name entry) model])))
+        a (:providers original) b (:providers current)]
+    (cond-> policy
+      (or a b)
+      (assoc :providers
+             (if (and a b)
+               (mapv (fn [[name pairs]] {:name name :models (mapv second pairs)})
+                     (sort-by key (group-by first (set/intersection (providers a) (providers b)))))
+               (or a b))))))
 
 (defn sensitive! []
   (when-not *sensitive*

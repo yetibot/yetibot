@@ -177,12 +177,7 @@
         (if (<= (json-bytes result) descriptor-bytes) result
           (recur (pop rows)))))))
 
-(defn retain!
-  "Validate and snapshot a complete host envelope before atomic admission.
-   Returns a bounded descriptor, never the complete rows. Failed admission
-   leaves every previously retained dataset reusable."
-  [store owner envelope]
-  (authorize! store owner)
+(defn- validate-envelope! [envelope]
   (let [{:keys [rows fields source captured-at series-field]} envelope]
     (when-not (and (vector? rows) (<= (count rows) 10000) (every? map? rows)
                    (string? source) (<= 1 (count source) 256)
@@ -196,20 +191,63 @@
           retained (cond-> {:rows rows :fields fields :source source
                             :captured-at captured-at
                             :coverage (coverage! (:coverage envelope) (count rows))}
-                     series-field (assoc :series-field series-field))
-          size (json-bytes retained)
-          id (str (UUID/randomUUID))
-          result (descriptor store id retained)]
-      (when (> size max-bytes) (invalid! :size))
-      (swap! (:state store)
-             (fn [state]
-               (when (:closed? state) (invalid! :scope))
-               (when (or (>= (count (:datasets state)) 8)
-                         (> (+ (:bytes state) size) max-bytes))
-                 (invalid! :size))
-               (-> state (update :bytes + size)
-                   (assoc-in [:datasets id] retained))))
-      result)))
+                     series-field (assoc :series-field series-field))]
+      retained)))
+
+(defn retain!
+  "Validate and snapshot before atomic admission. No partial dataset survives."
+  [store owner envelope]
+  (authorize! store owner)
+  (let [retained (validate-envelope! envelope)
+        size (json-bytes retained)
+        id (str (UUID/randomUUID))
+        result (descriptor store id retained)]
+    (when (> size max-bytes) (invalid! :size))
+    (swap! (:state store)
+           (fn [state]
+             (when (:closed? state) (invalid! :scope))
+             (when (or (>= (count (:datasets state)) 8)
+                       (> (+ (:bytes state) size) max-bytes))
+               (invalid! :size))
+             (-> state (update :bytes + size)
+                 (assoc-in [:datasets id] retained))))
+    result))
+
+(defn export-store!
+  "Host checkpoint data only; never exports secrets or reviewed metadata.
+   Refuse unsafe continuation rather than redact or truncate retained values."
+  [store owner]
+  (locking (:state store)
+    (authorize! store owner)
+    (let [datasets (:datasets @(:state store))]
+      (when-not (= datasets (protect (:redaction-config store) datasets))
+        (invalid! :credentials))
+      {:version 1 :owner owner :datasets datasets})))
+
+(defn import-store!
+  "Host codec entry: validate exact owner, IDs, envelopes and aggregate bounds.
+   This creates private observations, never authenticated result metadata."
+  [owner saved redaction-config]
+  (when-not (and (= #{:version :owner :datasets} (set (keys saved)))
+                 (= 1 (:version saved)) (= owner (:owner saved))
+                 (map? (:datasets saved)) (<= (count (:datasets saved)) 8))
+    (invalid! :checkpoint))
+  (let [store (create-store owner redaction-config)
+        retained (into {}
+                   (map (fn [[id envelope]]
+                          (when-not (and (string? id)
+                                         (= id (str (try (UUID/fromString id)
+                                                        (catch Exception _ nil)))))
+                            (invalid! :id))
+                          (let [validated (validate-envelope! envelope)]
+                            (when-not (= validated envelope) (invalid! :checkpoint))
+                            [id validated]))) (:datasets saved))
+        size (reduce + 0 (map json-bytes (vals retained)))]
+    (when (or (> size max-bytes)
+              (not= retained (protect (:redaction-config store) retained)))
+      (invalid! :checkpoint))
+    (reset! (:state store) {:closed? false :bytes size :datasets retained})
+    store))
 
 (defn lookup!
   "Resolve only in this live request and under its exact host owner. Raw rows

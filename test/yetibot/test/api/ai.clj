@@ -5,6 +5,8 @@
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
             [yetibot.core.chat :as chat]
+            [yetibot.core.util.ai-usage :as usage]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.core.config :as config]
             [yetibot.models.ai-context :as context])
   (:import [com.sun.net.httpserver HttpServer HttpHandler]
@@ -127,3 +129,29 @@
           (mapv :path @requests)
           => ["/custom/v1/models" "/custom/v1/chat/completions" "/slack/conversations.replies" "/redirect/models"]))
       (finally (.stop server 0)))))
+
+
+(fact "actual prepared chat and Responses wire facts precede each physical send"
+  (doseq [api [nil "responses"]]
+    (let [p (cond-> (assoc provider :url "https://routed.invalid/private/v1/")
+              api (assoc :api api))
+          admissions (atom []) wires (atom [])
+          response (if api {:status "completed" :output [{:type "message"
+                                    :content [{:type "output_text" :text "answer"}]}]}
+                       {:choices [{:message {:role "assistant" :content "answer"}}]})]
+      (with-redefs [client/post (fn [url opts]
+                                 (swap! wires conj [url (:form-params opts)])
+                                 (count @admissions) => (count @wires)
+                                 {:status 200 :body response})]
+        (binding [usage/*admit-inference* #(do (swap! admissions conj %) {:ordinal 1})
+                  usage/*finish-inference* (fn [_ _])]
+          (ai/chat p "chat" messages {:max-output-tokens 91}) => response)
+        (select-keys (first @admissions) [:provider :model :provider-signature :output-cap])
+        => {:provider "example" :model "chat"
+            :provider-signature (execution/provider-signature p) :output-cap 91}
+        (:endpoint (first @admissions)) => (ffirst @wires)
+        (get-in @wires [0 1 (if api :max_output_tokens :max_completion_tokens)]) => 91
+        (binding [usage/*admit-inference* (fn [_] (throw (ex-info "denied" {})))]
+          (ai/chat p "other" messages {:max-output-tokens 91})) => (midje.sweet/throws Exception)
+        (count @wires) => 1
+        (boolean (re-find #"secret" (pr-str (first @admissions)))) => false))))

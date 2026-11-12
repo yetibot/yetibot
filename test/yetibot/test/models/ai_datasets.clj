@@ -136,3 +136,27 @@
       (string/includes? (json/generate-string descriptor) "987654321") => false
       (get-in (datasets/lookup! store owner (:dataset-id descriptor))
               [:rows 0 (if (keyword? key) (subs (str key) 1) key)]) => 987654321)))
+
+(fact "durable dataset codec preserves exact IDs and rejects closed stores"
+  (let [store (datasets/create-store owner)
+        id (:dataset-id (datasets/retain! store owner envelope))
+        saved (datasets/export-store! store owner)
+        restored (datasets/import-store! owner saved {})]
+    (datasets/lookup! restored owner id) => (datasets/lookup! store owner id)
+    (:dataset-id (datasets/describe restored owner id)) => id
+    (datasets/close! store owner)
+    (datasets/export-store! store owner) => (throws clojure.lang.ExceptionInfo)))
+
+(fact "durable snapshots reject credentials rather than changing exact continuation data"
+  (let [store (datasets/create-store owner {:secrets ["PRIVATE_SYNTHETIC_VALUE"]})
+        id (:dataset-id (datasets/retain! store owner
+                          (assoc envelope :rows [{:city "PRIVATE_SYNTHETIC_VALUE" :temp 1}])))]
+    (get-in (datasets/describe store owner id) [:preview 0 "city"]) => "[redacted]"
+    (datasets/export-store! store owner) => (throws Exception)
+    (get-in (datasets/lookup! store owner id) [:rows 0 "city"]) => "PRIVATE_SYNTHETIC_VALUE")
+  (let [store (datasets/create-store owner)
+        id (:dataset-id (datasets/retain! store owner envelope))
+        saved (datasets/export-store! store owner)]
+    (datasets/import-store! (assoc owner :actor {:id "another"}) saved {}) => (throws Exception)
+    (datasets/import-store! owner (assoc-in saved [:datasets id :reviewed] true) {})
+    => (throws Exception)))

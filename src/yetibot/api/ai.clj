@@ -15,7 +15,8 @@
             [yetibot.util.ai-config :as settings]
             [yetibot.util.ai-limits :as limits]
             [yetibot.util.ai-capacity :as capacity]
-            [yetibot.util.ai-cost :as cost])
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.util.ai-execution :as execution])
   (:import [java.io File FileInputStream]
            [java.net URI]
            [java.util UUID]))
@@ -381,18 +382,8 @@
                  {:model model
                   :messages (if (cloudflare/provider-account provider)
                               (cloudflare-messages messages) messages)})]
-    (let [body
-          (try
-            (usage/capture!
-              {:provider (:name provider) :model model :operation "text"
-               :secrets [(:key provider)]}
-              (fn []
-                (request
-                  client/post provider
-                  (if responses-api? "/responses" "/chat/completions")
-                  {:content-type :json
-                   :form-params
-                   (merge
+    (let [path (if responses-api? "/responses" "/chat/completions")
+          form (merge
                      (cond-> params
                        progress (assoc :stream true)
                        (:max-output-tokens options)
@@ -410,7 +401,23 @@
                        ;; Stateless Workers AI rejects empty tool fields.
                        (and (cloudflare/provider-account provider)
                             (empty? (:tools options)))
-                       (dissoc :tools :tool_choice)))}
+                       (dissoc :tools :tool_choice)))
+          body
+          (try
+            (usage/capture!
+              {:provider (:name provider) :model model :operation "text"
+               :secrets [(:key provider)]
+               :endpoint (str (string/replace (:url provider) #"/+$" "") path)
+               :provider-signature (execution/provider-signature provider)
+               :output-cap (or (:max_output_tokens form) (:max_completion_tokens form)
+                               (:max_tokens form))}
+              (fn []
+                (request
+                  client/post provider
+                  path
+                  {:content-type :json
+                   :form-params
+                   form}
                   progress (::diagnostics/stage options :initial)))
               (partial cost/ledger-metrics provider model))
             (catch Exception e

@@ -9,6 +9,7 @@
             [yetibot.api.ai-stream :as stream]
             [yetibot.api.mcp :as mcp]
             [yetibot.core.util.public-result :as public-result]
+            [yetibot.core.util.agent-execution :as agent]
             [yetibot.models.ai-data-tools :as data-tools]
             [yetibot.models.ai-datasets :as datasets]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -292,8 +293,10 @@
        :tool-budget {:used used :limit limit
                      :remaining (max 0 (- limit used))}})))
 
-(defn- execute-batch [calls config trace-state start]
-  (loop [pending calls replies [] attempted 0 halted false]
+(defn- execute-batch [calls config trace-state start resume save!]
+  (let [saved-replies (:replies resume [])]
+  (loop [pending (drop (count saved-replies) calls) replies saved-replies
+         attempted (:attempted resume 0) halted (:halted resume false)]
     (if-let [call (first pending)]
       (let [ordinal (+ start (count replies) 1)]
         (if halted
@@ -307,14 +310,17 @@
                                   (str "This tool was not run because an "
                                        "earlier call had an unknown outcome.")})
                    attempted true))
-          (let [_ (execution/charge!)
+          (let [handle (execution/admit-operation! :tool)
                 _ (swap! trace-state update :used inc)
                 _ (trace/outcome! trace-state ordinal :unknown true false)
                 _ (notify-tool! config trace-state ordinal :running)
                 started (System/nanoTime)
-                reply (try (binding [diagnostics/*call* ordinal]
+                reply (try (binding [diagnostics/*call* ordinal
+                                   agent/*operation* (or handle agent/*operation*)]
                              (execute-call call config))
                            (catch Exception _
+                             (when handle
+                               (execution/finish-operation! handle {:state :unknown}))
                              (let [elapsed (min 300000
                                              (long (/ (- (System/nanoTime) started)
                                                       1000000)))]
@@ -362,9 +368,13 @@
                           (cond unknown? :unknown
                                 (::tool-error (meta reply)) :error
                                 :else :success))
+            (if unknown?
+              (when handle (execution/finish-operation! handle {:state :unknown}))
+              (save! {:replies (conj replies reply) :attempted (inc attempted)
+                      :halted false} handle))
             (recur (next pending) (conj replies reply)
                    (inc attempted) unknown?))))
-      {:replies replies :attempted attempted :halted halted})))
+      {:replies replies :attempted attempted :halted halted}))))
 
 (defn- terminal-result [config trace-state limit accounting used]
   (data-tools/timed config :handoff
@@ -394,8 +404,10 @@
         by-name (into {} (map (juxt :name identity) entries))
         definitions (mapv :definition entries)
         limit (mcp/number-option (:max-tool-calls config) 20)
-        trace-state (atom {:calls [] :omitted 0 :next-call 0
-                           :used 0 :requested 0})
+        resume (:resume-loop config)
+        trace-state (atom (or (:trace resume)
+                              {:calls [] :omitted 0 :next-call 0
+                               :used 0 :requested 0}))
         redact (trace/redactor config messages)
         ;; Check original spellings before generated-name substitution/cropping.
         ;; The same lazy request redactor also supplies trace's safe row labels.
@@ -413,9 +425,12 @@
     (stream/notify! (:on-progress config) config
                     {:tool-budget {:used 0 :limit limit :remaining limit}})
     (try
-      (loop [messages (into [{:role "system" :content instructions}] messages)
-             used 0 seen #{} actions #{} stage :initial
-             response 1 accounting cost/initial correction? false]
+      (loop [messages (or (:messages resume)
+                          (into [{:role "system" :content instructions}] messages))
+             used (:used resume 0) seen (:seen resume #{})
+             actions (:actions resume #{}) stage (:stage resume :initial)
+             response (:response resume 1) accounting (:accounting resume cost/initial)
+             correction? (:correction? resume false) resume resume]
         (let [_ (swap! trace-state assoc :requested 0)
               remaining (min (- limit used) (or (execution/remaining) limit))
               turn-messages
@@ -428,7 +443,7 @@
                            "When exhausted, stop fetching and answer "
                            "with available evidence.")}]
                     (rest messages))
-              body (data-tools/timed config :planning
+              body (or (:body resume) (data-tools/timed config :planning
                      (fn [] (ai/chat provider model turn-messages
                             (cond->
                               {::diagnostics/stage stage
@@ -445,16 +460,31 @@
                                         (dissoc event :answer :answer-limit?)))
                                      :progress-config
                                      (assoc config :progress-response
-                                            response))))))
-              _ (swap! (:planning-responses config) inc)
-              accounting (cost/add accounting (cost/turn provider model body))
+                                            response)))))))
+              _ (when-not (:body resume) (swap! (:planning-responses config) inc))
+              accounting (if (:body resume) accounting
+                           (cost/add accounting (cost/turn provider model body)))
               message (ai/message provider body)
-              calls (:tool_calls message)]
+              calls (:tool_calls message)
+              snapshot (fn [extra]
+                         (merge {:messages messages :used used :seen seen
+                                 :actions actions :stage stage :response response
+                                 :accounting accounting :correction? correction?
+                                 :body body :trace @trace-state
+                                 :chart-terminal @(:chart-terminal config)
+                                 :chart-stop @(:chart-stop config)
+                                 :artifacts @(:kroki-artifacts config)
+                                 :errors @(:kroki-errors config)
+                                 :planning-responses @(:planning-responses config)
+                                 :stage-timings @(:stage-timings config)
+                                 :accepted-jobs (some-> execution/*request* :accepted-jobs deref)} extra))
+              _ (when-not resume (execution/save-loop! (snapshot {})))]
           (if (and (some? calls) (not= [] calls))
             (let [collection? (sequential? calls)
-                  start (trace/add-batch! trace-state
-                                          (if collection? calls [])
-                                          by-name redact)]
+                  start (or (:batch-start resume)
+                            (trace/add-batch! trace-state
+                                              (if collection? calls [])
+                                              by-name redact))]
               (when-not (vector? calls) (trace/fail! :malformed-batch))
               (when-not (every? #(and (map? %) (= "function" (:type %))
                                      (ai/nonblank-string? (:id %))
@@ -462,7 +492,8 @@
                 (trace/fail! :malformed-call))
               (when-not (= (count calls) (count (distinct (map :id calls))))
                 (trace/fail! :duplicate-ids))
-              (when (> (count calls) remaining)
+              (when (> (- (count calls) (count (get-in resume [:batch :replies])))
+                       (min (- limit used) (or (execution/remaining) limit)))
                 (trace/fail! :budget-exceeded))
               (let [chart-only? (sole-host-chart? calls by-name)
                     _ (when (and correction? (not chart-only?)) (trace/fail! :exclusive-batch))
@@ -481,7 +512,10 @@
                   (trace/fail! :exclusive-batch))
                 (let [{:keys [replies attempted halted]}
                       (if parsed
-                        (execute-batch parsed config trace-state start)
+                        (execute-batch parsed config trace-state start (:batch resume)
+                          (fn [batch handle]
+                            (execution/save-loop!
+                              (snapshot {:batch-start start :batch batch}) handle)))
                         {:replies [{:role "tool" :tool_call_id (:id (first calls))
                                     :content (json/generate-string
                                                {:isError true :problem (:problem (last (:calls @trace-state)))})}]
@@ -510,12 +544,27 @@
                      :result/data
                      {:proposal (:id p)
                       :mcp {:tool-calls (+ used attempted)} :ai/cost accounting}})
+                    (and (:metered? execution/*request*) (zero? (execution/remaining))
+                         (seq (some-> execution/*request* :accepted-jobs deref)))
+                    (let [jobs (some-> execution/*request* :accepted-jobs deref)
+                          report (trace/public-report
+                                   (trace/report trace-state limit (if (seq jobs) :queued :exhausted)))]
+                      (public/reviewed
+                        {:result/value
+                         (if (seq jobs)
+                           (str "Accepted/queued inherited work (not completed): "
+                                (string/join ", " (map :job-id jobs)) ".")
+                           "Inherited allowance exhausted; no further inference or tool was dispatched.")
+                         :result/data {:mcp {:tool-calls (+ used attempted)}
+                                       :ai/cost accounting :execution report
+                                       :agent-jobs jobs :isError (empty? jobs)}
+                         :result/public-data {:execution report :agent-jobs jobs}}))
                     :else
                     (recur (ai/continue-messages provider messages body replies)
                            (long (+ used attempted))
                            (into seen (map :id calls))
                            (into actions requested-actions)
-                           :follow-up (inc response) accounting (or correction? chart-only?))))))
+                           :follow-up (inc response) accounting (or correction? chart-only?) nil)))))
             (if correction?
               (do (reset! (:chart-stop config) "No valid chart correction was supplied; collected data was not replayed.")
                   (terminal-result config trace-state limit accounting used))
@@ -613,6 +662,22 @@
          [:planning :collection :preparation :render :handoff])
    :planning-responses @plans})
 
+(defn- inherited-config [config]
+  (if-not execution/*request* config
+    (let [original (:toolset-policy execution/*request*)
+          policy (execution/intersect-policy original (:toolset config))
+          servers (:servers original)
+          config (assoc config :toolset policy)]
+      (if-not (some? servers) config
+        (update config :servers
+          (fn [current]
+            (vec (keep (fn [server]
+                         (when-let [before (some #(when (= (:name server) (:name %)) %) servers)]
+                           (if (nil? (:tools before)) server
+                             (update server :tools
+                               #(if (nil? %) (:tools before)
+                                  (filterv (set (:tools before)) %)))))) current))))))))
+
 (defn- complete*
   ([provider model messages] (complete* provider model messages {}))
   ([provider model messages
@@ -620,8 +685,9 @@
             max-tool-calls max-output-tokens] :as options}]
    (let [_ (request-budget! max-tool-calls)
          _ (limits/request! :max-output-tokens max-output-tokens)
-         config (adapter-servers (toolsets/select (mcp/config) (execution/inherited-toolset toolset))
-                                 actor)
+         config (inherited-config
+                  (adapter-servers (toolsets/select (mcp/config) (execution/inherited-toolset toolset))
+                                   actor))
          config (merge config (limits/effective config options)
                        {:on-progress on-progress :staged (atom nil)
                         :kroki-artifacts (:kroki-artifacts options)
@@ -630,7 +696,9 @@
                         :dataset-owner (:dataset-owner execution/*request*)
                         :stage-timings (:stage-timings options)
                         :planning-responses (:planning-responses options)
-                        :chart-terminal (atom nil) :chart-stop (atom nil)})]
+                        :resume-loop (:resume-loop execution/*request*)
+                        :chart-terminal (atom (get-in execution/*request* [:resume-loop :chart-terminal]))
+                        :chart-stop (atom (get-in execution/*request* [:resume-loop :chart-stop]))})]
      (policy/authorize! (:toolset config) actor provider model)
      (when (toolsets/github? (:toolset config)) (execution/sensitive!))
      (when (and (seq (get-in config [:toolset :native-tools]))
@@ -674,8 +742,15 @@
                      reads (model-tools config reads)
                      tools (cond-> (into reads local)
                              (= "github-pr" (get-in config [:toolset :kind]))
-                             (conj (staging-tool config actor provider model
-                                                 reads)))]
+                             (conj (staging-tool config actor provider model reads)))
+                     tools (if-let [allowed? (:allowed-tool? execution/*request*)]
+                             (filterv allowed? tools) tools)
+                     _ (when-let [ceiling (:tool-ceiling execution/*request*)]
+                         (compare-and-set! ceiling nil
+                           (set (map (fn [tool]
+                                       [(if (:native? tool) "yetibot"
+                                          (get-in tool [:session :server :name]))
+                                        (:name tool)]) tools))))]
                  (cond-> (try (run-tools provider model messages tools config)
                               (finally
                                 (when (some #(contains? @(:stage-timings config) %)
@@ -723,7 +798,8 @@
 (defn- complete-request
   ([provider model messages] (complete-request provider model messages {}))
   ([provider model messages options]
-   (let [artifacts (atom []) errors (atom [])]
+   (let [artifacts (atom (get-in execution/*request* [:resume-loop :artifacts] []))
+         errors (atom (get-in execution/*request* [:resume-loop :errors] []))]
      (cost/capture
        #(with-kroki-results
           (try
@@ -756,15 +832,17 @@
                              (get-in result [:result/data :execution])) details)
           used (:used @(:budget request))
           execution (cond-> execution
-                      (and root? (:budget execution))
+                      (and (or root? (:metered? request)) (:budget execution))
                       (update :budget assoc :used used
-                              :remaining (max 0 (- (:limit (:budget execution)) used))))]
+                              :reserved (:reserved @(:budget request) 0)
+                              :remaining (max 0 (- (:limit (:budget execution)) used
+                                                   (:reserved @(:budget request) 0)))))]
       (public/reviewed
         (cond-> (-> result
                     (assoc-in [:result/data :execution] execution)
                     (assoc :result/public-data
                            (assoc projection :execution execution)))
-          (and root? (get-in result [:result/data :mcp]))
+          (and root? (not (:metered? request)) (get-in result [:result/data :mcp]))
           (assoc-in [:result/data :mcp :tool-calls] used))))))
 
 (defn- narrow-toolset? [original candidate]
@@ -791,6 +869,7 @@
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
    (let [root? (nil? execution/*request*)
+         _ (execution/require-open!)
          config (mcp/config)
          selected (toolsets/select config
                     (execution/inherited-toolset (:toolset options)))
@@ -798,23 +877,59 @@
          owner (when (native/trusted? (:actor options))
                  {:actor (:actor options)
                   :chat-source (:chat-source execution/*event*)})
-         store (when (and root? owner)
-                 (datasets/create-store owner
-                   {:secrets (:additional-secrets options)}))
+         inherited-store (:dataset-store execution/*request*)
+         owns-store? (or root? (nil? inherited-store)
+                         (:closed? @(:state inherited-store)))
+         store (when (and owns-store? owner)
+                 (datasets/create-store owner {:secrets (:additional-secrets options)}))
          request (assoc
                    (or execution/*request*
-                       {:budget (atom {:used 0 :limit (:max-tool-calls budgets)
-                                       :closed? false})
-                        :event execution/*event*
-                        :stage-timings (atom {}) :planning-responses (atom 0)
-                        :dataset-store store :dataset-owner owner})
+                       (merge (execution/family (:max-tool-calls budgets)
+                                                (:max-output-tokens budgets))
+                              ;; Source issuance belongs to the installed host
+                              ;; bridge. Never downgrade an existing family.
+                              {:metered? false :event execution/*event*
+                               :planner-provider (ai/prepare-provider provider model)
+                               :planner-model model
+                               :stage-timings (atom {}) :planning-responses (atom 0)
+                               :dataset-store store :dataset-owner owner}))
                    :generation-limit (:max-output-tokens budgets)
+                   :event (or (:event execution/*request*) execution/*event*)
+                   :planner-provider (or (:planner-provider execution/*request*)
+                                         (ai/prepare-provider provider model))
+                   :planner-model (or (:planner-model execution/*request*) model)
+                   :dataset-store (if owns-store? store inherited-store)
+                   :dataset-owner (if owns-store? owner (:dataset-owner execution/*request*))
                    :toolset-name (get-in selected [:toolset :name])
-                   :toolset-policy (:toolset selected)
-                   :narrow-toolset? #(narrow-toolset? selected
-                                      (toolsets/select config %)))
+                   :resume-loop (when-not (:loop-active? execution/*request*)
+                                  (:resume-loop execution/*request*))
+                   :loop-active? true
+                   :toolset-policy (execution/intersect-policy
+                                     (:toolset-policy execution/*request*) (:toolset selected))
+                   :tool-ceiling (or (:tool-ceiling execution/*request*) (atom nil))
+                   :authorize-inference!
+                   (or (:authorize-inference! execution/*request*)
+                       (fn [attrs]
+                         (let [actual (ai/prepare-provider
+                                        (if (= (:name provider) (:provider attrs)) provider
+                                          (ai/provider (ai/config) (:provider attrs)))
+                                        (:model attrs))
+                               cap (:output-cap attrs)]
+                           (when-not (and (= (:provider-signature attrs)
+                                              (execution/provider-signature actual))
+                                          (if (= "text" (:operation attrs))
+                                            (and (integer? cap) (<= 1 cap (:max-output-tokens budgets)))
+                                            (or (nil? cap)
+                                                (and (integer? cap) (<= 1 cap (:max-output-tokens budgets))))))
+                             (ai/fail "Inherited inference identity or cap changed."))
+                           (policy/authorize! (execution/intersect-policy
+                                                (:toolset-policy execution/*request*) (:toolset selected))
+                                              (:actor options) actual (:model attrs)))))
+                   :narrow-toolset? (or (:narrow-toolset? execution/*request*)
+                                        #(narrow-toolset? selected (toolsets/select config %))))
          timings (:stage-timings request) plans (:planning-responses request)]
-     (binding [execution/*request* request]
+     (execution/with-request* request
+       (fn []
        (try
          (with-execution-details
            (complete-request provider model messages
@@ -831,9 +946,8 @@
                                         :remaining (or (execution/remaining) 0)))) e))
              (throw e)))
          (finally
-           (when root?
-             (swap! (:budget request) assoc :closed? true)
-             (when store (datasets/close! store owner)))))))))
+           (when (and root? (not agent/*scope*)) (execution/close-family! request))
+           (when store (datasets/close! store owner)))))))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))
