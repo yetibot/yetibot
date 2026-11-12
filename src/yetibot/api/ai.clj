@@ -351,7 +351,8 @@
                        (<= 1 (:max-output-tokens options) 262144))))
     (fail "AI output token limit must be an integer from 1 to 262144."))
   (let [options (merge (limits/effective options) options)
-        provider (prepare-provider provider model)
+        provider (prepare-provider (if (execution/text-only?)
+                                     (dissoc provider :native-tools) provider) model)
         _ (when-let [record (::capacity/model provider)]
             (when (= model (:id record))
               (capacity/check! record (:max-output-tokens options))))

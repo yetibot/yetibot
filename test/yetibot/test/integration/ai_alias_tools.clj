@@ -8,15 +8,17 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
             [yetibot.test.models.ai-alias-tools :as fixture]
-            [yetibot.test.support.ai-execution :as execution]))
+            [yetibot.test.support.ai-execution :as execution]
+            [yetibot.test.integration.ai-command-charts :as caller]))
 
 (def settings {:servers [] :toolsets [fixture/toolset]})
 
 (defn run-calls [calls callback]
-  (execution/in-event execution/request "ai describe aliases"
+  (caller/with-current-caller #(execution/in-event execution/request "ai describe aliases"
     (fn [request]
       (let [sent (atom [])]
         (with-redefs [mcp/config (constantly settings)
+                      ai/config (constantly {:providers [(assoc fixture/provider :url "https://synthetic.invalid/v1")]})
                       ai/chat
                       (fn [_ _ messages options]
                         (swap! sent conj {:messages messages :options options})
@@ -33,10 +35,10 @@
                                         (json/generate-string args)}})
                                     (range) calls)}
                              {:role "assistant" :content "Done."})}]})]
-          (callback #(tools/complete fixture/provider "fake"
+          (callback (fn [] (tools/complete (assoc fixture/provider :url "https://synthetic.invalid/v1") "fake"
                                     [{:role "user"
                                       :content "Describe aliases."}]
-                                    {:actor (policy/actor request)}) sent))))))
+                                    {:actor (policy/actor request)})) sent)))))))
 
 (facts "passive discovery preserves the explicit capability boundary"
   (fixture/with-store []

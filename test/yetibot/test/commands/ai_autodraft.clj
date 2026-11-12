@@ -9,7 +9,8 @@
             [yetibot.core.commands.cmd] [yetibot.core.commands.nil]
             [yetibot.core.webapp.routes.api :as route]
             [yetibot.core.models.channel :as channel]
-            [yetibot.models.ai-autodraft :as autodraft]))
+            [yetibot.models.ai-autodraft :as autodraft]
+            [yetibot.test.integration.ai-command-charts :as caller]))
 
 (def provider {:name "local" :url "http://localhost/v1" :model "chat"})
 (def router {:enabled true :github-toolset "github-pr" :account-id (apply str (repeat 32 "a"))
@@ -17,10 +18,13 @@
 (defn request [] (assoc-in chat/request [:chat-source :raw-event :ts] (str (java.util.UUID/randomUUID))))
 (defn scenario [f]
   (let [classified (atom []) writes (atom []) generations (atom [])
-        generation-options (atom [])]
-    (with-redefs [channel/settings-for-chat-source (constantly {})
+        generation-options (atom [])
+        t (update fixture/t :providers conj {:name "cloudflare" :models ["@cf/cloudflare/clef"]})
+        config (assoc fixture/config :toolsets [t])]
+    (with-redefs [fixture/t t fixture/config config
+                  channel/settings-for-chat-source (constantly {})
                   api/config (constantly {:providers [provider] :intent-router router})
-                  mcp/config (constantly fixture/config)
+                  mcp/config (constantly config)
                   context/messages (fn [_ prompt] [{:role "user" :content prompt}])
                   clef/credential! (constantly "fixture-clef-secret")
                   clef/classify! (fn [_ prompt] (swap! classified conj prompt) :code-change)
@@ -37,8 +41,8 @@
                       "ordinary answer"))
                   github/execute! (fn [_ p] (swap! writes conj p)
                                     {:status :succeeded :pr-url "https://github.com/owner/repo/pull/1"})]
-      (f {:classified classified :writes writes :generations generations
-          :generation-options generation-options}))))
+      (caller/with-current-caller #(f {:classified classified :writes writes :generations generations
+          :generation-options generation-options})))))
 
 (fact "automatic code-change routing forwards resolved and explicit budgets"
   (doseq [[flag budget] [["--max-tool-calls 12 " 12]
@@ -118,7 +122,8 @@
     (route/api {:chat-source (pr-str (assoc (:chat-source (request)) :room "agent-room"))
                 :command "ai Fix owner/repo"} {})
     (with-redefs [api/complete (constantly "ai Fix owner/repo")]
-      (chat/run-command (request) "ai --no-tools generate a command | cmd"))
+      (try (chat/run-command (request) "ai --no-tools generate a command | cmd")
+           (catch Exception _ nil)))
     (fact @writes => [] @classified => []))))
 
 (fact "replay cannot turn an earlier read-only decision into a write"

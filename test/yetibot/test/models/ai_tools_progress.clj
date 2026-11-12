@@ -5,12 +5,22 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tools :as tools]
-            [yetibot.test.support.mcp :as support]))
+            [yetibot.test.support.mcp :as support]
+            [yetibot.test.support.ai-execution :as chat]
+            [yetibot.test.integration.ai-command-charts :as caller]
+            [yetibot.models.ai-tool-policy :as policy]))
 
 (def provider {:name "local" :url "http://localhost/v1"})
 (def config {:servers [{:name "search" :url "https://search.test/mcp"}]})
 (def tool
   (assoc support/search-tool :session {:server (first (:servers config))}))
+
+(defn complete [provider model messages options]
+  (with-redefs [ai/config (constantly {:providers [provider]})]
+    (caller/with-current-caller
+      #(chat/in-event chat/request "ai progress fixture"
+         (fn [event]
+           (tools/complete provider model messages (assoc options :actor (policy/actor event))))))))
 
 (defn run-fixture [cap mode callback]
   (let [turn (atom 0) calls (atom 0) observations (atom [])]
@@ -41,7 +51,7 @@
                                     [(call 1) (call 2)] [(call 1)])}}]}
              {:choices [{:message {:content "Done"}}]})))]
       (let [result (try
-                     (tools/complete provider "chat"
+                     (complete provider "chat"
                                      [{:role "user" :content "PRIVATE-PROMPT"}]
                                      {:on-progress
                                       (fn [event]
@@ -110,7 +120,7 @@
                                                    [:tools 0 :function :name])
                                      :arguments "{}"}}]}}]}
                      {:choices [{:message {:content "Done"}}]}))]
-        (tools/complete provider "chat"
+        (complete provider "chat"
                         [{:role "user" :content "PRIVATE_PROMPT"}]
                         {:on-progress #(swap! seen conj %)})
         (fact (some #(re-find #"PRIVATE|s-ecret|quote|123456|@everyone"
@@ -140,7 +150,7 @@
              (fact (string/includes? (:content (last msgs)) "quote") => false)
              {:choices [{:message {:content (str "Benign " secret)}}]})))]
       (:result/value
-        (tools/complete provider "chat" []
+        (complete provider "chat" []
                         {:on-progress #(swap! seen conj %)}))
       => (str "Benign [redacted]\n\n1 tool failed.\n\n"
               "#1 mcp_0_search__web_search — "
@@ -166,7 +176,7 @@
                           {:name (get-in opts [:tools 0 :function :name])
                            :arguments "{}"}}]}}]}
            {:choices [{:message {:content "Done"}}]}))]
-      (:result/value (tools/complete provider "chat" []
+      (:result/value (complete provider "chat" []
                                     {:on-progress identity})) => "Done"
       @responses => [1 2])))
 
@@ -196,7 +206,7 @@
                       (json/generate-string {:status "completed"
                                              :output output}) "UTF-8"))}))]
       (:result/value
-        (tools/complete (assoc provider :api "responses"
+        (complete (assoc provider :api "responses"
                                        :native-tools ["web_search"])
                         "chat" [] {:on-progress #(swap! seen conj %)}))
       => "Done"

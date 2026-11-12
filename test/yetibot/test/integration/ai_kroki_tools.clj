@@ -9,7 +9,8 @@
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
-            [yetibot.test.support.ai-execution :as execution]))
+            [yetibot.test.support.ai-execution :as execution]
+            [yetibot.test.integration.ai-command-charts :as caller]))
 
 (def toolset {:name "diagrams" :kind "search" :servers []
               :native-tools ["kroki_types" "kroki_render"]
@@ -31,12 +32,14 @@
                                     :result/data artifact :result/public-data artifact}))))
 
 (defn run [last-turn & [render-result source]]
-  (let [calls (atom []) sent (atom [])]
+  (let [calls (atom []) sent (atom [])
+        provider {:name "fake" :model "fake" :url "https://synthetic.invalid/v1"}]
     (with-redefs [kroki/available-tools (constantly ["kroki_types" "kroki_render"])
                   kroki/client-call (fn [operation & args]
                                       (if (and render-result (= operation "render!"))
                                         (do (swap! calls conj (first args)) render-result)
                                         (apply boundary calls operation args)))
+                  ai/config (constantly {:providers [provider]})
                   mcp/config (constantly {:servers [] :toolsets [toolset]})
                   ai/chat (fn [_ _ messages _]
                             (swap! sent conj messages)
@@ -49,12 +52,12 @@
                                                                                  {"type" "future-engine"
                                                                                   "source" (or source "literal | diagram `text`")})}}]}}]}
                               (last-turn)))]
-      (execution/in-event execution/request "ai draw this"
+      (caller/with-current-caller #(execution/in-event execution/request "ai draw this"
         (fn [request]
-          {:result (tools/complete {:name "fake"} "fake"
+          {:result (tools/complete provider "fake"
                                    [{:role "user" :content "Draw this."}]
                                    {:actor (policy/actor request)})
-           :calls @calls :sent @sent})))))
+           :calls @calls :sent @sent}))))))
 
 (fact "native catalog/render definitions are discoverable without running diagrams"
   (get-in (native/definition "kroki_render") [:inputSchema :required])

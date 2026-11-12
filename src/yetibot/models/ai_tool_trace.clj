@@ -454,7 +454,7 @@
 
 (defn public-report [report]
   ;; Deliberately omit arguments and IDs; not a generic tool-payload viewer.
-  (-> (merge (select-keys report [:reason :budget :omitted :truncated])
+  (-> (merge (select-keys report [:reason :budget :host-budget :omitted :truncated])
              (progress/timing-details report))
       (assoc :calls
              (mapv #(cond-> (select-keys % [:call :tool :outcome :attempted :confirmed
@@ -472,6 +472,9 @@
         header (str (get reasons (:reason report))
                     (when-let [label (progress/failure-labels (:code report))]
                       (str " " label ".")) "\n"
+                    (when-let [{:keys [limit admitted reserved remaining]} (:host-budget report)]
+                      (str "Host admissions: " admitted "/" limit
+                           "; reserved=" reserved "; remaining=" remaining ".\n"))
                     "Tool budget: total=" limit " used=" used
                     " remaining=" remaining " requested=" requested
                     ". Trace (redacted arguments; ordinal references, "

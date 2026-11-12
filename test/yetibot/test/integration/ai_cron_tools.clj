@@ -2,10 +2,17 @@
   (:require [cheshire.core :as json]
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as str]
+            [clj-http.client :as http]
+            [yetibot.core.chat :as chat]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.models.users :as users]
             [midje.sweet :refer [fact =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.commands.ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.core.db.util :as db]
+            [yetibot.core.db :as database]
+            [yetibot.core.db.cron :as core-cron]
             [yetibot.core.models.admin :as admin]
             [yetibot.models.ai-cron-tools :as cron]
             [yetibot.models.ai-native-tools :as native]
@@ -23,24 +30,32 @@
   (execution/in-event (or request execution/request) "ai manage my cron schedules"
     (fn [event] (cron/call! (or cfg config) "cron" args (:chat-source event)))))
 
+(def caller-adapter
+  (reify adapters/Adapter
+    (uuid [_] "workspace") (platform-name [_] "Slack")
+    (channels [_] ["C1"]) (connected? [_] true)
+    (send-msg [_ _] nil) (send-paste [_ _] nil)
+    (join [_ _]) (leave [_ _]) (chat-source [_ _]) (start [_]) (stop [_])
+    (connection-last-active-timestamp [_] 0) (connection-latency [_] 0)))
+
 (defn with-store [f]
   (let [cfg (db/config)
-        table (str "test_ai_cron_" (System/nanoTime) "_cron")
+        prefix (str "test_ai_cron_" (System/nanoTime) "_")
         runtime (atom [])]
-    (jdbc/db-do-commands (:url cfg)
-      (str "CREATE TABLE " table " (id SERIAL PRIMARY KEY,"
-           "chat_source_adapter TEXT,chat_source_room TEXT,user_id TEXT,"
-           "schedule TEXT NOT NULL,cmd TEXT NOT NULL)"))
-    (try
-      (with-redefs [db/config (constantly
-                               (assoc cfg :table
-                                      {:prefix (subs table 0 (- (count table) 4))}))
-                    ai/config (constantly {})
-                    admin/user-is-admin? (constantly false)
-                    cron/runtime! (fn [action row]
-                                    (swap! runtime conj [action row]))]
-        (f runtime table (:url cfg)))
-      (finally (jdbc/db-do-commands (:url cfg) (str "DROP TABLE " table))))))
+    (when-not (re-find #":55445/" (:url cfg))
+      (throw (ex-info "Native cron qualification requires owned PG55445." {})))
+    (with-redefs [adapters/adapters (atom {"workspace" caller-adapter})
+                  users/users (atom {{:adapter :slack :id "U1"} (:user execution/request)
+                                     {:adapter :slack :id "BOT"} {:id "BOT"}})
+                  db/config (constantly (assoc cfg :table {:prefix prefix}))
+                  ai/config (constantly {})
+                  admin/user-is-admin? (constantly false)
+                  cron/runtime! (fn [action row] (swap! runtime conj [action row]))]
+      (let [table (db/qualified-table-name "cron")]
+        (try
+          (database/idempotent-create-table! "cron" (:schema/specs core-cron/schema))
+          (f runtime table (:url cfg))
+          (finally (jdbc/db-do-commands (:url cfg) (str "DROP TABLE " table))))))))
 
 (fact "native integration cannot initialize a stopped/unloaded scheduler"
   (let [find-ns clojure.core/find-ns]
@@ -184,37 +199,33 @@
         (count @runtime) => 1
         (count (get-in (call {}) [:structuredContent :items])) => 1))))
 
-(fact "the model can create a requested schedule without a confirmation step"
+(fact "the model creates the requested schedule automatically with one finite allocation, not another planner send"
   (with-store
-    (fn [runtime _ _]
-      (let [sent (atom [])]
+    (fn [runtime table url]
+      (let [sent (atom []) provider {:name "fake" :model "fake" :url "https://planner.invalid/v1"}]
         (with-redefs [mcp/config (constantly {:servers [] :toolsets [toolset]})
-                      ai/chat
-                      (fn [_ _ messages _]
-                        (swap! sent conj messages)
-                        {:choices
-                         [{:message
-                           (if (= 1 (count @sent))
-                             {:role "assistant"
-                              :tool_calls
-                              [{:id "cron-1" :type "function"
-                                :function
-                                {:name "yetibot_cron"
-                                 :arguments (json/generate-string
-                                              {"action" "create"
-                                               "schedule" schedule
-                                               "command" "temps"})}}]}
-                             {:role "assistant" :content "Schedule created."})}]})]
+                      ai/config (constantly {:providers [provider]})
+                      http/post
+                      (fn [endpoint options]
+                        (swap! sent conj [endpoint (:form-params options)])
+                        {:status 200 :body
+                         {:choices [{:message {:role "assistant" :tool_calls
+                           [{:id "cron-1" :type "function" :function
+                             {:name "yetibot_cron"
+                              :arguments (json/generate-string
+                                           {"action" "create" "schedule" schedule "command" "temps"})}}]}}]}})]
           (execution/in-event execution/request "ai schedule temps each morning"
             (fn [event]
-              (:result/value
-                (tools/complete {:name "fake"} "fake"
-                                [{:role "user" :content "Schedule temps at 08:00 server time daily."}]
-                                {:actor (policy/actor event)}))
-              => "Schedule created."))
+              (binding [chat/*target* "C1"]
+                (let [result (tools/complete provider "fake"
+                               [{:role "user" :content "Schedule temps at 08:00 server time daily."}]
+                               {:actor (policy/actor event)})]
+                  (str/includes? (:result/value result) "reserved for durable work") => true
+                  (get-in result [:result/data :mcp :tool-calls]) => 1))))
+          (count @sent) => 1
+          (ffirst @sent) => "https://planner.invalid/v1/chat/completions"
           (count @runtime) => 1
-          (let [message (first (filter #(= "tool" (:role %)) (last @sent)))
-                reply (json/parse-string (:content message) true)]
-            (get-in reply [:structuredContent :created]) => true
-            (get-in reply [:structuredContent :item :command]) => "temps"
-            (get-in reply [:structuredContent :scope]) => "current-channel"))))))
+          (let [row (first (jdbc/query url [(str "SELECT cmd,execution_origin,execution_limit FROM " table)]))]
+            (:cmd row) => "temps"
+            (:execution_origin row) => "app-inherited-v1"
+            (:execution_limit row) => 18))))))

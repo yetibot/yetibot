@@ -44,7 +44,10 @@
             (try (get (json/parse-string (:content m)) "dataset") (catch Exception _ nil)))) messages))
 
 (defn run-script [planner {:keys [wire options render remote] :as settings}]
-  (let [turns (atom []) renders (atom []) sent (atom []) request-state (atom nil)]
+  (let [turns (atom []) renders (atom []) sent (atom []) request-state (atom nil)
+        child-post http/post
+        configured (try (ai/config) (catch Exception _ {}))
+        parent {:name "fake" :model "fake" :url "https://planner.invalid/v1"}]
     (with-redefs [hooks/hooks (atom @hooks/hooks)
                   hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
                   channel/settings-for-chat-source (constantly {})
@@ -64,18 +67,25 @@
                                                           {:result/value (:url charts/artifact)
                                                            :result/data charts/artifact
                                                            :result/public-data charts/artifact})))))
-                  ai/chat (fn [p m messages opts]
-                            (reset! request-state execution/*request*)
-                            (swap! turns conj [p m opts])
-                            (planner (count @turns) messages opts))]
+                  ai/config (constantly (update configured :providers
+                                          #(into [parent] (remove (fn [p] (= "fake" (:name p))) %))))
+                  http/post (fn [endpoint opts]
+                              (if (= endpoint "https://planner.invalid/v1/chat/completions")
+                                (let [form (:form-params opts)
+                                      options (assoc form :max-output-tokens (:max_completion_tokens form))]
+                                  (reset! request-state execution/*request*)
+                                  (swap! turns conj [parent (:model form) options])
+                                  {:status 200 :body (planner (count @turns) (:messages form) options)})
+                                (child-post endpoint opts)))]
       (when wire (wire))
-      (support/in-event support/request "ai synthetic workflow"
+      (charts/with-current-caller
+       #(support/in-event support/request "ai synthetic workflow"
         (fn [request]
-          (let [result (try (tools/complete {:name "fake"} "fake" [{:role "user" :content "Synthetic request"}]
+          (let [result (try (tools/complete parent "fake" [{:role "user" :content "Synthetic request"}]
                                       (merge {:actor (policy/actor request)} options))
                             (catch Exception e {:result/error (.getMessage e)
                                                 :result/data {:tool-trace (:ai/tool-failure (ex-data e))}}))]
-            {:result result :turns @turns :renders @renders :sent @sent :request @request-state}))))))
+            {:result result :turns @turns :renders @renders :sent @sent :request @request-state})))))))
 
 (fact "pipeline data charts directly, timings are bounded and the store closes"
   (let [{:keys [result turns renders request]}
@@ -100,7 +110,7 @@
   "written")
 (defn nested-ai-fixture [_]
   (ai-command/complete-prompt
-    {:provider {:name "fake"} :model "fake"
+    {:provider {:name "fake" :url "https://planner.invalid/v1"} :model "fake"
      :messages [{:role "user" :content "nested"}]
      :actor (policy/actor execution/*event*)
      :max-output-tokens 262144 :max-tool-calls 128}))
@@ -127,8 +137,8 @@
         (run-script (fn [n _ opts] (if (= "none" (:tool_choice opts)) (answer "Budget exhausted")
                                      (charts/call (str "c" n) "command" {"command" "nested-ai"})))
                     {:wire wire :options {:max-tool-calls 3 :max-output-tokens 1200}})]
-    (count turns) => 3
-    (mapv #(get-in % [2 :max-output-tokens]) turns) => [1200 1200 1200]
+    (count turns) => 2
+    (mapv #(get-in % [2 :max-output-tokens]) turns) => [1200 1200]
     (:used @(:budget request)) => 3
     (:closed? @(:budget request)) => true))
 
@@ -322,7 +332,7 @@
 
 (defn nested-narrow-fixture [_]
   (ai-command/complete-prompt
-    {:provider {:name "fake"} :model "fake" :toolset "narrow"
+    {:provider {:name "fake" :url "https://planner.invalid/v1"} :model "fake" :toolset "narrow"
      :actor (policy/actor execution/*event*)
      :messages [{:role "user" :content "nested"}]}))
 
@@ -422,31 +432,32 @@
                   {:wire inference-wire :toolsets [inference-policies wide]})
       @sends => 0)))
 
-(fact "authorized xargs Zen and legacy OpenAI retain actor, shared attempts and generation ceilings"
+(fact "authorized xargs Zen and legacy OpenAI retain actor, exact physical admissions and generation ceilings"
+  ;; Three admissions permit source + command + ONE send; four permit both
+  ;; xargs sends. This is an explicit physical-source accounting regression.
   (doseq [command ["list A B | xargs zen --model paid --max-output-tokens 262144"
-                   "list A B | xargs openai"]]
+                   "list A B | xargs openai"]
+          limit [3 4]]
     (let [children (atom [])]
       (with-redefs [ai/config (constantly {:providers [zen-provider]})
                     ai/prepare-provider (fn [p _] p)
+                    openai/config {:key "synthetic-openai-key"}
                     context/messages (fn [_ prompt] [{:role "user" :content prompt}])
-                    ai/complete (fn [_ _ _ opts]
-                                  (swap! children conj [(:max-output-tokens opts)
-                                                        (policy/actor execution/*event*)
-                                                        (:used @(:budget execution/*request*))])
-                                  {:result/value "child"})
-                    http/post (fn [_ opts]
-                                (swap! children conj [(get-in opts [:form-params :max_tokens])
+                    http/post (fn [endpoint opts]
+                                (swap! children conj [(or (get-in opts [:form-params :max_tokens])
+                                                          (get-in opts [:form-params :max_completion_tokens]))
                                                       (policy/actor execution/*event*)
-                                                      (:used @(:budget execution/*request*))])
-                                {:body {:choices [{:message {:content "child"}}]}})]
+                                                      (:used @(:budget execution/*request*)) endpoint])
+                                {:status 200 :body (answer "child")})]
         (let [r (run-script (command-plan command)
                            {:wire inference-wire :toolset inference-policies
-                            :options {:max-output-tokens 1200 :max-tool-calls 3}})]
-          (mapv first @children) => [1200 1200]
-          (mapv #(get-in % [1 :user]) @children) => ["U1" "U1"]
-          (count @children) => 2
-          (every? #(<= 2 (last %) 3) @children) => true
-          (:used @(:budget (:request r))) => 3)))))
+                            :options {:max-output-tokens 1200 :max-tool-calls limit}})
+              expected (- limit 2)]
+          (mapv first @children) => (vec (repeat expected 1200))
+          (mapv #(get-in % [1 :user]) @children) => (vec (repeat expected "U1"))
+          (count @children) => expected
+          (every? #(<= 3 (nth % 2) limit) @children) => true
+          (:used @(:budget (:request r))) => limit)))))
 
 (fact "failed weather labels come from bounded redacted source outcomes, not error prose or command text"
   (with-redefs [weather/current
@@ -479,21 +490,28 @@
             (answer "Partial source coverage"))))
       {:wire #(hooks/cmd-hook #"weather" #".+" weather/weather-cmd)})))
 
-(fact "structured classifiers remain automatic when inherited policy allows the real wire model"
+(fact "structured classifiers remain automatic and each physical send shares the source allowance"
   (doseq [command ["list A B | xargs clef Is this A?" "list A B | xargs clairic demo"]]
-    (let [sends (atom [])]
-      (with-redefs [config/get-config (fn [spec path]
+    (let [sends (atom []) account (apply str (repeat 32 "a"))]
+      (with-redefs [ai/config (constantly {:providers [] :intent-router {:account-id account}})
+                    config/get-config (fn [spec path]
                                         (if (= path [:ai])
-                                          {:value {:intent-router {:account-id (apply str (repeat 32 "a"))}}}
+                                          {:value {:intent-router {:account-id account}}}
                                           (original-get-config spec path)))
                     clef/credential! (constantly "synthetic-structured-key")
                     images/images (constantly [])
-                    cloudflare/infer! (fn [_ _ model _] (swap! sends conj model) {:answers {}})]
+                    http/post (fn [url opts]
+                                (swap! sends conj [url (json/parse-string (:body opts) true)])
+                                ;; Invalid response still records the real send;
+                                ;; do not manufacture successful classifier data.
+                                {:status 200 :body (java.io.ByteArrayInputStream.
+                                                   (.getBytes "{\"success\":true,\"errors\":[],\"result\":{}}" "UTF-8"))})]
         (let [r (run-script (command-plan command)
                            {:wire inference-wire :toolset inference-policies
-                            :options {:max-tool-calls 2}})]
+                            :options {:max-tool-calls 3}})]
           (count @sends) => 1
-          (:used @(:budget (:request r))) => 2)))))
+          (.startsWith (ffirst @sends) (str "https://api.cloudflare.com/client/v4/accounts/" account "/ai/run/")) => true
+          (:used @(:budget (:request r))) => 3)))))
 
 (def credential-collections (atom 0))
 (defn credential-records [_]

@@ -12,9 +12,9 @@
 
 (defn with-store [f]
   (let [config (db/config)
-        prefix (str "app_u2_" (System/nanoTime) "_")]
-    (when-not (re-find #":55444/" (:url config))
-      (throw (ex-info "Tests require owned PostgreSQL port 55444." {})))
+        prefix (str "app_u3_" (System/nanoTime) "_")]
+    (when-not (re-find #":55445/" (:url config))
+      (throw (ex-info "Tests require owned PostgreSQL port 55445." {})))
     (with-redefs [db/config (constantly (assoc config :table {:prefix prefix}))]
       (try
         (doseq [schema [ledger/schema cron/schema]]

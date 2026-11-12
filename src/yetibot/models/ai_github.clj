@@ -4,6 +4,8 @@
             [cheshire.core :as json]
             [clojure.string :as string]
             [yetibot.api.ai :as ai]
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.core.util.agent-execution :as origin]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets])
   (:import [java.util Arrays Base64 UUID]
@@ -22,14 +24,33 @@
                 structured parsed)]
     (or value (ai/fail "GitHub MCP returned an unsupported result shape."))))
 
+(def ^:private ^:dynamic *proposal* nil)
+
 (defn- call! [tools name args]
   (let [tool (some #(when (= name (:name %)) %) tools)]
     (when-not tool (ai/fail "A required GitHub MCP tool is not configured."))
-    (let [result (mcp/call-tool (:session tool) name args)]
-      (when (or (:isError result) (:unknownOutcome result))
-        (throw (ex-info "GitHub MCP operation failed; no automatic retry."
-                        {:ai/error true :unknown-outcome (boolean (:unknownOutcome result))})))
-      result)))
+    (when execution/*request*
+      (execution/require-effects!)
+      (execution/require-open!)
+      (if *proposal*
+        (if-let [authorize (:authorize-github! execution/*request*)]
+          (authorize {:proposal *proposal* :server (get-in tool [:session :server]) :tool name})
+          (ai/fail "Automatic GitHub authority is unavailable."))
+        (when-let [authorize (:authorize-tool! execution/*request*)] (authorize tool))))
+    (let [handle (execution/admit-operation! :tool)]
+      (try
+        (let [result (binding [origin/*operation* (or handle origin/*operation*)]
+                       (mcp/call-tool (:session tool) name args))]
+          (execution/finish-operation! handle {:state (if (:unknownOutcome result) :unknown :definitive)})
+          (when (or (:isError result) (:unknownOutcome result))
+            (throw (ex-info "GitHub MCP operation failed; no automatic retry."
+                            {:ai/error true :unknown-outcome (boolean (:unknownOutcome result))})))
+          result)
+        (catch Exception e
+          (when handle
+            (try (execution/finish-operation! handle {:state :unknown})
+                 (catch Exception _ nil)))
+          (throw e))))))
 
 (defn- commit! [tools owner repo ref]
   (let [data (data! (call! tools "get_commit"
@@ -93,6 +114,9 @@
      :originals (into {} (map #(vector % (read-file! tools owner repo sha %)) paths))}))
 
 (defn snapshot! [config t owner repo base paths]
+  (when execution/*request*
+    (execution/require-effects!) (execution/require-open!)
+    (when-let [authorize (:reauthorize-expression! execution/*request*)] (authorize)))
   (let [selected (toolsets/select config (:name t))]
     (mcp/with-tools selected
       #(snapshot-with-tools! % owner repo base paths))))
@@ -104,7 +128,15 @@
    object from GitHub's authenticated REST API; never reuse MCP transport auth."
   [token owner repo sha timeout-ms]
   (try
-    (let [response (client/get
+    (let [_ (when execution/*request*
+              (execution/require-effects!) (execution/require-open!)
+              (if-let [authorize (:authorize-github! execution/*request*)]
+                (authorize {:proposal *proposal* :ancestry? true})
+                (ai/fail "Automatic GitHub authority is unavailable.")))
+          handle (execution/admit-operation! :tool)
+          response (try
+                     (let [response (binding [origin/*operation* (or handle origin/*operation*)]
+                                      (client/get
                      (str "https://api.github.com/repos/" owner "/" repo
                           "/git/commits/" sha)
                      {:as :json :throw-exceptions false
@@ -112,7 +144,10 @@
                       :redirect-strategy :none :retry-handler (fn [& _] false)
                       :headers {"Accept" "application/vnd.github+json"
                                 "X-GitHub-Api-Version" "2022-11-28"
-                                "Authorization" (str "Bearer " token)}})
+                                "Authorization" (str "Bearer " token)}}))]
+                       (execution/finish-operation! handle {:state :definitive}) response)
+                     (catch Exception e
+                       (execution/finish-operation! handle {:state :unknown}) (throw e)))
           data (:body response)]
       (when-not (and (= 200 (:status response)) (= sha (:sha data))
                      (vector? (:parents data))
@@ -169,6 +204,7 @@
       (swap! state assoc :status :succeeded :pr-url url))))
 
 (defn execute! [config p]
+  (binding [*proposal* p]
   (let [state (atom {:status :failed :step :validate})]
     (try
       (when-not (= :executing (:status p))
@@ -190,6 +226,11 @@
             timeout-ms (mcp/number-option (:timeout-ms config) 30000)]
         (when-not (= t (:toolset p))
           (ai/fail "Tool policy changed. Generate a new proposal."))
+        (when execution/*request*
+          (execution/require-effects!) (execution/require-open!)
+          (if-let [authorize (:authorize-github! execution/*request*)]
+            (authorize {:proposal p :ancestry? true})
+            (ai/fail "Automatic GitHub authority is unavailable.")))
         (mcp/with-tools selected
           (fn [reads]
             (let [commit-reader (first (filter #(= "get_commit" (:name %))
@@ -212,4 +253,4 @@
                                 (:step @state)))
                          :unknown :failed)
                :message (str "GitHub workflow stopped. Inspect known identifiers "
-                             "before any new attempt; no automatic retry."))))))
+                             "before any new attempt; no automatic retry.")))))))

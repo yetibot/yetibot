@@ -66,13 +66,19 @@
 
 (defn- validate-authority! [authority]
   (let [{:keys [source user yetibot-user actor tools planner delivery]} authority
+        identity? (fn [identity transports]
+                    (and (map? identity)
+                         (every? #{:name :model :signature :transport} (keys identity))
+                         (every? #(contains? identity %) [:name :model :signature])
+                         (or (nil? (:transport identity)) (contains? transports (:transport identity)))
+                         (every? #(and (string? %) (<= 1 (count %) 256)) (vals identity))))
         raw (:raw-event source)
         channel (if (= :slack (:adapter source)) (:channel raw) (:channel-id raw))
         uid (if (= :slack (:adapter source)) (:user raw) (get-in raw [:author :id]))]
     (when-not
       (and (map? authority)
            (every? #{:source :user :yetibot-user :actor :tools :planner :delivery
-                     :toolset-name :toolset-policy} (keys authority))
+                     :toolset-name :toolset-policy :server-identities :no-tools? :producer :provider-identities} (keys authority))
            (#{:slack :discord} (:adapter source))
            (some? (:uuid source)) (string? (:room source))
            (every? #{:adapter :uuid :room :raw-event} (keys source))
@@ -89,8 +95,16 @@
            (set? tools) (<= (count tools) 64)
            (every? #(and (vector? %) (= 2 (count %))
                          (every? (fn [s] (and (string? s) (<= 1 (count s) 256))) %)) tools)
-           (= #{:name :model :signature} (set (keys planner)))
-           (every? #(and (string? %) (<= 1 (count %) 256)) (vals planner))
+           (identity? planner #{"xai-text" "openai-text"})
+           (or (nil? (:producer authority))
+               (identity? (:producer authority) #{"xai-text" "openai-text" "xai-image" "gemini-image"
+                                                   "gemini-video" "cloudflare-classifier"}))
+           (or (nil? (:provider-identities authority))
+               (and (map? (:provider-identities authority)) (<= (count (:provider-identities authority)) 128)
+                    (every? #(and (string? %) (<= 1 (count %) 300))
+                            (concat (keys (:provider-identities authority)) (vals (:provider-identities authority))))))
+           (or (not (contains? authority :no-tools?)) (boolean? (:no-tools? authority)))
+           (or (not (:no-tools? authority)) (empty? tools))
            (or (nil? delivery)
                (and (= source (:source delivery)) (string? (:target delivery))
                     (every? #{:source :target :thread-ts} (keys delivery)))))
@@ -359,3 +373,24 @@
      :counters (select-keys row [:execution-limit :execution-used :execution-reserved
                                 :operation-ordinal :generation-cap :execution-phase
                                 :state-revision :worker-fence])}))
+
+(defn claimed-cron-session
+  "Consume an already admitted core tick once. Re-read current counters, not
+   claim-tick!'s pre-admission row fields, and verify the exact owner/revision."
+  [database claim config]
+  (jdbc/with-db-transaction [tx database]
+    (let [row (ledger/lock-row! tx "cron" (:id claim))
+          owner (:owner claim)
+          operation (:operation claim)]
+      (when-not (and (= :claimed (:status claim))
+                     (= (:id row) (:id owner)) (= "cron" (:table owner))
+                     (= (:worker-fence row) (:fence owner))
+                     (= (:state-revision row) (:state-revision claim))
+                     (= (:operation-ordinal row) (:ordinal operation))
+                     (= "operation-in-flight" (:execution-phase row)))
+        (invalid!))
+      (cron-snapshot row config)
+      {:status :claimed :owner owner :database database
+       :row (atom row) :state (atom (row-state! row config))
+       :budget (atom (counters row)) :codec-config config
+       :operation operation})))

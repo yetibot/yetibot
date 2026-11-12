@@ -64,7 +64,11 @@
           (unavailable!))
         (let [response (usage/capture!
                          {:provider "cloudflare" :model "@cf/cloudflare/clef"
-                          :operation "classification" :secrets [key]}
+                          :operation "classification"
+                          :endpoint (str "https://api.cloudflare.com/client/v4/accounts/"
+                                         account "/ai/run/@cf/cloudflare/clef")
+                          :resource-limits {:schema-fields (count (:questions (payload text)))}
+                          :secrets [key]}
                          (fn []
                            (client/post
                              (str "https://api.cloudflare.com/client/v4/accounts/"

@@ -1,14 +1,22 @@
 (ns yetibot.test.models.ai-tools
   (:require [cheshire.core :as json]
             [clojure.string :as string]
-            [midje.sweet :refer [fact facts =>]]
+            [midje.sweet :refer [fact facts background =>]]
             [clj-http.client :as client]
             [yetibot.models.ai-tool-trace :as trace]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.test.support.mcp :as support])
   (:import [java.io ByteArrayInputStream]))
+
+;; These synchronous planner-component facts provide neither chat ingress nor
+;; authenticated callers. Public source activation/current authority is tested
+;; through real dispatch and physical HTTP in integration.ai-agent-execution.
+(background
+  (around :facts
+    (with-redefs [execution/with-source* (fn [_ f] (f))] ?form)))
 
 (def provider {:name "local" :model "chat" :url "http://localhost/v1"})
 (def config {:servers [{:name "search" :url "https://search.test/mcp" :tools ["web_search"]}]})
@@ -107,7 +115,7 @@
       (get-in @requests [0 2 0 :content]) => tools/instructions
       (vec (drop 2 (get-in @requests [0 2]))) => messages
       (string/includes? (get-in @requests [0 2 1 :content])
-                        "total=20 used=0 remaining=20") => true)))
+                        "total=20 admitted=0 reserved=0 remaining=20; tool calls=0") => true)))
 
 (fact "web search results return as tool messages with source links and the original call ID"
   (let [requests (atom []) executions (atom [])]
@@ -330,8 +338,8 @@
       (fact (first @requests)
             => (into [{:role "system" :content tools/instructions}
                       {:role "system" :content
-                       (str "Host tool-call budget: "
-                            "total=20 used=0 remaining=20. "
+                       (str "Host admission budget: "
+                            "total=20 admitted=0 reserved=0 remaining=20; tool calls=0. "
                             "Keep the entire next batch within remaining. "
                             "When exhausted, stop fetching and answer "
                             "with available evidence.")}]
@@ -480,7 +488,7 @@
               => "hello")
         (fact (string/includes? (get-in @sent [1 :content])
                                 (str "total=" expected
-                                     " used=0 remaining=" expected))
+                                     " admitted=0 reserved=0 remaining=" expected "; tool calls=0"))
               => true)))))
 
 (fact "direct invalid budgets fail before credentials and discovery"
@@ -537,7 +545,7 @@
           (fact @executions => 1)
           (fact (count (filter #(= "system" (:role %)) (last @turns))) => 2)
           (fact (string/includes? (get-in (last @turns) [1 :content])
-                                  "total=2 used=1 remaining=1") => true))))))
+                                  "total=2 admitted=1 reserved=0 remaining=1; tool calls=1") => true))))))
 
 (facts "late provider and thrown tool failures retain safe attempted history"
   (doseq [kind [:http :stream :tool]]

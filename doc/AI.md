@@ -2233,3 +2233,62 @@ sending a partial conversation or silently dropping context.
 History is not silently shortened. Very long threads may exceed the selected
 model's context limit; the provider's HTTP error is reported. Provider errors do
 not expose API keys, request headers or provider response bodies.
+
+### Inherited persistent execution (integration qualification pending)
+
+A model-derived executable expression retains its finite source family through
+aliases, formatting, subexpressions and `xargs`. Actual model sends and host tool
+admissions share that family; source planning sends are included. The defaults
+remain **32768 output tokens and 20 host admissions**, with the existing
+262144/128 ceilings. Tool counts, host admissions and durable reservations are
+separate measurements: reserving unused allowance is not spending it.
+
+An inherited `agent` uses the app's existing continuation loop, **not Gemini
+CLI**. A compatible native text source retains its actual transport and model,
+even when it is configured only in the core helper rather than `ai.providers`.
+An image/media/classifier source records its producer separately and selects a
+permitted configured default text planner **before the first source request**;
+missing or forbidden configuration stops before IO, not by trying a fallback.
+Its receipt means accepted/queued, not completed collection or a delivered chart. Persistence transfers unused allowance once;
+restarts, recurring ticks and later edits of an inherited schedule do not grant
+another default allocation. Both core cron writes and native schedule management
+use the published transactional origin seam. Legacy null-kind agent jobs and
+compatibility schedules retain their legacy classification, not an assertion
+that their old synthetic/nil caller is authenticated. Genuine human-literal
+`agent` actions, including an explicit literal action receiving piped report
+data, retain the existing CLI branch, model and process settings.
+
+A `--no-tools` source may continue through generated `ai` or queue an `agent`
+for text only, with the same planner, cap and remaining allocation. Its frozen
+empty host-native/MCP/command ceiling cannot be repopulated by a nested call or
+broader current configuration. Generated generic effects, computed `agent run`
+and provider/model switching do not gain authority from that text. This does
+not disable a native provider's existing built-in search behavior; host tools
+and provider-internal work are different controls.
+
+Restored execution resolves the registered connected adapter, current users,
+current policy and provider configuration. Model results, HTTP EDN and stored
+conversation data cannot supply a live capability or direct-control rights.
+Unknown effects and delivery-started uncertainty are non-replayable. Slack and
+Discord's existing return contracts do not prove whole-response delivery;
+nonthrowing sends are still unconfirmed. Retained artifacts must remain in the
+trusted in-memory store; expiration is a limitation, not permission to collect
+or render again.
+
+These are host admission and request-field controls, not a monetary guarantee or
+a bound on all provider/MCP internal work. In particular, xAI Responses
+`max_output_tokens` caps visible output, not reasoning or function-call work.
+Gemini's actual inherited GenerateContent request uses
+`generationConfig.maxOutputTokens` and one candidate; the default image model's
+thinking/image-specific enforcement remains unqualified. Typed Cloudflare
+classifiers and media starts have schema/image/duration resource facts, not
+invented text-token support. No paid inference or live-latency qualification is
+claimed. The existing automatic public Kroki/temporary bearer-URL financial
+sharing path and credential protections are unchanged.
+
+This integration is not yet qualified for shipping: activation across the
+direct-only autodraft intent router, remaining qualification and fresh
+independent whole-feature review remain pending. The router currently precedes
+the ordinary `ai` source entry; its classifier/effect boundary must be included
+in the same finite family before claiming complete public activation. No
+completion claim here supersedes those acceptance requirements.

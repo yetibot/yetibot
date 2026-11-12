@@ -12,6 +12,7 @@
             [yetibot.core.webapp.routes.images :as images]
             [yetibot.core.db.util :as db]
             [yetibot.core.db.agent-run :as ledger]
+            [yetibot.core.db.cron :as cron]
             [yetibot.core.util.agent-execution :as origin]
             [yetibot.core.util.ai-usage :as usage]
             [yetibot.core.util.public-result :as public]
@@ -23,7 +24,8 @@
             [yetibot.util.ai-agent-execution :as agent]
             [yetibot.util.ai-execution :as execution]
             [yetibot.test.models.ai-agent-runs :as fixtures]
-            [yetibot.test.support.ai-execution :as support]))
+            [yetibot.test.support.ai-execution :as support]
+            [yetibot.test.integration.ai-command-charts :as caller]))
 
 (def provider {:name "local" :model "chat" :url "https://synthetic.invalid/v1"})
 (def toolset {:name "bounded" :kind "search" :servers [{:name "source"}]
@@ -58,10 +60,13 @@
   (with-redefs [mcp/config (constantly config)
                 ai/config (constantly {:providers [provider]})
                 mcp/with-tools (fn [_ f] (f [tool]))]
-    (f)))
+    (caller/with-current-caller f)))
 
-(fact "loading the worker does not install the public host bridge"
-  (origin/host-active?) => false)
+(fact "loading the worker alone never installs a bridge or starts workers"
+  (let [source (origin/host-callback :source)]
+    (with-redefs [clojure.core/future-call (fn [_] (throw (AssertionError. "Namespace load started a worker")))]
+      (require 'yetibot.util.ai-agent-execution :reload))
+    (identical? source (origin/host-callback :source)) => true))
 
 (fact "real worker uses selected provider, cap and loop with three distinct admissions"
   (fixtures/with-store
@@ -480,9 +485,10 @@
                       row (runs/transfer-live! url parent "cron"
                             {:schedule "* * * * *" :cmd "echo synthetic"
                              :execution-origin ledger/inherited-kind} state {})
-                      restored ((:restore-cron backend) row)
+                      claimed (jdbc/with-db-transaction [tx url] (cron/claim-tick! tx (:id row)))
+                      restored ((:restore-cron backend) claimed)
                       session (:session restored) request (:request restored)
-                      tick (runs/admit! session :tick nil)]
+                      tick (:operation claimed)]
                   (:scheduled? request) => true
                   (some #(contains? (first @resolved) %) [:event :event-type :body :direct-input]) => nil
                   (some #(contains? request %) [:direct-input :direct-command]) => nil

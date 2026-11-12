@@ -15,6 +15,7 @@
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.util.ai-agent-execution :as agent-execution]
             [yetibot.models.ai-tool-trace :as trace]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -601,7 +602,10 @@
                                 (:providers config)))
              (ai/fail (str "AI provider " provider-name
                            " is not configured. Add it to ai.providers.")))
-         provider (ai/provider config provider-name)
+         inherited (when (execution/text-only?) (:planner-provider execution/*request*))
+         _ (when (and inherited provider-name (not= provider-name (:name inherited)))
+             (ai/fail "Text-only continuation cannot change provider."))
+         provider (or inherited (ai/provider config provider-name))
          automatic? (and (= "zen" (:name provider))
                          (or (nil? (:model provider))
                              (:ai/free-default provider))
@@ -610,7 +614,7 @@
              (:toolset (toolsets/select (mcp/config) (:toolset options))))
          actor (policy/actor args)
          _ (when automatic? (policy/authorize-provider! t actor provider))
-         model (or (:model options)
+         model (or (:model options) (when inherited (:planner-model execution/*request*))
                    (ai/default-model provider
                      #(policy/model-allowed? t actor provider %)))
          provider (cond-> provider automatic? (assoc :ai/verified-free true))]
@@ -678,7 +682,9 @@
                       on-progress (assoc :on-progress on-progress)))))
 
 (defn complete-prompt [prepared]
-  (let [_ (when execution/*command-capture*
+  (execution/with-source* prepared
+   (fn []
+    (let [_ (when execution/*command-capture*
                   (execution/charge!)
                   (policy/authorize! (:toolset-policy execution/*request*)
                                      (policy/actor execution/*event*)
@@ -690,7 +696,7 @@
         (-> result
             (assoc-in [:result/data :ai/limits] (limits/public-values budgets))
             (assoc-in [:result/public-data :limits]
-                      (limits/public-values budgets)))))))
+                      (limits/public-values budgets)))))))))
 
 (defn prompt-cmd
   {:doc (str "ai <prompt> # ask the default AI provider; "
@@ -739,3 +745,6 @@
   #"^servers\s*$" servers-cmd
   #"(?s)^tools(?:\s+(.+?))?\s*$" tools-cmd
   #"(?s)^.*$" prompt-cmd)
+
+;; Tools are loaded above; the bridge never requires commands.ai.
+(agent-execution/install!)

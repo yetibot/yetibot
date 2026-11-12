@@ -20,27 +20,30 @@
 (defn openai-completions
   {:yb/cat #{:info :fun}}
   [messages]
+  (execution/with-source*
+   {:provider {:name "openai" :url "https://api.openai.com/v1" :key (:key config)
+                :continuation-transport "openai-text"}
+    :model model :no-tools true :single-hop? true}
+   (fn []
   (when execution/*command-capture*
     (execution/charge!)
     (policy/authorize! (:toolset-policy execution/*request*)
                        (policy/actor execution/*event*) {:name "openai"} model))
-  (usage/capture!
-    {:provider "openai" :model model :operation "text" :secrets [(:key config)]}
-    (fn []
-      (client/post
-        "https://api.openai.com/v1/chat/completions"
-        {:as :json
-         :content-type :json
-         :form-params (cond-> {:model model
-                              ;; https://platform.openai.com/docs/guides/text-generation/faq
-                              :temperature 0.9
-                              :messages messages}
-                        execution/*command-capture*
-                        (assoc :max_tokens (:max-output-tokens (limits/effective {}))))
-         :throw-exceptions false :redirect-strategy :none
-         :retry-handler (fn [& _] false)
-         :headers {:Authorization (str "Bearer " (:key config))}}))
-    usage/response-metrics))
+  (let [cap (when execution/*request*
+              (:max-output-tokens (limits/effective {})))
+        form (cond-> {:model model :temperature 0.9 :messages messages}
+               cap (assoc :max_tokens cap))]
+    (usage/capture!
+      {:provider "openai" :model model :operation "text"
+       :endpoint "https://api.openai.com/v1/chat/completions"
+       :output-cap cap :secrets [(:key config)]}
+      #(client/post
+         "https://api.openai.com/v1/chat/completions"
+         {:as :json :content-type :json :form-params form
+          :throw-exceptions false :redirect-strategy :none
+          :retry-handler (fn [& _] false)
+          :headers {:Authorization (str "Bearer " (:key config))}})
+      usage/response-metrics)))))
 
 ;; maintain per-channel context
 (defonce context (atom {}))

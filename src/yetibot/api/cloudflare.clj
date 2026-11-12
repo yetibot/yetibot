@@ -137,7 +137,11 @@
       (fail! "Inference input contains the configured credential."))
     (let [response (usage/capture!
                      {:provider "cloudflare" :model (str "@cf/cloudflare/" model)
-                      :operation "classification" :secrets [token]}
+                      :operation "classification"
+                      :endpoint (str (account-url (:account-id config))
+                                     "/ai/run/@cf/cloudflare/" model)
+                      :resource-limits {:schema-fields (count (or (:questions payload) (:fields payload)))}
+                      :secrets [token]}
                      (fn []
                        (request!
                          http/post

@@ -29,10 +29,29 @@
                   {:ai/error true :ai/request-not-sent true
                    :yetibot.models.ai-tool-trace/reason :budget-exceeded})))
 
+(defn tool-key [tool]
+  [(cond (:host-stage? tool) "host" (:native? tool) "yetibot"
+         :else (get-in tool [:session :server :name])) (:name tool)])
+
+(defn text-only? []
+  (boolean (or (:no-tools? *request*) (some-> *request* :text-only deref))))
+
+(defn require-effects! []
+  (when (:routing-pending? *request*)
+    (throw (ex-info "Intent routing has no effect authority before selection."
+                    {:ai/error true :ai/request-not-sent true}))))
+
 (defn remaining []
   (when *request*
     (let [{:keys [limit used reserved]} @(:budget *request*)]
       (max 0 (- limit used (or reserved 0))))))
+
+(defn admissions
+  "Host operations and transfers, distinct from model tokens and tool counts."
+  [request]
+  (let [{:keys [limit used reserved]} @(:budget request)]
+    {:limit limit :admitted used :reserved (or reserved 0)
+     :remaining (max 0 (- limit used (or reserved 0)))}))
 
 (defn charge!
   "Compatibility entry charge. Metered families charge at the actual send."
@@ -59,6 +78,7 @@
                  :budget (atom {:limit limit :used 0 :reserved 0
                                 :receipts [] :closed? false})
                  :generation-limit generation-limit :tool-ceiling (atom nil)
+                 :core-context (atom nil) :text-only (atom false)
                  :accepted-jobs (atom [])}]
     (when agent/*scope*
       (agent/on-close! (:family-id request) #(close-family! request)))
@@ -67,6 +87,7 @@
 (defn admit-operation!
   "Host ordinal, not a model tool ID. Always called before external effects."
   [kind]
+  (when (not= :inference kind) (require-effects!))
   (when *request*
     (let [request *request* state (:budget request)]
       (if-let [admit (:admit! request)]
@@ -114,7 +135,13 @@
        (when handle (finish-operation! handle {:state :definitive}))))))
 
 (defn with-request* [request f]
+  (let [context (when-let [factory (agent/host-callback :request-context)]
+                  (if-let [slot (:core-context request)]
+                    (or @slot (locking slot
+                                (or @slot (reset! slot (factory request)))))
+                    (factory request)))]
   (binding [*request* request
+            agent/*context* (or context agent/*context*)
             usage/*context-id* (or (:usage-context-id request) usage/*context-id*)
             usage/*admit-inference*
             (when (:metered? request)
@@ -123,7 +150,33 @@
                 (admit-operation! :inference)))
             usage/*finish-inference*
             (when (:metered? request) finish-operation!)]
+    (if-let [scheduled (and (:scheduled? request)
+                            (some-> (find-ns 'yetibot.core.commands.cron)
+                                    (ns-resolve '*scheduled?*)))]
+      (with-bindings {scheduled true} (f))
+      (f)))))
+
+(defn with-source*
+  "Issue a finite family before a source constructs its first request body.
+   The installed host owns selection/policy; model options cannot issue one."
+  [prepared f]
+  (if-let [source (agent/host-callback :source)]
+    (source prepared f)
     (f)))
+
+(defn with-routing-source*
+  "Only the installed host may preauthorize and freeze the direct router family."
+  [prepared args f]
+  (if-let [route (agent/host-callback :route-source)]
+    (route prepared args f)
+    (throw (ex-info "Intent routing authority is unavailable." {:ai/error true}))))
+
+(defn require-live!
+  "An already admitted expression may use its last unit; it cannot admit more."
+  []
+  (when *request*
+    (let [{:keys [closed? unknown?]} @(:budget *request*)]
+      (when (or closed? unknown?) (exhausted!)))))
 
 (defn require-open! []
   (when *request*
@@ -162,10 +215,11 @@
     (cond-> policy
       (or a b)
       (assoc :providers
-             (if (and a b)
+             (if (= a b) a
+              (if (and a b)
                (mapv (fn [[name pairs]] {:name name :models (mapv second pairs)})
                      (sort-by key (group-by first (set/intersection (providers a) (providers b)))))
-               (or a b))))))
+               (or a b)))))))
 
 (defn sensitive! []
   (when-not *sensitive*
@@ -185,7 +239,7 @@
   {:result/error expired-message})
 
 (defn provider-signature [provider]
-  (let [identity (select-keys provider [:name :url :api :native-tools])
+  (let [identity (select-keys provider [:name :url :api :native-tools :max-turns :gateway-id :continuation-transport])
         digest (.digest (java.security.MessageDigest/getInstance "SHA-256")
                         (.getBytes (pr-str identity) "UTF-8"))]
     (apply str (map #(format "%02x" (bit-and 255 %)) digest))))
@@ -280,6 +334,8 @@
               *sensitive* sensitive
               log/*config* (update log/*config* :middleware
                                   #(into [privacy] %))]
+      (when-let [observe (agent/host-callback :observe-event)]
+        (observe *event*))
       (if-let [route (discord/command-followup)]
         (do (sensitive!)
             (dispatch-followup! route chat-source user yetibot-user

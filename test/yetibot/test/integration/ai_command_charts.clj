@@ -1,6 +1,7 @@
 (ns yetibot.test.integration.ai-command-charts
   (:require [cheshire.core :as json]
             [clojure.string :as string]
+            [clj-http.client :as http]
             [midje.sweet :refer :all]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
@@ -12,6 +13,9 @@
             [yetibot.core.commands.render]
             [yetibot.core.handler :as handler]
             [yetibot.core.hooks :as hooks]
+            [yetibot.core.chat :as chat]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.models.users :as users]
             [yetibot.core.models.channel :as channel]
             [yetibot.core.models.history :as history]
             [yetibot.core.util.public-result :as public]
@@ -35,6 +39,20 @@
 (defn descriptor [messages]
   (->> messages (filter #(= "tool" (:role %)))
        (keep #(get-in (json/parse-string (:content %)) ["structuredContent" "datasets" 0])) last))
+
+(def caller-adapter
+  (reify adapters/Adapter
+    (uuid [_] "workspace") (platform-name [_] "Slack")
+    (channels [_] ["C1"]) (connected? [_] true)
+    (send-msg [_ _] nil) (send-paste [_ _] nil)
+    (join [_ _]) (leave [_ _]) (chat-source [_ _]) (start [_]) (stop [_])
+    (connection-last-active-timestamp [_] 0) (connection-latency [_] 0)))
+
+(defn with-current-caller [f]
+  (with-redefs [adapters/adapters (atom {"workspace" caller-adapter})
+                users/users (atom {{:adapter :slack :id "U1"} (:user support/request)
+                                   {:adapter :slack :id "BOT"} {:id "BOT"}})]
+    (binding [chat/*adapter* caller-adapter chat/*target* "C1"] (f))))
 
 (defn chart-temps [failed-location correction?]
   (try (deref alias/loader) (catch Exception _ nil))
@@ -66,24 +84,27 @@
                                     (public/reviewed {:result/value (:url artifact)
                                                       :result/data artifact
                                                       :result/public-data artifact}))))
-                  ai/chat (fn [provider model messages opts]
-                            (swap! turns conj (assoc opts :test-provider (:name provider)
-                                                         :test-model model
-                                                         :test-budget (:content (second messages))))
-                            (if (= 1 (count @turns))
-                              (call "collect" "command" {"command" "temps"})
-                              (let [d (descriptor messages)]
-                                (call (str "chart" (count @turns)) "chart"
-                                      {"dataset_id" (get d "dataset-id") "kind" "bar"
-                                       "x" "city_name" "y" (if (and correction? (= 2 (count @turns)))
-                                                               "missing" "temp")}))))]
+                  http/post (fn [endpoint opts]
+                              (let [form (:form-params opts) messages (:messages form)]
+                                (swap! turns conj {:test-endpoint endpoint
+                                                   :test-provider "fake" :test-model (:model form)
+                                                   :max-output-tokens (:max_completion_tokens form)
+                                                   :test-budget (:content (second messages))})
+                                {:status 200
+                                 :body (if (= 1 (count @turns))
+                                         (call "collect" "command" {"command" "temps"})
+                                         (let [d (descriptor messages)]
+                                           (call (str "chart" (count @turns)) "chart"
+                                             {"dataset_id" (get d "dataset-id") "kind" "bar"
+                                              "x" "city_name" "y" (if (and correction? (= 2 (count @turns)))
+                                                                     "missing" "temp")})))}))]
       (hooks/cmd-hook #"weather" #".+" weather/weather-cmd)
       (doseq [[name body] [["locs" "list edmonton 59106 nyc sunnyvale 48178"]
                           ["quicktemp" fixtures/quicktemp]
                           ["temps" "locs | xargs quicktemp | sort"]
                           ["gemma" "ai --provider fake --model fake $s"]]]
         (#'alias/wire-alias {:cmd-name name :cmd body}))
-      (let [pipeline (support/run-command support/request "gemma chart temps")]
+      (let [pipeline (with-current-caller #(support/run-command support/request "gemma chart temps"))]
         {:result @final-result :pipeline pipeline
          :collected @collected :renders @renders :turns @turns :sent @sent}))))
 
@@ -93,8 +114,12 @@
     (count turns) => 2
     (mapv :test-provider turns) => ["fake" "fake"]
     (mapv :test-model turns) => ["fake" "fake"]
-    (string/includes? (:test-budget (first turns)) "total=20 used=0 remaining=20") => true
+    (string/includes? (:test-budget (first turns)) "total=20 admitted=0 reserved=0 remaining=20") => true
     (mapv :max-output-tokens turns) => [32768 32768]
+    (mapv :test-endpoint turns) => ["https://synthetic.invalid/v1/chat/completions"
+                                        "https://synthetic.invalid/v1/chat/completions"]
+    (get-in result [:result/data :execution :host-budget])
+    => {:limit 20 :admitted 4 :reserved 0 :remaining 16}
     (count renders) => 1
     (count (get-in spec [:data :values])) => 5
     (set (map :x (get-in spec [:data :values]))) => (set fixtures/locations)

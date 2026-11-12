@@ -310,7 +310,9 @@
                                   (str "This tool was not run because an "
                                        "earlier call had an unknown outcome.")})
                    attempted true))
-          (let [handle (execution/admit-operation! :tool)
+          (let [_ (when-let [authorize (:authorize-tool! execution/*request*)]
+                    (authorize (get-in call [:entry :tool])))
+                handle (execution/admit-operation! :tool)
                 _ (swap! trace-state update :used inc)
                 _ (trace/outcome! trace-state ordinal :unknown true false)
                 _ (notify-tool! config trace-state ordinal :running)
@@ -437,8 +439,14 @@
               (into [(first messages)
                      {:role "system"
                       :content
-                      (str "Host tool-call budget: total=" limit
-                           " used=" used " remaining=" (max 0 remaining)
+                      (str (if (:metered? execution/*request*)
+                             (let [{:keys [limit admitted reserved remaining]}
+                                   (execution/admissions execution/*request*)]
+                               (str "Host admission budget: total=" limit
+                                    " admitted=" admitted " reserved=" reserved
+                                    " remaining=" remaining "; tool calls=" used))
+                             (str "Host tool-call budget: total=" limit
+                                  " used=" used " remaining=" (max 0 remaining)))
                            ". Keep the entire next batch within remaining. "
                            "When exhausted, stop fetching and answer "
                            "with available evidence.")}]
@@ -545,7 +553,8 @@
                      {:proposal (:id p)
                       :mcp {:tool-calls (+ used attempted)} :ai/cost accounting}})
                     (and (:metered? execution/*request*) (zero? (execution/remaining))
-                         (seq (some-> execution/*request* :accepted-jobs deref)))
+                         (or (seq (some-> execution/*request* :accepted-jobs deref))
+                             (pos? (:reserved @(:budget execution/*request*) 0))))
                     (let [jobs (some-> execution/*request* :accepted-jobs deref)
                           report (trace/public-report
                                    (trace/report trace-state limit (if (seq jobs) :queued :exhausted)))]
@@ -554,7 +563,7 @@
                          (if (seq jobs)
                            (str "Accepted/queued inherited work (not completed): "
                                 (string/join ", " (map :job-id jobs)) ".")
-                           "Inherited allowance exhausted; no further inference or tool was dispatched.")
+                           "Remaining allowance is reserved for durable work; no further inference or tool was dispatched.")
                          :result/data {:mcp {:tool-calls (+ used attempted)}
                                        :ai/cost accounting :execution report
                                        :agent-jobs jobs :isError (empty? jobs)}
@@ -615,7 +624,7 @@
                                    (:ai/diagnostic (ex-data e)))))))))))
 
 (defn- staging-tool [config actor provider model reads]
-  {:name "stage_changes" :exclusive? true
+  {:name "stage_changes" :host-stage? true :exclusive? true
    :description (str "Propose small text-file additions/updates, without GitHub writes. "
                      "Call alone after reading the repository. The host snapshots "
                      "source, validates policy and asks the user to review/approve. "
@@ -667,16 +676,26 @@
     (let [original (:toolset-policy execution/*request*)
           policy (execution/intersect-policy original (:toolset config))
           servers (:servers original)
-          config (assoc config :toolset policy)]
-      (if-not (some? servers) config
-        (update config :servers
-          (fn [current]
-            (vec (keep (fn [server]
-                         (when-let [before (some #(when (= (:name server) (:name %)) %) servers)]
-                           (if (nil? (:tools before)) server
-                             (update server :tools
-                               #(if (nil? %) (:tools before)
-                                  (filterv (set (:tools before)) %)))))) current))))))))
+          config (assoc config :toolset policy)
+          config (if-not (some? servers) config
+                   (update config :servers
+                     (fn [current]
+                       (vec (keep (fn [server]
+                                    (when-let [before (some #(when (= (:name server) (:name %)) %) servers)]
+                                      (if (nil? (:tools before)) server
+                                        (update server :tools
+                                          #(if (nil? %) (:tools before)
+                                             (filterv (set (:tools before)) %)))))) current)))))
+          ceiling (some-> execution/*request* :tool-ceiling deref)]
+      (if (nil? ceiling) config
+        (-> config
+            (update :servers
+              #(vec (keep (fn [server]
+                            (let [names (mapv second (filter (fn [[name _]] (= name (:name server))) ceiling))]
+                              (when (seq names) (assoc server :tools names)))) %)))
+            (assoc-in [:toolset :native-tools]
+                      (filterv #(contains? ceiling ["yetibot" %])
+                               (native/names config))))))))
 
 (defn- complete*
   ([provider model messages] (complete* provider model messages {}))
@@ -736,6 +755,8 @@
            (when-not (ai/tool-calling? provider)
              (ai/fail
                "Tool calling is disabled for this provider. Use --no-tools."))
+           (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+             (reauthorize))
            (mcp/with-tools (assoc config :tolerant? true)
              (fn [reads]
                (let [statuses (::mcp/statuses (meta reads))
@@ -748,9 +769,7 @@
                      _ (when-let [ceiling (:tool-ceiling execution/*request*)]
                          (compare-and-set! ceiling nil
                            (set (map (fn [tool]
-                                       [(if (:native? tool) "yetibot"
-                                          (get-in tool [:session :server :name]))
-                                        (:name tool)]) tools))))]
+                                       (execution/tool-key tool)) tools))))]
                  (cond-> (try (run-tools provider model messages tools config)
                               (finally
                                 (when (some #(contains? @(:stage-timings config) %)
@@ -762,7 +781,10 @@
                    (assoc-in [:result/data :mcp :servers]
                              (clean-data statuses config)))))))
          ;; Text-only providers and non-chat callers need no function support.
-         (if on-progress
+         (do
+          (when-let [ceiling (:tool-ceiling execution/*request*)]
+            (compare-and-set! ceiling nil #{}))
+          (if on-progress
            (clean-data (ai/complete provider model (host-messages messages)
                                     {::diagnostics/stage :initial
                                      :max-output-tokens
@@ -771,7 +793,7 @@
                                      :progress-config config}) config)
            (ai/complete provider model (host-messages messages)
                         {:max-output-tokens
-                         (:max-output-tokens config)})))))))
+                         (:max-output-tokens config)}))))))))
 
 (defn- with-kroki-results [result artifacts errors]
   (if (and (empty? artifacts) (empty? errors)) result
@@ -832,11 +854,8 @@
                              (get-in result [:result/data :execution])) details)
           used (:used @(:budget request))
           execution (cond-> execution
-                      (and (or root? (:metered? request)) (:budget execution))
-                      (update :budget assoc :used used
-                              :reserved (:reserved @(:budget request) 0)
-                              :remaining (max 0 (- (:limit (:budget execution)) used
-                                                   (:reserved @(:budget request) 0)))))]
+                      (:metered? request)
+                      (assoc :host-budget (execution/admissions request)))]
       (public/reviewed
         (cond-> (-> result
                     (assoc-in [:result/data :execution] execution)
@@ -868,27 +887,32 @@
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
-   (let [root? (nil? execution/*request*)
+   (execution/with-source* (merge options {:provider provider :model model})
+    (fn []
+     (let [_ (execution/require-effects!)
+         root? (nil? execution/*request*)
          _ (execution/require-open!)
          config (mcp/config)
          selected (toolsets/select config
                     (execution/inherited-toolset (:toolset options)))
+         selected (if (= #{} (some-> execution/*request* :tool-ceiling deref))
+                    (-> selected (assoc :servers [])
+                        (assoc-in [:toolset :native-tools] [])) selected)
          budgets (limits/effective config options)
          owner (when (native/trusted? (:actor options))
                  {:actor (:actor options)
                   :chat-source (:chat-source execution/*event*)})
          inherited-store (:dataset-store execution/*request*)
-         owns-store? (or root? (nil? inherited-store)
-                         (:closed? @(:state inherited-store)))
+         _ (when (and inherited-store (:closed? @(:state inherited-store)))
+             (ai/fail "Inherited dataset store is closed."))
+         owns-store? (or root? (nil? inherited-store))
          store (when (and owns-store? owner)
                  (datasets/create-store owner {:secrets (:additional-secrets options)}))
          request (assoc
                    (or execution/*request*
                        (merge (execution/family (:max-tool-calls budgets)
                                                 (:max-output-tokens budgets))
-                              ;; Source issuance belongs to the installed host
-                              ;; bridge. Never downgrade an existing family.
-                              {:metered? false :event execution/*event*
+                              {:event execution/*event*
                                :planner-provider (ai/prepare-provider provider model)
                                :planner-model model
                                :stage-timings (atom {}) :planning-responses (atom 0)
@@ -907,6 +931,14 @@
                    :toolset-policy (execution/intersect-policy
                                      (:toolset-policy execution/*request*) (:toolset selected))
                    :tool-ceiling (or (:tool-ceiling execution/*request*) (atom nil))
+                   :stage-timings (or (:stage-timings execution/*request*) (atom {}))
+                   :planning-responses (or (:planning-responses execution/*request*) (atom 0))
+                   :allowed-tool?
+                   (fn [tool]
+                     (let [ceiling (some-> execution/*request* :tool-ceiling deref)]
+                       (or (nil? ceiling)
+                           (contains? ceiling
+                             (execution/tool-key tool)))))
                    :authorize-inference!
                    (or (:authorize-inference! execution/*request*)
                        (fn [attrs]
@@ -941,13 +973,12 @@
              (throw (ex-info (.getMessage e)
                        (assoc (ex-data e) :ai/tool-failure
                               (cond-> (merge report (execution-details timings plans))
-                                root? (update :budget assoc
-                                        :used (:used @(:budget request))
-                                        :remaining (or (execution/remaining) 0)))) e))
+                                (:metered? request)
+                                (assoc :host-budget (execution/admissions request)))) e))
              (throw e)))
          (finally
            (when (and root? (not agent/*scope*)) (execution/close-family! request))
-           (when store (datasets/close! store owner)))))))))
+           (when store (datasets/close! store owner)))))))))))
 
 (defn- listing-config [actor]
   (let [config (toolsets/validate! (mcp/config))
