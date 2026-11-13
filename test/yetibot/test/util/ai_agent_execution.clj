@@ -613,3 +613,23 @@
                   (:reserved @(:budget parent)) => 0
                   (:used @(:budget parent)) => 0
                   @queued => [])))))))))
+
+(fact "scheduler throw after a worker starts cannot release that running process-local owner"
+  (let [entered (promise) release (promise) worker (atom nil) exits (atom 0)
+        scheduled (atom 0) row {:id (System/nanoTime)}
+        resume (fn [_] (deliver entered true) @release (swap! exits inc))
+        schedule (fn [f]
+                   (reset! worker (future (f)))
+                   (deref entered 5000 false)
+                   (throw (Exception. "scripted scheduler acknowledgement failure")))]
+    (try
+      (#'agent/schedule-worker! "local-owner-fixture" row schedule resume)
+      (deref entered 5000 false) => true
+      (#'agent/schedule-worker! "local-owner-fixture" row (fn [_] (swap! scheduled inc)) resume)
+      @scheduled => 0
+      (finally (deliver release true)))
+    (deref @worker 5000 :timeout) => 1
+    @exits => 1
+    ;; Only local liveness is tested here; real worker/SQL completion is covered
+    ;; by integration.ai-agent-execution's blocked physical-send regression.
+    (#'agent/schedule-worker! "local-owner-fixture" row (fn [f] (f)) (fn [_] :exited)) => :exited))

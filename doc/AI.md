@@ -2292,3 +2292,13 @@ independent whole-feature review remain pending. The router currently precedes
 the ordinary `ai` source entry; its classifier/effect boundary must be included
 in the same finite family before claiming complete public activation. No
 completion claim here supersedes those acceptance requirements.
+
+Inherited recurring schedules retain their enclosing tick fence during delivery.
+With the current Slack/Discord adapters, even a nonthrowing send is unconfirmed:
+the first delivery attempt therefore leaves the schedule unknown and stops later
+automatic occurrences. Spent/reserved allowance is retained; neither the command
+nor its send is replayed. Rewiring or editing that schedule does not clear this
+uncertainty. Human-literal legacy schedules keep their existing behavior.
+Legacy unauthenticated HTTP `ai --no-tools` plaintext remains finite and permitted
+only by the original/current provider policy; it grants no chat actor, generated
+command, durable agent, native-tool, or direct-control authority.

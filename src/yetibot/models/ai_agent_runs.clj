@@ -141,10 +141,13 @@
                  (map? (:authority state))
                  (integer? (:generation-cap state))
                  (<= 1 (:generation-cap state) 262144)
-                 (#{:queued :loop :result-saved :delivery-started} (:phase state))
+                 (#{:queued :loop :result-saved :delivery-started :cron-delivery-started} (:phase state))
                  (not-any? #(contains? (:authority state) %)
                            [:direct-input :direct-command :credentials :key :key-file]))
     (invalid!))
+  (when (= :cron-delivery-started (:phase state))
+    (when-not (and (:scheduled? state) (not (:loop state))
+                   (not (:datasets state)) (not (:result state))) (invalid!)))
   (validate-authority! (:authority state))
   (validate-loop! (:phase state) (:loop state))
   (when (#{:result-saved :delivery-started} (:phase state))
@@ -319,6 +322,34 @@
         (if handle
           (ledger/complete-operation! tx (:owner session) handle text "ready")
           (ledger/checkpoint! tx (:owner session) (:state-revision row) text "ready"))))
+    (reset! (:state session) state)))
+
+(defn begin-cron-delivery!
+  "Persist intent under the exact tick owner without completing its receipt or
+   moving the SQL phase to ready. Core safe checkpoints require definitive IO."
+  [session operation]
+  (let [state (assoc @(:state session) :phase :cron-delivery-started)
+        text (encode state (:codec-config session))
+        {:keys [table id fence] :as owner} (:owner session)]
+    (transaction! session
+      (fn [tx row]
+        (let [before (row-state! row (:codec-config session))
+              receipt (nth (json/parse-string (:operation-receipts row) true)
+                           (dec (:ordinal operation)) nil)]
+          (when-not (and (= "cron" table) (= owner (:owner operation))
+                         (= fence (:worker-fence row))
+                         (= "operation-in-flight" (:execution-phase row))
+                         (= :queued (:phase before)) (:scheduled? before)
+                         (= "tick" (:kind receipt)) (= "intent" (:state receipt))
+                         (nil? (:parent-ordinal receipt))
+                         (= (select-keys before grant-fields) (select-keys state grant-fields)))
+            (invalid!))
+          (when-not (= [1] (jdbc/update! tx (db/qualified-table-name table)
+                            {:execution_state text :state_revision (inc (:state-revision row))}
+                            ["id=? AND execution_kind=? AND worker_fence=? AND state_revision=? AND execution_phase=?"
+                             id ledger/inherited-kind fence (:state-revision row) "operation-in-flight"]))
+            (invalid!))
+          (ledger/read-row tx table id))))
     (reset! (:state session) state)))
 
 (defn save-result! [session result outcome]

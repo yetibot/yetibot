@@ -27,3 +27,12 @@
       (with-redefs [channel/settings-for-chat-source (constantly {})]
         (handler/handle-parsed-expr chat-source user {:id "BOT"}
                                     (parser/parser text))))))
+
+(defn configured-test-url!
+  "Fixtures may use only the explicitly selected test URL, never a default DB."
+  [config explicit-url]
+  (when-not (and (string? explicit-url)
+                 (re-find #"^postgres(?:ql)?://[^\s]+/[^/\s]+$" explicit-url)
+                 (= explicit-url (:url config)))
+    (throw (ex-info "Set an explicit YETIBOT_DB_URL for isolated test tables." {})))
+  explicit-url)

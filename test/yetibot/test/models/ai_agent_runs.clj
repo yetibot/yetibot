@@ -8,13 +8,13 @@
             [yetibot.core.db.cron :as cron]
             [yetibot.core.util.public-result :as public]
             [yetibot.models.ai-agent-runs :as runs]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.test.support.ai-execution :as support]))
 
 (defn with-store [f]
   (let [config (db/config)
         prefix (str "app_u3_" (System/nanoTime) "_")]
-    (when-not (re-find #":55445/" (:url config))
-      (throw (ex-info "Tests require owned PostgreSQL port 55445." {})))
+    (support/configured-test-url! config (System/getenv "YETIBOT_DB_URL"))
     (with-redefs [db/config (constantly (assoc config :table {:prefix prefix}))]
       (try
         (doseq [schema [ledger/schema cron/schema]]
@@ -382,3 +382,37 @@
     (runs/decode (str (apply str (repeat 300 "[")) "0" (apply str (repeat 300 "]"))) {})
     => (throws Exception)
     (runs/decode "{\"version\":2,\"version\":1,\"checkpoint\":null}" {}) => (throws Exception)))
+
+(fact "explicit isolated test URLs are portable across CI and owned local ports"
+  (doseq [url ["postgresql://test@localhost:5432/test"
+               "postgresql://test@127.0.0.1:55446/test"]]
+    (support/configured-test-url! {:url url} url) => url)
+  (support/configured-test-url! {:url "postgresql://localhost/production"} nil)
+  => (throws Exception)
+  (support/configured-test-url! {:url "postgresql://localhost/production"}
+                                "postgresql://localhost/test") => (throws Exception))
+
+(fact "cron delivery intent preserves its in-flight tick and cannot become a safe ready checkpoint"
+  (with-store
+    (fn [url]
+      (let [request (execution/family 3 91)
+            state (runs/cron-state (assoc state :generation-cap 91))
+            row (runs/transfer-live! url request "cron"
+                  {:schedule "0 0 8 * * * *" :cmd "echo bounded"
+                   :execution-origin ledger/inherited-kind} state {})
+            claim (jdbc/with-db-transaction [tx url] (cron/claim-tick! tx (:id row)))
+            session (runs/claimed-cron-session url claim {})
+            operation (:operation claim)]
+        (runs/begin-cron-delivery! session (update-in operation [:owner :fence] inc)) => (throws Exception)
+        (:phase (runs/decode (:execution-state (ledger/read-row url "cron" (:id row))) {})) => :queued
+        (runs/begin-cron-delivery! session operation)
+        (let [pending (ledger/read-row url "cron" (:id row))]
+          (:execution-phase pending) => "operation-in-flight"
+          (:phase (runs/decode (:execution-state pending) {})) => :cron-delivery-started
+          (mapv :state (json/parse-string (:operation-receipts pending) true)) => ["intent"]
+          (select-keys pending [:execution-used :execution-reserved])
+          => {:execution-used 1 :execution-reserved 0})
+        (runs/checkpoint! session @(:state session) operation) => (throws Exception)
+        (runs/finish! session operation {:state :unknown})
+        (jdbc/with-db-transaction [tx url] (cron/claim-tick! tx (:id row))) => {:status :unknown}
+        (:execution-used (ledger/read-row url "cron" (:id row))) => 1))))

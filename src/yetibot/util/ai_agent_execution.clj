@@ -72,7 +72,9 @@
 (defn- resolve-planner [planner]
   (let [provider (if-let [transport (:transport planner)]
                    (native-text-provider transport)
-                   (ai/provider (ai/config) (:name planner)))]
+                   (ai/provider (if (= "grok" (:name planner))
+                                  (ai/grok-config) (ai/config))
+                                (:name planner)))]
     (when-not (and provider
                    (or (nil? (:transport planner))
                        (= (:model planner) (case (:transport planner)
@@ -95,14 +97,15 @@
     nil))
 
 (defn- provider-identities []
-  (let [native (keep identity
+  (let [config (ai/grok-config)
+        native (keep identity
                  [(when (xai/configured?) {:name "xai" :url "https://api.x.ai/v1"})
                   (when (gemini/configured?) {:name "gemini" :url "https://generativelanguage.googleapis.com/v1beta"})
                   (when (native-text-provider "openai-text") {:name "openai" :url "https://api.openai.com/v1"})
-                  (when-let [account (get-in (ai/config) [:intent-router :account-id])]
+                  (when-let [account (get-in config [:intent-router :account-id])]
                     {:name "cloudflare" :url (cloudflare/account-url account)})])]
     (into {} (concat
-               (map (fn [p] [(str "app:" (:name p)) (execution/provider-signature p)]) (:providers (ai/config)))
+               (map (fn [p] [(str "app:" (:name p)) (execution/provider-signature p)]) (:providers config))
                (map (fn [p] [(str "native:" (:name p)) (execution/provider-signature p)]) native)))))
 
 (defn authority
@@ -181,7 +184,7 @@
 
 (defn- authorize-inference! [original current attrs]
   (when (= "agent" (:operation attrs)) (denied!))
-  (let [configured (some #(when (= (:provider attrs) (:name %)) %) (:providers (try (ai/config) (catch Exception _ {}))))
+  (let [configured (some #(when (= (:provider attrs) (:name %)) %) (:providers (ai/grok-config)))
         prepared (when configured (ai/prepare-provider configured (:model attrs)))
         app-wire? (and prepared
                        (some #{(:provider-signature attrs)}
@@ -283,6 +286,34 @@
              (runs/checkpoint! session
                (assoc @(:state session) :phase :loop :loop loop-state
                       :datasets (datasets/export-store! store owner)) handle)))))
+
+(defonce ^:private live-workers (atom {}))
+
+(defn- schedule-worker! [database row schedule resume]
+  (let [key [database (db/qualified-table-name "agent_run") (:id row)]
+        token (Object.)
+        owned? #(identical? token (get-in @live-workers [key :token]))
+        release! (fn []
+                   (locking live-workers
+                     (when (owned?) (swap! live-workers dissoc key))))
+        acquired? (locking live-workers
+                    (when-not (contains? @live-workers key)
+                      (swap! live-workers assoc key {:token token :phase :queued}) true))]
+    (when acquired?
+      (try
+        (schedule
+          (fn []
+            (if (locking live-workers
+                  (when (and (owned?) (= :queued (get-in @live-workers [key :phase])))
+                    (swap! live-workers assoc-in [key :phase] :running) true))
+              (try (resume row) (finally (release!)))
+              {:status :not-owner})))
+        (catch Throwable _
+          ;; A scheduler may enqueue and then throw, or throw after starting the
+          ;; worker. Invalidate only queued work; a running owner exits itself.
+          (locking live-workers
+            (when (and (owned?) (= :queued (get-in @live-workers [key :phase])))
+              (swap! live-workers dissoc key))))))))
 
 (defn callbacks
   "Construct trusted start/resume callbacks; install them only from the bridge.
@@ -424,9 +455,10 @@
               (when-let [accepted (:accepted-jobs request)] (swap! accepted conj receipt))
               ;; A scheduling failure does not undo a committed allocation or
               ;; justify a replacement job. The same queued ID is boot-resumable.
-              (try (schedule #(resume! row)) (catch Throwable _ nil))
+              (schedule-worker! database row schedule resume!)
               receipt))]
     {:start start! :resume resume! :schedule schedule
+     :schedule-row #(schedule-worker! database % schedule resume!)
      :restore-cron
      (fn [row]
        (when-not (= ledger/inherited-kind (:execution-origin row)) (denied!))
@@ -606,6 +638,25 @@
       (let [result (callback text input f)]
         (if-let [context @*command-source*] (origin/mark-output! result context) result)))))
 
+(defn- reauthorize-text-source! [request attrs]
+  ;; This admits only legacy unauthenticated plaintext IO. It issues no actor,
+  ;; command, durable, native-tool or adapter authority.
+  (let [provider (:planner-provider request)
+        model (:planner-model request)
+        current (resolve-planner (planner-identity provider model))]
+    (when-not (and (:untrusted-text? request)
+                   (nil? execution/*event*) (nil? (:event request))
+                   (execution/text-only?) (= #{} @(:tool-ceiling request))
+                   (not (seq (:native-tools provider)))
+                   (= "text" (:operation attrs))
+                   (= (:name provider) (:provider attrs)) (= model (:model attrs))
+                   (= (execution/provider-signature provider)
+                      (execution/provider-signature current)))
+      (denied!))
+    (doseq [t [(:toolset-policy request)
+               (:toolset (toolsets/select (mcp/config) (:toolset-name request)))]]
+      (policy/authorize! t nil current model))))
+
 (defn- authorize-source-request [request selected provider model]
   (assoc request
                     :reauthorize-expression!
@@ -634,7 +685,9 @@
                                            provider model)))
                     :authorize-inference!
                     (fn [attrs]
-                      (reauthorize-source! request)
+                      (if (:untrusted-text? request)
+                        (reauthorize-text-source! request attrs)
+                        (reauthorize-source! request))
                       (authorize-inference! {:toolset-policy (:toolset-policy request)
                                              :provider-identities (:provider-identities request)
                                              :actor (policy/actor execution/*event*)}
@@ -656,8 +709,15 @@
       (when (and (execution/text-only?)
                  (not (:producer-operation? prepared))
                  (or (not= (:model prepared) (:planner-model execution/*request*))
-                     (not= (execution/provider-signature (:provider prepared))
-                           (execution/provider-signature (:planner-provider execution/*request*)))) )
+                     (not (or (= (execution/provider-signature (:provider prepared))
+                                 (execution/provider-signature (:planner-provider execution/*request*)))
+                              ;; The chat hook sees the deliberate no-tools wire
+                              ;; projection, not a replacement planner identity.
+                              (and (:single-hop? prepared)
+                                   (not (seq (:native-tools (:provider prepared))))
+                                   (= (execution/provider-signature (dissoc (:provider prepared) :native-tools))
+                                      (execution/provider-signature (dissoc (:planner-provider execution/*request*)
+                                                                            :native-tools))))))))
         (denied!))
       (when (and (:no-tools prepared) (not (:single-hop? prepared))
                  (not (:producer-operation? prepared)))
@@ -683,6 +743,9 @@
                           :planner-model model :producer producer :provider-identities (provider-identities)
                           :toolset-name (get-in selected [:toolset :name])
                           :toolset-policy (:toolset selected) :no-tools? (boolean (:no-tools prepared))
+                          :untrusted-text? (and (nil? execution/*event*) (:no-tools prepared)
+                                                (not (:producer-operation? prepared))
+                                                (not (seq (:native-tools provider))))
                           :tool-ceiling (atom (when (:no-tools prepared) #{}))
                           :text-only (atom (boolean (:no-tools prepared)))
                           :stage-timings (atom {}) :planning-responses (atom 0)})
@@ -858,10 +921,9 @@
         config (mcp/config)]
     (cond
       (= :inherited (cron/origin-kind existing))
-      (let [grant (:grant (runs/cron-snapshot existing config))
-            ;; The snapshot intentionally excludes phase; edits restore only
-            ;; the queued grant, never counters or another allocation.
-            state (runs/cron-state (assoc grant :phase :queued))
+      (let [_ (runs/cron-snapshot existing config)
+            ;; Edits retain delivery intent as well as core's sticky fence.
+            state (runs/decode (:execution-state existing) config)
             incoming (when request (authority request))
             state (if incoming
                     (-> state
@@ -932,9 +994,10 @@
                                (parser/parser (:cmd @(:row session))))]
                   ;; Deliver inside the tick barrier. Adapter ambiguity never
                   ;; makes the saved expression replayable.
+                  (runs/begin-cron-delivery! session operation)
                   (chat/chat-data-structure (:value result))
-                  (runs/checkpoint! session @(:state session) operation)
-                  {:status :definitive}))))
+                  (runs/finish! session operation {:state :unknown})
+                  {:status :unconfirmed}))))
           (catch Throwable e
             (try (runs/finish! session operation {:state :unknown})
                  (catch Throwable _ nil))
@@ -942,8 +1005,6 @@
           (finally
             (execution/close-family! request)
             (datasets/close! (:dataset-store request) (:dataset-owner request))))))))
-
-(defonce ^:private resumed (atom #{}))
 
 (defn- observe-event! [event]
   (when (policy/actor event)
@@ -958,15 +1019,11 @@
                          " WHERE execution_kind=? AND execution_phase IN ('queued','ready','operation-in-flight')")
                     ledger/inherited-kind]
                    {:identifiers #(string/replace % "_" "-")})]
-        (doseq [row rows :let [key [database table (:id row)]]
-                :when (not (contains? @resumed key))]
+        (doseq [row rows]
           (try
             (let [state (runs/decode (:execution-state row) (mcp/config))]
               (current-authority (:authority state))
-              (when (locking resumed
-                      (when-not (contains? @resumed key)
-                        (swap! resumed conj key) true))
-                ((:schedule @runtime) #((:resume @runtime) row))))
+              ((:schedule-row @runtime) row))
             ;; One invalid/unavailable grant must not starve unrelated jobs.
             (catch Exception _ nil))))
       ;; DB/adapter startup is not an authenticated caller or a CLI fallback.
@@ -984,7 +1041,7 @@
      :write-cron write-cron! :tick tick!
      :command-origin command-origin
      :classify-agent (fn [_ _] (when (human-literal?) :human-literal))
-     :resume (fn [row] ((:resume @runtime) row))})
+     :resume (fn [row] ((:schedule-row @runtime) row))})
   (hooke/add-hook #'origin/with-command* #'with-command-request)
   (hooke/add-hook #'cron/create #'with-cron-write)
   (hooke/add-hook #'cron/update-where #'with-cron-write)

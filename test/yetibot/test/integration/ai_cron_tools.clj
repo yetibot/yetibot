@@ -42,8 +42,7 @@
   (let [cfg (db/config)
         prefix (str "test_ai_cron_" (System/nanoTime) "_")
         runtime (atom [])]
-    (when-not (re-find #":55445/" (:url cfg))
-      (throw (ex-info "Native cron qualification requires owned PG55445." {})))
+    (execution/configured-test-url! cfg (System/getenv "YETIBOT_DB_URL"))
     (with-redefs [adapters/adapters (atom {"workspace" caller-adapter})
                   users/users (atom {{:adapter :slack :id "U1"} (:user execution/request)
                                      {:adapter :slack :id "BOT"} {:id "BOT"}})

@@ -11,6 +11,7 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
+            [yetibot.core.util.xai :as xai]
             [yetibot.core.util.ai-usage :as usage]
             [yetibot.util.ai-config :as settings]
             [yetibot.util.ai-limits :as limits]
@@ -126,6 +127,24 @@
     (or (some #(when (= provider-name (:name %)) %) (:providers config))
         (fail (str "Unknown AI provider. Use ai providers to list "
                    "available providers.") :configuration-unavailable))))
+
+(defn grok-config
+  "Current host Grok configuration; an absent shared config is not malformed.
+   The xai.key fallback is local to Grok/source resolution, never a mutation."
+  []
+  (let [config (try (config)
+                    (catch Exception e
+                      (if (= :not-found (:error (get-config map? [:ai])))
+                        {:providers []}
+                        (throw e))))
+        key (:key xai/config)]
+    (if (and (not-any? #(= "grok" (:name %)) (:providers config))
+             (nonblank-string? key))
+      (update config :providers conj
+              {:name "grok" :url "https://api.x.ai/v1" :key key
+               :model "grok-4.7" :api "responses"
+               :native-tools ["web_search" "x_search"]})
+      config)))
 
 (defn automatic-discovery? [provider]
   (not (false? (:automatic-discovery provider))))

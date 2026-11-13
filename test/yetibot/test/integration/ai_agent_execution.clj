@@ -9,6 +9,8 @@
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.clef :as clef]
             [yetibot.commands.ai :as ai-command]
+            [yetibot.commands.grok :as grok]
+            [yetibot.core.config :as host-config]
             [yetibot.commands.openai :as openai]
             [yetibot.commands.weather :as weather]
             [yetibot.core.commands.agent :as core-agent]
@@ -16,6 +18,10 @@
             [yetibot.core.commands.collections]
             [yetibot.core.commands.echo]
             [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.adapters.slack :as slack]
+            [yetibot.core.adapters.discord :as discord]
+            [clj-slack.chat :as slack-chat]
+            [yetibot.core.webapp.routes.images :as images]
             [yetibot.core.models.users :as users]
             [yetibot.core.models.channel :as channel]
             [yetibot.core.models.history :as history]
@@ -25,6 +31,7 @@
             [yetibot.core.db.agent-run :as ledger]
             [yetibot.core.db.cron :as cron]
             [yetibot.core.handler :as handler]
+            [yetibot.core.webapp.routes.api :as http-api]
             [yetibot.core.hooks :as hooks]
             [yetibot.core.interpreter :as interpreter]
             [yetibot.core.chat :as chat]
@@ -65,12 +72,12 @@
     (connection-last-active-timestamp [_] 0) (connection-latency [_] 0)))
 
 (def ^:dynamic *queued* nil)
+(def ^:dynamic *schedule-failure* nil)
 
 (defn with-runtime [f]
   (let [cfg (db/config) prefix (str "app_u3_" (System/nanoTime) "_")
-        callbacks agent/callbacks queued (atom [])]
-    (when-not (re-find #":55445/" (:url cfg))
-      (throw (ex-info "U3 requires owned PostgreSQL55445" {})))
+        callbacks agent/callbacks queued (atom []) failed (atom false)]
+    (support/configured-test-url! cfg (System/getenv "YETIBOT_DB_URL"))
     (with-redefs [db/config (constantly (assoc cfg :table {:prefix prefix}))
                   adapters/adapters (atom {"workspace" adapter})
                   users/users (atom {{:adapter :slack :id "U1"} (:user support/request)
@@ -83,14 +90,18 @@
                   mcp/config (constantly {:servers [] :toolsets [toolset]})
                   ai/config (constantly {:providers [provider]})
                   agent/callbacks (fn [options]
-                                    (callbacks (assoc options :schedule (fn [f] (swap! queued conj (bound-fn [] (f)))))))]
+                                    (callbacks (assoc options :schedule
+                                              (fn [f]
+                                                (when (not= true @failed)
+                                                  (swap! queued conj (bound-fn [] (f))))
+                                                (when @failed (throw (Exception. "scripted schedule failure")))))))]
       (try
         (doseq [schema [ledger/schema cron/schema]]
           (database/idempotent-create-table! (:schema/table schema) (:schema/specs schema)))
         (agent/install!)
         (hooks/cmd-hook #"agent" #"run\s+(.+)" core-agent/agent-run-cmd
                         #"(?s)(.+)" core-agent/agent-cmd)
-        (binding [*queued* queued] (f (:url cfg)))
+        (binding [*queued* queued *schedule-failure* failed] (f (:url cfg)))
         (finally
           (doseq [table ["agent_run" "cron"]]
             (jdbc/db-do-commands (:url cfg)
@@ -308,8 +319,9 @@
             (:execution-used saved) => 0
             (:generation-cap saved) => 91
             (dotimes [_ 4] (callback nil))
-            @effects => 3
-            (:execution-used (ledger/read-row url "cron" (:id row))) => 3
+            @effects => 1
+            (:execution-phase (ledger/read-row url "cron" (:id row))) => "unknown"
+            (:execution-used (ledger/read-row url "cron" (:id row))) => 1
             ;; Ordinary later edit retains original family and exhausted ledger.
             (dispatch (str "cron 0 0 9 * * * * tick-write"))
             (let [legacy (first (jdbc/insert! url (db/qualified-table-name "cron")
@@ -338,8 +350,9 @@
               (:reserved @(:budget parent)) => 4
               (:execution-origin (ledger/read-row url "cron" (:id legacy))) => ledger/inherited-kind
               (dotimes [_ 5] (stale nil))
-              @effects => 7
-              (:execution-used (ledger/read-row url "cron" (:id legacy))) => 4)))))))
+              @effects => 2
+              (:execution-phase (ledger/read-row url "cron" (:id legacy))) => "unknown"
+              (:execution-used (ledger/read-row url "cron" (:id legacy))) => 1)))))))
 
 (fact "actual native xAI source transport facts normalize map caps without requiring an ai.providers entry"
   (with-runtime
@@ -508,23 +521,34 @@
             (binding [chat/*target* "WRONG" chat/*thread-ts* "WRONG"] ((first @*queued*)))
             (count @sent) => 1
             (mapv #(subvec % 1) @sent) => [["C1" nil "saved answer"]]
-            ((first @*queued*)) => {:status :terminal}
+            ((first @*queued*)) => {:status :not-owner}
             @wire => 2
             (count @sent) => 1
             (:execution-state (ledger/read-row url "agent_run" (:id row))) => nil)))))))
 
-(fact "restart readiness schedules a real saved queued row once only after current adapter is connected"
+(fact "restart readiness recovers the same genuinely unscheduled row once after the current adapter is connected"
   (with-runtime
-    (fn [_]
-      (with-redefs [http/post (fn [_ _] {:status 200 :body (answer "agent report")})]
-        (dispatch "ai --no-tools report | split , | xargs %s"))
-      (reset! *queued* [])
-      (with-redefs [adapters/adapters (atom {})]
-        (support/in-event support/request "echo readiness" (fn [_] nil)))
-      (count @*queued*) => 0
-      (dotimes [_ 2]
-        (support/in-event support/request "echo readiness" (fn [_] nil)))
-      (count @*queued*) => 1)))
+    (fn [url]
+      (let [wire (atom 0)]
+        (reset! *schedule-failure* true)
+        (with-redefs [http/post (fn [_ _] (swap! wire inc)
+                                 {:status 200 :body (answer (if (= 1 @wire) "agent report" "completed"))})]
+          (dispatch "ai --no-tools report | split , | xargs %s")
+          (count @*queued*) => 0
+          (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])))]
+            (reset! *schedule-failure* false)
+            (with-redefs [adapters/adapters (atom {})]
+              (support/in-event support/request "echo readiness" (fn [_] nil)))
+            (count @*queued*) => 0
+            (dotimes [_ 2]
+              (support/in-event support/request "echo readiness" (fn [_] nil)))
+            (count @*queued*) => 1
+            ((first @*queued*)) => {:status :unconfirmed :work-outcome :completed}
+            @wire => 2
+            (:execution-phase (ledger/read-row url "agent_run" id)) => "terminal"
+            (support/in-event support/request "echo readiness" (fn [_] nil))
+            (count @*queued*) => 1
+            (count (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])) => 1))))))
 
 (fact "concurrent actual cron callbacks cannot overlap or replay an interrupted enclosing tick"
   (with-runtime
@@ -888,7 +912,7 @@
                       {"action" "update" "id" id "version" version "schedule" "0 0 10 * * * *"} (:chat-source event)))))
               (snapshot (ledger/read-row url "cron" id)) => (snapshot before)
               (dotimes [_ 3] (tick nil))
-              (:execution-used (ledger/read-row url "cron" id)) => 3)))))))
+              (:execution-used (ledger/read-row url "cron" id)) => 1)))))))
 
 (fact "source event data alone cannot authorize even the first physical send without its current registered adapter and caller"
   (with-runtime
@@ -913,3 +937,289 @@
                                        (throw (ex-info "Forbidden discovery boundary reached" {})))]
           (dispatch "ai report")
           @discovery => 0)))))
+
+(fact "original no-tools Responses source preserves identity while removing only native tools"
+  (with-runtime
+    (fn [_]
+      (let [configured (assoc provider :api "responses" :native-tools ["web_search" "x_search"])
+            wire (atom [])]
+        (with-redefs [ai/config (constantly {:providers [configured]})
+                      http/post (fn [endpoint opts]
+                                  (swap! wire conj [endpoint (:form-params opts) (:ordinal origin/*operation*)])
+                                  {:status 200 :body {:output [{:type "message" :content [{:type "output_text" :text "bounded"}]}]}})]
+          (dispatch "ai --no-tools --max-output-tokens 91 hello")
+          (count @wire) => 1
+          (get-in @wire [0 0]) => "https://fixture.invalid/v1/responses"
+          (get-in @wire [0 1 :max_output_tokens]) => 91
+          (get-in @wire [0 1 :tools]) => []
+          (get-in @wire [0 2]) => 1
+          (support/in-event support/request "ai no tools"
+            (fn [_]
+              (binding [chat/*target* "C1"]
+                (execution/with-source* {:provider configured :model "fixture-model" :no-tools true}
+                  (fn []
+                    (doseq [changed [(assoc configured :native-tools ["web_search"])
+                                     (assoc configured :url "https://changed.invalid/v1")
+                                     (assoc configured :api "chat-completions")]]
+                      (execution/with-source* {:provider changed :model "fixture-model" :no-tools true :single-hop? true}
+                        (fn [] (throw (AssertionError. "Widened source reached callback")))) => (throws Exception))
+                    (execution/with-source* {:provider (dissoc configured :native-tools)
+                                              :model "changed-model" :no-tools true :single-hop? true}
+                      (fn [] (throw (AssertionError. "Changed model reached callback")))) => (throws Exception)
+                    (with-redefs [mcp/config (constantly {:servers [] :toolsets [(assoc toolset :users ["revoked"])]})]
+                      (ai/chat (dissoc configured :native-tools) "fixture-model" [] {}) => (throws Exception))))))))
+          (count @wire) => 1
+          (support/in-event support/request "ai text-only"
+            (fn [_]
+              (execution/with-source* {:provider (dissoc configured :native-tools) :model "fixture-model" :no-tools true}
+                #(execution/with-source* {:provider configured :model "fixture-model" :no-tools true :single-hop? true}
+                   (fn [] (throw (AssertionError. "Native-tool addition reached callback"))))))) => (throws Exception)))))
+
+(fact "genuine HTTP no-tools plaintext uses a finite untrusted family, never chat authority"
+  (with-runtime
+    (fn [_]
+      (let [wire (atom []) effects (atom 0)
+            source (pr-str {:adapter :agent :room "agent-room"})
+            api-call (fn [command] (http-api/api {:chat-source source :command command} {}))]
+        (hooks/cmd-hook-resolved #"http-effect" #".*" (fn [_] (swap! effects inc) {:result/value "effect"}))
+        (with-redefs [mcp/config (constantly {:servers []})
+                      http/post (fn [endpoint opts]
+                                  (swap! wire conj [endpoint (:form-params opts) (:ordinal origin/*operation*)
+                                                   (execution/admissions execution/*request*)])
+                                  {:status 200 :body (answer "http-effect")})]
+          (api-call "ai --no-tools --max-output-tokens 91 hello") => "http-effect"
+          (count @wire) => 1
+          (get-in @wire [0 1 :max_completion_tokens]) => 91
+          (get-in @wire [0 2]) => 1
+          (get-in @wire [0 3 :limit]) => 20
+          (get-in @wire [0 3 :admitted]) => 1
+          (api-call "ai --no-tools hello | xargs %s")
+          @effects => 0
+          (api-call "ai --no-tools hello | xargs agent %s")
+          (count @*queued*) => 0
+          (let [before (count @wire)]
+            (doseq [command ["ai default fixture" "agent run hello" "ai hello"]]
+              (try (api-call command) (catch Exception _ nil)))
+            (count @wire) => before)
+          (let [before @ai/runtime-default]
+            (with-redefs [http/post (fn [_ _] {:status 200 :body (answer "ai default fixture")})]
+              (api-call "ai --no-tools hello | xargs %s"))
+            @ai/runtime-default => before)
+          ;; A serialized chat identity does not authenticate an HTTP caller.
+          (http-api/api {:chat-source (pr-str (assoc (:chat-source support/request) :room "agent-room"))
+                         :command "ai --no-tools hello | xargs %s"} {})
+          @effects => 0
+          (let [before (count @wire)]
+            (with-redefs [mcp/config (constantly {:servers [] :toolsets [toolset]})]
+              (api-call "ai --no-tools hello"))
+            (count @wire) => before))))))
+
+(fact "actual Grok fallback reconstructs current xai.key transport with shared-other and key-only configuration"
+  (with-runtime
+    (fn [_]
+      (doseq [key-only? [false true]]
+        (let [wire (atom [])
+              policy (assoc toolset :native-tools [] :providers [{:name "grok" :models ["grok-4.7" "grok-custom"]}])]
+          (with-redefs [host-config/get-config (constantly (if key-only? {:error :not-found} {:value {}}))
+                        xai/config {:key "SYNTHETIC_XAI_KEY"}
+                        ai/config (if key-only? (fn [] (ai/fail "No shared AI configuration"))
+                                      (constantly {:providers [provider]}))
+                        mcp/config (constantly {:servers [] :toolsets [policy]})
+                        http/post (fn [url opts]
+                                    (swap! wire conj [url (:form-params opts) (:ordinal origin/*operation*)])
+                                    {:status 200 :body {:output [{:type "message" :content [{:type "output_text" :text "fallback answer"}]}]}})]
+            (dispatch "grok --max-output-tokens 91 hello")
+            (count @wire) => 1
+            (get-in @wire [0 0]) => "https://api.x.ai/v1/responses"
+            (get-in @wire [0 1 :model]) => "grok-4.7"
+            (get-in @wire [0 1 :max_output_tokens]) => 91
+            (get-in @wire [0 1 :tools]) => [{:type "web_search"} {:type "x_search"}]
+            (get-in @wire [0 2]) => 1
+            (dispatch "grok --no-tools --model grok-custom hello")
+            (count @wire) => 2
+            (get-in @wire [1 1 :model]) => "grok-custom"
+            (get-in @wire [1 1 :tools]) => []))))))
+
+(fact "Grok source denies revoked or changed fallback and honors configured-grok precedence"
+  (with-runtime
+    (fn [_]
+      (let [wire (atom [])
+            grok-policy (assoc toolset :native-tools [] :providers [{:name "grok" :models ["grok-4.7"]}])]
+        (with-redefs [host-config/get-config (constantly {:value {}})
+                      xai/config {:key "SYNTHETIC_XAI_KEY"}
+                      mcp/config (constantly {:servers [] :toolsets [grok-policy]})
+                      http/post (fn [url _] (swap! wire conj url)
+                                  {:status 200 :body (answer "configured")})]
+          (let [fallback (ai/provider (ai/grok-config) "grok")]
+            (support/in-event support/request "grok hello"
+              (fn [_]
+                (binding [chat/*target* "C1"]
+                  (execution/with-source* {:provider fallback :model "grok-4.7" :no-tools true}
+                    (fn []
+                      (with-redefs [xai/config {}]
+                        (ai/chat (dissoc fallback :native-tools) "grok-4.7" [] {}) => (throws Exception))
+                      (doseq [changed [(assoc fallback :url "https://changed.invalid/v1")
+                                       (assoc fallback :native-tools ["web_search"])
+                                       (assoc fallback :api "chat-completions" :native-tools [])]]
+                        (with-redefs [ai/config (constantly {:providers [changed]})]
+                          (ai/chat (dissoc fallback :native-tools) "grok-4.7" [] {}) => (throws Exception)))))))))
+          @wire => []
+          (with-redefs [ai/config (constantly {:providers [(assoc provider :name "grok" :model "grok-4.7")]})]
+            (dispatch "grok --no-tools hello"))
+          @wire => ["https://fixture.invalid/v1/chat/completions"]
+          (with-redefs [host-config/get-config (constantly {:error :invalid})
+                        ai/config (fn [] (ai/fail "AI configuration is invalid."))]
+            (dispatch "grok hello"))
+          (count @wire) => 1)))))
+
+(fact "scheduled Slack logging and Discord partial delivery retain the enclosing fence and stop all future callbacks"
+  (with-runtime
+    (fn [url]
+      (doseq [mode [:slack :discord]]
+        (let [{:keys [wire command]} (scheduler-functions)
+              tasks (atom {}) effects (atom 0) parts (atom []) observed (atom [])
+              request (if (= mode :slack) support/request
+                        {:user (:user support/request)
+                         :chat-source {:adapter :discord :uuid "workspace" :room "private"
+                                       :raw-event {:author {:id "U1"} :channel-id "C1" :id "message"}}})
+              adapter (if (= mode :slack)
+                        (slack/map->Slack {:config {:name "workspace"} :connected? (atom true)
+                                          :connection-last-active-timestamp (atom (System/currentTimeMillis))})
+                        (discord/map->Discord {:config {:name "workspace"} :connected? (atom true)
+                                              :conn (atom {:rest :scripted}) :yetibot-user (atom {:id "BOT"})}))
+              record-part (fn [target body]
+                            (let [row (first (jdbc/query url [(str "SELECT * FROM " (db/qualified-table-name "cron")
+                                                                   " ORDER BY id DESC LIMIT 1")]
+                                                       {:identifiers #(clojure.string/replace % "_" "-")}))]
+                              (swap! observed conj [(:execution-phase row)
+                                                    (:phase (runs/decode (:execution-state row) {}))
+                                                    (:state (first (json/parse-string (:operation-receipts row) true)))])
+                              (swap! parts conj [target body])))]
+          (hooks/cmd-hook-resolved #"cron" #"(\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)" command)
+          (hooks/cmd-hook-resolved #"delivery-tick" #".*"
+            (fn [_] (swap! effects inc)
+              {:result/value (if (= mode :slack) "scheduled answer"
+                               "two artifacts https://bot.invalid/generated-images/one.png\nhttps://bot.invalid/generated-images/two.png")}))
+          (with-redefs [adapters/adapters (atom {"workspace" adapter})
+                        users/users (atom {{:adapter mode :id "U1"} (:user request)
+                                           {:adapter mode :id "BOT"} {:id "BOT"}})
+                        mcp/config (constantly {:servers [] :toolsets [(assoc toolset :adapters [(name mode)])]})
+                        scheduler/add-task (fn [_ id task] (swap! tasks assoc id task))
+                        scheduler/delete-task (fn [_ id] (swap! tasks dissoc id))
+                        http/post (fn [_ _] {:status 200 :body (tool-call "cron 0 0 8 * * * * delivery-tick")})
+                        slack-chat/post-message (fn [_ target body _] (record-part target body) {:ok true :ts "scripted"})
+                        images/image-store (atom {"one" {:data "AA==" :mime-type "image/png"}
+                                                  "two" {:data "AA==" :mime-type "image/png"}})]
+            (with-redefs-fn
+              {#'discord/create-message!
+               (fn [_ target part]
+                 (record-part target part)
+                 (if (= 1 (count @parts)) {:id "first-part"}
+                   (throw (Exception. "scripted second-part failure"))))}
+              (fn []
+                (support/in-event request "ai --max-tool-calls 5 schedule"
+                  (fn [{:keys [chat-source user]}]
+                    (binding [interpreter/*chat-source* chat-source chat/*target* "C1" chat/*adapter* adapter]
+                      (handler/record-and-run-raw "!ai --max-tool-calls 5 schedule" user {:id "BOT"}
+                                                  {:record-yetibot-response? false}))))
+                (let [row (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "cron") " ORDER BY id DESC LIMIT 1")]))
+                      id (:id row) callback (get-in @tasks [(str "task-" id) :handler])]
+                  (callback nil)
+                  @effects => 1
+                  (count @parts) => (if (= mode :slack) 1 2)
+                  (set @observed) => #{["operation-in-flight" :cron-delivery-started "intent"]}
+                  (let [after (ledger/read-row url "cron" id)]
+                    (:execution-phase after) => "unknown"
+                    (:execution-used after) => 1
+                    (:execution-reserved after) => 0
+                    (wire after)
+                    (dotimes [_ 3]
+                      (callback nil)
+                      ((get-in @tasks [(str "task-" id) :handler]) nil))
+                    @effects => 1
+                    (count @parts) => (if (= mode :slack) 1 2)
+                    (select-keys (ledger/read-row url "cron" id)
+                                [:execution-used :execution-reserved :worker-fence])
+                    => (select-keys after [:execution-used :execution-reserved :worker-fence])))))))))))
+
+(fact "genuine overlapping events exclude a physically blocked initial worker until its one completion"
+  (with-runtime
+    (fn [url]
+      (let [wire (atom 0) entered (promise) release (promise) sent (atom [])]
+        (binding [*deliveries* sent]
+          (with-redefs [http/post (fn [_ _]
+                                   (let [n (swap! wire inc)]
+                                     (when (= 2 n) (deliver entered true) @release)
+                                     {:status 200 :body (answer (if (= 1 n) "agent report" "completed once"))}))]
+            (dispatch "ai --no-tools report | split , | xargs %s")
+            (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])))]
+              (count @*queued*) => 1
+              (let [worker (future ((first @*queued*)))]
+                (try
+                  (deref entered 5000 false) => true
+                  (let [before (ledger/read-row url "agent_run" id)
+                        events (doall (repeatedly 2 #(future (support/in-event support/request "echo overlap" (fn [_] nil)))))]
+                    (doseq [event events] (deref event 5000 :timeout) =not=> :timeout)
+                    (count @*queued*) => 1
+                    (doseq [unexpected (rest @*queued*)] (unexpected))
+                    (:execution-phase (ledger/read-row url "agent_run" id)) => "operation-in-flight"
+                    (:worker-fence (ledger/read-row url "agent_run" id)) => (:worker-fence before))
+                  (finally (deliver release true)))
+                (try (deref worker 5000 :timeout) (catch Exception _ :worker-error))
+                => {:status :unconfirmed :work-outcome :completed}
+                @wire => 2
+                (count @sent) => 1
+                (:execution-phase (ledger/read-row url "agent_run" id)) => "terminal"
+                (support/in-event support/request "echo after completion" (fn [_] nil))
+                (count @*queued*) => 1))))))))
+
+(fact "a scheduler enqueue-then-throw releases only queued ownership and invalidates the stale callback"
+  (with-runtime
+    (fn [url]
+      (let [wire (atom 0)]
+        (reset! *schedule-failure* :after-enqueue)
+        (with-redefs [http/post (fn [_ _] (swap! wire inc)
+                                 {:status 200 :body (answer (if (= 1 @wire) "agent report" "done"))})]
+          (dispatch "ai --no-tools report | split , | xargs %s")
+          (count @*queued*) => 1
+          (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])))
+                allocated (:execution-limit (ledger/read-row url "agent_run" id))]
+            (reset! *schedule-failure* false)
+            (support/in-event support/request "echo recovery" (fn [_] nil))
+            (count @*queued*) => 2
+            ((first @*queued*)) => {:status :not-owner}
+            @wire => 1
+            ((second @*queued*)) => {:status :unconfirmed :work-outcome :completed}
+            @wire => 2
+            (:execution-limit (ledger/read-row url "agent_run" id)) => allocated
+            (:execution-phase (ledger/read-row url "agent_run" id)) => "terminal"
+            (count (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])) => 1))))))
+
+(fact "genuine events do not replace a registered initial worker that is still queued"
+  (with-runtime
+    (fn [_]
+      (with-redefs [http/post (fn [_ _] {:status 200 :body (answer "agent report")})]
+        (dispatch "ai --no-tools report | split , | xargs %s")
+        (dotimes [_ 3] (support/in-event support/request "echo queued" (fn [_] nil)))
+        (count @*queued*) => 1))))
+
+(fact "a failed physical worker send releases local ownership but restart recovery never repeats unknown IO"
+  (with-runtime
+    (fn [url]
+      (let [wire (atom 0)]
+        (with-redefs [http/post (fn [_ _]
+                                 (if (= 1 (swap! wire inc))
+                                   {:status 200 :body (answer "agent report")}
+                                   (throw (Exception. "scripted uncertain physical send"))))]
+          (dispatch "ai --no-tools report | split , | xargs %s")
+          ((first @*queued*)) => (throws Exception)
+          @wire => 2
+          (support/in-event support/request "echo restart recovery" (fn [_] nil))
+          (count @*queued*) => 1
+          (support/in-event support/request "echo no replay" (fn [_] nil))
+          (count @*queued*) => 1
+          @wire => 2
+          (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])))
+                row (ledger/read-row url "agent_run" id)]
+            (:execution-phase row) => "unknown"
+            (runs/claim! url "agent_run" id (:state-revision row) {}) => {:status :unknown}))))))

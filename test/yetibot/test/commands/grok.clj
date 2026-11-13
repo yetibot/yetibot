@@ -9,6 +9,7 @@
             [midje.sweet :refer [fact facts =>]]
             [org.httpkit.client :as http]
             [yetibot.api.ai :as api]
+            [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as command-ai]
             [yetibot.commands.grok :as grok]
             [yetibot.core.adapters.discord :as host-discord]
@@ -57,6 +58,8 @@
   (let [captured (atom nil)]
     (with-redefs [config/get-config (constantly {:value {}})
                   xai/config {:key "LEGACY_KEY"}
+                  mcp/config (constantly {:servers [] :toolsets [{:name "cloudflare_read" :kind "search"
+                                                                 :servers [] :native-tools []}]})
                   api/config (constantly {:providers [other provider]
                                           :default-provider "local"})
                   context/messages (fn [_ prompt]
@@ -104,6 +107,8 @@
                     (constantly (if shared? {:value {}}
                                   {:error :not-found}))
                     xai/config {:key "XAI_ONLY"}
+                    mcp/config (constantly {:servers [] :toolsets [{:name "cloudflare_read" :kind "search"
+                                                                   :servers [] :native-tools []}]})
                     legacy/grok-cmd
                     (fn [_] {:result/error "Unexpected legacy command path"})
                     api/config (constantly {:providers [other]
