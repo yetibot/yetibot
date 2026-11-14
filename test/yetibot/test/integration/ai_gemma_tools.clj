@@ -48,7 +48,7 @@
    authorization, child ai/complete and parent continuation use real code."
   [outputs {:keys [cfg unknown-child? actor-user pipeline-input]
             :or {cfg config actor-user "U1"}}]
-  (execution/in-event execution/request "ai compare supplied text"
+  (execution/in-registered-event execution/request "ai compare supplied text"
     (fn [request]
       (let [posts (atom []) callbacks (atom []) catalogs (atom 0)
             parent-turn (atom 0) actual-call models/call!]

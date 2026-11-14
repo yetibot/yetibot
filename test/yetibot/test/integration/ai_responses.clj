@@ -9,6 +9,7 @@
             [yetibot.core.config :as config]
             [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.util.ai-execution :as host-execution]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.test.support.mcp :as support]))
 
@@ -82,8 +83,10 @@
                                  :url (str url "/mcp") :tools ["whoami"]
                                  :headers {"Authorization"
                                            "Bearer CLOUDFLARE_SECRET"}}]}]
-          (with-redefs [mcp/config (constantly config)]
-            (f provider requests calls)))))))
+          (with-redefs [mcp/config (constantly config)
+                        ai/config (constantly {:providers [(assoc provider :model "grok-4.7")]})]
+            (execution/in-registered-event execution/request "grok fixture"
+              (fn [_] (f provider requests calls)))))))))
 
 (defn write-event! [out event]
   (.write ^java.io.OutputStream out
@@ -253,7 +256,31 @@
                            (get-in % [:headers "authorization"])))
                   @requests) => true))))))
 
-(fact "both real commands enforce named-toolset identity and model policy"
+(defn- command-with-admissions [request command expected]
+  (let [post client/post family (atom nil)
+        result (with-redefs [client/post (fn [& args]
+                                          (reset! family host-execution/*request*)
+                                          (apply post args))]
+                 (execution/run-registered-command request command))]
+    (fact (select-keys (host-execution/admissions @family) [:limit :admitted])
+          => {:limit expected :admitted expected})
+    result))
+
+(fact "ordinary ai and grok roots retain config2 and deny the third physical admission without retry"
+  (doseq [command ["ai --provider grok Identify us." "grok Identify us."]]
+    (with-runtime
+      (fn [body]
+        (response [(function-call (account-function-name body) "limited-call" "{}")]))
+      {:structuredContent {:name "Yetibot"} :content [] :isError false}
+      (fn [_ requests calls]
+        (let [request (update-in execution/request [:chat-source :raw-event] dissoc :thread_ts)
+              result (command-with-admissions request command 2)]
+          (fact (count (filter #(= "/v1/responses" (:path %)) @requests)) => 1
+                (count @calls) => 1
+                (string/includes? (:value result) "tool-call limit") => true
+                (< (count (:value result)) 1500) => true))))))
+
+(fact "explicit caller allowance3 composes real commands with named-toolset identity and model policy"
   (with-runtime
     (fn [body]
       (if (= "function_call_output" (:type (last (:input body))))
@@ -280,9 +307,9 @@
                       mcp/config (constantly restricted)]
           (doseq [command ["ai --provider grok" "grok"]]
             (let [command (str command
-                               " --toolset cloudflare_read Identify us.")]
+                               " --max-tool-calls 3 --toolset cloudflare_read Identify us.")]
               (fact
-                (get-in (execution/run-command request command)
+                (get-in (command-with-admissions request command 3)
                         [:data :mcp :tool-calls]) => 1)
               (let [before (count @requests)
                     unauthorized (-> request
@@ -291,18 +318,18 @@
                                                "U2"))]
                 (fact
                   (string/includes?
-                    (:error (execution/run-command unauthorized command))
+                    (:error (execution/run-registered-command unauthorized command))
                     "do not have access") => true
                   (count @requests) => before))))
           (fact
             (string/includes?
-              (:error (execution/run-command
+              (:error (execution/run-registered-command
                         request (str "grok --model forbidden "
                                      "--toolset cloudflare_read Identify us.")))
               "provider/model is not allowed") => true
             (count @calls) => 2))))))
 
-(fact "legacy xAI credentials keep Grok identity with real HTTP and MCP"
+(fact "explicit caller allowance3 keeps legacy xAI Grok identity with real HTTP and MCP"
   (let [endpoints (atom [])
         post client/post]
     (with-runtime
@@ -331,7 +358,7 @@
                           (when-not (= url "https://api.x.ai/v1/responses")
                             (throw (ex-info "Wrong provider endpoint" {})))
                           (post (str (:url provider) "/responses") options))]
-            (let [result (execution/run-command request "grok Identify us.")
+            (let [result (command-with-admissions request "grok --max-tool-calls 3 Identify us." 3)
                   turns (filter #(= "/v1/responses" (:path %)) @requests)]
               (fact
                 (:error result) => nil

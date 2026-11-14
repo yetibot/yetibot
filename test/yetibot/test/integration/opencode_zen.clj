@@ -88,7 +88,7 @@
   (with-redefs [core-http/fetch (fn [& _]
                                  (throw (AssertionError. "No GitHub wisdom")))
                 ai/complete (fn [& _] (throw (AssertionError. "No inference")))]
-    (let [result (execution/run-command execution/request "zen")]
+    (let [result (execution/run-registered-command execution/request "zen")]
       (string/includes? (str (:value result)) "zen models") => true
       (string/includes? (str (:value result)) "--model") => true
       (get-in result [:data :isError]) => nil)))
@@ -98,10 +98,10 @@
                 http/get (fn [& _] (response))
                 ai/complete (fn [& _] (throw (AssertionError. "inference")))
                 clojure.core/rand-int (constantly 0)]
-    (let [listing (execution/run-command execution/request "zen models")
-          picked (execution/run-command execution/request
+    (let [listing (execution/run-registered-command execution/request "zen models")
+          picked (execution/run-registered-command execution/request
                    "zen models | random")
-          shown (execution/run-command execution/request
+          shown (execution/run-registered-command execution/request
                   "zen models | random | data show")]
       (:value listing)
       => ["fixture-chat" "new-model-arrived-today" "other"]
@@ -115,7 +115,7 @@
                   mcp/config (constantly {:servers []})
                   http/get (fn [& _] (swap! requests inc) (response))
                   ai/complete (fn [& _] (swap! requests inc))]
-      (let [result (execution/run-command execution/request
+      (let [result (execution/run-registered-command execution/request
                      "zen models --typo | echo must-not-run")]
         @requests => 0
         (get-in result [:data :isError]) => true
@@ -133,7 +133,7 @@
                   (fn [provider model messages options]
                     (swap! calls conj [provider model messages options])
                     {:result/value "Zen answer"})]
-      (let [result (execution/run-command execution/request
+      (let [result (execution/run-registered-command execution/request
                      "zen --model new-model-arrived-today Say hello")
             [provider model messages options] (first @calls)]
         (:value result) => "Zen answer"
@@ -166,7 +166,7 @@
                     (fact (:name provider) => "zen")
                     (fact model => "fixture-chat")
                     {:result/value "Explicit Zen answer"})]
-      (:value (execution/run-command execution/request
+      (:value (execution/run-registered-command execution/request
                 "ai --provider zen --no-tools Say hello"))
       => "Explicit Zen answer")))
 
@@ -183,11 +183,11 @@
                   (fn [p model & _]
                     (reset! selected [p model])
                     {:result/value "Credited answer"})]
-      (:value (execution/run-command execution/request "zen Hello"))
+      (:value (execution/run-registered-command execution/request "zen Hello"))
       => "Credited answer"
       (second @selected) => "fixture-chat"
       (:ai/verified-free (first @selected)) => nil
-      (:value (execution/run-command execution/request
+      (:value (execution/run-registered-command execution/request
                 "ai --provider zen --no-tools Hello")) => "Credited answer"
       (second @selected) => "fixture-chat"
       (:ai/verified-free (first @selected)) => nil)))
@@ -220,7 +220,7 @@
                     {:status 429 :headers {"retry-after" "26627"}
                      :body (str "Free usage limit reached. OpenCode "
                                 "zen-fixture-secret private vendor text")})]
-      (let [result (execution/run-command execution/request
+      (let [result (execution/run-registered-command execution/request
                      "zen why tho | echo must-not-run")]
         @posts => 1
         (string/includes? (str (:value result)) "free-usage limit") => true
@@ -239,7 +239,7 @@
                 ai/complete (fn [& _]
                               (throw (ex-info "private vendor text"
                                        {:ai/diagnostic {:status 429}})))]
-    (let [result (execution/run-command execution/request "zen Hello")]
+    (let [result (execution/run-registered-command execution/request "zen Hello")]
       (string/includes? (str (:value result)) "HTTP 429") => true
       (string/includes? (str result) "private vendor text") => false
       (get-in result [:data :unknownOutcome]) => false)))
@@ -255,7 +255,7 @@
                   (fn [& _]
                     (swap! calls inc)
                     (throw (ex-info "zen-fixture-secret private input" {})))]
-      (let [result (execution/run-command execution/request
+      (let [result (execution/run-registered-command execution/request
                      "zen private input | echo must-not-run")]
         @calls => 1
         (get-in result [:data :isError]) => true

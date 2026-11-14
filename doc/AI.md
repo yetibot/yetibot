@@ -127,6 +127,21 @@ Nested command-driven AI shares the original tool allowance, generation ceiling,
 actor and toolset; it cannot reset budgets, change global AI controls or publish a
 duplicate child status/answer. Built-in defaults remain **32768/20**.
 
+Host-code `yetibot.api.ai/chat` and `complete` also use a live, finite transport
+family when the application host is installed. Explicit provider records need
+not be registered, but remain subject to applicable original/current policy,
+actual endpoint/model/output-cap admission and the **262144/128** ceilings.
+Vendor-native and function wire definitions do not grant host tool execution.
+This transport cannot execute commands, discover/call host MCP tools, create
+agent jobs or transfer durable allowance; an inherited Context keeps its own
+identity, remaining allowance and lifetime instead of creating a fresh root.
+
+Unauthenticated HTTP plaintext requests still select configured provider names,
+never arbitrary URLs or credential records. They acquire no actor or host tool
+rights. Operator-configured vendor-native wire defaults remain available where
+policy allows; explicit `--no-tools` removes them as well as function/MCP tools,
+without changing the frozen planner identity or bypassing current policy.
+
 Datasets exist only for the live root request: at most eight, 2 MiB total, 10,000
 rows each and 64 fields. The model sees opaque handles, checked field types/units,
 coverage and at most five redacted preview rows, not a requirement to copy all

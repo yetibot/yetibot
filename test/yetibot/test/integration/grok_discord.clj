@@ -4,9 +4,15 @@
             [clojure.java.jdbc :as jdbc]
             [clojure.string :as string]
             [discljord.messaging :as messaging]
+            [discljord.connections :as websocket]
+            [discljord.events :as events]
             [discljord.util :as discord-util]
             [midje.sweet :refer [fact =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.db.util :as db]
+            [yetibot.core.db.agent-run :as ledger]
             [yetibot.commands.grok]
             [yetibot.core.adapters.discord :as discord]
             [yetibot.core.chat :as chat]
@@ -63,6 +69,7 @@
         original-delete messaging/delete-message!
         original-typing messaging/trigger-typing-indicator!
         jdbc-attempts (atom 0) observer-lookups (atom 0)
+        recovery-reads (atom []) startup (atom [])
         padding (apply str (repeat 2500 "x"))
         first-answer (answer "one" (str "First SECRET @everyone\n" padding))
         second-answer (answer "two" "Next <@123>")
@@ -71,8 +78,6 @@
         event {:id "command" :channel-id "parent"
                :author {:id "alice" :username "alice"}
                :content "!grok --no-tools --model selected Hi"}]
-    (reset! conn {:rest :mock-rest :status-rest :mock-status-rest})
-    (reset! (:yetibot-user adapter) {:id "bot" :username "yetibot"})
     (support/with-http-server
       (fn [request]
         (swap! requests conj request)
@@ -89,7 +94,35 @@
                                          :output [first-answer
                                                   second-answer]}}))})
       (fn [url]
-        (with-redefs [jdbc/get-connection
+        (with-redefs [adapters/adapters (atom {(adapters/uuid adapter) adapter})
+                      websocket/connect-bot!
+                      (fn [& _]
+                        (fact (get @adapters/adapters (adapters/uuid adapter)) => adapter)
+                        (swap! startup conj :connect)
+                        (async/chan 1))
+                      messaging/start-connection!
+                      (fn [& _]
+                        (swap! startup conj :rest)
+                        (if (= 1 (count (filter #{:rest} @startup)))
+                          :mock-rest :mock-status-rest))
+                      messaging/get-current-user!
+                      (fn [& _] (result-channel {:id "bot" :username "yetibot"}))
+                      events/message-pump!
+                      (fn [& _]
+                        (fact (adapters/connected? adapter) => true
+                              @(:yetibot-user adapter) => {:id "bot" :username "yetibot"})
+                        (swap! startup conj :pump))
+                      jdbc/query
+                      (fn [_ statement options]
+                        (if (and (= statement
+                                    [(str "SELECT * FROM " (db/qualified-table-name "agent_run")
+                                          " WHERE execution_kind=? AND execution_phase IN ('queued','ready','operation-in-flight')")
+                                     ledger/inherited-kind])
+                                 (= #{:identifiers} (set (keys options))))
+                          (do (swap! recovery-reads conj :ingress-recovery) [])
+                          (do (swap! jdbc-attempts inc)
+                              (throw (ex-info "Unexpected fixture query" {})))))
+                      jdbc/get-connection
                       (fn [& _]
                         (swap! jdbc-attempts inc)
                         (throw (ex-info "Unexpected fixture JDBC access" {})))
@@ -161,6 +194,9 @@
                         (if (= rest :mock-status-rest)
                           (result-channel true)
                           (original-typing rest target)))]
+          (adapters/start adapter)
+          (fact @startup => [:connect :rest :rest :pump]
+                (adapters/connected? adapter) => true)
           (binding [chat/*adapter* adapter]
             (let [completion (discord/handle-event
                                :message-create event conn
@@ -232,4 +268,16 @@
                             (payload-calls @calls :edit)) => true
                     (count @requests) => 2
                     @observer-lookups => 2
+                    @recovery-reads => [:ingress-recovery :ingress-recovery]
+                    @jdbc-attempts => 0)
+              ;; Genuine ingress still cannot use a disconnected or revoked source.
+              (reset! (:connected? adapter) false)
+              (await! (discord/handle-event :message-create
+                        (assoc event :id "disconnected") conn (:yetibot-user adapter)))
+              (fact (count @requests) => 2)
+              (reset! (:connected? adapter) true)
+              (with-redefs [mcp/config (constantly {:servers [] :toolsets [{:name "revoked" :users ["other"]}]})]
+                (await! (discord/handle-event :message-create
+                          (assoc event :id "revoked") conn (:yetibot-user adapter))))
+              (fact (count @requests) => 2
                     @jdbc-attempts => 0))))))))

@@ -887,9 +887,12 @@
 (defn complete
   ([provider model messages] (complete provider model messages {}))
   ([provider model messages options]
+   (when (and (:actor options) (nil? (policy/actor execution/*event*)))
+     (ai/fail "Native Yetibot tools require a trusted chat request."))
    (execution/with-source* (merge options {:provider provider :model model})
     (fn []
-     (let [_ (execution/require-effects!)
+     (let [_ (when-not (:untrusted-text? execution/*request*)
+               (execution/require-effects!))
          root? (nil? execution/*request*)
          _ (execution/require-open!)
          config (mcp/config)

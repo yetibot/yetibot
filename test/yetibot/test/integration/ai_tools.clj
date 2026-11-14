@@ -15,8 +15,12 @@
             [yetibot.test.integration.ai-command-charts :as caller]
             [yetibot.core.adapters.adapter :as adapters]
             [yetibot.core.models.users :as users]
-            [yetibot.core.chat :as core-chat])
-  (:import [java.util Base64]))
+            [yetibot.core.chat :as core-chat]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.models.ai-mcp-catalog :as catalog])
+  (:import [java.util Base64]
+           [java.util.concurrent Executors ExecutorService]))
 
 (def discord-adapter
   (reify
@@ -113,6 +117,61 @@
                      "create_pull_request" {:html_url "https://github.com/owner/repo/pull/12"})})]
             {:headers {"Mcp-Session-Id" "integration-session"}
              :body {:jsonrpc "2.0" :id (:id body) :result result}}))))))
+
+(fact "MCP loopback discovery converges in synchronous live source and non-conveying catalog worker"
+  (let [requests (atom []) stages (atom [])
+        connect mcp/connect-with-config! list-tools mcp/list-tools]
+    (support/with-http-server
+      (support/rpc-handler requests false)
+      (fn [url]
+        (let [provider {:name "catalog-fixture" :url (str url "/v1") :model "model"}
+              config {:servers [{:name "loopback" :url (str url "/mcp") :tools ["web_search"]}]}
+              observe! (fn [stage f]
+                         (swap! stages conj {:stage stage
+                                             :admitted (some-> execution/*request* execution/admissions :admitted)
+                                             :open (when execution/*request* (not (:closed? @(:budget execution/*request*))))
+                                             :unknown (boolean (some-> execution/*request* :budget deref :unknown?))})
+                         (try (f)
+                              (catch Exception e
+                                ;; Closed diagnostics only: never messages,
+                                ;; ex-data, arguments, headers or credentials.
+                                (println "MCP-DISCOVERY-CLOSED" {:stage stage :server "loopback"
+                                                               :class (.getName (class e))
+                                                               :code :discovery-failed
+                                                               :initialize-reached (boolean (some #(= "initialize" (get-in % [:body :method])) @requests))
+                                                               :list-reached (boolean (some #(= "tools/list" (get-in % [:body :method])) @requests))})
+                                (throw e))))]
+          (with-redefs [api/config (constantly {:providers [provider]})
+                        mcp/config (constantly {:servers []})
+                        mcp/connect-with-config! (fn [& args] (observe! :connect #(apply connect args)))
+                        mcp/list-tools (fn [session] (observe! :list #(list-tools session)))]
+            (execution/with-source* {:provider provider :model "model" :no-tools true}
+              (fn []
+                (let [sync (catalog/new-cache (constantly 0) (fn [job] (job)))
+                      workers (Executors/newSingleThreadExecutor (#'catalog/daemon-factory "qualification-mcp"))
+                      completed (promise)
+                      async-cache (catalog/new-cache (constantly 0)
+                                    (fn [job]
+                                      (.execute workers
+                                        (fn []
+                                          (try
+                                            (fact execution/*request* => nil origin/*context* => nil)
+                                            (job)
+                                            (finally (deliver completed true)))))))]
+                  (try
+                    (fact (get-in (catalog/snapshot sync config) [:servers 0 :status]) => "fresh")
+                    (catalog/snapshot async-cache config)
+                    (fact (deref completed 5000 :timeout) => true
+                          (get-in (catalog/snapshot async-cache config) [:servers 0 :status]) => "fresh"
+                          (mapv :stage @stages) => [:connect :list :connect :list]
+                          (select-keys (first @stages) [:admitted :open :unknown])
+                          => {:admitted 0 :open true :unknown false}
+                          (:admitted (nth @stages 2)) => nil
+                          (count (filter #(= "initialize" (get-in % [:body :method])) @requests)) => 2
+                          (count (filter #(= "tools/list" (get-in % [:body :method])) @requests)) => 4
+                          (some #(= "tools/call" (get-in % [:body :method])) @requests) => nil)
+                    (println "MCP-DISCOVERY-OBSERVED" (pr-str @stages))
+                    (finally (.shutdownNow ^ExecutorService workers))))))))))))
 
 (defn- check-transports [discovery]
   (let [requests (atom []) pushed (atom false)

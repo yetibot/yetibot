@@ -998,9 +998,14 @@
           (api-call "ai --no-tools hello | xargs agent %s")
           (count @*queued*) => 0
           (let [before (count @wire)]
-            (doseq [command ["ai default fixture" "agent run hello" "ai hello"]]
+            (doseq [command ["ai default fixture" "agent run hello"]]
               (try (api-call command) (catch Exception _ nil)))
-            (count @wire) => before)
+            (count @wire) => before
+            ;; The supported untrusted plaintext fallback is not a control or
+            ;; durable grant, even when the caller omitted --no-tools.
+            (api-call "ai hello") => "http-effect"
+            (count @wire) => (inc before)
+            @effects => 0)
           (let [before @ai/runtime-default]
             (with-redefs [http/post (fn [_ _] {:status 200 :body (answer "ai default fixture")})]
               (api-call "ai --no-tools hello | xargs %s"))
@@ -1223,3 +1228,54 @@
                 row (ledger/read-row url "agent_run" id)]
             (:execution-phase row) => "unknown"
             (runs/claim! url "agent_run" id (:state-revision row) {}) => {:status :unknown}))))))
+
+(fact "HTTP configured Responses native planner composes with original no-tools and plaintext defaults"
+  (with-runtime
+    (fn [_]
+      (let [configured (assoc provider :api "responses" :native-tools ["web_search" "x_search"])
+            wire (atom [])
+            call! #(http-api/api {:chat-source (pr-str {:adapter :agent :room "agent-room"})
+                                  :command %} {})]
+        (with-redefs [ai/config (constantly {:providers [configured]})
+                      mcp/config (constantly {:servers []})
+                      http/post (fn [endpoint options]
+                                  (swap! wire conj [endpoint (:form-params options)
+                                                   (:ordinal origin/*operation*)
+                                                   (execution/admissions execution/*request*)])
+                                  {:status 200 :body {:status "completed" :output [{:type "message" :content [{:type "output_text" :text "bounded"}]}]}})]
+          (call! "ai --no-tools --max-output-tokens 91 hello") => "bounded"
+          (count @wire) => 1
+          (get-in @wire [0 1 :tools]) => []
+          (get-in @wire [0 1 :max_output_tokens]) => 91
+          (get-in @wire [0 2]) => 1
+          (get-in @wire [0 3 :limit]) => 20
+          (call! "ai --max-output-tokens 91 hello") => "bounded"
+          (count @wire) => 2
+          (get-in @wire [1 1 :tools]) => [{:type "web_search"} {:type "x_search"}]
+          (with-redefs [mcp/config (constantly {:servers [] :toolsets [toolset]})]
+            (call! "ai --no-tools hello"))
+          (count @wire) => 2
+          (call! "ai --provider http://127.0.0.1:9/private --no-tools hello")
+          (count @wire) => 2
+          (execution/with-source* {:provider configured :model "fixture-model" :no-tools true}
+            (fn []
+              (:native-tools (:planner-provider execution/*request*)) => ["web_search" "x_search"]
+              (:untrusted-text? execution/*request*) => true
+              (:no-host-execution? execution/*request*) => true
+              execution/*event* => nil
+              (origin/invoke! origin/*context* :start {:match ["agent run work" "work"]}) => (throws Exception)
+              (doseq [[changed model] [[(assoc configured :url "http://127.0.0.1:9/private") "fixture-model"]
+                                       [(assoc configured :api "chat-completions") "fixture-model"]
+                                       [(assoc configured :native-tools ["web_search"]) "fixture-model"]
+                                       [(dissoc configured :native-tools) "changed-model"]]]
+                (ai/chat changed model [] {}) => (throws Exception))
+              (doseq [changed [(assoc configured :url "http://127.0.0.1:9/private")
+                               (assoc configured :native-tools ["web_search"])]]
+                (with-redefs [ai/config (constantly {:providers [changed]})]
+                  (ai/chat (dissoc configured :native-tools) "fixture-model" [] {}) => (throws Exception)))
+              (with-redefs [ai/config (constantly {:providers []})]
+                (ai/chat (dissoc configured :native-tools) "fixture-model" [] {}) => (throws Exception))
+              (with-redefs [mcp/config (constantly {:servers [] :toolsets [toolset]})]
+                (ai/chat (dissoc configured :native-tools) "fixture-model" [] {}) => (throws Exception))))
+          (count @wire) => 2
+          (count @*queued*) => 0)))))

@@ -73,9 +73,10 @@
   (try (f) nil (catch Exception e (.getMessage e))))
 
 (defn in-request [f]
-  (execution/in-event execution/request "ai ask another model"
+  (execution/in-registered-event execution/request "ai ask another model"
     (fn [request]
-      (with-redefs [ai/config (constantly settings)]
+      (with-redefs [ai/config (constantly settings)
+                    mcp/config (constantly {:servers [] :toolsets [toolset]})]
         (f request)))))
 
 (fact "larger host budgets reach stateless children and bound model-selected caps"
@@ -474,7 +475,7 @@
                     {:result/value "Real handler answer"})
                   context/messages
                   (fn [& _] (throw (AssertionError. "history")))]
-      (:value (execution/run-command
+      (:value (execution/run-registered-command
                 execution/request
                 "cf --model @cf/vendor/chat only supplied text"))
       => "Real handler answer"
@@ -521,19 +522,19 @@
                          (str "cf " private " " path)
                          (str "cf --invalid " private " " token)
                          (str "cf --model " private " " token)]]
-          (private-error! (execution/run-command execution/request command)
+          (private-error! (execution/run-registered-command execution/request command)
                           [token path private] false))
         (with-redefs [ai/config
                       (fn [] (throw (ex-info (str token " " path) {})))]
           (private-error!
-            (execution/run-command execution/request
+            (execution/run-registered-command execution/request
                                    (str "cf " private " " token))
             [token path private] false)
-          (private-error! (execution/run-command execution/request "cf models")
+          (private-error! (execution/run-registered-command execution/request "cf models")
                           [token path] false))
         (with-redefs [mcp/config (constantly {:toolsets [] :servers []})]
           (private-error!
-            (execution/run-command execution/request
+            (execution/run-registered-command execution/request
                                    (str "cf " private " " token))
             [token path private] false))
         @posts => 0))))
@@ -547,7 +548,7 @@
                         (swap! echoes inc)
                         {:result/value token})]
           (private-error!
-            (execution/run-command execution/request
+            (execution/run-registered-command execution/request
                                    "echo private-fixture | cf | echo later")
             [token "private-fixture"] false)
           @echoes => 1
@@ -565,7 +566,7 @@
                            (swap! echoes inc)
                            {:result/value "must not run"})]
           (private-error!
-            (execution/run-command
+            (execution/run-registered-command
               execution/request
               "cf PRIVATE-PAID-PROMPT | echo later | echo again")
             ["PRIVATE-PAID-PROMPT" "PRIVATE-POST-ERROR"] true)
@@ -681,6 +682,7 @@
                                     :api "responses" :key "zen-token"
                                     :url "https://opencode.ai/inference/openai/v1"}]
                        :default-provider "zen"})
+                    mcp/config (constantly {:servers [] :toolsets [(assoc (dissoc toolset :providers) :native-tools [])]})
                     http/get (fn [& _] {:status 200 :body {:data zen-catalog}})]
         (f request (update config :toolset dissoc :providers))))))
 
@@ -795,9 +797,11 @@
                       yetibot.core.util.ai-usage/capture!
                       (fn [& _] (swap! effects conj :reservation))]
           (let [e (try
-                    (ai/chat (ai/provider (ai/config) "zen") "b-paid"
-                             [{:role "user" :content "question"}]
-                             {:max-output-tokens 32768})
+                    (let [provider (ai/prepare-provider (ai/provider (ai/config) "zen") "b-paid")]
+                      (yetibot.util.ai-execution/with-source*
+                        {:provider provider :model "b-paid" :no-tools true}
+                        #(ai/chat provider "b-paid" [{:role "user" :content "question"}]
+                                  {:max-output-tokens 32768})))
                     (catch Exception e e))]
             (:ai/request-not-sent (ex-data e)) => true
             (:ai/error-code (ex-data e)) => :model-capacity-exceeded
@@ -814,6 +818,7 @@
                             {:name "local" :models ["p"]})
             effects (atom [])]
         (with-redefs [ai/config (constantly cfg)
+                      mcp/config (constantly {:servers [] :toolsets [(:toolset host)]})
                       ai/resolve-provider (fn [p] (swap! effects conj :credential) p)
                       ai/models (fn [_] (swap! effects conj :models) ["p"])
                       ai/complete (fn [& _] {:result/value "explicit answer"})]

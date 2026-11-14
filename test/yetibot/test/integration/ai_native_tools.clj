@@ -20,6 +20,7 @@
             [yetibot.core.commands.grokimage :as gi]
             [yetibot.core.util.gemini :as gemini]
             [yetibot.core.util.xai :as xai]
+            [yetibot.core.util.agent-execution :as origin]
             [yetibot.core.util.http :as http]
             [yetibot.core.webapp.routes.images :as images]
             [yetibot.models.imgflip :as imgflip]
@@ -112,10 +113,11 @@
 (defn run-calls
   "Exercise shared validation/execution; only replace the model boundary."
   [settings calls & [request]]
-  (execution/in-event (or request execution/request) "ai find launch"
+  (execution/in-registered-event (or request execution/request) "ai find launch"
     (fn [request]
       (let [sent (atom [])]
         (with-redefs [mcp/config (constantly settings)
+                      ai/config (constantly {:providers [(assoc provider :model "grok-4.7")]})
                       ai/chat
                       (fn [_ _ msgs options]
                         (swap! sent conj {:messages msgs :options options})
@@ -173,8 +175,8 @@
   (with-redefs [mcp/config (constantly nil)
                 ai/chat (fn [& _] (throw (AssertionError. "No model calls")))
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
-    (let [normal (execution/run-command execution/request "ai tools yetibot")
-          data (execution/run-command execution/request
+    (let [normal (execution/run-registered-command execution/request "ai tools yetibot")
+          data (execution/run-registered-command execution/request
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
             => (mapv #(str "`" % "`") default-tool-names)
@@ -195,7 +197,7 @@
                 mcp/call-tool
                 (fn [& _] (throw (AssertionError. "No tool call")))
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
-    (let [result (execution/run-command execution/request
+    (let [result (execution/run-registered-command execution/request
                    "ai tools | tail 3 | xargs ai tools")
           ids (vec (take-last 3 default-tool-names))]
       (mapv #(some-> % string/split-lines first) (:value result)) => ids
@@ -494,7 +496,7 @@
                              "grok find launch"]]
                   (reset! requests [])
                   (let [result (with-redefs [mcp/config (constantly settings)]
-                                 (execution/run-command execution/request cmd))
+                                 (execution/run-registered-command execution/request cmd))
                         first-turn (first @requests)
                         reply (last (:input (last @requests)))]
                     (fact (string/includes? (:value result)
@@ -506,7 +508,7 @@
                     (fact (get-in (json/parse-string (:output reply) true)
                                   [:structuredContent :count]) => 25)))
                 (reset! requests [])
-                (execution/run-command execution/request
+                (execution/run-registered-command execution/request
                                        "grok --no-tools find launch")
                 (fact (count @requests) => 1)
                 (fact (empty? (:tools (first @requests))) => true)))))))))
@@ -768,12 +770,13 @@
               => "https://yetibot.test/generated-images/edited.png")))))
 
 (fact "media generation rechecks policy immediately before the side effect"
-  (let [authorizations (atom 0)
-        calls (atom 0)]
+  (let [calls (atom 0)
+        authorize policy/authorize!]
     (with-redefs [xai/config {:key "fake-image-key"}
-                  policy/authorize! (fn [& _]
-                                      (when (> (swap! authorizations inc) 1)
-                                        (ai/fail "Policy changed.")))
+                  policy/authorize! (fn [& args]
+                                      (if (= :tool (:kind origin/*operation*))
+                                        (ai/fail "Policy changed.")
+                                        (apply authorize args)))
                   gi/grokimage-cmd (fn [_] (swap! calls inc))]
       (fact (error-message #(run-calls media-config
                              [["gi" {"prompt" "a yeti"}]]))

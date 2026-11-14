@@ -4,6 +4,9 @@
             [clojure.string :as string]
             [midje.sweet :refer [fact facts => throws contains]]
             [yetibot.api.clef :as clef]
+            [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.test.support.ai-execution :as caller]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.cloudflare-images :as images]
             [yetibot.core.config :as config]
@@ -14,9 +17,10 @@
            [java.net InetAddress]))
 
 (def event
-  {:event-type :message :user {:id "U1"}
+  {:event-type :message :user {:id "U1"} :yetibot-user {:id "BOT"}
    :chat-source {:adapter :slack :uuid "workspace" :room "private"
                  :raw-event {:user "U1" :channel "C1" :ts "now"}}})
+(def planner {:name "fixture-planner" :url "https://planner.invalid/v1" :model "planner"})
 (def calls (atom []))
 (def downloads (atom []))
 (def basic {"question" "Is this an outage?" "input" "service is down"})
@@ -56,9 +60,13 @@
       (spit file token)
       (reset! calls [])
       (reset! downloads [])
-      (binding [execution/*event* event execution/*sensitive* (atom false)]
+      (caller/with-registered-caller event
+       (fn []
+        (binding [execution/*event* event execution/*sensitive* (atom false)]
         (with-redefs
-          [config/get-config (fn [& _] {:value {:intent-router settings}})
+          [ai/config (constantly {:providers [planner] :intent-router settings})
+           mcp/config (constantly {:servers []})
+           config/get-config (fn [& _] {:value {:intent-router settings}})
            http/post infer-response
            images/public-addresses
            (fn [_] (into-array InetAddress
@@ -67,10 +75,13 @@
                       (swap! downloads conj [url opts])
                       {:status 200 :body
                        (ByteArrayInputStream. (fixture/png))})]
-          (f settings)))
+          (f settings)))))
       (finally (.delete file)))))
-(defn invoke [operation args]
-  (tools/call! {} operation args (:chat-source execution/*event*)))
+(defn invoke
+  ([operation args] (invoke {} operation args))
+  ([config operation args]
+   (execution/with-source* {:provider planner :model "planner"}
+     #(tools/call! config operation args (:chat-source execution/*event*)))))
 
 (fact "discovery is passive, validates config, and ignores routing enabled"
   (with-fixture "fake-token"
@@ -395,10 +406,8 @@
                                :value "cf-\"token\\value mcp-\"x\\y"
                                :guess "NEVER-RETURN"
                                :raw_request "NEVER-RETURN"}}}))]
-        (let [r (tools/call!
-                  {:secrets ["mcp-\"x\\y"]} "clairic"
-                  {"fields" {"note" {"type" "text"}} "input" "receipt"}
-                  (:chat-source execution/*event*))]
+        (let [r (invoke {:secrets ["mcp-\"x\\y"]} "clairic"
+                        {"fields" {"note" {"type" "text"}} "input" "receipt"})]
           (:isError r) => nil
           (get-in r [:structuredContent :answers :note :value])
           => "[redacted] [redacted]"

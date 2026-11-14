@@ -37,8 +37,8 @@
   (boolean (or (:no-tools? *request*) (some-> *request* :text-only deref))))
 
 (defn require-effects! []
-  (when (:routing-pending? *request*)
-    (throw (ex-info "Intent routing has no effect authority before selection."
+  (when (or (:routing-pending? *request*) (:no-host-execution? *request*))
+    (throw (ex-info "This inference source has no host effect authority."
                     {:ai/error true :ai/request-not-sent true}))))
 
 (defn remaining []

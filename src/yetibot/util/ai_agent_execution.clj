@@ -17,6 +17,7 @@
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.clef :as clef]
             [yetibot.core.util.agent-execution :as origin]
+            [yetibot.core.util.ai-usage :as usage]
             [yetibot.core.util.command :as command]
             [yetibot.core.parser :as parser]
             [yetibot.core.webapp.routes.images :as images]
@@ -111,7 +112,7 @@
 (defn authority
   "Issue only from live host bindings; model/job JSON is not an input."
   [request]
-  (when (:routing-pending? request) (denied!))
+  (when (or (:routing-pending? request) (:no-host-execution? request)) (denied!))
   (let [event execution/*event* actor (policy/actor event)
         provider (:planner-provider request) model (:planner-model request)]
     (when-not (and actor (:id (:yetibot-user event)) provider (ai/nonblank-string? model)
@@ -646,8 +647,7 @@
         current (resolve-planner (planner-identity provider model))]
     (when-not (and (:untrusted-text? request)
                    (nil? execution/*event*) (nil? (:event request))
-                   (execution/text-only?) (= #{} @(:tool-ceiling request))
-                   (not (seq (:native-tools provider)))
+                   (= #{} @(:tool-ceiling request))
                    (= "text" (:operation attrs))
                    (= (:name provider) (:provider attrs)) (= model (:model attrs))
                    (= (execution/provider-signature provider)
@@ -699,21 +699,24 @@
 (def ^:private ^:dynamic *route-slot* nil)
 
 (defn- source! [prepared f]
-  (if execution/*request*
+  (if (and (nil? execution/*request*) (origin/value-origin))
+    (origin/invoke! (origin/value-origin) :with-request
+      #(do (when-not execution/*request* (denied!)) (source! prepared f)))
+    (if execution/*request*
     (do
       (execution/require-open!)
       (let [current (toolsets/select (mcp/config) (:toolset-name execution/*request*))
             actor (policy/actor execution/*event*)]
         (doseq [t [(:toolset-policy execution/*request*) (:toolset current)]]
           (policy/authorize! t actor (:provider prepared) (:model prepared))))
-      (when (and (execution/text-only?)
+      (when (and (or (execution/text-only?) (:no-host-execution? execution/*request*))
                  (not (:producer-operation? prepared))
                  (or (not= (:model prepared) (:planner-model execution/*request*))
                      (not (or (= (execution/provider-signature (:provider prepared))
                                  (execution/provider-signature (:planner-provider execution/*request*)))
                               ;; The chat hook sees the deliberate no-tools wire
                               ;; projection, not a replacement planner identity.
-                              (and (:single-hop? prepared)
+                              (and (execution/text-only?) (:single-hop? prepared)
                                    (not (seq (:native-tools (:provider prepared))))
                                    (= (execution/provider-signature (dissoc (:provider prepared) :native-tools))
                                       (execution/provider-signature (dissoc (:planner-provider execution/*request*)
@@ -743,10 +746,10 @@
                           :planner-model model :producer producer :provider-identities (provider-identities)
                           :toolset-name (get-in selected [:toolset :name])
                           :toolset-policy (:toolset selected) :no-tools? (boolean (:no-tools prepared))
-                          :untrusted-text? (and (nil? execution/*event*) (:no-tools prepared)
-                                                (not (:producer-operation? prepared))
-                                                (not (seq (:native-tools provider))))
-                          :tool-ceiling (atom (when (:no-tools prepared) #{}))
+                          :untrusted-text? (and (nil? execution/*event*)
+                                                (not (:producer-operation? prepared)))
+                          :no-host-execution? (nil? execution/*event*)
+                          :tool-ceiling (atom (when (or (:no-tools prepared) (nil? execution/*event*)) #{}))
                           :text-only (atom (boolean (:no-tools prepared)))
                           :stage-timings (atom {}) :planning-responses (atom 0)})
           request (authorize-source-request request selected provider model)]
@@ -758,7 +761,7 @@
              (when *command-source* (reset! *command-source* origin/*context*))
              (origin/mark-output! (f) origin/*context*)))
         (finally
-          (when-not origin/*scope* (execution/close-family! request)))))))
+          (when-not origin/*scope* (execution/close-family! request))))))))
 
 
 (defn- route-source! [prepared args f]
@@ -838,13 +841,115 @@
             (reset! slot pending)
             (execution/with-request* pending #(f freeze!))))))))
 
+(defn- with-sdk-transport* [provider model options f]
+  ;; Only the internal host-code chat hook enters here. No option, provider
+  ;; field, actor event, or serialized Context can issue execution authority.
+  ;; SDK records can retain unused dialect defaults (for example Responses
+  ;; native fields on a Chat Completions turn); validate actual wire identity,
+  ;; not the stricter operator configuration schema.
+  (when-not (and (ai/nonblank-string? (:name provider)) (ai/base-url? (:url provider))
+                 (or (nil? (:api provider)) (#{"chat-completions" "responses"} (:api provider)))
+                 (ai/nonblank-string? model)) (denied!))
+  (let [selected (toolsets/select (mcp/config) nil)
+        original (:toolset selected)
+        configured (some #(when (= (:name provider) (:name %)) %) (:providers (ai/grok-config)))
+        _ (when (and configured
+                     (not= (execution/provider-signature provider)
+                           (execution/provider-signature configured))) (denied!))
+        _ (policy/authorize! original nil provider model)
+        budgets (limits/effective options)
+        upstream-admit usage/*admit-inference*
+        upstream-finish usage/*finish-inference*
+        wire-provider (atom nil)
+        request-slot (atom nil)
+        request (assoc (execution/family (:max-tool-calls budgets) (:max-output-tokens budgets))
+                       :event nil :no-host-execution? true :routing-request request-slot
+                       :planner-provider provider :planner-model model
+                       :toolset-name (:name original) :toolset-policy original
+                       :tool-ceiling (atom #{}))
+        request (assoc request
+                  :reauthorize-expression! denied!
+                  :authorize-tool! (fn [_] (denied!))
+                  :authorize-inference!
+                  (fn [attrs]
+                    (execution/require-open!)
+                    (let [now (some #(when (= (:name provider) (:name %)) %) (:providers (ai/grok-config)))
+                          current (:toolset (toolsets/select (mcp/config) (:name original)))
+                          prepared @wire-provider
+                          cap (:output-cap attrs)]
+                      (when-not (and prepared (= "text" (:operation attrs))
+                                     (= (:name provider) (:provider attrs)) (= model (:model attrs))
+                                     (= (execution/provider-signature prepared) (:provider-signature attrs))
+                                     (= (str (string/replace (:url prepared) #"/+$" "")
+                                             (if (ai/responses? prepared) "/responses" "/chat/completions"))
+                                        (:endpoint attrs))
+                                     (integer? cap) (<= 1 cap (:generation-limit request))
+                                     ;; Once configured, revocation is never absence.
+                                     (if configured
+                                       (and now (= (execution/provider-signature configured)
+                                                   (execution/provider-signature now)))
+                                       (or (nil? now)
+                                           (= (execution/provider-signature provider)
+                                              (execution/provider-signature now)))))
+                        (denied!))
+                      (doseq [policy [original current]]
+                        (policy/authorize! policy nil prepared model)))))]
+    (try
+      (execution/with-request* request
+        #(let [_ (execution/require-open!)
+               prepared (ai/prepare-provider provider model)
+               _ (reset! wire-provider prepared)
+               live-request (assoc request :planner-provider prepared)
+               _ (reset! request-slot live-request)]
+           (execution/with-request* live-request
+             (fn []
+               (let [admit usage/*admit-inference* finish usage/*finish-inference*]
+                 (binding [execution/*event* nil
+                           usage/*admit-inference*
+                           (fn [attrs]
+                             (let [handle (admit attrs)]
+                               (cond-> handle
+                                 upstream-admit (assoc ::upstream (upstream-admit attrs)))))
+                           usage/*finish-inference*
+                           (fn [handle outcome]
+                             (when (and upstream-finish (::upstream handle))
+                               (upstream-finish (::upstream handle) outcome))
+                             (finish handle outcome))]
+                   (origin/mark-output! (f prepared) origin/*context*)))))))
+      (finally
+        (execution/close-family! request)
+        (when-let [context @(:core-context request)] (origin/close! context))))))
+
 (defn- source-chat [callback provider model messages options]
-  (execution/with-source* (assoc options :provider provider :model model :no-tools true :single-hop? true)
-    #(case (:continuation-transport provider)
-       "xai-text" (let [result (xai/generate-text messages)]
-                    {:status "completed" :output [{:type "message" :content [{:type "output_text" :text (:text result)}]}]})
-       "openai-text" (:body ((ns-resolve 'yetibot.commands.openai 'openai-completions) messages))
-       (callback provider model messages options))))
+  (cond
+    execution/*request*
+    (execution/with-source* {:provider provider :model model :single-hop? true}
+      #(case (:continuation-transport provider)
+         "xai-text" (let [result (xai/generate-text messages)]
+                      {:status "completed" :output [{:type "message" :content [{:type "output_text" :text (:text result)}]}]})
+         "openai-text" (:body ((ns-resolve 'yetibot.commands.openai 'openai-completions) messages))
+         (callback provider model messages options)))
+
+    (origin/value-origin)
+    (origin/invoke! (origin/value-origin) :with-request
+      #(do (when-not execution/*request* (denied!))
+           (source-chat callback provider model messages options)))
+
+    :else
+    (with-sdk-transport* provider model options #(callback % model messages options))))
+
+(defn- source-complete [callback provider model messages & [options]]
+  (let [options (or options {})]
+    (cond
+      execution/*request*
+      (execution/with-source* {:provider provider :model model :single-hop? true}
+        #(callback provider model messages options))
+      (origin/value-origin)
+      (origin/invoke! (origin/value-origin) :with-request
+        #(do (when-not execution/*request* (denied!))
+             (source-complete callback provider model messages options)))
+      :else (with-sdk-transport* provider model options
+              #(callback % model messages options)))))
 
 (defn- source-xai-text [callback prompt]
   (execution/with-source* {:provider (native-text-provider "xai-text")
@@ -1047,6 +1152,7 @@
   (hooke/add-hook #'cron/update-where #'with-cron-write)
   (hooke/add-hook #'cron-tools/call! #'with-cron-write)
   (hooke/add-hook #'ai/chat #'source-chat)
+  (hooke/add-hook #'ai/complete #'source-complete)
   (hooke/add-hook #'xai/generate-text #'source-xai-text)
   (hooke/add-hook #'xai/generate-image #'source-xai-image)
   (hooke/add-hook #'gemini/generate-image #'source-gemini-image)

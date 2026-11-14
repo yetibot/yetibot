@@ -402,9 +402,6 @@
                       allowance (get args "max_output_tokens"
                                      (generation-budget config))
                       _ (when record (capacity/check! record allowance))
-                      messages (if read-messages (read-messages)
-                                 [{:role "user" :content (get args "prompt")}])
-                      _ (credential-input! redactions messages)
                       p (cond-> (ai/prepare-provider p model)
                           record (assoc ::capacity/model record))
                       _ (when-let [record (::capacity/model p)]
@@ -412,16 +409,27 @@
                       _ (trusted! config source)
                       _ (policy/authorize! (:toolset config)
                           (policy/actor execution/*event*) p model)
-                      _ (reset! attempted? true)
-                      result (binding [cost/*role* (if read-messages
-                                                    :parent :delegated)]
-                               (ai/complete
-                                 (assoc p :native-tools []) model messages
-                                 {::diagnostics/stage :delegation
-                                  :tools [] :tool_choice "none"
-                                  :max-output-tokens
-                                  (get args "max_output_tokens"
-                                       (generation-budget config))}))]
+                      result
+                      (execution/with-source*
+                        (merge (limits/effective config)
+                               {:provider p :model model :no-tools true :single-hop? true
+                                :toolset (get-in config [:toolset :name])
+                                :max-output-tokens allowance})
+                        (fn []
+                          ;; Context/history reads need the same current caller
+                          ;; as the subsequent send, not merely a copied actor.
+                          (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+                            (reauthorize))
+                          (let [messages (if read-messages (read-messages)
+                                           [{:role "user" :content (get args "prompt")}])]
+                            (credential-input! redactions messages)
+                            (reset! attempted? true)
+                            (binding [cost/*role* (if read-messages :parent :delegated)]
+                              (ai/complete
+                                (assoc p :native-tools []) model messages
+                                {::diagnostics/stage :delegation
+                                 :tools [] :tool_choice "none"
+                                 :max-output-tokens allowance})))))]
                   {:structuredContent
                    (cond-> (project p model (:result/value result) redactions)
                      (get-in result [:result/data :ai/cost])
