@@ -10,7 +10,8 @@
             [yetibot.api.ai :as ai]
             [yetibot.commands.ai :as command]
             [yetibot.core.config :as config]
-            [yetibot.test.support.mcp :as support]))
+            [yetibot.test.support.mcp :as support]
+            [yetibot.test.support.ai-execution :as caller]))
 
 (def server {:name "search" :url "https://search.example/mcp" :tools ["web_search"]})
 (defn error-message [f] (try (f) (catch Exception e (.getMessage e))))
@@ -355,10 +356,13 @@
                                                          :key "model-secret" :model "chat"}]})
                       mcp/config (constantly {:servers [(assoc server :url (str base "/mcp")
                                                                      :headers {"Authorization" "Bearer mcp-secret"})]})]
-          (let [result (command/prompt-cmd {:match "What's new today?"})
+          (let [request (update-in caller/request [:chat-source :raw-event] dissoc :thread_ts)
+                result (caller/in-registered-event request "ai What's new today?"
+                         #(command/prompt-cmd (assoc % :match "What's new today?")))
                 model-requests (filter #(= "/v1/chat/completions" (:path %)) @requests)
                 mcp-requests (filter #(= "/mcp" (:path %)) @requests)]
             (fact
+              (:result/error result) => nil
               (:result/value result) => "Latest news: https://source.test/news"
               (get-in result [:result/data :mcp :tool-calls]) => 1
               (count model-requests) => 2

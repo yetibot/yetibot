@@ -21,7 +21,8 @@
             [yetibot.models.ai-input :as input]
             [yetibot.models.ai-native-tools :as native]
             [yetibot.models.ai-tools :as tools]
-            [yetibot.test.support.ai-execution :as execution]))
+            [yetibot.test.support.ai-execution :as execution]
+            [yetibot.util.ai-execution :as live]))
 
 (def provider
   {:name "cloudflare" :key "fixture-key" :model "parent"
@@ -58,7 +59,7 @@
                     api/complete (fn [p model messages & _]
                                    (swap! calls conj [p model messages])
                                    {:result/value "Formatted fixture"})]
-        {:result (execution/run-command execution/request command)
+        {:result (execution/run-registered-command execution/request command)
          :calls @calls}))))
 
 (facts "real catalog random pipe gives AI the complete selected record"
@@ -186,6 +187,34 @@
           => string?))
       @reads => 0)))
 
+(fact "revoked current policy denies Zen credential reads before protocol revalidation"
+  (let [reads (atom 0)
+        resolve-provider api/resolve-provider
+        p {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+           :key "fixture-secret" :model "paid" :api "responses"}
+        policy (atom {:servers [] :toolsets [{:name "scoped" :kind "search"
+                                              :servers [] :native-tools []
+                                              :users ["U1"]}]})]
+    (with-redefs [api/config (constantly {:providers [p]})
+                  mcp/config #(deref policy)
+                  api/models (fn [_]
+                               (with-meta ["paid"]
+                                 {:catalog {:models [{:id "paid" :interface :chat
+                                                      :schema-summary {:api "responses"}}]}}))
+                  api/resolve-provider (fn [p] (swap! reads inc) (resolve-provider p))]
+      (execution/in-registered-event execution/request "ai --toolset scoped Hi"
+        (fn [_]
+          (live/with-source* {:provider p :model "paid" :toolset "scoped" :no-tools true}
+            (fn []
+              (reset! reads 0)
+              (swap! policy assoc-in [:toolsets 0 :users] ["someone-else"])
+              (let [error (try
+                            ((:reauthorize-expression! live/*request*))
+                            nil
+                            (catch Exception e e))]
+                (some? error) => true
+                @reads => 0))))))))
+
 (fact "real Grok entrypoint sees supplied metadata, with its provider pinned"
   (let [p (assoc provider :name "grok") calls (atom [])]
     (with-redefs [api/config (constantly {:providers [provider p]})
@@ -198,7 +227,7 @@
                   api/complete (fn [p _ messages & _]
                                  (swap! calls conj [p messages])
                                  {:result/value "formatted"})]
-      (:value (execution/run-command
+      (:value (execution/run-registered-command
                 execution/request
                 "cf models | random | grok --no-tools Format it"))
       => "formatted\n\nSent via parent"
@@ -223,7 +252,7 @@
                                       [{:message
                                         {:role "assistant"
                                          :content "Formatted all fields"}}]}})]
-      (:value (execution/run-command
+      (:value (execution/run-registered-command
                 execution/request "cf models | random | ai Format all fields"))
       => "Formatted all fields"
       (count @posts) => 1

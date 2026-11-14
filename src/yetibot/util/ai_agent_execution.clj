@@ -25,6 +25,7 @@
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.util.ai-limits :as limits]
             [yetibot.api.ai :as ai]
+            [yetibot.api.opencode :as opencode]
             [yetibot.api.mcp :as mcp]
             [yetibot.core.db.agent-run :as ledger]
             [yetibot.core.db.cron :as cron]
@@ -70,7 +71,14 @@
            :signature (execution/provider-signature provider)}
     (:continuation-transport provider) (assoc :transport (:continuation-transport provider))))
 
-(defn- resolve-planner [planner]
+(defn- prepare-source-provider [provider model]
+  ;; Identity checks must not resolve an ordinary provider's key-file. Zen
+  ;; needs protocol metadata, but only after the caller's policy is checked.
+  (if (opencode/provider? provider)
+    (ai/prepare-provider provider model)
+    provider))
+
+(defn- resolve-planner-provider [planner]
   (let [provider (if-let [transport (:transport planner)]
                    (native-text-provider transport)
                    (ai/provider (if (= "grok" (:name planner))
@@ -81,7 +89,10 @@
                        (= (:model planner) (case (:transport planner)
                                               "xai-text" "grok-4.7" "openai-text" "gpt-4" nil))))
       (denied!))
-    (ai/prepare-provider provider (:model planner))))
+    provider))
+
+(defn- resolve-planner [planner]
+  (prepare-source-provider (resolve-planner-provider planner) (:model planner)))
 
 (defn- resolve-producer [producer]
   (case (:transport producer)
@@ -186,7 +197,11 @@
 (defn- authorize-inference! [original current attrs]
   (when (= "agent" (:operation attrs)) (denied!))
   (let [configured (some #(when (= (:provider attrs) (:name %)) %) (:providers (ai/grok-config)))
-        prepared (when configured (ai/prepare-provider configured (:model attrs)))
+        prepared (when configured
+                   (doseq [grant [original current]]
+                     (policy/authorize! (:toolset-policy grant) (:actor grant)
+                                        configured (:model attrs)))
+                   (prepare-source-provider configured (:model attrs)))
         app-wire? (and prepared
                        (some #{(:provider-signature attrs)}
                              (map execution/provider-signature
@@ -216,15 +231,22 @@
   (let [original (:authority state)
         current (resolve-current original)
         planner (:planner original)
-        provider (resolve-planner planner)
+        _ (when-not (and current
+                         (= (select-keys original [:source :actor])
+                            (select-keys current [:source :actor]))
+                         (= (get-in original [:user :id]) (get-in current [:user :id]))
+                         (= (get-in original [:yetibot-user :id])
+                            (get-in current [:yetibot-user :id])))
+            (denied!))
+        raw-provider (resolve-planner-provider planner)
+        _ (doseq [grant [original current]]
+            (policy/authorize! (:toolset-policy grant) (:actor original)
+                               raw-provider (:model planner)))
+        provider (prepare-source-provider raw-provider (:model planner))
         producer (:producer original)
-        current-producer (when producer (resolve-producer producer))]
-    (when-not (and current
-                   (= (select-keys original [:source :actor])
-                      (select-keys current [:source :actor]))
-                   (= (get-in original [:user :id]) (get-in current [:user :id]))
-                   (= (get-in original [:yetibot-user :id]) (get-in current [:yetibot-user :id]))
-                   (= (:signature planner) (execution/provider-signature provider))
+        current-producer (when producer
+                           (if (= producer planner) provider (resolve-producer producer)))]
+    (when-not (and (= (:signature planner) (execution/provider-signature provider))
                    (or (nil? producer)
                        (and current-producer
                             (= (:signature producer) (execution/provider-signature current-producer)))))
@@ -644,7 +666,11 @@
   ;; command, durable, native-tool or adapter authority.
   (let [provider (:planner-provider request)
         model (:planner-model request)
-        current (resolve-planner (planner-identity provider model))]
+        raw-current (resolve-planner-provider (planner-identity provider model))
+        _ (doseq [t [(:toolset-policy request)
+                      (:toolset (toolsets/select (mcp/config) (:toolset-name request)))]]
+            (policy/authorize! t nil raw-current model))
+        current (prepare-source-provider raw-current model)]
     (when-not (and (:untrusted-text? request)
                    (nil? execution/*event*) (nil? (:event request))
                    (= #{} @(:tool-ceiling request))
@@ -727,16 +753,17 @@
         (reset! (:tool-ceiling execution/*request*) #{})
         (when-let [text-only (:text-only execution/*request*)] (reset! text-only true)))
       (f))
-    (let [producer-provider (ai/prepare-provider (:provider prepared) (:model prepared))
-          selected (toolsets/select (mcp/config) (:toolset prepared))
+    (let [selected (toolsets/select (mcp/config) (:toolset prepared))
           actor (policy/actor execution/*event*)
-          _ (policy/authorize! (:toolset selected) actor producer-provider (:model prepared))
+          _ (policy/authorize! (:toolset selected) actor (:provider prepared) (:model prepared))
+          producer-provider (prepare-source-provider (:provider prepared) (:model prepared))
           provider (if (:non-chat? prepared) (ai/provider (ai/config) nil) producer-provider)
           model (if (:non-chat? prepared)
                   (ai/default-model provider #(policy/model-allowed? (:toolset selected) actor provider %))
                   (:model prepared))
           _ (when-not (ai/nonblank-string? model) (denied!))
-          provider (ai/prepare-provider provider model)
+          _ (policy/authorize! (:toolset selected) actor provider model)
+          provider (if (:non-chat? prepared) (prepare-source-provider provider model) provider)
           producer (cond-> (planner-identity producer-provider (:model prepared))
                      (:producer-kind prepared) (assoc :transport (:producer-kind prepared)))
           budgets (limits/effective prepared)

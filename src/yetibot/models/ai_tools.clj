@@ -743,10 +743,13 @@
                                         {:data (:data pipeline-input)})
                                       (catch Exception _ nil)))
            messages (input/messages messages pipeline-input config)
-           messages (cond-> messages pipeline-descriptor
-                      (conj {:role "user" :content (json/generate-string
+           messages (if pipeline-descriptor
+                      (conj (pop messages)
+                            {:role "user" :content (json/generate-string
                               {:source "yetibot-pipeline-dataset" :untrusted true
-                               :dataset pipeline-descriptor})}))
+                               :dataset pipeline-descriptor})}
+                            (peek messages))
+                      messages)
            local (when (or (ai/tool-calling? provider)
                            (seq (get-in config [:toolset :native-tools])))
                    (native/tools config actor provider model))]

@@ -1,6 +1,9 @@
 (ns yetibot.test.integration.ai-followups
   (:require [clojure.core.async :as async]
             [clojure.string :as str]
+            [clojure.java.jdbc :as jdbc]
+            [discljord.connections :as websocket]
+            [discljord.events :as events]
             [discljord.messaging :as messaging]
             [midje.sweet :refer [fact =>]]
             [yetibot.api.ai :as api]
@@ -10,6 +13,9 @@
             [yetibot.commands.grok]
             [yetibot.commands.zen]
             [yetibot.core.adapters.discord :as discord]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.db.util :as db]
+            [yetibot.core.db.agent-run :as ledger]
             [yetibot.core.chat :as chat]
             [yetibot.core.config :as core-config]
             [yetibot.core.db.observe :as observers]
@@ -38,10 +44,32 @@
   (let [adapter (discord/make-discord {:name "test"}) conn (:conn adapter)
         messages (atom {}) next-id (atom 199) calls (atom [])
         config (atom settings) policy (atom {:servers []})
-        reject? (atom false)]
-    (reset! conn {:rest :fixture})
-    (reset! (:yetibot-user adapter) {:id "9"})
-    (with-redefs [users/users (atom {})
+        reject? (atom false) gateway (async/chan 1)
+        starts (atom 0) recovery-reads (atom 0) unexpected-db (atom 0)]
+    (with-redefs [adapters/adapters (atom {(adapters/uuid adapter) adapter})
+                  websocket/connect-bot! (fn [& _] gateway)
+                  messaging/start-connection!
+                  (fn [& _] (if (= 1 (swap! starts inc)) :fixture :status-fixture))
+                  messaging/get-current-user! (fn [& _] (delivered {:id "9"}))
+                  events/message-pump!
+                  (fn [& _]
+                    (fact (adapters/connected? adapter) => true
+                          (get @adapters/adapters (adapters/uuid adapter)) => adapter))
+                  jdbc/query
+                  (fn [_ statement options]
+                    (if (and (= statement
+                                [(str "SELECT * FROM " (db/qualified-table-name "agent_run")
+                                      " WHERE execution_kind=? AND execution_phase IN ('queued','ready','operation-in-flight')")
+                                 ledger/inherited-kind])
+                             (= #{:identifiers} (set (keys options))))
+                      (do (swap! recovery-reads inc) [])
+                      (do (swap! unexpected-db inc)
+                          (throw (AssertionError. "Unexpected followup fixture query")))))
+                  jdbc/get-connection
+                  (fn [& _]
+                    (swap! unexpected-db inc)
+                    (throw (AssertionError. "Unexpected followup JDBC access")))
+                  users/users (atom {})
                   history/add (constantly nil)
                   observers/find-all (constantly [])
                   channel/settings-for-chat-source (constantly {})
@@ -80,8 +108,10 @@
                   messaging/get-channel-message!
                   (fn [_ _ id] (delivered (get @messages id)))
                   messaging/create-message!
-                  (fn [_ room & options]
-                    (let [options (apply hash-map options)
+                  (fn [connection room & options]
+                    (if (= connection :status-fixture)
+                      (delivered {:id "status" :channel-id room})
+                      (let [options (apply hash-map options)
                           reference (:message-reference options)
                           latest (apply max (map #(Long/parseLong %)
                                                  (keys @messages)))
@@ -95,22 +125,33 @@
                                            :channel-id
                                            (:channel_id reference)}))]
                       (swap! messages assoc id result)
-                      (delivered result)))
+                      (delivered result))))
                   messaging/edit-message!
-                  (fn [_ room id & options]
-                    (swap! messages update id merge
-                           (select-keys (apply hash-map options) [:components]))
-                    (delivered (get @messages id)))
+                  (fn [connection room id & options]
+                    (if (= connection :status-fixture)
+                      (delivered {:id id :channel-id room})
+                      (do (swap! messages update id merge
+                                 (select-keys (apply hash-map options) [:components]))
+                          (delivered (get @messages id)))))
                   messaging/delete-message!
-                  (fn [_ _ id] (swap! messages dissoc id) (delivered true))]
-      (binding [chat/*adapter* adapter]
-        (f {:adapter adapter :conn conn :messages messages :calls calls
-            :config config :policy policy :reject? reject?
-            :send! (fn [message]
-                     (swap! messages assoc (:id message) message)
-                     (await!
-                       (discord/handle-event :message-create message conn
-                                             (:yetibot-user adapter))))})))))
+                  (fn [_ _ id] (swap! messages dissoc id) (delivered true))
+                  messaging/trigger-typing-indicator! (fn [& _] (delivered true))]
+      (try
+        (adapters/start adapter)
+        (fact @starts => 2
+              (adapters/connected? adapter) => true
+              @(:yetibot-user adapter) => {:id "9"})
+        (binding [chat/*adapter* adapter]
+          (f {:adapter adapter :conn conn :messages messages :calls calls
+              :config config :policy policy :reject? reject?
+              :send! (fn [message]
+                       (swap! messages assoc (:id message) message)
+                       (await!
+                         (discord/handle-event :message-create message conn
+                                               (:yetibot-user adapter))))}))
+        (fact (pos? @recovery-reads) => true
+              @unexpected-db => 0)
+        (finally (async/close! gateway))))))
 
 (fact "plain replies inherit AI, Grok or Zen without reinterpreting their text"
   (doseq [[command provider model options]
