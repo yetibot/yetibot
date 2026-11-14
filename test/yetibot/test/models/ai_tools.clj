@@ -7,6 +7,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-datasets :as datasets]
             [yetibot.util.ai-execution :as execution]
             [yetibot.test.support.mcp :as support])
   (:import [java.io ByteArrayInputStream]))
@@ -953,3 +954,27 @@
       (yetibot.util.ai-execution/remaining) => 0
       (yetibot.util.ai-execution/charge!) => (midje.sweet/throws clojure.lang.ExceptionInfo)
       (:used @budget) => 3)))
+
+(fact "request payload projection preserves Responses controls and call correlation but not untrusted id values"
+  ;; This exercises projection only, not source activation or execution authority.
+  (let [owner {:actor {:id "projection-owner"} :chat-source {:adapter :discord :room "projection"}}
+        store (datasets/create-store owner)
+        secret "PRIVATE-WIRE-VALUE"
+        d (datasets/retain! store owner
+            {:rows [{:auth/token secret}]
+             :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+             :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+        config {:dataset-store store :dataset-owner owner}
+        message {:type "message" :id secret :role "assistant"
+                 :content [{:type "output_text" :text secret}]}
+        output {:type "function_call_output" :call_id secret
+                :output (json/generate-string {:id secret :ordinary secret
+                                              :structuredContent {:datasets [d]}})}
+        safe-output (#'tools/current-message output config)]
+    (#'tools/current-message message config)
+    => (assoc message :content [{:type "output_text" :text "[redacted]"}])
+    (:call_id safe-output) => secret
+    (get-in (json/parse-string (:output safe-output) true) [:id]) => "[redacted]"
+    (get-in (json/parse-string (:output safe-output) true) [:ordinary]) => "[redacted]"
+    (get-in (json/parse-string (:output safe-output) true) [:structuredContent :datasets 0 :dataset-id])
+    => (:dataset-id d)))

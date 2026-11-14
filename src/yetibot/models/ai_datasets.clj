@@ -159,12 +159,26 @@
                             (if (input/sensitive-key? k)
                               "[redacted]" (protect config cell))]) v))
     (sequential? v) (mapv #(protect config %) v)
+    (or (nil? v) (boolean? v)) v
     :else (let [s (json/generate-string v)]
             (if (= s (mcp/metadata-redact s config)) v "[redacted]"))))
 
+(defn- sensitive-copies [store dataset]
+  (let [state @(:state store)]
+    (when (:closed? state) (invalid! :scope))
+    ;; Derive knowledge from the bounded, append-only live observations. Failed
+    ;; admission contributes nothing, and closing clears the only learned facts.
+    (input/sensitive-copies (conj (vec (vals (:datasets state))) dataset))))
+
 (defn- redaction-config [store dataset]
-  (update (:redaction-config store) :secrets concat
-          (input/sensitive-copies dataset)))
+  (update (:redaction-config store) :secrets concat (sensitive-copies store dataset)))
+
+(defn redact
+  "Project untrusted values using learned request facts. No execution authority.
+   Configured credentials are handled by each boundary's existing projection."
+  [store value]
+  (let [copies (seq (sensitive-copies store nil))]
+    (if copies (protect {:secrets copies} value) value)))
 
 (defn credential-input?
   "Check selected values or compiled source without changing private rows."
@@ -209,18 +223,21 @@
   (authorize! store owner)
   (let [retained (validate-envelope! envelope)
         size (json-bytes retained)
-        id (str (UUID/randomUUID))
-        result (descriptor store id retained)]
+        id (str (UUID/randomUUID))]
     (when (> size max-bytes) (invalid! :size))
-    (swap! (:state store)
-           (fn [state]
-             (when (:closed? state) (invalid! :scope))
-             (when (or (>= (count (:datasets state)) 8)
-                       (> (+ (:bytes state) size) max-bytes))
-               (invalid! :size))
-             (-> state (update :bytes + size)
-                 (assoc-in [:datasets id] retained))))
-    result))
+    (locking (:state store)
+      (authorize! store owner)
+      (let [state @(:state store)]
+        (when (or (>= (count (:datasets state)) 8)
+                  (> (+ (:bytes state) size) max-bytes))
+          (invalid! :size))
+        ;; Project against all admitted facts plus this candidate before committing.
+        ;; Descriptor failure cannot admit data or poison request knowledge.
+        (let [result (descriptor store id retained)]
+          (reset! (:state store)
+                  (-> state (update :bytes + size)
+                      (assoc-in [:datasets id] retained)))
+          result)))))
 
 (defn export-store!
   "Host checkpoint data only; never exports secrets or reviewed metadata.
@@ -266,12 +283,14 @@
   (or (get-in @(:state store) [:datasets id]) (invalid! :scope)))
 
 (defn describe [store owner id]
-  (descriptor store id (lookup! store owner id)))
+  (locking (:state store)
+    (descriptor store id (lookup! store owner id))))
 
 (defn close!
   "Clear all retained values and permanently refuse late callbacks."
   [store owner]
   (owner! owner)
   (when-not (= owner (:owner store)) (invalid! :scope))
-  (reset! (:state store) {:closed? true :bytes 0 :datasets {}})
+  (locking (:state store)
+    (reset! (:state store) {:closed? true :bytes 0 :datasets {}}))
   nil)

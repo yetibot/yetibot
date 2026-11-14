@@ -253,3 +253,98 @@
       (get-in d ["coverage" "requested"]) => 5
       (get-in d ["coverage" "status"]) => "complete"
       (frequencies collected) => (zipmap fixtures/locations (repeat 1)))))
+
+(defn request-private-datasets [secret order raw-render?]
+  (let [turns (atom []) renders (atom []) retained (atom [])
+        retain datasets/retain! complete ai-command/complete-prompt
+        rows-a [{:label "safe" :reading 1 :auth/token secret}]
+        rows-b [{:label secret :reading (if (number? secret) secret 2)}]
+        command-call (fn [which] (get-in (call (str "collect-" which "-987654321") "command"
+                                               {"command" (str "request-private-" which)})
+                                        [:choices 0 :message :tool_calls 0]))
+        sequence (if (= order :a-first) ["a" "b"] ["b" "a"])]
+    (with-redefs [hooks/hooks (atom @hooks/hooks)
+                  hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                  channel/settings-for-chat-source (constantly {})
+                  history/add (fn [& _])
+                  mcp/config (constantly {:servers [] :toolsets [(update toolset :native-tools conj "kroki_render")]})
+                  ai/config (constantly {:providers [{:name "fake" :model "fake" :url "https://synthetic.invalid/v1"}]})
+                  context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                  datasets/retain! (fn [store owner envelope]
+                                     (let [d (retain store owner envelope)]
+                                       (swap! retained conj {:id (:dataset-id d)
+                                                            :raw (datasets/lookup! store owner (:dataset-id d))}) d))
+                  kroki/available-tools (constantly ["kroki_render"])
+                  kroki/client-call (fn [operation request]
+                                      (if (= operation "validate-render!") request
+                                        (do (swap! renders conj request)
+                                            (public/reviewed {:result/value (:url artifact)
+                                                              :result/data artifact :result/public-data artifact}))))
+                  http/post (fn [_ opts]
+                              (let [messages (get-in opts [:form-params :messages])
+                                    n (count (swap! turns conj messages))
+                                    collect-turns (if (= order :batch) 1 2)]
+                                {:status 200 :body
+                                 (cond
+                                   (<= n collect-turns)
+                                   {:choices [{:message {:role "assistant" :tool_calls
+                                                        (if (= order :batch)
+                                                          [(command-call "b") (command-call "a")]
+                                                          [(command-call (nth sequence (dec n)))])}}]}
+                                   (= n (inc collect-turns))
+                                   (if raw-render?
+                                     (call "raw-987654321" "kroki_render"
+                                           {"type" "mermaid" "source" (str "graph TD; "
+                                                                          (if (string? secret)
+                                                                            (str (format "\\u%04x" (int (first secret))) (subs secret 1))
+                                                                            secret) "-->B")})
+                                     (let [b (first (filter #(= (json/parse-string (json/generate-string rows-b))
+                                                               (:rows (:raw %))) @retained))]
+                                       (call "chart-987654321" "chart"
+                                             {"dataset_id" (:id b) "kind" "point" "x" "label" "y" "reading"})))
+                                   :else {:choices [{:message {:role "assistant" :content "Rejected safely."}}]})}))]
+      (doseq [[suffix rows] [["a" rows-a] ["b" rows-b]]]
+        (hooks/cmd-hook-resolved (re-pattern (str "request-private-" suffix)) #".*"
+          (fn [_] {:result/value "private structured rows" :result/data rows})))
+      (let [result (try (with-current-caller
+                         #(support/in-registered-event support/request "ai chart request private rows"
+                            (fn [event] (complete (ai-command/prepare-prompt (assoc event :match "chart request private rows"))))))
+                        (catch clojure.lang.ExceptionInfo e {:error (ex-data e)}))]
+        {:result result :turns @turns :renders @renders :retained @retained
+         :expected-rows [rows-a rows-b]}))))
+
+(fact "real request command loop keeps cross-dataset secrets out of later inference and both chart and raw renderer"
+  (doseq [secret ["REQUEST-PRIVATE" "private-\"quote\\slash" 987654321 1]
+          order [:a-first :b-first :batch]
+          raw-render? [false true]]
+    (let [r (request-private-datasets secret order raw-render?)
+          after-learning (drop (if (= order :batch) 1 2) (:turns r))
+          encoded (json/generate-string secret)
+          spelling (if (string? secret) (subs encoded 1 (dec (count encoded))) encoded)]
+      (count (:retained r)) => 2
+      (count after-learning) => pos?
+      (some (fn [message]
+              (let [content (or (:content message) "")
+                    ;; Genuine host handles deliberately survive even a one-digit
+                    ;; sensitive value; inspect untrusted payloads separately.
+                    content (if (= "tool" (:role message))
+                              (json/generate-string
+                                (update-in (json/parse-string content true) [:structuredContent :datasets]
+                                           #(mapv (fn [d] (dissoc d :dataset-id)) %)))
+                              content)]
+                (when (string/includes? content spelling) true)))
+            (mapcat identity after-learning)) => nil
+      (:renders r) => []
+      (set (map (comp :rows :raw) (:retained r)))
+      => (set (json/parse-string (json/generate-string (:expected-rows r))))
+      (every? #(try (java.util.UUID/fromString (:id %)) true (catch Exception _ false)) (:retained r)) => true
+      (set (keep :tool_call_id (first after-learning))) => #{"collect-a-987654321" "collect-b-987654321"}
+      (set (mapcat (fn [m]
+                     (when (= "tool" (:role m))
+                       (map :dataset-id (get-in (json/parse-string (:content m) true)
+                                               [:structuredContent :datasets]))))
+                   (first after-learning))) => (set (map :id (:retained r)))
+      (if raw-render?
+        (get-in r [:result :error :ai/tool-failure :code])
+        (when (string/includes? (str (:turns r)) "credential-input") :credential-input))
+      => :credential-input)))

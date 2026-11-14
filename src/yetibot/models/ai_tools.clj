@@ -92,7 +92,54 @@
        "only the host's explicit user-approval command can perform those operations."))
 
 (defn- clean-data [data config]
-  (walk/postwalk #(if (string? %) (mcp/redact % config) %) data))
+  (let [cleaned (walk/postwalk #(if (string? %) (mcp/redact % config) %) data)]
+    (if-let [store (:dataset-store config)] (datasets/redact store cleaned) cleaned)))
+
+(defn- current-content
+  ([content config] (current-content content config {}))
+  ([content config {:keys [configured? tool-result?]}]
+   (if-not (and (:dataset-store config) (string? content)) content
+     (let [project #(if configured? (clean-data % config)
+                       (datasets/redact (:dataset-store config) %))]
+       (try
+         (let [data (json/parse-string content true)
+               ;; The host result envelope is protocol, not untrusted payload.
+               ;; Configured redaction already ran before authored size errors;
+               ;; replay adds only newly learned facts, never re-redacts controls.
+               clean (if (and tool-result? (map? data))
+                       (into {} (map (fn [[k v]] [k (project v)])) data)
+                       (project data))
+               descriptor (fn [d]
+                            ;; Restore only a real live host handle, not arbitrary
+                            ;; id/key values; describe rechecks the exact owner.
+                            (try (datasets/describe (:dataset-store config)
+                                                    (:dataset-owner config) (:dataset-id d))
+                                 (catch Exception _ (project d))))]
+           (json/generate-string
+             (cond-> clean
+               (map? (:dataset data)) (assoc :dataset (descriptor (:dataset data)))
+               (vector? (get-in data [:structuredContent :datasets]))
+               (assoc-in [:structuredContent :datasets]
+                         (mapv descriptor (get-in data [:structuredContent :datasets]))))))
+         (catch Exception _ (project content)))))))
+
+(defn- current-message [message config]
+  ;; Project payloads, never vendor call IDs, tool names or wire controls. This
+  ;; runs immediately before inference, including earlier replies in one batch.
+  (cond-> message
+    (string? (:content message))
+    (update :content current-content config {:tool-result? (= "tool" (:role message))})
+    (vector? (:content message))
+    (update :content #(mapv (fn [part]
+                             (cond-> part
+                               (string? (:text part)) (update :text current-content config))) %))
+    (string? (:output message))
+    (update :output current-content config {:tool-result? (= "function_call_output" (:type message))})
+    (string? (:arguments message)) (update :arguments current-content config)
+    (seq (:tool_calls message))
+    (update :tool_calls
+            #(mapv (fn [call] (update-in call [:function :arguments]
+                                        current-content config)) %))))
 
 (defn- model-tools [config tools]
   (let [servers (into {} (map (juxt :name identity) (:servers config)))
@@ -225,7 +272,10 @@
                    (assoc :content (->> (:content result)
                                         (keep text-content)
                                         vec)))
-        content (json/generate-string (clean-data result config))
+        content (if (:dataset-store config)
+                  (current-content (json/generate-string result) config
+                                   {:configured? true :tool-result? true})
+                  (json/generate-string (clean-data result config)))
         content (if (<= (count content) 20000) content
                   (if (:native? tool)
                     ;; Credential replacement can expand a bounded page. Keep
@@ -452,7 +502,7 @@
                            "with available evidence.")}]
                     (rest messages))
               body (or (:body resume) (data-tools/timed config :planning
-                     (fn [] (ai/chat provider model turn-messages
+                     (fn [] (ai/chat provider model (mapv #(current-message % config) turn-messages)
                             (cond->
                               {::diagnostics/stage stage
                                :max-output-tokens (:max-output-tokens config)
@@ -590,8 +640,8 @@
                  {:result/value
                  (if partial?
                    (trace/summary report (:answers @trace-state)
-                                  (mcp/redact text config))
-                   (mcp/redact text config))
+                                  (clean-data text config))
+                   (clean-data text config))
                  :result/data
                  (cond->
                    (clean-data

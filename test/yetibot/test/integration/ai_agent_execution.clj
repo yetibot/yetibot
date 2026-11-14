@@ -1415,3 +1415,53 @@
             @wire => 1
             @admissions => 1
             (count @*queued*) => 0))))))
+
+(fact "generated native xAI continuation checks actual nonempty incomplete and failed Responses outcomes before normalization"
+  (doseq [[status reason expected] [["incomplete" "max_output_tokens" :output-limit]
+                                     ["incomplete" "other" :incomplete-output]
+                                     ["failed" nil :incomplete-output]
+                                     ["completed" nil nil]]]
+    (with-runtime
+      (fn [_]
+        (let [wire (atom []) observed (atom []) dispatched (atom nil) original ai/native-xai-text]
+          (hooks/cmd-hook-resolved #"native-outcome-text" #".*"
+            (fn [_] {:result/value (:text (xai/generate-text "source prompt"))}))
+          (with-redefs [mcp/config (constantly {:servers [] :toolsets [(update toolset :providers conj
+                                                                      {:name "xai" :models ["grok-4.7"]})]})
+                        xai/config {:key "synthetic-outcome-key"}
+                        ai/native-xai-text (fn [messages options]
+                                             (try (let [r (original messages options)]
+                                                    (swap! observed conj {:body r}) r)
+                                                  (catch Exception e
+                                                    (swap! observed conj (ex-data e)) (throw e))))
+                        http/post (fn [url options]
+                                    (swap! wire conj [url options (json/parse-string (:body options) true)
+                                                      (:family-id execution/*request*)])
+                                    {:status 200 :body
+                                     (if (= 1 (count @wire))
+                                       {:output [{:type "message" :content [{:text "ai --no-tools --max-output-tokens 91 report"}]}]}
+                                       {:status status :incomplete_details {:reason reason}
+                                        :usage {:input_tokens 7 :output_tokens 91}
+                                        :output [{:type "message" :content [{:type "output_text" :text "nonempty partial answer"}]}]})})]
+            (reset! dispatched (dispatch "native-outcome-text | split , | xargs %s"))
+            (count @wire) => 2
+            (mapv first @wire) => ["https://api.x.ai/v1/responses" "https://api.x.ai/v1/responses"]
+            (get-in @wire [1 2 :model]) => "grok-4.7"
+            (get-in @wire [1 2 :max_output_tokens]) => 91
+            (get-in @wire [1 2 :tools]) => nil
+            (get-in @wire [0 2 :tools]) => [{:type "web_search"} {:type "x_search"}]
+            (count (distinct (map last @wire))) => 1
+            (select-keys (get-in @wire [1 1]) [:conn-timeout :socket-timeout :redirect-strategy])
+            => {:conn-timeout 5000 :socket-timeout 120000 :redirect-strategy :none}
+            ((get-in @wire [1 1 :retry-handler]) nil nil nil) => false
+            (:ai/output-error (last @observed)) => expected
+            (when expected (boolean (re-find #"nonempty partial answer" (pr-str @dispatched))))
+            => (when expected false)
+            (when-not expected (select-keys (:body (last @observed)) [:status :usage]))
+            => (when-not expected {:status "completed" :usage {:input_tokens 7 :output_tokens 91}})
+            (when expected
+              (select-keys (:ai/response (last @observed))
+                           [:provider :model :endpoint :status :output-cap :text-present :input_count :output_count]))
+            => (when expected {:provider :grok :model :grok :endpoint :responses :status (keyword status)
+                               :output-cap 91 :text-present true :input_count 7 :output_count 91})
+            (count @*queued*) => 0))))))

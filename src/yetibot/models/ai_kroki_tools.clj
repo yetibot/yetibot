@@ -6,6 +6,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.core.util.public-result :as public]
+            [yetibot.models.ai-datasets :as datasets]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tool-trace :as trace]
             [yetibot.util.ai-execution :as execution]))
@@ -111,7 +112,9 @@
         (when-not (and (every? #{"type" "source" "format" "options"} (keys args))
                        (type? (get args "type")) (ai/nonblank-string? (get args "source")))
           (invalid!))
-        (when-not (= args (walk/postwalk #(if (string? %) (mcp/redact % config) %) args))
+        (when (or (not= args (walk/postwalk #(if (string? %) (mcp/redact % config) %) args))
+                  (and (:dataset-store config)
+                       (datasets/credential-input? (:dataset-store config) nil args)))
           (throw (ex-info "Diagram input contains configured credentials."
                           {:ai/error true :ai/error-code :credential-input
                            :ai/problem {:stage :arguments :field "*" :code :credential-input

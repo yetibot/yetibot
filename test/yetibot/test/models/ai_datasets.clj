@@ -160,3 +160,47 @@
     (datasets/import-store! (assoc owner :actor {:id "another"}) saved {}) => (throws Exception)
     (datasets/import-store! owner (assoc-in saved [:datasets id :reviewed] true) {})
     => (throws Exception)))
+
+(fact "live request knowledge covers later and earlier handles without poisoning failed admission"
+  (doseq [secret ["REQUEST-PRIVATE" "private-\"quote\\slash" 987654321]
+          order [:a-first :b-first]]
+    (let [store (datasets/create-store owner)
+          b (assoc envelope :rows [{:city secret :temp (if (number? secret) secret 2)}])
+          a (assoc envelope :rows [{:city "safe" :temp 1 :auth/token secret}])
+          [first-d second-d] (mapv #(datasets/retain! store owner %)
+                                  (if (= order :a-first) [a b] [b a]))
+          id (:dataset-id (if (= order :a-first) second-d first-d))
+          raw (datasets/lookup! store owner id)]
+      (get-in (datasets/describe store owner id) [:preview 0 "city"]) => "[redacted]"
+      (datasets/credential-input? store raw [secret]) => true
+      (:rows raw) => [{"city" secret "temp" (if (number? secret) secret 2)}]
+      (datasets/retain! store owner (assoc envelope :rows [{:city "safe" :temp 1 :token "FAILED-ONLY"}]
+                                          :coverage {:status :invented})) => (throws Exception)
+      (datasets/credential-input? store raw "FAILED-ONLY") => false
+      (datasets/credential-input? store raw secret) => true
+      (datasets/redact store {"id" secret "ordinary" secret})
+      => {"id" "[redacted]" "ordinary" "[redacted]"}
+      (when (string? secret)
+        (datasets/credential-input? store raw
+          (str (format "\\u%04x" (int (first secret))) (subs secret 1))))
+      => (when (string? secret) true)
+      (datasets/close! store owner)
+      (:datasets @(:state store)) => {}
+      (datasets/redact store secret) => (throws Exception))))
+
+(fact "failed descriptor and count admission never add sensitive request facts"
+  (let [store (datasets/create-store owner)
+        raw (assoc envelope :rows [{:city "safe" :temp 2}])
+        id (:dataset-id (datasets/retain! store owner raw))
+        fields (mapv #(hash-map :name (str "f" %) :type :nominal
+                               :path (vec (repeat 12 (apply str (repeat 128 "x"))))) (range 64))]
+    (datasets/retain! store owner
+      (assoc envelope :fields fields :rows [{:auth/token "DESCRIPTOR-FAILED-ONLY"}]))
+    => (throws Exception)
+    (datasets/credential-input? store nil "DESCRIPTOR-FAILED-ONLY") => false
+    (dotimes [_ 7] (datasets/retain! store owner raw))
+    (datasets/retain! store owner
+      (assoc envelope :rows [{:city "safe" :temp 2 :auth/token "COUNT-FAILED-ONLY"}]))
+    => (throws Exception)
+    (datasets/credential-input? store nil "COUNT-FAILED-ONLY") => false
+    (:rows (datasets/lookup! store owner id)) => [{"city" "safe" "temp" 2}]))

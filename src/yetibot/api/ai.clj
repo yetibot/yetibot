@@ -383,6 +383,10 @@
                    (partial usage/xai-metrics "grok-4.7"))
         _ (when-not (<= 200 (:status response) 299)
             (fail "Native xAI text request failed."))
+        actual-body (:body response)
+        _ (outcome/check! {:name "xai" :api "responses" :url "https://api.x.ai/v1"}
+                          "grok-4.7" actual-body
+                          (assoc options :max-output-tokens cap))
         text (some (fn [item]
                      (when (= "message" (some-> (:type item) name))
                        (let [content (or (:content item) (get-in item [:message :content]))]
@@ -390,7 +394,9 @@
                                (sequential? content) (string/join "" (keep :text content))
                                :else (:text item)))))
                    (get-in response [:body :output]))]
-    {:status "completed" :output [{:type "message" :content [{:type "output_text" :text text}]}]}))
+    (assoc (select-keys actual-body [:status :usage :incomplete_details])
+           :status (or (:status actual-body) "completed")
+           :output [{:type "message" :content [{:type "output_text" :text text}]}])))
 
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
