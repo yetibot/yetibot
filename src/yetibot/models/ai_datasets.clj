@@ -162,8 +162,17 @@
     :else (let [s (json/generate-string v)]
             (if (= s (mcp/metadata-redact s config)) v "[redacted]"))))
 
+(defn- redaction-config [store dataset]
+  (update (:redaction-config store) :secrets concat
+          (input/sensitive-copies dataset)))
+
+(defn credential-input?
+  "Check selected values or compiled source without changing private rows."
+  [store dataset value]
+  (not= value (protect (redaction-config store dataset) value)))
+
 (defn- descriptor [store id envelope]
-  (let [config (:redaction-config store)
+  (let [config (redaction-config store envelope)
         base (merge {:dataset-id id :untrusted true}
                     (protect config (select-keys envelope
                                       [:fields :source :captured-at :coverage

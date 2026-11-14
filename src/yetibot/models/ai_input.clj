@@ -101,7 +101,9 @@
     (and (string? k)
          (boolean (re-matches sensitive-field (last (string/split k #"/" -1)))))))
 
-(defn- sensitive-copies [data]
+(defn sensitive-copies
+  "Literal and JSON spellings of sensitive values in already bounded data."
+  [data]
   ;; Aliases can embed the rendered value in the prompt. Mask copies there and
   ;; in sibling fields too. Literal replacement keeps large values out of regex.
   (->> (for [node (tree-seq coll? seq data) :when (map? node)

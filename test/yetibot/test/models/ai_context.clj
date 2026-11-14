@@ -1,5 +1,11 @@
 (ns yetibot.test.models.ai-context
-  (:require [clj-slack.conversations :as slack]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as http]
+            [clj-slack.conversations :as slack]
+            [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.commands.ai :as command]
+            [yetibot.test.support.ai-execution :as support]
             [discljord.messaging :as discord]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.core.chat :as chat]
@@ -147,3 +153,61 @@
     (with-redefs [discord/get-channel! (fn [& _] (throw (Exception. "secret")))]
       (error-message #(context/messages discord-args "current"))
       => "Could not read the conversation. No prompt was sent to the AI provider.")))
+
+(def history-policy
+  {:name "history" :kind "search" :servers [] :native-tools ["command" "chart"]
+   :users ["U1"] :adapters ["slack" "discord"]
+   :providers [{:name "history" :models ["history-model"]}]})
+(def history-provider {:name "history" :model "history-model" :url "https://history.invalid/v1"})
+
+(fact "genuine threaded actors denied by current source policy cause zero physical history or inference IO"
+  (doseq [kind [:slack :discord]]
+    (let [reads (atom 0) sends (atom 0)
+          request (assoc support/request :chat-source
+                    (if (= kind :slack)
+                      {:adapter :slack :uuid "workspace" :room "C1"
+                       :raw-event {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"}}
+                      {:adapter :discord :uuid "workspace" :room "100"
+                       :raw-event {:author {:id "U1"} :channel-id "100" :id "400"}}))]
+      (with-redefs [ai/config (constantly {:providers [history-provider]})
+                    mcp/config (constantly {:servers [] :toolsets [(assoc history-policy :users ["denied"])]})
+                    slack/replies (fn [& _] (swap! reads inc) {:ok true :messages []})
+                    discord/get-channel! (fn [& _] (swap! reads inc) (delivered {:id "100" :type 12}))
+                    discord/get-channel-messages! (fn [& _] (swap! reads inc) (delivered []))
+                    http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+        (support/in-registered-event request "ai --no-tools hello"
+          (fn [event]
+            (when (= kind :discord) (reset! (:conn chat/*adapter*) {:rest :connection}))
+            (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+              (string? (error-message #(command/complete-prompt
+                                        (command/prepare-prompt (assoc event :match "--no-tools hello"))))))
+            => true))
+        @reads => 0
+        @sends => 0))))
+
+(fact "authorized source reads complete ordered Slack history once before descriptor and final prompt"
+  (let [reads (atom []) sends (atom [])
+        request (assoc-in support/request [:chat-source :raw-event]
+                          {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"})]
+    (with-redefs [ai/config (constantly {:providers [history-provider]})
+                  mcp/config (constantly {:servers [] :toolsets [history-policy]})
+                  slack/replies (fn [_ _ _ options]
+                                  (swap! reads conj options)
+                                  (if (:cursor options)
+                                    {:ok true :messages [{:ts "2.0" :user "BOT" :text "answer"}]}
+                                    {:ok true :messages [{:ts "1.0" :user "U1" :text "root"}]
+                                     :has_more true :response_metadata {:next_cursor "next"}}))
+                  http/post (fn [_ options] (swap! sends conj (:form-params options))
+                              {:status 200 :body {:choices [{:message {:role "assistant" :content "done"}}]}})]
+      (support/in-registered-event request "ai hello"
+        (fn [event]
+          (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+            (command/complete-prompt (command/prepare-prompt
+                                      (assoc event :yetibot-user {:id "BOT"}
+                                             :match "hello" :data [{:label "A" :reading 2}] :raw "rows"))))))
+      (count @reads) => 2
+      (count @sends) => 1
+      (let [messages (:messages (first @sends)) tail (vec (take-last 5 messages))]
+        (subvec tail 0 2) => [{:role "user" :content "U1: root"} {:role "assistant" :content "answer"}]
+        (:source (json/parse-string (:content (nth tail 3)) true)) => "yetibot-pipeline-dataset"
+        (last tail) => {:role "user" :content "hello"}))))

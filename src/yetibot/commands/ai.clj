@@ -630,7 +630,7 @@
                             options))
                     :provider provider :model model
                     :caption? (empty? (:next-cmds args))
-                    :messages (context/messages args (:prompt options))
+                    :read-messages #(context/messages args (:prompt options))
                     :actor (policy/actor args))
        snapshot (assoc :pipeline-input snapshot
                        :additional-secrets (keep :key (:providers config)))))))
@@ -648,11 +648,13 @@
               (when-not (:no-tools route)
                 (:toolset (toolsets/select (mcp/config) (:toolset route))))
               actor provider (:model route)))
-        provider (execution/revalidate-free-followup! route provider)
-        messages (context/messages args (:match args))]
+        provider (execution/revalidate-free-followup! route provider)]
     (execution/ensure-followup! route provider)
     (merge (select-keys route [:no-tools :toolset :max-tool-calls :max-output-tokens])
-           {:provider provider :model (:model route) :messages messages
+           {:provider provider :model (:model route)
+            :read-messages #(let [messages (context/messages args (:match args))]
+                              (execution/ensure-followup! route provider)
+                              messages)
             :actor actor :prompt (:match args) :caption? true})))
 
 (defn- complete-prompt*
@@ -669,9 +671,9 @@
                      (input/messages messages pipeline-input redactions))]
       (if on-progress
         (ai/complete (dissoc provider :native-tools) model messages
-                     {:on-progress on-progress :max-output-tokens max-output-tokens})
+                     {:on-progress on-progress :max-output-tokens max-output-tokens :no-tools true})
         (ai/complete (dissoc provider :native-tools) model messages
-                     {:max-output-tokens max-output-tokens})))
+                     {:max-output-tokens max-output-tokens :no-tools true})))
     (tools/complete provider model messages
                     (cond-> {:toolset toolset :actor actor
                              :max-output-tokens max-output-tokens}
@@ -690,7 +692,9 @@
                                      (policy/actor execution/*event*)
                                      (:provider prepared) (:model prepared)))
         budgets (limits/effective prepared)
-        result (complete-prompt* (merge prepared budgets))]
+        result (complete-prompt* (cond-> (merge prepared budgets)
+                                  (:read-messages prepared)
+                                  (assoc :messages ((:read-messages prepared)))))]
     (if-not (map? result) result
       (public-result/reviewed
         (-> result

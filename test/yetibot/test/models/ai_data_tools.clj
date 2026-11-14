@@ -36,3 +36,14 @@
 
 (fact "normalized-key collisions cannot silently replace an observation"
   (tools/envelope {:data-collection [{:value 1 "value" 2}]} []) => (throws Exception))
+
+(fact "weather units require authenticated matching observations and the actual companion unit contract"
+  (let [row {:temp 3 :app_temp 2 :wind_spd 5 :rh 60}
+        companion {:source "wttr.in" :units {:temperature "C" :wind "km/h" :humidity "%"} :current row}
+        envelope (fn [raw reviewed]
+                   (tools/envelope {:data raw :public-result (public/reviewed {:result/public-data reviewed})} []))
+        units (fn [e] (into {} (map (juxt :name :unit) (:fields e))))]
+    (units (envelope row companion)) => {"temp" "C" "app_temp" "C" "wind_spd" "km/h" "rh" "%"}
+    (get (units (envelope (assoc row :wind_spd 99) companion)) "wind_spd") => nil
+    (get (units (envelope row (assoc-in companion [:units :humidity] "invented"))) "rh") => nil
+    (get (units (tools/envelope {:data row :public-result {:result/public-data companion}} [])) "wind_spd") => nil))

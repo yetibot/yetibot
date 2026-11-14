@@ -1,6 +1,7 @@
 (ns yetibot.test.integration.ai-agent-execution
   (:require [midje.sweet :refer [fact => =not=> throws]]
             [cheshire.core :as json]
+            [clojure.core.async :as async]
             [clojure.java.jdbc :as jdbc]
             [clj-http.client :as http]
             [hara.io.scheduler :as scheduler]
@@ -44,7 +45,8 @@
             [yetibot.models.ai-cron-tools :as native-cron]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-agent-execution :as agent]
-            [yetibot.test.support.ai-execution :as support]))
+            [yetibot.test.support.ai-execution :as support]
+            [yetibot.test.support.mcp :as scripted]))
 
 (def provider {:name "fixture" :model "fixture-model" :url "https://fixture.invalid/v1"})
 (def toolset {:name "integration" :kind "search" :servers []
@@ -827,12 +829,21 @@
 (fact "explicit short outer timeout closes the real source family; late HTTP completion cannot start an agent or a new default"
   (with-runtime
     (fn [_]
-      (let [entered (promise) release (promise) state (atom nil) wire (atom 0) legacy (atom 0)]
-        (with-redefs [handler/expr-eval-timeout-ms 300
+      (let [entered (promise) release (promise) exited (promise) worker-thread (atom nil)
+            thread-call async/thread-call state (atom nil) wire (atom 0) legacy (atom 0)]
+        (with-redefs [async/thread-call (fn [f]
+                                         (thread-call
+                                           (fn []
+                                             (try (f)
+                                                  (finally
+                                                    (when (identical? (Thread/currentThread) @worker-thread)
+                                                      (deliver exited true)))))))
+                      handler/expr-eval-timeout-ms 300
                       core-agent/configured? (constantly false)
                       core-agent/say-unconfigured (fn [] (swap! legacy inc) "legacy")
                       http/post (fn [_ _]
                                   (reset! state execution/*request*)
+                                  (reset! worker-thread (Thread/currentThread))
                                   (swap! wire inc) (deliver entered true) @release
                                   {:status 200 :body (answer "agent late")})]
           (let [evaluation (future (dispatch "ai --no-tools report | split , | xargs %s"))]
@@ -840,7 +851,7 @@
             (:timeout? (first (deref evaluation 3000 []))) => true
             (:closed? @(:budget @state)) => true
             (deliver release true)
-            (Thread/sleep 100)
+            (deref exited 3000 false) => true
             @wire => 1
             @legacy => 0
             (count @*queued*) => 0))))))
@@ -1279,3 +1290,128 @@
                 (ai/chat (dissoc configured :native-tools) "fixture-model" [] {}) => (throws Exception))))
           (count @wire) => 2
           (count @*queued*) => 0)))))
+
+(fact "generated native OpenAI and xAI ai turns retain actual identity and honor explicit narrower caps and no-tools at admission and wire"
+  (doseq [kind [:openai :xai] explicit-no-tools? [false true]]
+    (with-runtime
+      (fn [_]
+        (let [wire (atom []) admissions (atom []) capture usage/capture!
+              native-name (if (= kind :openai) "openai" "xai")
+              native-model (if (= kind :openai) "gpt-4" "grok-4.7")
+              endpoint (if (= kind :openai) "https://api.openai.com/v1/chat/completions" "https://api.x.ai/v1/responses")
+              generated (str "ai " (when explicit-no-tools? "--no-tools ") "--max-output-tokens 91 report")]
+          (hooks/cmd-hook-resolved #"native-options-text" #".*"
+            (fn [_] {:result/value (:text (xai/generate-text "source prompt"))}))
+          (with-redefs [mcp/config (constantly {:servers [] :toolsets [(update toolset :providers conj
+                                                                       {:name native-name :models [native-model]})]})
+                        openai/config {:key "synthetic-native-key"}
+                        xai/config {:key "synthetic-native-key"}
+                        usage/capture! (fn [attrs request project]
+                                         (swap! admissions conj attrs) (capture attrs request project))
+                        http/post (fn [url options]
+                                    (let [body (or (:form-params options) (json/parse-string (:body options) true))]
+                                      (swap! wire conj {:url url :body body :ordinal (:ordinal origin/*operation*)
+                                                        :family (:family-id execution/*request*) :headers (:headers options)})
+                                      {:status 200 :body
+                                       (let [text (if (= 1 (count @wire)) generated "native bounded answer")]
+                                         (if (= kind :openai) (answer text)
+                                           {:output [{:type "message" :content [{:text text}]}]}))}))]
+            (dispatch (str (if (= kind :openai) "openai report" "native-options-text") " | split , | xargs %s"))
+            (count @wire) => 2
+            (mapv :url @wire) => [endpoint endpoint]
+            (mapv #(get-in % [:body :model]) @wire) => [native-model native-model]
+            (mapv #(get-in % [:body (if (= kind :openai) :max_tokens :max_output_tokens)]) @wire) => [32768 91]
+            (mapv #(let [cap (:output-cap %)] (if (map? cap) (:value cap) cap)) @admissions) => [32768 91]
+            (every? #(and (integer? (:ordinal %)) (pos? (:ordinal %))) @wire) => true
+            (count (distinct (map :family @wire))) => 1
+            (get-in @wire [1 :body :tools]) => (when (and (= kind :xai) (not explicit-no-tools?))
+                                               [{:type "web_search"} {:type "x_search"}])
+            (get-in @wire [0 :body :tools]) => (when (= kind :xai) [{:type "web_search"} {:type "x_search"}])
+            (every? #(some #{"Bearer synthetic-native-key"} (vals (:headers %))) @wire) => true
+            (count @*queued*) => 0))))))
+
+(fact "scaled stalled native OpenAI continuation times out releases the actual local worker and leaves unknown nonreplayable admission"
+  (with-runtime
+    (fn [url]
+      (let [posts (atom []) accepted (promise) release (promise)
+            physical-post http/post physical-error (atom nil) owner-key (atom nil) worker (atom nil)]
+        (scripted/with-http-server
+          (fn [_]
+            {:stream (fn [out]
+                       (let [body (.getBytes (json/generate-string (answer "late answer")) "UTF-8")]
+                         (.write out body 0 5) (.flush out)
+                         (deliver accepted true)
+                         (deref release 5000 nil)
+                         (try (.write out body 5 (- (alength body) 5)) (.flush out)
+                              (catch java.io.IOException _ nil))))})
+          (fn [base]
+            (with-redefs [mcp/config (constantly {:servers [] :toolsets [(update toolset :providers conj
+                                                                       {:name "openai" :models ["gpt-4"]})]})
+                          openai/config {:key "synthetic-stall-key"}
+                          http/post (fn [endpoint options]
+                                      (swap! posts conj [endpoint options])
+                                      (if (= 1 (count @posts))
+                                        {:status 200 :body (answer "agent report")}
+                                        (do
+                                          ;; Assert real production values separately. Only fixture waits scale.
+                                          (fact (:conn-timeout options) => 5000
+                                                (:socket-timeout options) => 120000
+                                                (:redirect-strategy options) => :none
+                                                ((:retry-handler options) nil nil nil) => false)
+                                          (try
+                                            (physical-post (str base "/stalled")
+                                              (cond-> options
+                                                (:conn-timeout options) (assoc :conn-timeout 100)
+                                                (:socket-timeout options) (assoc :socket-timeout 100)))
+                                            (catch Exception e (reset! physical-error e) (throw e))))))]
+              (dispatch "openai report | split , | xargs %s")
+              (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])))
+                    key [url (db/qualified-table-name "agent_run") id]]
+                (reset! owner-key key)
+                (get-in @@#'agent/live-workers [key :phase]) => :queued
+                (reset! worker (future (try ((first @*queued*)) (catch Exception e {:error e}))))
+              (try
+                (deref accepted 3000 false) => true
+                (let [finished (deref @worker 1000 :still-running)]
+                  (instance? Throwable (:error (when (map? finished) finished))) => true
+                  (instance? java.net.SocketTimeoutException @physical-error) => true
+                  (println "STALLED-PHYSICAL-ERROR" (some-> @physical-error class .getName))
+                  (contains? @@#'agent/live-workers @owner-key) => false
+                  (let [id (last @owner-key) row (ledger/read-row url "agent_run" id)]
+                    (:execution-phase row) => "unknown"
+                    (runs/claim! url "agent_run" id (:state-revision row) {}) => {:status :unknown}
+                    (some #(= "unknown" (:state %)) (json/parse-string (:operation-receipts row) true)) => true)
+                  (support/in-event support/request "echo recover stalled" (fn [_] nil))
+                  (support/in-event support/request "echo recover again" (fn [_] nil))
+                  (count @*queued*) => 1
+                  (count @posts) => 2
+                  (println "SCALED-TIMEOUT-EVIDENCE fixture connect/socket=100ms; asserted production connect=5000ms socket=120000ms; no measured120s claim"))
+                (finally
+                  (deliver release true)
+                  (deref @worker 3000 :fixture-worker-did-not-exit)))))))))))
+
+(fact "revoked current policy blocks generated native continuation before any second admission or physical send"
+  (doseq [kind [:openai :xai]]
+    (with-runtime
+      (fn [_]
+        (let [native-name (if (= kind :openai) "openai" "xai")
+              native-model (if (= kind :openai) "gpt-4" "grok-4.7")
+              policy (atom {:servers [] :toolsets [(update toolset :providers conj
+                                                                    {:name native-name :models [native-model]})]})
+              wire (atom 0) admissions (atom 0) capture usage/capture!]
+          (hooks/cmd-hook-resolved #"native-denied-text" #".*"
+            (fn [_] {:result/value (:text (xai/generate-text "source prompt"))}))
+          (with-redefs [mcp/config #(deref policy)
+                        openai/config {:key "synthetic-native-key"}
+                        xai/config {:key "synthetic-native-key"}
+                        usage/capture! (fn [& args] (swap! admissions inc) (apply capture args))
+                        http/post (fn [_ _]
+                                    (swap! wire inc)
+                                    (swap! policy assoc-in [:toolsets 0 :users] ["revoked"])
+                                    {:status 200 :body
+                                     (if (= kind :openai) (answer "ai --no-tools --max-output-tokens 91 report")
+                                       {:output [{:type "message" :content [{:text "ai --no-tools --max-output-tokens 91 report"}]}]})})]
+            (dispatch (str (if (= kind :openai) "openai report" "native-denied-text") " | split , | xargs %s"))
+            @wire => 1
+            @admissions => 1
+            (count @*queued*) => 0))))))

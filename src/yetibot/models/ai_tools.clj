@@ -732,7 +732,9 @@
                                [secret (subs encoded 1
                                              (dec (count encoded)))]))
                            (filter ai/nonblank-string?
-                                   (concat (:secrets config)
+                                   (concat (mcp/credentials config)
+                                           (mcp/credentials (get-in config [:dataset-store :redaction-config]))
+                                           (keep :key (try (:providers (ai/config)) (catch Exception _ [])))
                                            [(:key provider) credential-file]
                                            additional-secrets))))
            config (update config :dataset-store

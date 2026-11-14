@@ -30,7 +30,7 @@
 (fact "automatic routing uses real model/MCP transports and opens exactly one draft"
   (let [requests (atom []) pushed (atom false)
         physical-post client/post execute-github github/execute!
-        family-snapshots (atom [])
+        family-snapshots (atom []) history-reads (atom [])
         staging-attempts (atom 0) stage! proposals/stage!]
     (support/with-http-server
       (fixture/fixture-handler requests pushed)
@@ -60,11 +60,22 @@
                                         (physical-post url options)))
                         clef/credential! (constantly "fixture-clef-secret")
                         mcp/config (constantly config)
-                        context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                        context/messages (fn [_ prompt]
+                                           (swap! history-reads conj
+                                             {:authorized? (boolean execution/*request*)
+                                              :routing-pending? (boolean (:routing-pending? execution/*request*))})
+                                           [{:role "user" :content "complete root history"}
+                                            {:role "assistant" :content "complete prior answer"}
+                                            {:role "user" :content prompt}])
                         client/get (fn [url _] {:status 200 :body {:sha (last (string/split url #"/"))
                                                                   :parents [{:sha fixture/base-sha}]}})]
             (let [result (run-command request "ai Fix src/a.clj in owner/repo")]
-              (fact (get-in result [:data :status]) => :succeeded
+              (fact @history-reads => [{:authorized? true :routing-pending? false}]
+                    (take-last 3 (:messages (:body (first (filter #(= "/v1/chat/completions" (:path %)) @requests)))))
+                    => [{:role "user" :content "complete root history"}
+                        {:role "assistant" :content "complete prior answer"}
+                        {:role "user" :content "Fix src/a.clj in owner/repo"}]
+                    (get-in result [:data :status]) => :succeeded
                     (get-in result [:data :pr-url]) => "https://github.com/owner/repo/pull/12"
                     (count (distinct (map :family-id @family-snapshots))) => 1
                     (:used @(:budget (first @family-snapshots))) => 17

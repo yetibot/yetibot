@@ -952,9 +952,8 @@
     execution/*request*
     (execution/with-source* {:provider provider :model model :single-hop? true}
       #(case (:continuation-transport provider)
-         "xai-text" (let [result (xai/generate-text messages)]
-                      {:status "completed" :output [{:type "message" :content [{:type "output_text" :text (:text result)}]}]})
-         "openai-text" (:body ((ns-resolve 'yetibot.commands.openai 'openai-completions) messages))
+         "xai-text" (ai/native-xai-text messages options)
+         "openai-text" (:body ((ns-resolve 'yetibot.commands.openai 'openai-completions) messages options))
          (callback provider model messages options)))
 
     (origin/value-origin)

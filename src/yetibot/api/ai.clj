@@ -362,6 +362,36 @@
                                  calls)))))
       body)))
 
+(defn native-xai-text
+  "App-owned continuation for the legacy native producer, not registry routing.
+   Explicit no-tools is distinct from that producer's default vendor searches."
+  [messages options]
+  (let [cap (:max-output-tokens (limits/effective options))
+        endpoint "https://api.x.ai/v1/responses"
+        key (:key xai/config)
+        body (cond-> {:model "grok-4.7" :input messages :max_output_tokens cap}
+               (not (:no-tools options)) (assoc :tools [{:type "web_search"} {:type "x_search"}]))
+        response (usage/capture!
+                   {:provider "xai" :model "grok-4.7" :operation "text" :endpoint endpoint
+                    :output-cap {:field "max_output_tokens" :value cap} :secrets [key]}
+                   #(client/post endpoint
+                      {:headers {"Authorization" (str "Bearer " key)}
+                       :content-type :json :body (json/generate-string body)
+                       :as :json :throw-exceptions false
+                       :conn-timeout 5000 :socket-timeout 120000
+                       :redirect-strategy :none :retry-handler (fn [& _] false)})
+                   (partial usage/xai-metrics "grok-4.7"))
+        _ (when-not (<= 200 (:status response) 299)
+            (fail "Native xAI text request failed."))
+        text (some (fn [item]
+                     (when (= "message" (some-> (:type item) name))
+                       (let [content (or (:content item) (get-in item [:message :content]))]
+                         (cond (string? content) content
+                               (sequential? content) (string/join "" (keep :text content))
+                               :else (:text item)))))
+                   (get-in response [:body :output]))]
+    {:status "completed" :output [{:type "message" :content [{:type "output_text" :text text}]}]}))
+
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]

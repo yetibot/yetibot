@@ -106,6 +106,28 @@
     :temporal
     :else :nominal))
 
+(defn- failed-input-count [expressions]
+  (let [by-ordinal (into {} (map (juxt :ordinal identity)) expressions)
+        failed (filter #(not= :success (:status %)) expressions)
+        ancestors (reduce
+                    (fn [out expression]
+                      (loop [parent (:parent-ordinal expression) seen #{} out out]
+                        (if (or (nil? parent) (contains? seen parent)) out
+                          (recur (:parent-ordinal (get by-ordinal parent))
+                                 (conj seen parent) (conj out parent)))))
+                    #{} failed)]
+    (count (remove #(contains? ancestors (:ordinal %)) failed))))
+
+(defn- weather-unit [reviewed rows path]
+  (when-let [[measurement unit] (get {["temp"] [:temperature "C"]
+                                    ["app_temp"] [:temperature "C"]
+                                    ["wind_spd"] [:wind "km/h"]
+                                    ["rh"] [:humidity "%"]} path)]
+    (when (and (every? #(= unit (get-in % [:units measurement])) reviewed)
+               (= (mapv #(get-in % [:current (keyword (first path))]) reviewed)
+                  (mapv #(get-in % path) rows)))
+      unit)))
+
 (defn envelope
   "Only authenticated weather companions supply units. Raw rows remain private;
    generic data never acquires reviewed or complete-source authority."
@@ -120,14 +142,15 @@
                                       (map? (:current %))) reviewed)
                         (= (mapv #(get-in % [:current :temp]) reviewed) (mapv #(get % "temp") rows)))
           missing (- (count incoming) (count rows))
-          failures (max missing (count (filter #(not= :success (:status %)) expressions)))
+          failures (max missing (failed-input-count expressions))
           rows (if weather? rows (mapv #(if (nil? %) {} (string-keys %)) incoming))
           paths (distinct (mapcat leaf-paths rows))
           fields (mapv (fn [path]
-                         (let [values (keep #(get-in % path) rows)]
+                         (let [values (keep #(get-in % path) rows)
+                               unit (when weather? (weather-unit reviewed rows path))]
                            (cond-> {:name (string/join "." path) :path path
                                     :type (field-type values)}
-                             (and weather? (#{["temp"] ["app_temp"]} path)) (assoc :unit "C"))))
+                             unit (assoc :unit unit))))
                        (filter #(every? (fn [v] (or (nil? v) (string? v) (number? v) (boolean? v)))
                                         (map (fn [r] (get-in r %)) rows)) paths))]
       {:rows rows :fields fields :source (if weather? "weather" "yetibot-command")
@@ -224,10 +247,17 @@
   (let [compiled
         (timed config :preparation
           #(try
-             (let [dataset (datasets/lookup! (:dataset-store config) (:dataset-owner config) (get args "dataset_id"))]
-               (if (credential-field? dataset args)
-                 {:ok? false :problem (problem :chart "*" :credential-input false)}
-                 (charts/compile-chart dataset (dissoc args "dataset_id"))))
+             (let [dataset (datasets/lookup! (:dataset-store config) (:dataset-owner config) (get args "dataset_id"))
+                   selected (filter (fn [field] (some #{(:name field)} (keep args ["x" "y" "series"])))
+                                    (:fields dataset))
+                   values (mapv (fn [row] (mapv (fn [field] (get-in row (:path field))) selected)) (:rows dataset))
+                   compiled (charts/compile-chart dataset (dissoc args "dataset_id"))]
+               (if (or (credential-field? dataset args)
+                         (datasets/credential-input? (:dataset-store config) dataset values)
+                         (and (:ok? compiled)
+                              (datasets/credential-input? (:dataset-store config) dataset (:request compiled))))
+                   {:ok? false :problem (problem :chart "*" :credential-input false)}
+                 compiled))
              (catch Exception _ {:ok? false :problem (problem :chart "dataset_id" :unavailable-field false)})))]
     (if-not (:ok? compiled)
       {:isError true :structuredContent {:problem (trace/sanitize-problem (:problem compiled))}}
