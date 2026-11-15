@@ -978,3 +978,55 @@
     (get-in (json/parse-string (:output safe-output) true) [:ordinary]) => "[redacted]"
     (get-in (json/parse-string (:output safe-output) true) [:structuredContent :datasets 0 :dataset-id])
     => (:dataset-id d)))
+
+(fact "typed citation and source payloads protect nested human fields without treating untrusted ids as controls"
+  ;; Projection-only shapes supplement the registered physical Responses proof.
+  (doseq [secret ["NESTED-PRIVATE" "private-\"quote\\slash" 1]]
+    (let [owner {:actor {:id "citation-owner"} :chat-source {:adapter :discord :room "projection"}}
+          store (datasets/create-store owner)
+          d (datasets/retain! store owner
+              {:rows [{:auth/token secret}]
+               :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+               :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+          encoded (json/generate-string secret)
+          spelling (if (string? secret) (subs encoded 1 (dec (count encoded))) encoded)
+          config {:dataset-store store :dataset-owner owner :secrets ["CONFIGURED-PRIVATE"]}
+          annotation {:type "url_citation"
+                      :url_citation {:start_index 1 :end_index 2 :url (str "https://example.test/" spelling)
+                                     :title (str secret) :text "CONFIGURED-PRIVATE" :id secret}}
+          chat {:role "assistant" :content "Safe" :annotations [annotation]}
+          projected (#'tools/current-response {:id (str secret) :model (str secret) :usage {:input_tokens 1}
+                                               :choices [{:index 1 :message chat}]} config)
+          nested (get-in projected [:choices 0 :message :annotations 0 :url_citation])
+          state {:type "reasoning" :id (str secret) :encrypted_content (str secret)
+                 :summary [{:type "summary_text" :text (str secret) :annotations [annotation]}]}
+          search {:type "web_search_call" :id "search" :status "completed"
+                  :encrypted_content (str secret)
+                  :action {:type "search" :query (str secret)
+                           :sources [{:type "url" :url (str secret) :title spelling :id secret}]}}
+          files {:type "file_search_call" :id (str secret) :queries [(str secret)]
+                 :results [{:file_id (str secret) :score 1 :filename (str secret) :text spelling
+                            :attributes {:id secret :key secret}}]}]
+      nested => {:start_index 1 :end_index 2 :url "https://example.test/[redacted]"
+                 :title "[redacted]" :text "[redacted]" :id "[redacted]"}
+      (select-keys projected [:id :model :usage]) => {:id (str secret) :model (str secret) :usage {:input_tokens 1}}
+      (get-in projected [:choices 0 :index]) => 1
+      (#'tools/current-message state config)
+      => (-> state (assoc-in [:summary 0 :text] "[redacted]")
+                   (assoc-in [:summary 0 :annotations 0 :url_citation] nested))
+      (#'tools/current-message search config)
+      => (-> search (assoc-in [:action :query] "[redacted]")
+                    (assoc-in [:action :sources] [{:type "url" :url "[redacted]" :title "[redacted]" :id "[redacted]"}]))
+      (#'tools/current-message files config)
+      => (assoc files :queries ["[redacted]"]
+                      :results [{:file_id (str secret) :score 1 :filename "[redacted]" :text "[redacted]"
+                                 :attributes {:id "[redacted]" :key "[redacted]"}}])
+      (#'tools/current-message {:role "assistant" :content [{:type "output_text" :text {:id secret}
+                                                            :annotations {:id secret :type "unknown"}}
+                                                           {:type "unknown" :id secret}]} config)
+      => {:role "assistant" :content [{:type "output_text" :text {:id "[redacted]"}
+                                       :annotations {:id "[redacted]" :type "unknown"}}
+                                      {:type "unknown" :id "[redacted]"}]}
+      (get-in (datasets/lookup! store owner (:dataset-id d)) [:rows 0 "auth/token"]) => secret
+      (datasets/close! store owner)
+      (#'tools/current-message chat config) => (midje.sweet/throws Exception))))

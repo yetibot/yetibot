@@ -95,6 +95,17 @@
   (let [cleaned (walk/postwalk #(if (string? %) (mcp/redact % config) %) data)]
     (if-let [store (:dataset-store config)] (datasets/redact store cleaned) cleaned)))
 
+(defn- with-payload-secrets [config provider additional-secrets credential-file]
+  (assoc config :secrets
+    (mapcat (fn [secret]
+              (let [encoded (json/generate-string secret)]
+                [secret (subs encoded 1 (dec (count encoded)))]))
+            (filter ai/nonblank-string?
+              (concat (mcp/credentials config)
+                      (mcp/credentials (get-in config [:dataset-store :redaction-config]))
+                      (keep :key (try (:providers (ai/config)) (catch Exception _ [])))
+                      [(:key provider) credential-file] additional-secrets)))))
+
 (defn- current-content
   ([content config] (current-content content config {}))
   ([content config {:keys [configured? tool-result?]}]
@@ -127,6 +138,41 @@
   ;; Attribution and accounting are host metadata; only answer text is payload.
   (mapv #(update % :text clean-data config) answers))
 
+(defn- payload-object [value config controls]
+  ;; Only typed protocol positions may retain controls. Unknown extensions are
+  ;; untrusted payload, including fields named id/key; projection never falls
+  ;; back to the raw object if the live store cannot be read.
+  (if-not (map? value) (clean-data value config)
+    (let [kept (into {} (filter (fn [[k v]] (when-let [valid? (get controls k)] (valid? v))) value))]
+      (merge (clean-data (apply dissoc value (keys kept)) config) kept))))
+
+(defn- citation [annotation config]
+  (let [position? #(and (integer? %) (<= 0 %))
+        offsets {:start_index position? :end_index position?}
+        kind (:type annotation)
+        controls (case kind
+                   "url_citation" (assoc offsets :type #{kind})
+                   "file_citation" {:type #{kind} :file_id string? :index position?}
+                   "file_path" {:type #{kind} :file_id string? :index position?}
+                   "container_file_citation" (assoc offsets :type #{kind} :file_id string? :container_id string?)
+                   {})]
+    (cond-> (payload-object annotation config controls)
+      ;; Chat Completions nests the citation payload; Responses uses flat fields.
+      (and (= "url_citation" kind) (map? (:url_citation annotation)))
+      (assoc :url_citation (payload-object (:url_citation annotation) config offsets)))))
+
+(defn- content-part [part config payload]
+  (if-not (and (map? part) (#{"output_text" "text" "input_text" "refusal" "summary_text"} (:type part)))
+    (clean-data part config)
+    (cond-> (payload-object (dissoc part :text :annotations) config {:type #{(:type part)}})
+      (contains? part :text) (assoc :text (if (string? (:text part))
+                                          (payload (:text part))
+                                          (clean-data (:text part) config)))
+      (contains? part :annotations)
+      (assoc :annotations (if (vector? (:annotations part))
+                            (mapv #(citation % config) (:annotations part))
+                            (clean-data (:annotations part) config))))))
+
 (defn- current-message [message config & [public?]]
   ;; Project payloads, never vendor call IDs, tool names or wire controls. Replay
   ;; adds live knowledge; public response payloads also apply configured secrets.
@@ -138,25 +184,29 @@
       (string? (:content message))
       (update :content (if (= "tool" (:role message)) result-payload payload))
       (vector? (:content message))
-      (update :content #(mapv (fn [part]
-                               (cond-> part
-                                 (string? (:text part)) (update :text payload))) %))
+      (update :content #(mapv (fn [part] (content-part part config payload)) %))
+      (contains? message :annotations)
+      (update :annotations #(if (vector? %) (mapv (fn [a] (citation a config)) %)
+                               (clean-data % config)))
+      (contains? message :refusal) (update :refusal plain-payload)
       (string? (:output message))
       (update :output (if (= "function_call_output" (:type message)) result-payload payload))
       (and (= "reasoning" (:type message)) (vector? (:summary message)))
-      (update :summary
-              #(mapv (fn [part]
-                       (if (and (= "summary_text" (:type part)) (string? (:text part)))
-                         (update part :text plain-payload) part)) %))
-      (and (#{"web_search_call" "x_search_call"} (:type message)) (map? (:action message)))
+      (update :summary #(mapv (fn [part] (content-part part config plain-payload)) %))
+      (and (#{"web_search_call" "x_search_call"} (:type message)) (contains? message :action))
       (update :action
               (fn [action]
-                (cond-> action
-                  (string? (:query action)) (update :query plain-payload)
-                  (vector? (:queries action)) (update :queries #(mapv plain-payload %))
-                  (string? (:text action)) (update :text plain-payload)
-                  (string? (:url action)) (update :url plain-payload)
-                  (string? (:pattern action)) (update :pattern plain-payload))))
+                (cond-> (payload-object action config {:type #{"search" "open_page" "find"}})
+                  (and (map? action) (contains? action :sources))
+                  (assoc :sources (if (vector? (:sources action))
+                                    (mapv (fn [source] (payload-object source config {:type #{"url"}})) (:sources action))
+                                    (plain-payload (:sources action)))))))
+      (and (= "file_search_call" (:type message)) (contains? message :queries))
+      (update :queries plain-payload)
+      (and (= "file_search_call" (:type message)) (contains? message :results))
+      (update :results #(if (vector? %)
+                         (mapv (fn [item] (payload-object item config {:file_id string? :score number?})) %)
+                         (plain-payload %)))
       (string? (:arguments message)) (update :arguments payload)
       (seq (:tool_calls message))
       (update :tool_calls
@@ -475,6 +525,25 @@
            :result/public-data {:execution (trace/public-report report)}
            :result/public-error (when-not artifact (trace/public-errors report))})))))
 
+(defn- response-result [provider body message config trace-state limit accounting used]
+  (let [text (:content message)]
+    (when-not (ai/nonblank-string? text)
+      (ai/fail (str "AI provider " (:name provider) " returned no text response.")))
+    (let [partial? (or (seq (:failure-counts @trace-state))
+                       (some #(= :error (:outcome %)) (:calls @trace-state)))
+          report (trace/report trace-state limit (if partial? :partial-result :completed))]
+      (public/reviewed
+        {:result/value (if partial?
+                         (trace/summary report (current-answers (:answers @trace-state) config)
+                                        (clean-data text config))
+                         (clean-data text config))
+         :result/data (cond-> (assoc (current-response body config)
+                                    :mcp {:tool-calls used} :ai/cost accounting
+                                    :execution (trace/public-report report))
+                        partial? (assoc :isError true :tool-trace report))
+         :result/public-data {:execution (trace/public-report report)}
+         :result/public-error (when partial? (trace/public-errors report))}))))
+
 (defn- sole-host-chart? [calls by-name]
   (let [tool (get-in by-name [(get-in (first calls) [:function :name]) :tool])]
     (and (= 1 (count calls)) (= "chart" (:name tool))
@@ -658,35 +727,7 @@
             (if correction?
               (do (reset! (:chart-stop config) "No valid chart correction was supplied; collected data was not replayed.")
                   (terminal-result config trace-state limit accounting used))
-              (let [text (:content message)]
-              (when-not (ai/nonblank-string? text)
-                (ai/fail (str "AI provider " (:name provider)
-                              " returned no text response.")))
-              (let [partial? (or (seq (:failure-counts @trace-state))
-                                 (some #(= :error (:outcome %))
-                                       (:calls @trace-state)))
-                    report (when partial?
-                             (trace/report trace-state limit :partial-result))]
-                (public/reviewed
-                 {:result/value
-                 (if partial?
-                   (trace/summary report (current-answers (:answers @trace-state) config)
-                                  (clean-data text config))
-                   (clean-data text config))
-                 :result/data
-                 (cond->
-                   (assoc (current-response body config)
-                          :mcp {:tool-calls used} :ai/cost accounting
-                          :execution
-                          (trace/public-report
-                            (or report (trace/report trace-state limit :completed))))
-                   partial? (assoc :isError true :tool-trace report
-                                   :execution (trace/public-report report)))
-                  :result/public-data
-                  {:execution (trace/public-report
-                                (or report
-                                    (trace/report trace-state limit :completed)))}
-                  :result/public-error (when partial? (trace/public-errors report))})))))))
+              (response-result provider body message config trace-state limit accounting used)))))
       (catch Exception e
         (let [reason (or (::trace/reason (ex-data e)) :provider-failure)
               report (cond-> (trace/report trace-state limit reason)
@@ -804,18 +845,7 @@
        (ai/fail "Native Yetibot tools require a trusted chat request."))
      (let [credential-file (when pipeline-input (:key-file provider))
            provider (ai/prepare-provider provider model)
-           config (assoc config :secrets
-                         (mapcat
-                           (fn [secret]
-                             (let [encoded (json/generate-string secret)]
-                               [secret (subs encoded 1
-                                             (dec (count encoded)))]))
-                           (filter ai/nonblank-string?
-                                   (concat (mcp/credentials config)
-                                           (mcp/credentials (get-in config [:dataset-store :redaction-config]))
-                                           (keep :key (try (:providers (ai/config)) (catch Exception _ [])))
-                                           [(:key provider) credential-file]
-                                           additional-secrets))))
+           config (with-payload-secrets config provider additional-secrets credential-file)
            config (update config :dataset-store
                           #(when % (update % :redaction-config merge
                                            (select-keys config [:secrets :servers]))))
@@ -967,6 +997,51 @@
                               (set/subset? (set (:tools server))
                                            (set (:tools parent)))))))
                  (:servers candidate)))))
+
+(defn finalize-checkpoint
+  "Pure local formatting of a claimed definitive loop checkpoint, or nil when
+   it still requires work. Never enters the inference/tool/discovery route; the
+   worker owns fresh authority, artifact validation and fenced publication."
+  [provider request]
+  (let [session (:durable-session request)
+        state (some-> session :state deref)
+        saved (:resume-loop request)
+        {:keys [closed? unknown?]} @(:budget request)]
+    (when-not (and session (= :loop (:phase state)) (= saved (:loop state))
+                   (not closed?) (not unknown?)
+                   (= (:family-id state) (:family-id request)))
+      (ai/fail "Inherited checkpoint is not available for local finalization."))
+    (let [message (ai/message provider (:body saved))
+          calls (:tool_calls message)
+          terminal (:chart-terminal saved)
+          batch (:batch saved)
+          chart? (and terminal (map? (:artifact terminal))
+                      (some #{(:artifact terminal)} (:artifacts saved))
+                      (= 1 (count calls)) (= "yetibot_chart" (get-in (first calls) [:function :name]))
+                      (= 1 (:attempted batch)) (false? (:halted batch))
+                      (= (mapv :id calls) (mapv :tool_call_id (:replies batch))))
+          text? (and (or (nil? calls) (= [] calls)) (not (:correction? saved))
+                     (not terminal) (not (:chart-stop saved))
+                     (not (:batch saved)) (ai/nonblank-string? (:content message)))]
+      (when (or chart? text?)
+        (when (and chart? (not (contains? @(:tool-ceiling request) ["yetibot" "chart"])))
+          (ai/fail "Inherited chart authority is no longer available."))
+        (let [config (merge (:codec-config session)
+                           {:toolset (:toolset-policy request)
+                            :dataset-store (:dataset-store request) :dataset-owner (:dataset-owner request)
+                            :stage-timings (:stage-timings request) :planning-responses (:planning-responses request)
+                            :chart-terminal (atom terminal) :chart-stop (atom (:chart-stop saved))})
+              config (with-payload-secrets config provider nil nil)
+              trace-state (atom (:trace saved))
+              limit (:limit @(:budget request))
+              result (if chart?
+                       (terminal-result config trace-state limit (:accounting saved)
+                                        (+ (:used saved) (:attempted batch)))
+                       (response-result provider (:body saved) message config trace-state limit
+                                        (:accounting saved) (:used saved)))]
+          (with-execution-details
+            (with-kroki-results result (:artifacts saved) (:errors saved))
+            request false (execution-details (:stage-timings request) (:planning-responses request))))))))
 
 (defn complete
   ([provider model messages] (complete provider model messages {}))

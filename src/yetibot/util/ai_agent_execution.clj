@@ -352,6 +352,23 @@
                   config (merge (mcp/config) codec-config)]
               (update config :secrets concat
                       (mapcat #(keep identity [(:key %) (:key-file %)]) providers))))
+          (finalize-local! [session resolved]
+            (when (= :loop (:phase @(:state session)))
+              ;; Formatting cached definitive work is not a host operation. Do
+              ;; not enter tools/complete or an exhausted Context IO route.
+              (let [request (request-for session resolved)]
+                (try
+                  (when-let [result (tools/finalize-checkpoint (:provider resolved) request)]
+                    (let [projection (public-result/projection result)]
+                      (runs/save-result! session
+                        {:result/value (:result/value result)
+                         :result/public-data (:result/public-data projection)}
+                        (cond (seq @(:accepted-jobs request)) :queued
+                              (get-in result [:result/data :isError]) :partial
+                              :else :completed))
+                      (publish! session)))
+                  (finally
+                    (datasets/close! (:dataset-store request) (:dataset-owner request)))))))
           (resume! [row]
             (when-not (= ledger/inherited-kind (:execution-kind row)) (denied!))
             (let [session (runs/claim! database "agent_run" (:id row)
@@ -371,14 +388,15 @@
                     (= :result-saved (:phase state)) (publish! session)
                     (zero? (- (:limit @(:budget session)) (:used @(:budget session))
                               (:reserved @(:budget session))))
-                    (let [jobs (get-in state [:loop :accepted-jobs])]
-                      (runs/save-result! session
-                        {:result/value (if (seq jobs)
-                                         "Inherited child work is queued, not completed; no unreserved allowance remains."
-                                         "Inherited allowance exhausted; no further inference or tool was dispatched.")
-                         :result/public-data {:agent-jobs jobs}}
-                        (if (seq jobs) :queued :exhausted))
-                      (publish! session))
+                    (or (finalize-local! session resolved)
+                        (let [jobs (get-in state [:loop :accepted-jobs])]
+                          (runs/save-result! session
+                            {:result/value (if (seq jobs)
+                                             "Inherited child work is queued, not completed; no unreserved allowance remains."
+                                             "Inherited allowance exhausted; no further inference or tool was dispatched.")
+                             :result/public-data {:agent-jobs jobs}}
+                            (if (seq jobs) :queued :exhausted))
+                          (publish! session)))
                     :else
                     (let [request (request-for session resolved)
                           event (:event request)]

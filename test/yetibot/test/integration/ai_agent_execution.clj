@@ -44,6 +44,10 @@
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-agent-runs :as runs]
+            [yetibot.models.ai-datasets :as datasets]
+            [yetibot.models.ai-kroki-tools :as kroki]
+            [yetibot.core.util.public-result :as public]
+            [clojure.string :as string]
             [yetibot.models.ai-cron-tools :as native-cron]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-agent-execution :as agent]
@@ -1610,3 +1614,150 @@
           (get-in @wire [1 1 :input]) => (if (string? prompt) [{:role "user" :content prompt}] prompt)
           (get-in @wire [1 1 :tools]) => [{:type "web_search"} {:type "x_search"}])
          (finally (jdbc/db-do-commands url (str "DROP TABLE " (db/qualified-table-name "ai_usage")))))))))
+
+(fact "last admitted checkpoints finalize only definitive completed work under current authority"
+  (doseq [kind [:text :chart :pending]
+          recovery (if (= kind :pending) [:success]
+                     (if (= kind :chart) [:success :revoked-user :changed-provider :expired :revoked-chart]
+                       [:success :revoked-user :changed-provider]))]
+    (with-runtime
+      (fn [url]
+        (let [wire (atom []) collections (atom 0) renders (atom 0) deliveries (atom [])
+              committed (atom nil) saved (atom nil) finalized (atom nil) captured-context (atom nil)
+              checkpoint runs/checkpoint! save-result runs/save-result! finalize tools/finalize-checkpoint
+              priced-provider (assoc provider :url "https://api.x.ai/v1" :model "grok-4.7")
+              artifact {:type "vegalite" :format "png" :mime-type "image/png"
+                        :bytes 64 :id "last-chart" :ephemeral true
+                        :url "https://bot.invalid/generated-images/last-chart.png"}
+              policy (assoc toolset :native-tools ["command" "cron" "chart"]
+                                   :providers [{:name "fixture" :models ["grok-4.7"]}])
+              read-row #(ledger/read-row url "agent_run" (:id %))]
+          (with-redefs [mcp/config (constantly {:servers [] :toolsets [policy]})
+                        ai/config (constantly {:providers [priced-provider]})
+                        images/image-store (atom {"last-chart" {:data "AA==" :mime-type "image/png"}})
+                        gemini/yetibot-base-url (constantly "https://bot.invalid")
+                        http/post
+                        (fn [_ opts]
+                          (reset! captured-context origin/*context*)
+                          (let [form (:form-params opts) n (count (swap! wire conj form))]
+                            {:status 200 :body
+                             (assoc
+                               (cond
+                                 (= n 1) (tool-call "agent complete the requested answer")
+                                 (= kind :text) (answer "The already completed final answer.")
+                                 (= kind :pending) (tool-call "must-not-run")
+                                 (= n 2) (tool-call "last-chart-rows")
+                                 :else (let [d (->> (:messages form) (filter #(= "tool" (:role %)))
+                                                   (keep #(get-in (json/parse-string (:content %) true)
+                                                                  [:structuredContent :datasets 0])) last)]
+                                         {:choices [{:message {:role "assistant" :content nil
+                                                               :tool_calls [{:id "last-render" :type "function"
+                                                                             :function {:name "yetibot_chart"
+                                                                                        :arguments (json/generate-string
+                                                                                                     {:dataset_id (:dataset-id d) :kind "bar" :x "label" :y "reading"})}}]}}]}))
+                               :usage {:prompt_tokens 7 :completion_tokens 3})}))
+                        kroki/client-call (fn [op request]
+                                            (if (= op "validate-render!") request
+                                              (do (swap! renders inc)
+                                                  (public/reviewed {:result/value (:url artifact) :result/data artifact
+                                                                    :result/public-data artifact}))))]
+            (hooks/cmd-hook-resolved #"last-chart-rows" #".*"
+              (fn [_] (swap! collections inc)
+                {:result/value "complete readings" :result/data [{:label "A" :reading 2} {:label "B" :reading 3}]}))
+            (binding [*deliveries* deliveries]
+              ;; Two parent admissions legitimately transfer exactly one text
+              ;; admission or four planner/collection/planner/render admissions.
+              (dispatch (str "ai --max-tool-calls " (if (= kind :chart) 6 3) " --max-output-tokens 91 delegate"))
+              (count @*queued*) => 1
+              (with-redefs [runs/checkpoint!
+                            (fn [session state handle]
+                              (checkpoint session state handle)
+                              (when (and (= :loop (:phase state))
+                                         (zero? (- (:limit @(:budget session)) (:used @(:budget session))
+                                                   (:reserved @(:budget session))))
+                                         (or (= kind :pending) (get-in state [:loop :chart-terminal])
+                                             (empty? (:tool_calls (ai/message provider (get-in state [:loop :body]))))))
+                                (reset! committed {:row (read-row @(:row session)) :state state :budget @(:budget session)})
+                                (throw (AssertionError. "interrupted after definitive final checkpoint commit"))))]
+                ((first @*queued*)) => (throws AssertionError))
+              (some? @committed) => true
+              (:execution-phase (:row @committed)) => "ready"
+              (:phase (runs/decode (:execution-state (:row @committed)) {})) => :loop
+              (:execution-used (:row @committed)) => (:execution-limit (:row @committed))
+              (:execution-limit (:row @committed)) => (if (= kind :chart) 4 1)
+              (every? #(= "definitive" (:state %))
+                      (json/parse-string (:operation-receipts (:row @committed)) true)) => true
+              (origin/capability? @captured-context) => true
+              @deliveries => []
+              (let [before @wire receipts (:operation-receipts (:row @committed))
+                    backend @@#'agent/runtime]
+                (with-redefs [http/post (fn [& _] (throw (AssertionError. "recovery inferred")))
+                              mcp/with-tools (fn [& _] (throw (AssertionError. "recovery discovered")))
+                              mcp/call-tool (fn [& _] (throw (AssertionError. "recovery used MCP")))
+                              kroki/client-call (fn [& _] (throw (AssertionError. "recovery rendered")))
+                              datasets/retain! (fn [& _] (throw (AssertionError. "recovery collected")))
+                              usage/capture! (fn [& _] (throw (AssertionError. "recovery captured usage")))
+                              tools/finalize-checkpoint (fn [& args]
+                                                          (let [r (apply finalize args)] (reset! finalized r) r))
+                              runs/save-result! (fn [session result outcome]
+                                                  (reset! saved {:result result :outcome outcome :budget @(:budget session)
+                                                                 :row @(:row session) :owner (:owner session) :state @(:state session)})
+                                                  (save-result session result outcome))]
+                  (case recovery
+                    :success
+                    (do
+                      ((:resume backend) (read-row (:row @committed)))
+                      => {:status :unconfirmed :work-outcome (if (= kind :pending) :exhausted :completed)}
+                      ((:resume backend) (read-row (:row @committed))) => {:status :terminal})
+                    :revoked-user
+                    (with-redefs [mcp/config (constantly {:servers [] :toolsets [(assoc policy :users ["REVOKED"])]})]
+                      ((:resume backend) (read-row (:row @committed))) => (throws Exception))
+                    :changed-provider
+                    (with-redefs [ai/config (constantly {:providers [(assoc priced-provider :url "https://changed.invalid/v1")]})]
+                      ((:resume backend) (read-row (:row @committed))) => (throws Exception))
+                    :expired
+                    (with-redefs [images/image-store (atom {})]
+                      ((:resume backend) (read-row (:row @committed))) => (throws Exception))
+                    :revoked-chart
+                    (with-redefs [mcp/config (constantly {:servers [] :toolsets [(assoc policy :native-tools ["command"])]})]
+                      ((:resume backend) (read-row (:row @committed))) => (throws Exception))))
+                @wire => before
+                (let [final (read-row (:row @committed))
+                      text (get-in @saved [:result :result/value])]
+                  (:execution-used final) => (:execution-limit final)
+                  (:operation-receipts final) => receipts
+                  (:execution-reserved final) => 0
+                  @collections => (if (= kind :chart) 1 0)
+                  @renders => (if (= kind :chart) 1 0)
+                  (if (= recovery :success)
+                    (do
+                      (count @deliveries) => 1
+                      (:budget @saved) => (:budget @committed)
+                      (select-keys (:state @saved) [:family-id :authority :generation-cap])
+                      => (select-keys (:state @committed) [:family-id :authority :generation-cap])
+                      (get-in @saved [:row :worker-fence]) => (inc (get-in @committed [:row :worker-fence]))
+                      (get-in @saved [:owner :fence]) => (get-in @saved [:row :worker-fence])
+                      (get-in @saved [:row :state-revision]) => (inc (get-in @committed [:row :state-revision]))
+                      (get-in @saved [:row :operation-receipts]) => receipts
+                      (:outcome @saved) => (if (= kind :pending) :exhausted :completed)
+                      (:execution-phase final) => "terminal"
+                      (:execution-state final) => nil
+                      (last (first @deliveries)) => text
+                      (if (= kind :pending)
+                        (do @finalized => nil
+                            text => "Inherited allowance exhausted; no further inference or tool was dispatched.")
+                        (do
+                          (get-in @finalized [:result/data :ai/cost]) => (get-in @committed [:state :loop :accounting])
+                          (pos? (get-in @finalized [:result/data :ai/cost :usd])) => true
+                          (when (= kind :text) (get-in @finalized [:result/data :usage]))
+                          => (when (= kind :text) {:prompt_tokens 7 :completion_tokens 3})
+                          (if (= kind :text) text (get-in @saved [:result :result/public-data :artifacts]))
+                          => (if (= kind :text) "The already completed final answer." [artifact])
+                          (when (= kind :chart)
+                            (string/includes? text (get-in @committed [:state :loop :chart-terminal :caption])))
+                          => (when (= kind :chart) true))))
+                    (do
+                      @deliveries => []
+                      @saved => nil
+                      (:execution-phase final) => "ready"
+                      (:execution-state final) => (:execution-state (:row @committed)))))))))))))

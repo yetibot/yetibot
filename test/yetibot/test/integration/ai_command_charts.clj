@@ -25,7 +25,8 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-tools :as tools]
             [yetibot.test.integration.ai-command-capture :as fixtures]
-            [yetibot.test.support.ai-execution :as support]))
+            [yetibot.test.support.ai-execution :as support]
+            [yetibot.test.support.mcp :as scripted]))
 
 (def artifact {:type "vegalite" :format "png" :mime-type "image/png"
                :bytes 64 :id "owned-chart" :ephemeral true
@@ -472,3 +473,63 @@
     (get-in result [:result/data :usage]) => {:prompt_tokens 1 :completion_tokens 1}
     (get-in result [:result/data :mcp :tool-calls]) => 3
     (get-in result [:result/data :execution :calls 0 :call]) => 1))
+
+(fact "actual Responses citations are reprojected after a later command learns private facts"
+  (doseq [secret ["CITATION-PRIVATE" "private-\"quote\\slash" 987654321]]
+    (let [requests (atom []) result (atom nil) raw (atom nil)
+          configured "CONFIGURED-CITATION-CREDENTIAL"
+          spelling (str secret)
+          citation {:type "url_citation" :start_index 1 :end_index 9
+                    :url (str "https://example.test/" spelling) :title spelling}
+          lead {:type "message" :id "citation-item" :role "assistant" :status "completed"
+                :content [{:type "output_text" :text "Safe cited lead."
+                           :annotations [citation
+                                         {:type "file_citation" :file_id spelling :index 1 :filename spelling}
+                                         {:type "url_citation" :url "https://example.test/safe" :title "Safe title"}
+                                         {:type "unknown" :id spelling :key spelling}]}]}
+          close datasets/close! complete ai-command/complete-prompt]
+      (scripted/with-http-server
+        (fn [{:keys [body] :as request}]
+          (let [n (count (swap! requests conj request))]
+            {:body {:id "citation-response" :status "completed" :usage {:input_tokens 1 :output_tokens 9}
+                    :output (case n
+                              1 [lead {:type "function_call" :id "safe-item" :call_id "safe-call" :status "completed"
+                                       :name "yetibot_command" :arguments "{\"command\":\"citation-safe\"}"}]
+                              2 [{:type "function_call" :id "learn-item" :call_id "learn-call" :status "completed"
+                                  :name "yetibot_command" :arguments "{\"command\":\"citation-learn\"}"}]
+                              [(assoc-in lead [:content 0 :annotations]
+                                 [citation {:type "url_citation" :url (str "https://example.test/" configured)
+                                            :title configured}])])}}))
+        (fn [url]
+          (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                        channel/settings-for-chat-source (constantly {}) history/add (fn [& _])
+                        context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                        mcp/config (constantly {:servers [] :toolsets [toolset]})
+                        ai/config (constantly {:providers [{:name "fake" :model "fake" :api "responses"
+                                                           :url (str url "/v1") :key configured}]})
+                        datasets/close! (fn [store owner]
+                                          (reset! raw (vec (vals (:datasets @(:state store)))))
+                                          (close store owner))
+                        ai-command/complete-prompt (fn [prepared]
+                                                     (let [r (complete prepared)] (reset! result r) r))]
+            (hooks/cmd-hook-resolved #"citation-safe" #".*" (fn [_] {:result/value "safe"}))
+            (hooks/cmd-hook-resolved #"citation-learn" #".*"
+              (fn [_] {:result/value "learned" :result/data [{:auth/token secret}]}))
+            (with-current-caller #(support/run-command support/request "ai cite then learn")))))
+      (count @requests) => 3
+      (get-in (last @raw) [:rows 0 "auth/token"]) => secret
+      (let [replayed (first (filter #(= "citation-item" (:id %)) (get-in @requests [2 :body :input])))
+            annotations (get-in replayed [:content 0 :annotations])]
+        (get-in annotations [0 :url]) => "https://example.test/[redacted]"
+        (get-in annotations [0 :title]) => "[redacted]"
+        (select-keys (first annotations) [:type :start_index :end_index]) => (select-keys citation [:type :start_index :end_index])
+        (get annotations 1) => {:type "file_citation" :file_id spelling :index 1 :filename "[redacted]"}
+        (get annotations 2) => {:type "url_citation" :url "https://example.test/safe" :title "Safe title"}
+        (get annotations 3) => {:type "unknown" :id "[redacted]" :key "[redacted]"}
+        (:id replayed) => "citation-item"
+        (:call_id (last (get-in @requests [2 :body :input]))) => "learn-call")
+      (get-in @result [:result/data :output 0 :content 0 :annotations 0 :title]) => "[redacted]"
+      (string/includes? (pr-str @result) configured) => false
+      (string/includes? (pr-str @result) spelling) => false
+      (get-in @result [:result/data :id]) => "citation-response"
+      (get-in @result [:result/data :usage]) => {:input_tokens 1 :output_tokens 9})))
