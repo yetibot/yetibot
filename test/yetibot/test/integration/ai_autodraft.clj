@@ -3,6 +3,7 @@
             [clj-http.client :as client]
             [clojure.string :as string]
             [midje.sweet :refer [fact =>]]
+            [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.ai :as api] [yetibot.api.clef :as clef] [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai] [yetibot.models.ai-context :as context]
             [yetibot.models.ai-proposals :as proposals]
@@ -332,3 +333,54 @@
           @history => 0
           @subsequent => 0)
         (finally (.delete key-file))))))
+
+
+(fact "implicit Zen routing spends classifier and answer on the prepared source allocation"
+  (doseq [budget [1 2]]
+    (let [file (java.io.File/createTempFile "zen-router-" ".key")
+          provider {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key-file (.getAbsolutePath file)}
+          providers [{:name "zen" :models ["zen-chat"]} {:name "cloudflare" :models ["@cf/cloudflare/clef"]}]
+          t {:name "answer" :kind "search" :servers [] :native-tools [] :users ["U1"] :adapters ["slack"] :providers providers}
+          github (assoc (dissoc t :native-tools) :name "github-pr" :kind "github-pr" :repositories ["owner/repo"] :base-branches ["main"]
+                        :allowed-paths ["src/"] :write-server "writer" :servers [{:name "reader" :tools fixture/reader-tools}])
+          config {:default-toolset "answer" :toolsets [t github]
+                  :servers [{:name "reader" :tools fixture/reader-tools :github-api-token "fixture-secret"}
+                            {:name "writer" :tools fixture/writer-tools}]}
+          router {:enabled true :github-toolset "github-pr" :account-id (apply str (repeat 32 "a")) :key-file "/fixture/key"}
+          stages (atom []) sent (atom []) read-bytes cloudflare/read-bytes
+          snapshot #(hash-map :request execution/*request* :context origin/*context*)]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [api/config (constantly {:providers [provider] :intent-router router})
+                      mcp/config (constantly config)
+                      clef/credential! (constantly "fixture-secret")
+                      cloudflare/read-bytes (fn [& args] (swap! stages conj (snapshot)) (apply read-bytes args))
+                      context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                      client/get (fn [_ options]
+                                   (swap! stages conj (snapshot))
+                                   (let [body {:data [{:id "zen-chat" :type "chat"
+                                     :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}
+                                     :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                     {:status 200 :body (if (= :stream (:as options))
+                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                      client/post (fn [url options]
+                                    (swap! sent conj (assoc (snapshot) :url url :form (:form-params options)
+                                                           :ordinal (:used @(:budget execution/*request*))))
+                                    (if (string/includes? url "/ai/run/") (classification :answer)
+                                      {:status 200 :body {:choices [{:message {:role "assistant" :content "bounded Zen answer"}}]
+                                                         :usage {:prompt_tokens 7 :completion_tokens 3 :cost 0.002M}}}))]
+          (let [result (run-command (assoc-in chat/request [:chat-source :raw-event :ts] (str (java.util.UUID/randomUUID)))
+                                   (str "ai --max-tool-calls " budget " --max-output-tokens 91 Explain owner/repo"))]
+            (when (= budget 2) (get-in result [:data :ai/cost :usd]) => 0.002M))
+          (count @sent) => budget
+          (mapv :ordinal @sent) => (vec (range 1 (inc budget)))
+          (count (distinct (map #(get-in % [:request :family-id]) (concat @stages @sent)))) => 1
+          (count (distinct (map #(get-in % [:request :usage-context-id]) (concat @stages @sent)))) => 1
+          (every? #(origin/capability? (:context %)) (concat @stages @sent)) => true
+          (let [request (:request (first @sent))]
+            (:used @(:budget request)) => budget
+            (mapv :ordinal (:receipts @(:budget request))) => (vec (range 1 (inc budget))))
+          (when (= budget 2)
+            (get-in (last @sent) [:form :model]) => "zen-chat"
+            (get-in (last @sent) [:form :max_tokens]) => 91))
+        (finally (.delete file))))))

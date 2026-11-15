@@ -460,33 +460,43 @@
                                        (prepare-source-provider (:provider resolved) (:model resolved))))
                                 _ (when-not (= (execution/provider-signature provider)
                                                (execution/provider-signature (:provider resolved))) (denied!))
-                                request (assoc request :planner-provider provider)
+                                config (update (:codec-config session) :secrets conj (:key provider))
+                                _ (runs/decode (:execution-state @(:row session)) config)
+                                session (assoc session :codec-config config)
+                                ;; Rebuild every session callback after credential preparation;
+                                ;; the preparation Context keeps the same live allocation/slot.
+                                request (assoc (request-for session (assoc resolved :provider provider))
+                                               :core-context (:core-context request)
+                                               :routing-request (:routing-request request))
                                 _ (reset! (:routing-request request) request)]
-                            (execution/with-request* request
-                              (fn []
-                                (let [result
-                                    (try
-                                      (tools/complete provider (:model resolved)
-                                        (get-in state [:loop :messages])
-                                        {:actor (:actor (:original resolved))
-                                         :toolset (:toolset-name request)
-                                         :max-output-tokens (:generation-limit request)})
-                                      (catch Exception e
-                                        (if (and (zero? (execution/remaining))
-                                                 (= :budget-exceeded
-                                                    (get-in (ex-data e) [:ai/tool-failure :reason])))
-                                          {:result/value "Inherited allowance exhausted; no further inference or tool was dispatched."
-                                           :result/data {:isError true}}
-                                          (throw e))))
-                                    projection (public-result/projection result)
-                                    saved {:result/value (:result/value result)
-                                           :result/public-data (:result/public-data projection)}]
-                                (runs/save-result! session saved
-                                  (cond (seq @(:accepted-jobs request)) :queued
-                                        (zero? (execution/remaining)) :exhausted
-                                        (get-in result [:result/data :isError]) :partial
-                                        :else :completed))
-                                (publish! session))))))
+                            (try
+                              (execution/with-request* request
+                                (fn []
+                                  (let [result
+                                      (try
+                                        (tools/complete provider (:model resolved)
+                                          (get-in state [:loop :messages])
+                                          {:actor (:actor (:original resolved))
+                                           :toolset (:toolset-name request)
+                                           :max-output-tokens (:generation-limit request)})
+                                        (catch Exception e
+                                          (if (and (zero? (execution/remaining))
+                                                   (= :budget-exceeded
+                                                      (get-in (ex-data e) [:ai/tool-failure :reason])))
+                                            {:result/value "Inherited allowance exhausted; no further inference or tool was dispatched."
+                                             :result/data {:isError true}}
+                                            (throw e))))
+                                      projection (public-result/projection result)
+                                      saved {:result/value (:result/value result)
+                                             :result/public-data (:result/public-data projection)}]
+                                  (runs/save-result! session saved
+                                    (cond (seq @(:accepted-jobs request)) :queued
+                                          (zero? (execution/remaining)) :exhausted
+                                          (get-in result [:result/data :isError]) :partial
+                                          :else :completed))
+                                  (publish! session))))
+                              (finally
+                                (datasets/close! (:dataset-store request) (:dataset-owner request))))))
                         (finally
                           (execution/close-family! request)
                           (datasets/close! (:dataset-store request) (:dataset-owner request))))))))))
@@ -985,9 +995,10 @@
                    (= "github-pr" (get-in branches [:code-change :toolset :kind]))) (denied!))
     (doseq [selected (vals branches)] (check! selected))
     (binding [*route-slot* slot]
-      (source! prepared
+      (execution/with-source* prepared
         (fn []
           (let [base execution/*request*
+                slot (:routing-request base)
                 pending (assoc base :routing-pending? true :tool-ceiling (atom #{})
                            :authorize-inference!
                            (fn [attrs]

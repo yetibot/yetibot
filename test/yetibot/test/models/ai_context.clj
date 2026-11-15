@@ -386,3 +386,62 @@
         @effects => []
         @issued => 0
         (finally (.delete file))))))
+
+(fact "prepared metadata never replaces a distinct live allocation even when app binding is lost"
+  (doseq [stale? [false true] lost-binding? [false true]]
+    (let [provider {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])
+          sent (atom []) issued (atom []) make-family execution/family
+          prepared-context ::execution/source-context]
+      (with-redefs [ai/config (constantly {:providers [provider] :max-tool-calls 2})
+                    mcp/config (constantly {:servers [] :toolsets [policy]})
+                    execution/family (fn [& args]
+                                       (let [request (apply make-family args)] (swap! issued conj request) request))
+                    context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                    http/get (fn [_ options]
+                               (let [body {:data [{:id "zen-chat" :type "chat"
+                                  :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}
+                                  :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                 {:status 200 :body (if (= :stream (:as options))
+                                   (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                    http/post (fn [_ _]
+                                (swap! sent conj execution/*request*)
+                                {:status 200 :body {:choices [{:message {:role "assistant" :content "bounded answer"}}]}})]
+        (support/in-registered-event support/request "ai --no-tools hello"
+          (fn [event]
+            (let [older (command/prepare-prompt (assoc event :match "--no-tools hello"))
+                  active (command/prepare-prompt (assoc event :match "--no-tools hello"))
+                  older-context (get (meta older) prepared-context)
+                  close-older! #(origin/invoke! older-context :with-request
+                                  (fn [] (execution/close-family! execution/*request*)))]
+              (when stale? (close-older!))
+              (try
+                (try
+                  (execution/with-source* active
+                  (fn []
+                    (let [allocation execution/*request*
+                          run (fn []
+                                (execution/with-source* older
+                                  (fn []
+                                    (identical? (:budget allocation) (:budget execution/*request*)) => true
+                                    (command/complete-prompt older))))]
+                      (if lost-binding?
+                        (binding [execution/*request* nil] (run))
+                        (run))
+                      (:used @(:budget allocation)) => 1
+                      (if lost-binding?
+                        (binding [execution/*request* nil] (run))
+                        (run))
+                      (:used @(:budget allocation)) => 2
+                      (string? (error-message run)) => true)))
+                  :completed
+                  (catch Exception _ :denied)) => :completed
+                (finally (close-older!)))
+              (count @issued) => 2
+              (count @sent) => 2
+              (every? #(identical? (:budget (second @issued)) (:budget %)) @sent) => true
+              (:used @(:budget (first @issued))) => 0
+              (:closed? @(:budget (first @issued))) => true
+              (:closed? @(:budget (second @issued))) => true
+              (string? (error-message #(command/complete-prompt older))) => true
+              (count @sent) => 2)))))))

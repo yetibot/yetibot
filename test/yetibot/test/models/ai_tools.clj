@@ -1088,3 +1088,64 @@
     (#'tools/current-response {:choices [{:message {:role "assistant" :content "Safe"}}]
                                :extension {:PRIVATE-EXTENSION "one" "[redacted]" "two"}} config)
     => (midje.sweet/throws Exception)))
+
+(fact "malformed call positions are ordinary payload while genuine Chat and Responses controls stay opaque"
+  (doseq [secret ["MISPLACED-CREDENTIAL" 739194]]
+    (let [spelling (str secret)
+          owner {:actor {:id "typed-owner"} :chat-source {:adapter :slack :room "projection"}}
+          store (datasets/create-store owner)
+          descriptor (datasets/retain! store owner
+                       {:rows [{:auth/token secret}]
+                        :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+                        :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+          config {:dataset-store store :dataset-owner owner :secrets ["CONFIGURED-MISPLACED"]}
+          call {:id spelling :type "function" :index 1
+                :function {:name spelling :arguments "{}"}}
+          misplaced {:arguments {spelling secret :configured "CONFIGURED-MISPLACED" :safe "kept"}
+                     :tool_calls [call] :function {:name spelling} :tool_call_id spelling
+                     :call_id spelling :name spelling :index secret}]
+      (doseq [kind ["reasoning" "message" "web_search_call"]]
+        (let [message (merge misplaced {:type kind :id spelling})
+              safe (#'tools/current-message message config)]
+          (:id safe) => spelling
+          (:arguments safe) => {"[redacted]" "[redacted]" :configured "[redacted]" :safe "kept"}
+          (:tool_calls safe) => [{:id "[redacted]" :type "function" :index 1
+                                 :function {:name "[redacted]" :arguments "{}"}}]
+          (select-keys safe [:function :tool_call_id :call_id :name :index])
+          => {:function {:name "[redacted]"} :tool_call_id "[redacted]" :call_id "[redacted]"
+              :name "[redacted]" :index "[redacted]"}))
+      (#'tools/current-message {:role "assistant" :tool_calls [call]} config)
+      => {:role "assistant" :tool_calls [call]}
+      (#'tools/current-message {:type "function_call" :id spelling :call_id spelling :name spelling :arguments "{}"} config)
+      => {:type "function_call" :id spelling :call_id spelling :name spelling :arguments "{}"}
+      (get-in (#'tools/current-message {:type "function_call" :arguments {spelling secret}} config) [:arguments])
+      => {"[redacted]" "[redacted]"}
+      (doseq [message [{:role "user" :tool_calls [call]}
+                       {:role "assistant" :tool_calls [(assoc call :type "unknown")]}
+                       {:role "assistant" :tool_calls [(assoc-in call [:function :arguments] {spelling secret})]}]]
+        (get-in (#'tools/current-message message config) [:tool_calls 0 :id]) => "[redacted]")
+      (#'tools/current-message {:type "reasoning" :role "tool" :tool_call_id spelling
+                               :content {spelling secret} :annotations [{:type "file_citation" :file_id spelling :index secret}]} config)
+      => {:type "reasoning" :role "tool" :tool_call_id "[redacted]"
+          :content {"[redacted]" "[redacted]"} :annotations [{:type "file_citation" :file_id "[redacted]" :index "[redacted]"}]}
+      (#'tools/current-message {:type "reasoning" :arguments {spelling "one" "[redacted]" "two"}} config)
+      => (midje.sweet/throws Exception)
+      (get-in (datasets/lookup! store owner (:dataset-id descriptor)) [:rows 0 "auth/token"]) => secret
+      (datasets/close! store owner))))
+
+(fact "progress-only public projection cleans misplaced call controls without touching actual IDs and opaque state"
+  (let [secret "PUBLIC-MISPLACED"
+        body {:id secret :usage {:input_tokens 739194}
+              :output [{:type "reasoning" :id secret :encrypted_content secret :summary []
+                        :arguments {(keyword secret) secret :safe "kept"}
+                        :tool_calls [{:id secret :type "function" :function {:name secret :arguments {secret secret}}}]}]}]
+    (with-redefs [mcp/config (constantly {:servers [] :secrets [secret]})
+                  ai/complete (fn [& _] {:result/value "Safe" :result/data body})]
+      (let [result (tools/complete provider "chat" messages {:on-progress identity})
+            reasoning (get-in result [:result/data :output 0])]
+        (select-keys reasoning [:id :encrypted_content]) => {:id secret :encrypted_content secret}
+        (:arguments reasoning) => {"[redacted]" "[redacted]" :safe "kept"}
+        (:tool_calls reasoning) => [{:id "[redacted]" :type "function"
+                                    :function {:name "[redacted]" :arguments {"[redacted]" "[redacted]"}}}]
+        (get-in result [:result/data :id]) => secret
+        (get-in result [:result/data :usage]) => (:usage body)))))

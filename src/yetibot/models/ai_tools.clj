@@ -232,18 +232,23 @@
                        {:role #{"assistant" "user" "system" "developer" "tool"}})
                      (when (#{"function_call" "function_call_output"} (:type message)) {:call_id string?})
                      (when (= "function_call" (:type message)) {:name string?})
-                     (when (= "tool" (:role message)) {:tool_call_id string?})
+                     (when (and (nil? (:type message)) (= "tool" (:role message)))
+                       {:tool_call_id string?})
                      (when (#{"reasoning" "web_search_call" "x_search_call"} (:type message))
                        {:encrypted_content string?})))
       (contains? message :content)
       (assoc :content (cond
+                        (and (:type message) (not= "message" (:type message)))
+                        (plain-payload (:content message))
                         (string? (:content message))
-                        ((if (= "tool" (:role message)) result-payload payload) (:content message))
+                        ((if (and (nil? (:type message)) (= "tool" (:role message)))
+                           result-payload payload) (:content message))
                         (vector? (:content message))
                         (mapv (fn [part] (content-part part config payload)) (:content message))
                         :else (plain-payload (:content message))))
       (contains? message :annotations)
-      (assoc :annotations (if (vector? (:annotations message))
+      (assoc :annotations (if (and (nil? (:type message)) (= "assistant" (:role message))
+                                   (vector? (:annotations message)))
                             (mapv (fn [a] (citation a config)) (:annotations message))
                             (clean-data (:annotations message) config)))
       (contains? message :refusal) (assoc :refusal (plain-payload (:refusal message)))
@@ -271,21 +276,28 @@
       (assoc :results (if (vector? (:results message))
                        (mapv (fn [item] (payload-object item config {:file_id string? :score number?})) (:results message))
                        (plain-payload (:results message))))
-      (contains? message :arguments) (assoc :arguments (payload (:arguments message)))
+      (contains? message :arguments)
+      (assoc :arguments ((if (and (= "function_call" (:type message))
+                                  (string? (:arguments message)))
+                           payload plain-payload) (:arguments message)))
       (contains? message :tool_calls)
       (assoc :tool_calls
-             (if (vector? (:tool_calls message))
+             (if (and (nil? (:type message)) (= "assistant" (:role message))
+                      (vector? (:tool_calls message)))
                (mapv (fn [call]
-                       (unique-object
-                         (cond-> (payload-object (dissoc call :function) config
-                                                 {:id string? :type #{"function"} :index #(and (integer? %) (<= 0 %))})
-                           (contains? call :function)
-                           (assoc :function
+                       (if-not (and (map? call) (= "function" (:type call))
+                                    (string? (:id call)) (map? (:function call))
+                                    (string? (get-in call [:function :name]))
+                                    (string? (get-in call [:function :arguments])))
+                         (plain-payload call)
+                         (unique-object
+                           (assoc (payload-object (dissoc call :function) config
+                                                  {:id string? :type #{"function"} :index #(and (integer? %) (<= 0 %))})
+                                  :function
                                   (let [function (:function call)]
                                     (unique-object
-                                      (cond-> (payload-object (dissoc function :arguments) config {:name string?})
-                                        (contains? function :arguments)
-                                        (assoc :arguments (payload (:arguments function))))))))))
+                                      (assoc (payload-object (dissoc function :arguments) config {:name string?})
+                                             :arguments (payload (:arguments function)))))))))
                      (:tool_calls message))
                (plain-payload (:tool_calls message)))))))))
 

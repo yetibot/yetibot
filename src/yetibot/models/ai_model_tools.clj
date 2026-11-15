@@ -60,7 +60,8 @@
                  (:planner-provider execution/*request*))
          model (if automatic?
                  (when resolve?
-                   (or (when ready (:planner-model execution/*request*))
+                   (or (when (and ready (= "free" (get-in ready [::opencode/pricing :kind])))
+                         (:planner-model execution/*request*))
                        (ai/default-model provider
                          #(and (policy/model-allowed? t actor provider %)
                                (or (not execution/*command-capture*)

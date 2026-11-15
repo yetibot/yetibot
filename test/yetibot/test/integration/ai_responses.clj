@@ -11,6 +11,10 @@
             [yetibot.core.config :as config]
             [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-datasets :as datasets]
+            [yetibot.core.hooks :as hooks]
+            [yetibot.models.ai-context :as context]
+            [yetibot.test.integration.ai-command-charts :as caller]
             [yetibot.core.util.public-result :as public]
             [yetibot.util.ai-execution :as host-execution]
             [yetibot.test.support.ai-execution :as execution]
@@ -554,5 +558,67 @@
           @turns => 1
           (count @calls) => 1
           (get-in result [:result/data :isError]) => true
+          (string/includes? (pr-str result) "PROVIDER_SECRET") => false
+          (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))
+
+
+(fact "physical Responses replay cleans malformed call positions after a command learns a new secret"
+  (doseq [secret ["NEWLY-LEARNED-CREDENTIAL" 987654321]]
+    (let [spelling (str secret) requests (atom []) retained (atom []) retain datasets/retain!
+          malformed {:type "reasoning" :id spelling :encrypted_content spelling :summary []
+                     :arguments {spelling secret :safe "kept"}
+                     :tool_calls [{:id spelling :type "function" :index secret
+                                   :function {:name spelling :arguments {spelling secret}}}]
+                     :role spelling :tool_call_id spelling :call_id spelling :name spelling :index secret}]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:body (response (if (= 1 (count @requests))
+                             [malformed (function-call "yetibot_command" spelling "{\"command\":\"learn-response-secret\"}")]
+                             [(text-output "Safe answer")]))})
+        (fn [base]
+          (let [provider {:name "response-fixture" :model "chat" :api "responses" :url (str base "/v1")}
+                t {:name "response-private" :kind "search" :servers [] :native-tools ["command"]
+                   :users ["U1"] :adapters ["slack"] :providers [{:name "response-fixture" :models ["chat"]}]}]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [provider]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          datasets/retain! (fn [store owner envelope]
+                                             (let [d (retain store owner envelope)]
+                                               (swap! retained conj (datasets/lookup! store owner (:dataset-id d))) d))]
+              (hooks/cmd-hook-resolved #"learn-response-secret" #".*"
+                (fn [_] {:result/value "learned" :result/data [{:auth/token secret}]}))
+              (caller/with-current-caller #(execution/run-command execution/request "ai --max-tool-calls 3 replay"))))))
+      (count @requests) => 2
+      (get-in (first @retained) [:rows 0 "auth/token"]) => secret
+      (let [input (get-in @requests [1 :body :input])
+            replay (first (filter #(= "reasoning" (:type %)) input))
+            call (first (filter #(= "function_call" (:type %)) input))]
+        (select-keys replay [:id :encrypted_content]) => {:id spelling :encrypted_content spelling}
+        (:arguments replay) => {(keyword "[redacted]") "[redacted]" :safe "kept"}
+        (:tool_calls replay) => [{:id "[redacted]" :type "function" :index "[redacted]"
+                                  :function {:name "[redacted]" :arguments {(keyword "[redacted]") "[redacted]"}}}]
+        (select-keys replay [:role :tool_call_id :call_id :name :index])
+        => {:role "[redacted]" :tool_call_id "[redacted]" :call_id "[redacted]" :name "[redacted]" :index "[redacted]"}
+        (:call_id call) => spelling
+        (:name call) => "yetibot_command"))))
+
+(fact "malformed arguments key collisions seal physical replay after the genuine tool executes once"
+  (let [turns (atom 0)]
+    (with-runtime
+      (fn [body]
+        (swap! turns inc)
+        (response [{:type "reasoning" :id "collision-state" :summary []
+                    :arguments {:PROVIDER_SECRET "one" :CLOUDFLARE_SECRET "two"}}
+                   (function-call (account-function-name body) "typed-collision" "{}")]))
+      {:content [] :isError false}
+      (fn [provider _ calls]
+        (let [result (command/safely #(tools/complete provider "grok-4.7" messages
+                                                    {:actor (policy/actor host-execution/*event*)}))]
+          @turns => 1
+          (count @calls) => 1
+          (get-in result [:result/data :isError]) => true
+          (get-in result [:result/data :tool-trace :calls 0 :outcome]) => :success
           (string/includes? (pr-str result) "PROVIDER_SECRET") => false
           (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))

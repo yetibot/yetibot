@@ -1952,7 +1952,8 @@
                    :key-file (.getAbsolutePath file)}
               policy (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}])
               turns (atom 0) committed (atom nil) saved (atom nil) deliveries (atom [])
-              checkpoint runs/checkpoint! save-result runs/save-result!]
+              checkpoint runs/checkpoint! save-result runs/save-result!
+              finalized (atom nil) finalize tools/finalize-checkpoint]
           (spit file "synthetic-zen-key")
           (try
             (with-redefs [ai/config (constantly {:providers [zen]})
@@ -1965,7 +1966,7 @@
                                       {:status 200 :body
                                        (assoc (if (= 1 (swap! turns inc))
                                                 (tool-call "agent finish") (answer "Saved Zen answer"))
-                                              :usage {:prompt_tokens 7 :completion_tokens 3})})]
+                                              :usage {:prompt_tokens 7 :completion_tokens 3 :cost 0.0042M})})]
               (binding [*deliveries* deliveries]
                 (dispatch "ai --model zen-chat --max-tool-calls 3 --max-output-tokens 91 delegate")
                 (with-redefs [runs/checkpoint!
@@ -2000,6 +2001,9 @@
                                 kroki/client-call (fn [& _] (throw (AssertionError. "recovery rendered")))
                                 datasets/retain! (fn [& _] (throw (AssertionError. "recovery collected")))
                                 usage/capture! (fn [& _] (throw (AssertionError. "recovery captured usage")))
+                                tools/finalize-checkpoint (fn [provider request]
+                                                            (let [result (finalize provider request)]
+                                                              (reset! finalized result) result))
                                 runs/save-result! (fn [session result outcome]
                                                     (reset! saved result)
                                                     (save-result session result outcome))]
@@ -2011,6 +2015,15 @@
                       (:operation-receipts final) => receipts
                       (:execution-phase final) => "terminal"
                       ((:resume backend) final) => {:status :terminal}))
+                  (when (= interrupted :checkpoint)
+                    (get-in @finalized [:result/data :ai/cost]))
+                  => (when (= interrupted :checkpoint) (get-in before [:loop :accounting]))
+                  (when (= interrupted :checkpoint)
+                    (get-in @finalized [:result/data :usage]))
+                  => (when (= interrupted :checkpoint) {:prompt_tokens 7 :completion_tokens 3 :cost 0.0042M})
+                  (when (= interrupted :checkpoint) (get-in before [:loop :accounting :usd]))
+                  => (when (= interrupted :checkpoint) 0.0042M)
+                  (get-in @finalized [:result/data :ai/accounting]) => nil
                   (count @deliveries) => 1
                   (last (first @deliveries)) => "Saved Zen answer"
                   (when (= interrupted :checkpoint) (:result/value @saved))
@@ -2129,3 +2142,156 @@
               (:closed? @(:budget @root)) => true
               (get-in @wire [0 1 :max_output_tokens]) => 32768
               (every? #(= (:family-id @root) (nth % 2)) @wire) => true)))))))
+
+
+(fact "file-backed Zen worker credentials reject raw response checkpoint spellings before SQL"
+  (doseq [extension [{:content "739194"} {:extension {"739194" "reflection"}}
+                    {:extension {(keyword "739194") "reflection"}} {:extension 739194}
+                    {:extension (keyword "scope" "739194")}]]
+    (with-runtime
+      (fn [url]
+        (let [file (java.io.File/createTempFile "zen-worker-private-" ".key")
+              zen {:name "zen" :model "zen-chat" :url "https://opencode.ai/inference/openai/v1"
+                   :key-file (.getAbsolutePath file)}
+              policy (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}])
+              wire (atom []) parent (atom nil) deliveries (atom [])]
+          (spit file "739194")
+          (try
+            (with-redefs [ai/config (constantly {:providers [zen]})
+                          mcp/config (constantly {:servers [] :toolsets [policy]})
+                          http/get (fn [& _] {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                            :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}}]}})
+                          http/post (fn [_ options]
+                                      (swap! wire conj {:form (:form-params options) :request execution/*request*})
+                                      (when (= 1 (count @wire)) (reset! parent execution/*request*))
+                                      {:status 200 :body
+                                       (if (= 1 (count @wire)) (tool-call "agent finish")
+                                         (if (:content extension) (answer (:content extension))
+                                           (merge (answer "Safe answer") extension)))})]
+              (binding [*deliveries* deliveries]
+                (dispatch "ai --model zen-chat --max-tool-calls 3 delegate")
+                (count @*queued*) => 1
+                (:closed? @(:budget @parent)) => true
+                (let [row (first (jdbc/query url [(str "SELECT * FROM " (db/qualified-table-name "agent_run"))]
+                                            {:identifiers #(string/replace % "_" "-")}))
+                      prior (:execution-state row)]
+                  (try ((first @*queued*)) :accepted (catch Exception _ :rejected)) => :rejected
+                  (count @wire) => 2
+                  @deliveries => []
+                  (let [after (ledger/read-row url "agent_run" (:id row))]
+                    (:execution-state after) => prior
+                    (:execution-used after) => 1
+                    (:execution-phase after) => "operation-in-flight"
+                    (runs/claim! url "agent_run" (:id row) (:state-revision after) {:secrets ["739194"]}) => {:status :unknown}
+                    (:execution-phase (ledger/read-row url "agent_run" (:id row))) => "unknown")
+                  ((first @*queued*)) => {:status :not-owner}
+                  (count @wire) => 2)))
+            (finally (.delete file))))))))
+
+(fact "inherited selected implicit Zen text continuations never bootstrap their dialect again"
+  (doseq [budget [2 3]]
+    (with-runtime
+      (fn [_]
+        (let [zen {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+              policy (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}])
+              wire (atom []) catalogs (atom []) root (atom nil) saved (atom nil)]
+          (with-redefs [ai/config (constantly {:providers [zen] :max-tool-calls budget})
+                        mcp/config (constantly {:servers [] :toolsets [policy]})
+                        http/get (fn [_ options]
+                                   (swap! catalogs conj execution/*request*)
+                                   (let [body {:data [{:id "zen-chat" :type "chat"
+                                     :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}
+                                     :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                     {:status 200 :body (if (= :stream (:as options))
+                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                        http/post (fn [_ options]
+                                    (when-not @root (reset! root execution/*request*))
+                                    (reset! saved origin/*context*)
+                                    (swap! wire conj {:form (:form-params options) :family (:family-id execution/*request*)})
+                                    {:status 200 :body (answer (if (= 1 (count @wire)) "ai report" "bounded answer"))})]
+            (dispatch "ai --no-tools --max-output-tokens 91 report | split , | xargs %s")
+            (count @wire) => (if (= budget 3) 2 1)
+            (every? #(empty? (get-in % [:form :tools])) @wire) => true
+            (every? #(= "zen-chat" (get-in % [:form :model])) @wire) => true
+            (every? #(= 91 (get-in % [:form :max_tokens])) @wire) => true
+            (every? #(= (:family-id @root) (:family %)) @wire) => true
+            (:used @(:budget @root)) => budget
+            (mapv :ordinal (:receipts @(:budget @root))) => (vec (range 1 (inc budget)))
+            (count @catalogs) => 2
+            (origin/invoke! @saved :generation-limit) => (throws Exception)))))))
+
+(fact "selected text-only Zen continuations recheck current authority and route before a second send"
+  (doseq [denial [:adapter :user :endpoint :api :model :model-policy]]
+    (with-runtime
+      (fn [_]
+        (let [zen {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+              configured (atom zen)
+              selected (atom (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}]))
+              wire (atom []) catalogs (atom 0)]
+          (with-redefs [ai/config #(hash-map :providers [@configured] :max-tool-calls 3)
+                        mcp/config #(hash-map :servers [] :toolsets [@selected])
+                        http/get (fn [_ options]
+                                   (swap! catalogs inc)
+                                   (let [body {:data [{:id "zen-chat" :type "chat"
+                                     :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}
+                                     :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                     {:status 200 :body (if (= :stream (:as options))
+                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                        http/post (fn [_ options]
+                                    (swap! wire conj (:form-params options))
+                                    (case denial
+                                      :adapter (swap! adapters/adapters dissoc "workspace")
+                                      :user (swap! users/users dissoc {:adapter :slack :id "U1"})
+                                      :endpoint (swap! configured assoc :url "https://changed.invalid/v1")
+                                      :api (swap! configured assoc :api "responses")
+                                      :model-policy (swap! selected assoc :providers [{:name "zen" :models ["other"]}])
+                                      :model nil)
+                                    {:status 200 :body (answer (if (= denial :model) "ai --model other report" "ai report"))})]
+            (dispatch "ai --no-tools --max-output-tokens 91 report | split , | xargs %s")
+            (count @wire) => 1
+            @catalogs => 2
+            (empty? (:tools (first @wire))) => true
+            (:model (first @wire)) => "zen-chat"))))))
+
+(fact "closed parent prepared metadata cannot replace its live same-family durable child allocation"
+  (with-runtime
+    (fn [_]
+      (let [zen {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+            policy (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}])
+            prepared (atom nil) parent (atom nil) child (atom nil) wire (atom []) deliveries (atom [])
+            complete-prompt ai-command/complete-prompt complete tools/complete]
+        (with-redefs [ai/config (constantly {:providers [zen]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      ai-command/complete-prompt (fn [value] (reset! prepared value) (complete-prompt value))
+                      tools/complete (fn [provider model messages options]
+                                       (if-not (:durable-session execution/*request*)
+                                         (complete provider model messages options)
+                                         (let [allocation execution/*request*]
+                                           (reset! child allocation)
+                                           (execution/with-source* @prepared
+                                             (fn []
+                                               (identical? (:budget allocation) (:budget execution/*request*)) => true
+                                               (complete provider model messages options))))))
+                      http/get (fn [_ options]
+                                 (let [body {:data [{:id "zen-chat" :type "chat"
+                                   :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}
+                                   :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                   {:status 200 :body (if (= :stream (:as options))
+                                     (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                      http/post (fn [_ options]
+                                  (swap! wire conj {:form (:form-params options) :request execution/*request*})
+                                  (when (= 1 (count @wire)) (reset! parent execution/*request*))
+                                  {:status 200 :body (if (= 1 (count @wire)) (tool-call "agent finish") (answer "Child finished"))})]
+          (binding [*deliveries* deliveries]
+            (dispatch "ai --max-tool-calls 3 --max-output-tokens 91 delegate")
+            (origin/capability? (::execution/source-context (meta @prepared))) => true
+            (:closed? @(:budget @parent)) => true
+            (count @*queued*) => 1
+            ((first @*queued*)) => {:status :unconfirmed :work-outcome :exhausted}
+            (:family-id @child) => (:family-id @parent)
+            (identical? (:budget @child) (:budget @parent)) => false
+            (select-keys @(:budget @child) [:limit :used :reserved]) => {:limit 1 :used 1 :reserved 0}
+            (select-keys @(:budget @parent) [:limit :used :reserved]) => {:limit 3 :used 2 :reserved 1}
+            (count @wire) => 2
+            (count @deliveries) => 1
+            (last (first @deliveries)) => "Child finished"))))))

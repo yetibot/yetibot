@@ -161,7 +161,8 @@
    The installed host owns selection/policy; model options cannot issue one."
   [prepared f]
   (if-let [source (agent/host-callback :source)]
-    (if-let [context (::source-context (meta prepared))]
+    (if-let [context (when-not (or *request* (agent/value-origin))
+                       (::source-context (meta prepared)))]
       (agent/invoke! context :with-request
         #(try (source prepared f)
               (finally (when-not agent/*scope* (close-family! *request*)))))

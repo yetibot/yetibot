@@ -116,12 +116,12 @@
             (let [{:keys [duplicate]} (reserve! key)]
               (if duplicate
                 (or (:result duplicate) "This request is already running; it will not be executed twice.")
-                (let [code-started (atom false)]
+                (let [code-started (atom false)
+                      request-text (execution/direct-request-text args)]
                   (try
                     (execution/with-routing-source* prepared args
                       (fn [freeze!]
-                      (let [request-text (execution/direct-request-text args)
-                          cleaned (mcp/redact request-text (update config :secrets (fnil conj []) (:key provider)))
+                      (let [cleaned (mcp/redact request-text (update config :secrets (fnil conj []) (:key provider)))
                           _ (when-not (= cleaned request-text)
                               (ai/fail "The request contains configured credentials; no classification or writes were performed."))
                           decision (clef/classify! router request-text)

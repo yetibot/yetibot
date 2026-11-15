@@ -19,7 +19,10 @@
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.util.ai-limits :as limits]
-            [yetibot.util.ai-capacity :as capacity]))
+            [yetibot.util.ai-capacity :as capacity]
+            [yetibot.util.ai-execution :as host]
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.api.opencode :as zen]))
 
 (fact "structured model output compiles redaction patterns once per traversal"
   (let [compile-pattern re-pattern
@@ -920,3 +923,58 @@
           (get-in (ex-data error) [:ai/tool-failure :budget])
           => {:limit 20 :used 0 :remaining 20 :requested 0}
           (get-in (ex-data error) [:ai/tool-failure :calls]) => [])))))
+
+
+(fact "automatic native Zen children choose free catalog pricing rather than their paid prepared parent"
+  (doseq [explicit? [false true]]
+    (in-request
+      (fn [request]
+        (let [provider {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+              t (assoc toolset :native-tools ["ai"] :providers [{:name "zen" :models ["a-free" "b-paid"]}])
+              wire (atom []) accounting (atom []) turn cost/turn]
+          (with-redefs [ai/config (constantly {:providers [provider]})
+                        mcp/config (constantly {:servers [] :toolsets [t]})
+                        http/get (fn [_ options]
+                                   (let [body {:data zen-catalog}]
+                                     {:status 200 :body (if (= :stream (:as options))
+                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                        cost/turn (fn [p m body]
+                                    (let [value (turn p m body)]
+                                      (swap! accounting conj {:model m :role cost/*role* :free (:ai/verified-free p)
+                                                              :pricing (::zen/pricing p) :cost value}) value))
+                        http/post
+                        (fn [_ options]
+                          (swap! wire conj {:form (:form-params options) :request host/*request*})
+                          {:status 200 :body
+                           (assoc
+                             (if (= 1 (count @wire))
+                               {:choices [{:message {:role "assistant" :tool_calls
+                                 [{:id "delegate" :type "function" :function
+                                   {:name "yetibot_ai" :arguments
+                                    (json/generate-string
+                                      (cond-> {"action" "ask" "provider" "zen" "prompt" "Only supplied text"}
+                                        explicit? (assoc "model" "b-paid")))}}]}}]}
+                               {:choices [{:message {:role "assistant" :content "Done"}}]})
+                             :usage {:prompt_tokens 10 :completion_tokens 8})})]
+            (let [result (tools/complete provider "b-paid" [] {:actor (policy/actor request)})]
+              (get-in result [:result/data :ai/accounting :delegated :requests]) => 1
+              (get-in result [:result/data :ai/accounting :parent :requests]) => 2
+              (get-in result [:result/data :ai/accounting :delegated :estimated_usd])
+              => (if explicit? 0.0000126M 0M))
+            (count @wire) => 3
+            (mapv #(get-in % [:form :model]) @wire) => ["b-paid" (if explicit? "b-paid" "a-free") "b-paid"]
+            (count (distinct (map #(get-in % [:request :family-id]) @wire))) => 1
+            (let [children (filter #(= :delegated (:role %)) @accounting)
+                  child (first children)]
+              (count (distinct children)) => 1
+              (get-in child [:pricing :kind]) => (if explicit? "paid" "free")
+              (:free child) => (when-not explicit? true)
+              (get-in child [:cost :usd]) => (if explicit? 0.0000126M 0M)
+              (get-in child [:pricing :input]) => (if explicit? 0.3M 0M)
+              (get-in child [:pricing :output]) => (if explicit? 1.2M 0M))
+            (let [budget @(:budget (:request (first @wire)))]
+              (:used budget) => 4
+              (mapv :ordinal (:receipts budget)) => [1 2 3 4]
+              (mapv :kind (:receipts budget)) => [:inference :tool :inference :inference])
+            (when explicit?
+              (every? #(not (:free %)) @accounting) => true)))))))
