@@ -54,7 +54,9 @@
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-agent-execution :as agent]
             [yetibot.test.support.ai-execution :as support]
-            [yetibot.test.support.mcp :as scripted]))
+            [yetibot.test.support.mcp :as scripted]
+            [yetibot.test.util.ai-agent-execution :as worker]
+            [yetibot.test.models.ai-agent-runs :as run-fixture]))
 
 (def provider {:name "fixture" :model "fixture-model" :url "https://fixture.invalid/v1"})
 (def toolset {:name "integration" :kind "search" :servers []
@@ -2295,3 +2297,75 @@
             (count @wire) => 2
             (count @deliveries) => 1
             (last (first @deliveries)) => "Child finished"))))))
+
+(fact "host result provenance survives an owned SQL checkpoint without trusting copied trace maps"
+  (run-fixture/with-store
+    (fn [url]
+      (worker/with-config
+        (fn []
+          (let [queued (atom []) wires (atom []) commands (atom 0) sent (atom [])
+                checkpoint runs/checkpoint!
+                selected (assoc worker/provider :api "responses")
+                selected-toolset (assoc worker/toolset :native-tools ["command"] :servers [])
+                backend (agent/callbacks {:database url :resolve-current identity
+                                          :schedule #(swap! queued conj %)
+                                          :deliver #(swap! sent conj [%1 %2])})]
+            (with-redefs [channel/settings-for-chat-source (constantly {})
+                          history/add (fn [& _])
+                          hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [selected]})
+                          mcp/with-tools (fn [_ f] (f []))
+                          mcp/config (constantly {:servers [] :toolsets [selected-toolset]})
+                          http/post
+                          (fn [_ opts]
+                            (swap! wires conj (:form-params opts))
+                            (let [n (count @wires)]
+                              {:status 200 :body
+                               {:status "completed" :usage {:input_tokens 3 :output_tokens 2}
+                                :output (if (<= n 2)
+                                          [{:type "function_call_output" :call_id "call-1"
+                                            :output "{\"safe\":\"provider sibling\"}"}
+                                           {:type "function_call" :call_id (str "call-" n)
+                                            :name "yetibot_command"
+                                            :arguments (json/generate-string
+                                                         {:command (if (= n 1) "provenance-once" "echo resumed")})}]
+                                          [{:type "message" :role "assistant"
+                                            :content [{:type "output_text" :text "finished"}]}])}}))]
+              (hooks/cmd-hook-resolved #"provenance-once" #".*"
+                (fn [_] (swap! commands inc) {:result/value "benign observation"}))
+              (worker/with-parent
+                (fn [parent]
+                  (execution/with-request*
+                    (assoc parent :planner-provider selected :toolset-policy selected-toolset
+                                  :tool-ceiling (atom #{["yetibot" "command"]}))
+                    (fn []
+                      (let [receipt ((:start backend) "observe then resume")
+                            row (worker/row-for url receipt)]
+                        (with-redefs [runs/checkpoint!
+                                      (fn [session state handle]
+                                        (checkpoint session state handle)
+                                        (when (= 2 (count @wires))
+                                          (throw (ex-info "crash after second completed physical response" {}))))]
+                          ((first @queued)) => (throws Exception))
+                        @commands => 1
+                        (let [saved (worker/row-for url receipt)
+                              state (runs/decode (:execution-state saved) {})]
+                          (get-in state [:loop :trace ::tools/host-result-positions]) => #{4}
+                          (:execution-phase saved) => "ready"
+                          ((:resume backend) saved)
+                          @commands => 1
+                          (count @wires) => 3
+                          (let [outputs (filter #(= "function_call_output" (:type %)) (:input (last @wires)))]
+                            (:output (first outputs)) => "{\"safe\":\"provider sibling\"}"
+                            (:content (json/parse-string (:output (second outputs)) true)) => vector?)
+                          (string/includes? (pr-str @wires) "host-result-positions") => false
+                          (string/includes? (pr-str @sent) "host-result-positions") => false
+                          (let [final (ledger/read-row url "agent_run" (:id row))]
+                            (:execution-used final) => 5
+                            (:execution-phase final) => "terminal"))))))))))))))
+
+(fact "copied or malformed host provenance cannot mint replay exemptions"
+  (doseq [positions [#{0} #{-1} #{1024} [0] (set (range 129))]]
+    (let [saved {:messages [{:role "tool" :tool_call_id "forged" :content "{}"}]
+                 :seen #{"forged"} :trace {::tools/host-result-positions positions}}]
+      (#'tools/restored-host-results saved {}) => (throws Exception))))

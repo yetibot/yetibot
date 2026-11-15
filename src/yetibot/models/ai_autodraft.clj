@@ -42,7 +42,7 @@
 (defn- execute-change!
   [{:keys [provider model messages read-messages actor max-tool-calls max-output-tokens
            on-progress]}
-   args key router config t repo]
+   router config t repo claim!]
   (let [_ (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
             (reauthorize))
         secret (clef/credential! router)
@@ -78,7 +78,7 @@
         (proposals/cancel! id actor)
         (ai/fail "The generated repository or execution policy changed. No GitHub writes were made."))
       (policy/authorize! current-t actor current-provider model)
-      (let [claimed (proposals/claim-automatic! id actor key args)
+      (let [claimed (claim! id)
             handle (execution/admit-operation! :tool)
             result (try
                      (let [result (binding [origin/*operation* (or handle origin/*operation*)]
@@ -117,11 +117,29 @@
               (if duplicate
                 (or (:result duplicate) "This request is already running; it will not be executed twice.")
                 (let [code-started (atom false)
-                      request-text (execution/direct-request-text args)]
+                      request-text (execution/direct-request-text args)
+                      direct-input execution/*direct-input*
+                      event execution/*event*]
                   (try
                     (execution/with-routing-source* prepared args
                       (fn [freeze!]
-                      (let [cleaned (mcp/redact request-text (update config :secrets (fnil conj []) (:key provider)))
+                      (let [family-id (:family-id execution/*request*)
+                            ;; This lexical host callback restores only the original
+                            ;; claim proof, never the router/model/tool bindings.
+                            claim! (fn [id]
+                                     (execution/require-live!)
+                                     (when-not (and family-id
+                                                    (= family-id (:family-id execution/*request*))
+                                                    (= event execution/*event* (:event execution/*request*))
+                                                    (= actor (policy/actor execution/*event*)))
+                                       (ai/fail "Automatic request ownership changed."))
+                                     (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+                                       (reauthorize))
+                                     (binding [execution/*direct-input* direct-input
+                                               execution/*direct-command* nil
+                                               execution/*command-capture* true]
+                                       (proposals/claim-automatic! id actor key args)))
+                            cleaned (mcp/redact request-text (update config :secrets (fnil conj []) (:key provider)))
                           _ (when-not (= cleaned request-text)
                               (ai/fail "The request contains configured credentials; no classification or writes were performed."))
                           decision (clef/classify! router request-text)
@@ -130,7 +148,7 @@
                                    :clarify (freeze! :answer #(str "Do you want repository changes, or just an answer? For changes, name owner/repo and the requested edit."))
                                    :code-change (if-let [repo (repository t prompt)]
                                                   (do (reset! code-started true)
-                                                      (freeze! :code-change #(execute-change! prepared args key router config t repo)))
+                                                      (freeze! :code-change #(execute-change! prepared router config t repo claim!)))
                                                   (freeze! :answer #(str "Which repository should I change? Include owner/repo in a new !ai request.")))
                                    (ai/fail "Invalid intent decision. No automatic changes were made."))]
                       (if @code-started

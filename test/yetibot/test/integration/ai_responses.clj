@@ -622,3 +622,65 @@
           (get-in result [:result/data :tool-trace :calls 0 :outcome]) => :success
           (string/includes? (pr-str result) "PROVIDER_SECRET") => false
           (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))
+
+
+(fact "provider supplied result envelope keys are projected after one real command learns credentials"
+  (doseq [mode [:string :numeric :both :collision]]
+    (let [collision? (boolean (#{:both :collision} mode))
+          requests (atom []) retained (atom []) commands (atom 0) families (atom [])
+          retain datasets/retain! post client/post
+          private "ENVELOPE-LEARNED-STRING" numeric 987654321
+          payload (merge {:safe "kept"}
+                         (case mode
+                           :string {private "string-key"}
+                           :numeric {(str numeric) "numeric-key"}
+                           :both {private "string-key" (str numeric) "numeric-key"}
+                           :collision {private "string-key" "[redacted]" "collision"}))
+          supplied {:type "function_call_output" :call_id private
+                    :output (json/generate-string payload)}
+          opaque {:type "reasoning" :id private :encrypted_content private :summary []}]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:body (response (if (= 1 (count @requests))
+                             [opaque supplied (function-call "yetibot_command" private
+                                                             "{\"command\":\"learn-envelope-secret\"}")]
+                             [(text-output "Safe answer")]))})
+        (fn [base]
+          (let [provider {:name "envelope-fixture" :model "chat" :api "responses" :url (str base "/v1")}
+                t {:name "envelope-private" :kind "search" :servers [] :native-tools ["command"]
+                   :users ["U1"] :adapters ["slack"]
+                   :providers [{:name "envelope-fixture" :models ["chat"]}]}]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [provider]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          client/post (fn [& args]
+                                        (swap! families conj host-execution/*request*)
+                                        (apply post args))
+                          datasets/retain! (fn [store owner envelope]
+                                             (let [d (retain store owner envelope)]
+                                               (swap! retained conj (datasets/lookup! store owner (:dataset-id d))) d))]
+              (hooks/cmd-hook-resolved #"learn-envelope-secret" #".*"
+                (fn [_] (swap! commands inc)
+                  {:result/value "learned" :result/data [{:auth/token private :auth/key numeric}]}))
+              (let [result (execution/run-registered-command execution/request "ai --max-tool-calls 3 replay")]
+                (when collision?
+                  (get-in result [:data :isError]) => true
+                  (get-in result [:data :tool-trace :calls 0 :outcome]) => :success))))))
+      @commands => 1
+      (get-in (first @retained) [:rows 0 "auth/token"]) => private
+      (get-in (first @retained) [:rows 0 "auth/key"]) => numeric
+      (:used @(:budget (first @families))) => (if collision? 2 3)
+      (count @requests) => (if collision? 1 2)
+      (when-not collision?
+        (let [input (get-in @requests [1 :body :input])
+              replay (first (filter #(= "function_call_output" (:type %)) input))
+              call (first (filter #(= "function_call" (:type %)) input))]
+          (:call_id replay) => private
+          (string/includes? (:output replay) private) => false
+          (string/includes? (:output replay) (str numeric)) => false
+          (:safe (json/parse-string (:output replay) true)) => "kept"
+          (:call_id call) => private
+          (:name call) => "yetibot_command"
+          (first (filter #(= "reasoning" (:type %)) input)) => opaque)))))

@@ -1,5 +1,9 @@
 (ns yetibot.test.integration.ai-followups
   (:require [clojure.core.async :as async]
+            [clj-http.client :as client]
+            [cheshire.core :as json]
+            [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.test.integration.ai-autodraft :as autodraft]
             [clojure.string :as str]
             [clojure.java.jdbc :as jdbc]
             [discljord.connections :as websocket]
@@ -9,7 +13,7 @@
             [yetibot.api.ai :as api]
             [yetibot.api.mcp :as mcp]
             [yetibot.api.opencode :as zen]
-            [yetibot.commands.ai]
+            [yetibot.commands.ai :as command]
             [yetibot.commands.grok]
             [yetibot.commands.zen]
             [yetibot.core.adapters.discord :as discord]
@@ -301,3 +305,143 @@
       (str/includes? (pr-str (get @messages "301")) "PRIVATE") => false
       (str/includes? (pr-str (get @messages "301"))
                      "do not retry automatically") => true)))
+
+
+(defn implicit-zen-followup [mutation]
+  (let [chat-wire api/chat complete-wire api/complete models-wire api/models
+        read-bytes cloudflare/read-bytes preparations (atom []) sent (atom [])
+        remember execution/remember-answer! observations (atom [])
+        remember-route discord/remember-command-continuation! routes (atom [])
+        prepare-followup command/prepare-followup reply-errors (atom [])
+        dialect (atom :responses) catalog-model (atom "free-a")
+        file (java.io.File/createTempFile "zen-continuation-" ".key")
+        success? (contains? #{nil :default-model} mutation)
+        root-id (System/nanoTime) root (str root-id) root-reply (str (inc root-id))]
+    (spit file "zen-followup-fixture")
+    (try
+      (session
+        (fn [{:keys [send! config policy messages conn]}]
+          (swap! config assoc :default-provider "zen"
+                 :providers [{:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                              :key-file (.getAbsolutePath file)}]
+                 :intent-router {:enabled true :github-toolset "github-pr"
+                                 :account-id (apply str (repeat 32 "a")) :key-file "/fixture/router-key"})
+          (let [t {:name "answer" :kind "search" :servers [] :native-tools []
+                   :users ["7"] :adapters ["discord"]
+                   :providers [{:name "zen" :models ["free-a"]}
+                               {:name "cloudflare" :models ["@cf/cloudflare/clef"]}]}]
+            (reset! policy {:default-toolset "answer"
+                            :servers [{:name "reader" :tools ["get_commit" "get_file_contents"]
+                                       :github-api-token "followup-ancestry-fixture"}
+                                      {:name "writer" :tools ["create_branch" "push_files" "create_pull_request"]}]
+                            :toolsets [t (assoc (dissoc t :native-tools) :name "github-pr" :kind "github-pr"
+                                                :repositories ["owner/repo"] :base-branches ["main"]
+                                                :allowed-paths ["src/"] :write-server "writer"
+                                                :servers [{:name "reader" :tools ["get_commit" "get_file_contents"]}])]}))
+          (with-redefs [api/chat chat-wire api/complete complete-wire api/models models-wire
+                        cloudflare/read-bytes
+                        (fn [& args]
+                          (swap! preparations conj execution/*request*)
+                          (apply read-bytes args))
+                        execution/remember-answer!
+                        (fn [command prepared result]
+                          (swap! observations conj {:capture execution/*command-capture*
+                                                    :direct execution/*direct-input*
+                                                    :caption (:caption? prepared) :actor (:actor prepared)
+                                                    :value (:result/value result) :error (:result/error result)})
+                          (remember command prepared result))
+                        discord/remember-command-continuation!
+                        (fn [route] (swap! routes conj route) (remember-route route))
+                        command/prepare-followup
+                        (fn [& args]
+                          (try (apply prepare-followup args)
+                               (catch Exception e
+                                 (swap! reply-errors conj (.getMessage e))
+                                 (throw e))))
+                        yetibot.api.clef/credential! (constantly "router-fixture")
+                        client/get
+                        (fn [_ options]
+                          (swap! preparations conj execution/*request*)
+                          (let [body {:data [{:id @catalog-model :type "chat"
+                                             :modalities {:input ["text"] :output ["text"]}
+                                             :api {@dialect {}}
+                                             :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                            {:status 200 :body (if (= :stream (:as options))
+                                                (java.io.ByteArrayInputStream.
+                                                  (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                        client/post
+                        (fn [url options]
+                          (swap! sent conj {:url url :body (:form-params options)
+                                            :request execution/*request* :direct execution/*direct-input*})
+                          (if (str/includes? url "/ai/run/")
+                            (autodraft/classification :answer)
+                            (let [body {:id "followup-response" :status "completed"
+                                        :output [{:type "message" :role "assistant"
+                                                  :content [{:type "output_text" :text "bounded root answer"}]}]}]
+                              {:status 200 :headers {"content-type" "application/json"}
+                               :body (if (= :stream (:as options))
+                                       (java.io.ByteArrayInputStream.
+                                         (.getBytes (json/generate-string body) "UTF-8")) body)})))]
+            (send! (event root "!ai --max-tool-calls 2 --max-output-tokens 91 Explain owner/repo"))
+            (fact (count @sent) => 2
+                  (count @routes) => 1
+                  (set (keys @messages)) => #{root root-reply}
+                  (mapv #(some-> % :continuation deref :ready?) (vals (:commands @conn))) => [true]
+                  (set (keys (first @routes)))
+                  => #{:command :provider :model :provider-signature :verified-free :max-tool-calls :max-output-tokens}
+                  @observations => [{:capture false
+                                     :direct {:raw "ai --max-tool-calls 2 --max-output-tokens 91 Explain owner/repo"
+                                              :evaluated "ai --max-tool-calls 2 --max-output-tokens 91 Explain owner/repo"}
+                                     :caption true
+                                     :actor {:adapter "discord" :connection "test" :user "7"
+                                             :conversation "test/10" :thread "10"}
+                                     :value "bounded root answer" :error nil}])
+            (let [before (count @preparations) route (first @routes)
+                  forged (with-meta (assoc route :max-output-tokens 262144)
+                           {:yetibot.api.ai/configured-signature (:provider-signature route)})]
+              (fact (try (prepare-followup {:match "forged"} forged api/config) false
+                         (catch Exception _ true)) => true
+                    (count @preparations) => before
+                    (count @sent) => 2))
+            (case mutation
+              :default-model (swap! config assoc-in [:providers 0 :model] "different-default")
+              :api (swap! config assoc-in [:providers 0 :api] "responses")
+              :endpoint (swap! config assoc-in [:providers 0 :url] "https://changed.invalid/v1")
+              :native (swap! config assoc-in [:providers 0 :native-tools] ["web_search"])
+              :turns (swap! config assoc-in [:providers 0 :max-turns] 4)
+              :gateway (swap! config assoc-in [:providers 0 :gateway-id] "changed")
+              :transport (swap! config assoc-in [:providers 0 :continuation-transport] "changed")
+              :access (swap! policy assoc-in [:toolsets 0 :users] ["other-user"])
+              :dialect (reset! dialect :chat-completions)
+              :model (reset! catalog-model "different-model")
+              nil)
+            (let [before (count @preparations)]
+              (send! (event (str (+ root-id 100)) "--model attacker | echo not-a-command" root-reply))
+              (if success?
+                (do
+                  (fact @reply-errors => []
+                        (count @sent) => 3
+                        (mapv #(get-in % [:body :model]) (remove #(str/includes? (:url %) "/ai/run/") @sent))
+                        => ["free-a" "free-a"]
+                        (str/includes? (pr-str (:input (:body (last @sent))))
+                                       "--model attacker | echo not-a-command") => true)
+                  (send! (event (str (+ root-id 200)) "one more literal turn" (str (+ root-id 101))))
+                  (fact (count @sent) => 4))
+                (do
+                  (fact (count @sent) => 2)
+                  (when-not (#{:dialect :model} mutation)
+                    (fact (count @preparations) => before)))))
+            (fact (every? some? @preparations) => true
+                  (every? #(= 91 (get-in % [:body :max_output_tokens]))
+                          (remove #(str/includes? (:url %) "/ai/run/") @sent)) => true
+                  (every? #(nil? (:direct %)) @sent) => true
+                  (count (distinct (map #(get-in % [:request :family-id]) (take 2 @sent)))) => 1
+                  (every? #(= 2 (:limit @(:budget (:request %)))) @sent) => true))))
+      (finally (.delete file)))))
+
+(fact "implicit Zen routed root answer delivers real continuations with frozen model dialect and caps"
+  (doseq [mutation [nil :default-model]] (implicit-zen-followup mutation)))
+
+(fact "implicit Zen continuation rejects configured identity access model and catalog dialect drift before inference"
+  (doseq [mutation [:api :endpoint :native :turns :gateway :transport :access :dialect :model]]
+    (implicit-zen-followup mutation)))

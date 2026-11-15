@@ -131,19 +131,48 @@
                       (keep :key (try (:providers (ai/config)) (catch Exception _ [])))
                       [(:key provider) credential-file] additional-secrets)))))
 
+(declare unique-object)
+
+(def ^:private native-output-limit
+  {:error "Native result exceeded the output limit." :truncated true})
+
+(defn- host-result-envelope [data project]
+  (letfn [(object [value shapes projections]
+            (let [fields (into {} (filter (fn [[k v]]
+                                           (when-let [valid? (get shapes k)]
+                                             (valid? v)))) value)]
+              (unique-object
+                (merge (project (apply dissoc value (keys fields)))
+                       (into {} (map (fn [[k v]]
+                                       [k ((get projections k project) v)])) fields)))))
+          (part [value]
+            (case (:type value)
+              "text" (object value {:type #{"text"} :text string?} {:type identity})
+              "resource_link"
+              (object value {:type #{"resource_link"} :uri string? :name string?
+                             :title string? :description string? :mimeType string?}
+                      {:type identity})
+              "resource"
+              (object value {:type #{"resource"} :resource map?}
+                      {:type identity
+                       :resource #(object % {:uri string? :text string? :mimeType string?} {})})
+              (project value)))]
+    (object data {:isError boolean? :content vector? :structuredContent map? :problem map?}
+            {:isError identity :content #(mapv part %)
+             :structuredContent #(if (= native-output-limit %) % (project %))})))
+
 (defn- current-content
   ([content config] (current-content content config {}))
-  ([content config {:keys [configured? tool-result?]}]
-   (if-not (and (:dataset-store config) (string? content)) content
+  ([content config {:keys [configured? host-result?]}]
+   (if-not (and (or (:dataset-store config) configured?) (string? content)) content
      (let [project #(clean-data % (if configured? config
                                     {:dataset-store (:dataset-store config)}))]
        (try
          (let [data (json/parse-string content true)
-               ;; The host result envelope is protocol, not untrusted payload.
-               ;; Configured redaction already ran before authored size errors;
-               ;; replay adds only newly learned facts, never re-redacts controls.
-               clean (if (and tool-result? (map? data))
-                       (into {} (map (fn [[k v]] [k (project v)])) data)
+               ;; Only actual host replies retain typed envelope field names.
+               ;; Provider-supplied output items cannot acquire this provenance.
+               clean (if (and host-result? (map? data))
+                       (host-result-envelope data project)
                        (project data))
                descriptor (fn [d]
                             ;; Restore only a real live host handle, not arbitrary
@@ -207,12 +236,12 @@
                             (mapv #(citation % config) (:annotations part))
                             (clean-data (:annotations part) config)))))))
 
-(defn- current-message [message config & [public?]]
+(defn- current-message [message config & [public? host-result?]]
   ;; Project payloads, never vendor call IDs, tool names or wire controls. Replay
   ;; adds live knowledge; public response payloads also apply configured secrets.
   (let [payload #(if public? (clean-data % config) (current-content % config))
-        result-payload #(if public? (clean-data % config)
-                          (current-content % config {:tool-result? true}))
+        result-payload #(current-content % config {:configured? true
+                                                   :host-result? host-result?})
         plain-payload #(clean-data % config)]
     (if-not (and (map? message)
                  (if (contains? message :type)
@@ -470,7 +499,7 @@
                                         vec)))
         content (if (:dataset-store config)
                   (current-content (json/generate-string result) config
-                                   {:configured? true :tool-result? true})
+                                   {:configured? true :host-result? true})
                   (json/generate-string (clean-data result config)))
         content (if (<= (count content) 20000) content
                   (if (:native? tool)
@@ -479,8 +508,7 @@
                     (json/generate-string
                       {:isError true
                        :structuredContent
-                       {:error "Native result exceeded the output limit."
-                        :truncated true}})
+                       native-output-limit})
                     (str (subs content 0 20000)
                          "\n[Tool result shortened to 20000 characters.]")))]
     (with-meta {:role "tool" :tool_call_id id :content content}
@@ -664,6 +692,27 @@
     (and (= 1 (count calls)) (= "chart" (:name tool))
          (:native? tool) (fn? (:host-call tool)))))
 
+(defn- restored-host-results [saved request]
+  (if-not (contains? (:trace saved) ::host-result-positions)
+    #{}
+    (let [positions (get-in saved [:trace ::host-result-positions])
+          restore! (::restore-host-results request)
+          messages (:messages saved)]
+      (when-not (and (fn? restore!) (= positions (restore! saved request))
+                     (set? positions) (<= (count positions) 128)
+                     (vector? messages) (<= (count messages) 1024)
+                     (every? (fn [i]
+                               (and (integer? i) (<= 0 i) (< i (count messages))
+                                    (let [m (nth messages i)]
+                                      (or (and (= #{:role :tool_call_id :content} (set (keys m)))
+                                               (= "tool" (:role m)) (string? (:content m))
+                                               (contains? (:seen saved) (:tool_call_id m)))
+                                          (and (= #{:type :call_id :output} (set (keys m)))
+                                               (= "function_call_output" (:type m)) (string? (:output m))
+                                               (contains? (:seen saved) (:call_id m))))))) positions))
+        (ai/fail "Inherited result provenance is unavailable or unsafe."))
+      positions)))
+
 (defn- run-tools [provider model messages tools config]
   (when (> (count tools) 64)
     (ai/fail "Too many MCP tools are enabled. Allow at most 64 tools."))
@@ -672,7 +721,7 @@
         definitions (mapv :definition entries)
         limit (mcp/number-option (:max-tool-calls config) 20)
         resume (:resume-loop config)
-        trace-state (atom (or (:trace resume)
+        trace-state (atom (or (some-> (:trace resume) (dissoc ::host-result-positions))
                               {:calls [] :omitted 0 :next-call 0
                                :used 0 :requested 0}))
         redact (trace/redactor config messages)
@@ -697,7 +746,8 @@
              used (:used resume 0) seen (:seen resume #{})
              actions (:actions resume #{}) stage (:stage resume :initial)
              response (:response resume 1) accounting (:accounting resume cost/initial)
-             correction? (:correction? resume false) resume resume]
+             correction? (:correction? resume false) resume resume
+             host-result-indexes (restored-host-results resume execution/*request*)]
         (let [_ (swap! trace-state assoc :requested 0)
               remaining (min (- limit used) (or (execution/remaining) limit))
               turn-messages
@@ -717,7 +767,13 @@
                            "with available evidence.")}]
                     (rest messages))
               body (or (:body resume) (data-tools/timed config :planning
-                     (fn [] (ai/chat provider model (mapv #(current-message % config) turn-messages)
+                     (fn [] (ai/chat provider model
+                            (mapv (fn [i message]
+                                    ;; The budget instruction adds one position
+                                    ;; after the first saved message.
+                                    (current-message message config false
+                                      (contains? host-result-indexes (dec i))))
+                                  (range) turn-messages)
                             (cond->
                               {::diagnostics/stage stage
                                :max-output-tokens (:max-output-tokens config)
@@ -740,10 +796,11 @@
               message (ai/message provider body)
               calls (:tool_calls message)
               snapshot (fn [extra]
-                         (merge {:messages messages :used used :seen seen
+                         (merge {:messages messages
+                                 :used used :seen seen
                                  :actions actions :stage stage :response response
                                  :accounting accounting :correction? correction?
-                                 :body body :trace @trace-state
+                                 :body body :trace (assoc @trace-state ::host-result-positions host-result-indexes)
                                  :chart-terminal @(:chart-terminal config)
                                  :chart-stop @(:chart-stop config)
                                  :artifacts @(:kroki-artifacts config)
@@ -834,11 +891,16 @@
                                        :agent-jobs jobs :isError (empty? jobs)}
                          :result/public-data {:execution report :agent-jobs jobs}}))
                     :else
-                    (recur (ai/continue-messages provider messages body replies)
-                           (long (+ used attempted))
-                           (into seen (map :id calls))
-                           (into actions requested-actions)
-                           :follow-up (inc response) accounting (or correction? chart-only?) nil)))))
+                    (let [continued (ai/continue-messages provider messages body replies)
+                          first-reply (- (count continued) (count replies))]
+                      ;; Persist only host-computed positions in the authenticated
+                      ;; loop checkpoint, never a provider/model provenance DTO.
+                      (recur continued
+                             (long (+ used attempted))
+                             (into seen (map :id calls))
+                             (into actions requested-actions)
+                             :follow-up (inc response) accounting (or correction? chart-only?) nil
+                             (into host-result-indexes (range first-reply (count continued)))))))))
             (if correction?
               (do (reset! (:chart-stop config) "No valid chart correction was supplied; collected data was not replayed.")
                   (terminal-result config trace-state limit accounting used))
@@ -1127,6 +1189,7 @@
                    (not closed?) (not unknown?)
                    (= (:family-id state) (:family-id request)))
       (ai/fail "Inherited checkpoint is not available for local finalization."))
+    (restored-host-results saved request)
     (let [message (ai/message provider (:body saved))
           calls (:tool_calls message)
           terminal (:chart-terminal saved)
@@ -1148,7 +1211,7 @@
                             :stage-timings (:stage-timings request) :planning-responses (:planning-responses request)
                             :chart-terminal (atom terminal) :chart-stop (atom (:chart-stop saved))})
               config (with-payload-secrets config provider nil nil)
-              trace-state (atom (:trace saved))
+              trace-state (atom (dissoc (:trace saved) ::host-result-positions))
               limit (:limit @(:budget request))
               result (if chart?
                        (terminal-result config trace-state limit (:accounting saved)

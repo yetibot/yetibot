@@ -259,10 +259,29 @@
                         (.getBytes (pr-str identity) "UTF-8"))]
     (apply str (map #(format "%02x" (bit-and 255 %)) digest))))
 
+;; Core retains only closed route fields. Weak keys give a host-owned route
+;; its configured/effective identity pair without persisting credentials or
+;; trusting a copied provider/route DTO to establish continuation ownership.
+(defonce ^:private continuation-proofs (java.util.WeakHashMap.))
+
+(defn- continuation-proof [route]
+  (locking continuation-proofs (.get continuation-proofs route)))
+
+(defn ensure-followup-config! [route provider]
+  (let [proof (continuation-proof route)]
+    (when-not (and (= route (discord/command-followup))
+                   (or (nil? proof) (= (:model route) (:model proof)))
+                   (= (or (:configured proof) (:provider-signature route))
+                      (provider-signature provider)))
+      (throw (ex-info expired-message {:ai/error true})))))
+
 (defn ensure-followup! [route provider]
-  (when-not (and (= route (discord/command-followup))
-                 (= (:provider-signature route) (provider-signature provider)))
-    (throw (ex-info expired-message {:ai/error true}))))
+  (let [proof (continuation-proof route)]
+    (when-not (and (= route (discord/command-followup))
+                   (or (nil? proof) (= (:model route) (:model proof)))
+                   (= (or (:effective proof) (:provider-signature route))
+                      (provider-signature provider)))
+      (throw (ex-info expired-message {:ai/error true})))))
 
 (defn revalidate-free-followup! [route provider]
   (if-not (:verified-free route) provider
@@ -298,9 +317,22 @@
                                        [:no-tools :toolset :max-tool-calls
                                         :max-output-tokens]))))
                   (:ai/verified-free provider) (assoc :verified-free true))
+          configured (:yetibot.api.ai/configured-signature (meta provider))
+          proof (when (and (zen/provider? provider) configured
+                           (not= configured (:provider-signature route)))
+                  {:configured configured :effective (:provider-signature route) :model model})
+          ;; A unique closed token prevents equal effective dialects from
+          ;; aliasing routes created under different configured identities.
+          route (if proof
+                  (assoc route :provider-signature
+                    (string/replace (str (java.util.UUID/randomUUID)
+                                         (java.util.UUID/randomUUID)) "-" ""))
+                  route)
           secrets (keep identity [(:key provider) (:key-file provider)])]
       (when (every? #(= % (mcp/metadata-redact % {:secrets secrets}))
                     [(:name provider) model])
+        (when proof
+          (locking continuation-proofs (.put continuation-proofs route proof)))
         (try (discord/remember-command-continuation! route)
              ;; Unsupported IDs/options disable continuation, not the answer.
              (catch IllegalArgumentException _ nil)))))

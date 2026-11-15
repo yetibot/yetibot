@@ -7,6 +7,7 @@
             [yetibot.api.ai :as api] [yetibot.api.clef :as clef] [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai] [yetibot.models.ai-context :as context]
             [yetibot.models.ai-proposals :as proposals]
+            [yetibot.core.adapters.discord :as discord]
             [yetibot.models.ai-github :as github]
             [yetibot.test.integration.ai-tools :as fixture]
             [yetibot.test.support.ai-execution :as chat]
@@ -384,3 +385,154 @@
             (get-in (last @sent) [:form :model]) => "zen-chat"
             (get-in (last @sent) [:form :max_tokens]) => 91))
         (finally (.delete file))))))
+
+
+(defn direct-controls-denied? []
+  (every? (fn [control]
+            (try (execution/require-direct! {:args control}) false
+                 (catch Exception _ true)))
+          ["approve generated" "proposal generated" "default zen generated" "limits reset"]))
+
+(defn prepared-zen-change [revoke]
+  (let [requests (atom []) pushed (atom false) stages (atom []) claims (atom []) reviewed (atom []) remembered (atom [])
+        post client/post claim proposals/claim-automatic! review proposals/review!
+        stage proposals/stage! execute-github github/execute! remember discord/remember-command-continuation!
+        file (java.io.File/createTempFile "zen-root-" ".key")]
+    (spit file "synthetic-router-key")
+    (try
+      (support/with-http-server
+        (fixture/fixture-handler requests pushed)
+        (fn [base]
+          (let [provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                          :key-file (.getAbsolutePath file)}
+                providers [{:name "zen" :models ["root-chat"]}
+                           {:name "cloudflare" :models ["@cf/cloudflare/clef"]}]
+                t {:name "github-pr" :kind "github-pr" :users ["U1"] :adapters ["slack"]
+                   :repositories ["owner/repo"] :base-branches ["main"] :allowed-paths ["src/"]
+                   :providers providers :write-server "writer"
+                   :servers [{:name "reader" :tools fixture/reader-tools}]}
+                config {:default-toolset "github-pr" :toolsets [t]
+                        :servers [{:name "reader" :url (str base "/read") :tools fixture/reader-tools
+                                   :github-api-token "ancestry-fixture-secret"}
+                                  {:name "writer" :url (str base "/write") :tools fixture/writer-tools}]}
+                policy-config (atom config)
+                settings (atom {:providers [provider]
+                                :intent-router {:enabled true :github-toolset "github-pr"
+                                                :account-id (apply str (repeat 32 "a"))
+                                                :key-file (.getAbsolutePath file)}})
+                request (-> chat/request
+                            (update-in [:chat-source :raw-event] dissoc :thread_ts)
+                            (assoc-in [:chat-source :raw-event :ts] (str (System/nanoTime) ".0")))
+                text "ai --max-tool-calls 20 --max-output-tokens 91 Fix src/a.clj in owner/repo"]
+            (with-redefs [api/config #(deref settings) mcp/config #(deref policy-config)
+                          discord/remember-command-continuation!
+                          (fn [route] (swap! remembered conj route) (remember route))
+                          proposals/stage!
+                          (fn [& args]
+                            (fact execution/*direct-input* => nil
+                                  execution/*command-capture* => true
+                                  (direct-controls-denied?) => true)
+                            (apply stage args))
+                          github/execute!
+                          (fn [config p]
+                            (fact execution/*direct-input* => nil
+                                  execution/*command-capture* => true
+                                  (direct-controls-denied?) => true)
+                            (execute-github config p))
+                          proposals/review!
+                          (fn [& args]
+                            (let [p (apply review args)]
+                              (swap! reviewed conj p)
+                              (case revoke
+                                :provider (swap! settings assoc-in [:providers 0 :url] "https://changed.invalid/v1")
+                                :router (swap! settings assoc-in [:intent-router :enabled] false)
+                                :user (swap! users/users dissoc {:adapter :slack :id "U1"})
+                                :role (swap! users/users assoc-in [{:adapter :slack :id "U1"} :yetibot?] true)
+                                :repository (swap! policy-config assoc-in [:toolsets 0 :repositories] ["other/repo"])
+                                :closed (execution/close-family! execution/*request*)
+                                :event (set! execution/*event* (assoc execution/*event* :body "!ai forged"))
+                                :family (set! execution/*request* (assoc execution/*request* :family-id "foreign-family"))
+                                nil)
+                              p))
+                          proposals/claim-automatic!
+                          (fn [& args]
+                            (fact (direct-controls-denied?) => true)
+                            (swap! claims conj {:input execution/*direct-input*
+                                                :capture execution/*command-capture*
+                                                :request execution/*request*})
+                            (try
+                              (let [p (apply claim args)]
+                                (swap! claims conj {:proposal p}) p)
+                              (catch Exception e
+                                (swap! claims conj {:denial (.getMessage e)})
+                                (throw e))))
+                          client/get
+                          (fn [url options]
+                            (swap! stages conj execution/*request*)
+                            (if (string/starts-with? url "https://opencode.ai/")
+                              (let [body {:data [{:id "root-chat" :type "chat"
+                                                  :modalities {:input ["text"] :output ["text"]}
+                                                  :api {:chat-completions {}}
+                                                  :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                {:status 200 :body (if (= :stream (:as options))
+                                                   (java.io.ByteArrayInputStream.
+                                                     (.getBytes (json/generate-string body) "UTF-8")) body)})
+                              {:status 200 :body {:sha (last (string/split url #"/"))
+                                                :parents [{:sha fixture/base-sha}]}}))
+                          client/post
+                          (fn [url options]
+                            (swap! stages conj execution/*request*)
+                            (when (or (string/includes? url "/ai/run/")
+                                      (string/starts-with? url "https://opencode.ai/"))
+                              (fact execution/*direct-input* => nil
+                                    execution/*command-capture* => true
+                                    (try (execution/require-direct! {:args "limits reset"}) false
+                                         (catch Exception _ true)) => true))
+                            (cond
+                              (string/includes? url "/ai/run/") (classification :code_change)
+                              (string/starts-with? url "https://opencode.ai/")
+                              (post (str base "/v1/chat/completions") options)
+                              :else (post url options)))]
+              (let [result (chat/run-registered-command request text)
+                    first-stages @stages
+                    repeated (chat/run-registered-command request text)]
+                {:result result :repeated repeated :requests @requests :claims @claims
+                 :stages first-stages :pushed @pushed :reviewed @reviewed :remembered @remembered})))))
+      (finally (.delete file)))))
+
+(fact "prepared implicit Zen root stages and really claims its sealed automatic draft once"
+  (let [{:keys [result repeated requests claims stages remembered]} (prepared-zen-change nil)
+        p (:proposal (last claims))
+        family (first stages)]
+    (get-in result [:data :status]) => :succeeded
+    (:error result) => nil
+    (count (filter #(contains? % :input) claims)) => 1
+    (:value result) => "Draft PR: https://github.com/owner/repo/pull/12"
+    (:value repeated) => (:value result)
+    remembered => []
+    (:execution p) => :automatic
+    (:request-key p) => #"[a-f0-9]{64}"
+    (:hash p) => string?
+    (:actor p) => {:adapter "slack" :connection "workspace" :user "U1"
+                  :conversation "workspace/C1" :thread "C1"}
+    (:model p) => "root-chat"
+    (get-in p [:provider :name]) => "zen"
+    (get-in p [:toolset :name]) => "github-pr"
+    (count (filter #(= "create_pull_request" (get-in % [:body :params :name])) requests)) => 1
+    (get-in (first (filter #(= "create_pull_request" (get-in % [:body :params :name])) requests))
+            [:body :params :arguments :draft]) => true
+    (count (filter :input claims)) => 1
+    (count (distinct (map :family-id stages))) => 1
+    (:limit @(:budget family)) => 20
+    (:generation-limit family) => 91
+    (mapv :ordinal (:receipts @(:budget family))) => (vec (range 1 (inc (:used @(:budget family)))))
+    (:closed? @(:budget family)) => true))
+
+(fact "prepared Zen final claim still rejects current provider router and user revocation without retry"
+  (doseq [revoked [:provider :router :user :role :repository :closed :event :family]]
+    (let [{:keys [result requests claims pushed reviewed]} (prepared-zen-change revoked)]
+      (get-in result [:data :status]) => nil
+      (count reviewed) => 1
+      (count (filter #(= "create_pull_request" (get-in % [:body :params :name])) requests)) => 0
+      (count (filter :proposal claims)) => 0
+      pushed => false)))

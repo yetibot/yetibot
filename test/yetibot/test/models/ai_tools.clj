@@ -1149,3 +1149,49 @@
                                     :function {:name "[redacted]" :arguments {"[redacted]" "[redacted]"}}}]
         (get-in result [:result/data :id]) => secret
         (get-in result [:result/data :usage]) => (:usage body)))))
+
+(fact "host result provenance alone preserves typed envelope controls while all other keys and values are projected"
+  (let [owner {:actor {:id "envelope-owner"} :chat-source {:adapter :slack :room "projection"}}
+        store (datasets/create-store owner)
+        d (datasets/retain! store owner
+            {:rows [{:auth/token ["content" "type" "text" "isError" "structuredContent"]
+                     :auth/key 739194}]
+             :fields [{:name "key" :path ["auth/key"] :type :nominal}]
+             :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+        config {:dataset-store store :dataset-owner owner :secrets ["CONFIGURED-ENVELOPE"]}
+        envelope {:isError false :content [{:type "text" :text "content"}]
+                  :structuredContent {:safe "kept" :datasets [d]}
+                  :CONFIGURED-ENVELOPE "CONFIGURED-ENVELOPE" :numeric 739194}
+        parsed (try
+                 (json/parse-string
+                   (#'tools/current-content (json/generate-string envelope) config
+                                             {:configured? true :host-result? true}) true)
+                 (catch Exception e {:projection/error (:ai/ambiguous-payload (ex-data e))}))]
+    (:projection/error parsed) => nil
+    (select-keys parsed [:isError :content])
+    => {:isError false :content [{:type "text" :text "[redacted]"}]}
+    (get-in parsed [:structuredContent :safe]) => "kept"
+    (get-in parsed [:structuredContent :datasets 0 :dataset-id]) => (:dataset-id d)
+    (get parsed (keyword "[redacted]")) => "[redacted]"
+    (:numeric parsed) => "[redacted]"
+    (get-in (datasets/lookup! store owner (:dataset-id d)) [:rows 0 "auth/key"]) => 739194
+    (#'tools/current-content "{\"content\":[]}" config {:configured? true})
+    => "{\"[redacted]\":[]}"
+    (#'tools/current-content "{\"content\":[],\"[redacted]\":\"collision\"}" config {:configured? true})
+    => (midje.sweet/throws Exception)
+    (datasets/close! store owner)))
+
+(fact "progress-only provider result strings do not acquire host envelope exemptions"
+  (let [body {:id "CONFIGURED-ENVELOPE" :usage {:input_tokens 739194}
+              :output [{:type "reasoning" :id "CONFIGURED-ENVELOPE"
+                        :encrypted_content "CONFIGURED-ENVELOPE" :summary []}
+                       {:type "function_call_output" :call_id "CONFIGURED-ENVELOPE"
+                        :output "{\"CONFIGURED-ENVELOPE\":\"CONFIGURED-ENVELOPE\",\"safe\":\"kept\"}"}]}]
+    (with-redefs [mcp/config (constantly {:servers [] :secrets ["CONFIGURED-ENVELOPE"]})
+                  ai/complete (fn [& _] {:result/value "Safe" :result/data body})]
+      (let [result (tools/complete provider "chat" messages {:on-progress identity})
+            replay (get-in result [:result/data :output 1])]
+        (:call_id replay) => "CONFIGURED-ENVELOPE"
+        (json/parse-string (:output replay) true) => {(keyword "[redacted]") "[redacted]" :safe "kept"}
+        (get-in result [:result/data :output 0]) => (first (:output body))
+        (get-in result [:result/data :usage]) => (:usage body)))))

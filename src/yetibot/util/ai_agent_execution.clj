@@ -319,6 +319,17 @@
                  :budget (:budget session) :event event :core-context (atom nil)
                  :durable-session session :scheduled? (:scheduled? state)
                  :require-live! #(require-session-live! session)
+                 ::tools/restore-host-results
+                 (fn [saved request]
+                   ;; The host has already claimed/validated this owner. Pure
+                   ;; finalization checks that exact proof without another IO.
+                   (when-not (and (= :loop (:phase state))
+                                  (identical? saved (:loop state))
+                                  (= (:family-id state) (:family-id request))
+                                  (= (get-in session [:owner :fence]) (:worker-fence @(:row session)))
+                                  (identical? (:budget session) (:budget request)))
+                     (denied!))
+                   (get-in state [:loop :trace ::tools/host-result-positions]))
                  :generation-limit (:generation-cap state) :no-tools? (:no-tools? grant)
                  :text-only (atom (boolean (:no-tools? grant)))
                  :planner-provider (:provider resolved) :planner-model (:model resolved)

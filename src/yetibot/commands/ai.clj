@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.api.ai-outcome :as outcome]
+            [yetibot.api.opencode :as zen]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.chat :as chat]
             [yetibot.core.models.admin :as admin]
@@ -642,24 +643,32 @@
   "Re-resolve a host-owned route; the body is data, never flags or a pipeline."
   [args route resolve-config]
   (let [provider (ai/provider (resolve-config) (:provider route))
-        _ (execution/ensure-followup! route provider)
+        _ (execution/ensure-followup-config! route provider)
         actor (policy/actor args)
         _ (when-not actor
             (ai/fail "AI follow-ups require a trusted chat user."))
-        _ (when (:verified-free route)
-            (policy/authorize!
-              (when-not (:no-tools route)
-                (:toolset (toolsets/select (mcp/config) (:toolset route))))
-              actor provider (:model route)))
-        provider (execution/revalidate-free-followup! route provider)]
+        _ (policy/authorize!
+            (when-not (:no-tools route)
+              (:toolset (toolsets/select (mcp/config) (:toolset route))))
+            actor provider (:model route))
+        prepared (merge (select-keys route [:no-tools :toolset :max-tool-calls :max-output-tokens])
+                        {:provider (cond-> provider (:verified-free route) (assoc :ai/verified-free true))
+                         :model (:model route) :actor actor :prompt (:match args) :caption? true
+                         :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))})
+        ;; Resolve the pinned Zen model's dialect only in this human turn's
+        ;; one finite source, after checking its original configured identity.
+        prepared (if (zen/provider? provider) (execution/prepare-source prepared) prepared)
+        provider (:provider prepared)]
     (execution/ensure-followup! route provider)
-    (merge (select-keys route [:no-tools :toolset :max-tool-calls :max-output-tokens])
-           {:provider provider :model (:model route)
-            :read-messages #(let [messages (context/messages args (:match args))]
-                              (execution/ensure-followup! route provider)
-                              messages)
-            :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))
-            :actor actor :prompt (:match args) :caption? true})))
+    (assoc prepared :read-messages
+      #(do
+         (execution/ensure-followup-config! route (ai/provider (resolve-config) (:provider route)))
+         (execution/ensure-followup! route provider)
+         (execution/revalidate-free-followup! route provider)
+         (execution/ensure-followup-config! route (ai/provider (resolve-config) (:provider route)))
+         (let [messages (context/messages args (:match args))]
+           (execution/ensure-followup! route provider)
+           messages)))))
 
 (defn- complete-prompt*
   [{:keys [provider model messages no-tools toolset actor on-progress
@@ -732,10 +741,20 @@
     #(status/with-status
        chat/*target* (prepare-prompt args)
        (fn [prepared]
-         (autodraft/complete prepared args
-           (fn [selected]
-             (execution/remember-answer! "ai" selected
-                                         (complete-prompt selected))))))))
+         (let [answer (volatile! nil)
+               result (autodraft/complete prepared args
+                        (fn [selected]
+                          (let [result (complete-prompt selected)]
+                            (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+                              (execution/require-live!)
+                              (reauthorize))
+                            (vreset! answer selected)
+                            result)))]
+           ;; Root remembrance runs after inherited routing has unwound. A
+           ;; draft, duplicate, clarification or failed route is not an answer.
+           (if-let [selected @answer]
+             (execution/remember-answer! "ai" selected result)
+             result))))))
 
 (defmethod execution/run-followup "ai" [route args]
   (safely args
