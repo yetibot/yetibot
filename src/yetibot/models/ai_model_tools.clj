@@ -54,14 +54,19 @@
              (policy/authorize-provider! t actor provider)
              (when execution/*command-capture*
                (policy/authorize-provider! (:toolset-policy execution/*request*) actor provider)))
+         ready (when (and resolve? (= (:name provider) (get-in execution/*request* [:planner-provider :name]))
+                          (= (:planner-model execution/*request*)
+                             (::opencode/selected-model (:planner-provider execution/*request*))))
+                 (:planner-provider execution/*request*))
          model (if automatic?
                  (when resolve?
-                   (ai/default-model provider
-                     #(and (policy/model-allowed? t actor provider %)
-                           (or (not execution/*command-capture*)
-                               (policy/model-allowed? (:toolset-policy execution/*request*) actor provider %)))))
+                   (or (when ready (:planner-model execution/*request*))
+                       (ai/default-model provider
+                         #(and (policy/model-allowed? t actor provider %)
+                               (or (not execution/*command-capture*)
+                                   (policy/model-allowed? (:toolset-policy execution/*request*) actor provider %))))))
                  (or (get args "model") (:model provider)))
-         provider (cond-> provider
+         provider (cond-> (if (and ready (= model (:planner-model execution/*request*))) ready provider)
                     (and automatic? resolve? model)
                     (assoc :ai/verified-free true))]
      (when (and (= "cf" operation) (not (cf/provider-account provider)))
@@ -337,8 +342,17 @@
     (try
       (trusted! config source)
       (arguments! config operation args)
-      (let [action (get args "action")]
-        (cond
+      (let [action (get args "action")
+            [raw model] (when (= "ask" action) (selected config operation args))]
+        (if (and (= "ask" action) (opencode/provider? raw) (nil? execution/*request*))
+          (execution/with-source*
+            (merge (limits/effective config)
+                   {:provider raw :model model :no-tools true :single-hop? true
+                    :toolset (get-in config [:toolset :name])
+                    :toolset-policy (:toolset config)
+                    :max-output-tokens (get args "max_output_tokens" (generation-budget config))})
+            #(invoke! config operation args source read-messages))
+          (cond
           (= "defaults" action)
           {:structuredContent (assoc (defaults/view) :untrusted true)}
           (= "reset_default" action)
@@ -436,7 +450,7 @@
                      (assoc :ai/cost (get-in result [:result/data :ai/cost]))
                      (get-in result [:result/data :ai/accounting])
                      (assoc :ai/accounting
-                            (get-in result [:result/data :ai/accounting])))}))))))
+                            (get-in result [:result/data :ai/accounting])))})))))))
       (catch Exception e
         (let [data (ex-data e)
               output-error (:ai/output-error data)

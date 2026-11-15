@@ -259,7 +259,8 @@
   ([provider] (default-model provider (constantly true)))
   ([provider allowed?]
    (if (= "zen" (:name provider))
-     (opencode/default-model (resolve-provider provider) allowed?)
+     (opencode/default-model (if (and (:model provider) (not (:ai/free-default provider)))
+                               provider (resolve-provider provider)) allowed?)
      (:model provider))))
 
 (defn models [provider]
@@ -308,7 +309,9 @@
       (try
         (let [catalog (:catalog (meta (models provider)))
               record (some #(when (= model (:id %)) %) (:models catalog))]
-          (opencode/model-provider provider record))
+          (let [prepared (opencode/model-provider provider record)]
+            (with-meta prepared (assoc (meta prepared) ::configured-signature
+                                       (execution/provider-signature provider)))))
         (catch Exception e
           (throw (ex-info
                    "Zen text model routing is unavailable. No inference was sent."

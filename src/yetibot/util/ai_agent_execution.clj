@@ -71,12 +71,30 @@
            :signature (execution/provider-signature provider)}
     (:continuation-transport provider) (assoc :transport (:continuation-transport provider))))
 
+(declare source-identity!)
+
 (defn- prepare-source-provider [provider model]
-  ;; Identity checks must not resolve an ordinary provider's key-file. Zen
-  ;; needs protocol metadata, but only after the caller's policy is checked.
-  (if (opencode/provider? provider)
-    (ai/prepare-provider provider model)
-    provider))
+  ;; Ordinary descriptors require no IO. Zen protocol preparation must run
+  ;; under the actual finite source, not the scheduling parent's bindings.
+  (if-not (opencode/provider? provider) provider
+    (let [request execution/*request*
+          _ (when-not request (denied!))
+          _ (if origin/*operation* (execution/require-live!) (execution/require-open!))
+          current (source-identity! request)
+          raw (some #(when (= (:name provider) (:name %)) %) (:providers (ai/grok-config)))
+          before (get (:provider-identities request) (str "app:" (:name provider)))]
+      (when (and (:provider-identities request)
+                 (not (and before (= before (execution/provider-signature raw))))) (denied!))
+      (doseq [t [(:toolset-policy request) (:toolset-policy current)]]
+        (policy/authorize! t (policy/actor execution/*event*) provider model))
+      (let [ready (:planner-provider request)]
+        (if (and (= model (:planner-model request))
+                 (= model (::opencode/selected-model ready))
+                 (= (:name provider) (:name ready))
+                 (= (execution/provider-signature (dissoc provider :api))
+                    (execution/provider-signature (dissoc ready :api))))
+          ready
+          (ai/prepare-provider provider model))))))
 
 (defn- resolve-planner-provider [planner]
   (let [provider (if-let [transport (:transport planner)]
@@ -92,7 +110,14 @@
     provider))
 
 (defn- resolve-planner [planner]
-  (prepare-source-provider (resolve-planner-provider planner) (:model planner)))
+  ;; A saved signature can identify the already frozen Zen dialect without
+  ;; reopening credentials or a cold catalog during definitive finalization.
+  (let [raw (resolve-planner-provider planner)
+        candidates (if (opencode/provider? raw)
+                     [raw (assoc raw :api "responses") (assoc raw :api "chat-completions")]
+                     [raw])]
+    (or (some #(when (= (:signature planner) (execution/provider-signature %)) %) candidates)
+        (denied!))))
 
 (defn- resolve-producer [producer]
   (case (:transport producer)
@@ -123,7 +148,7 @@
 (defn authority
   "Issue only from live host bindings; model/job JSON is not an input."
   [request]
-  (when (or (:routing-pending? request) (:no-host-execution? request)) (denied!))
+  (when (or (:preparing? request) (:routing-pending? request) (:no-host-execution? request)) (denied!))
   (let [event execution/*event* actor (policy/actor event)
         provider (:planner-provider request) model (:planner-model request)]
     (when-not (and actor (:id (:yetibot-user event)) provider (ai/nonblank-string? model)
@@ -242,7 +267,9 @@
         _ (doseq [grant [original current]]
             (policy/authorize! (:toolset-policy grant) (:actor original)
                                raw-provider (:model planner)))
-        provider (prepare-source-provider raw-provider (:model planner))
+        _ (when-let [before (get (:provider-identities original) (str "app:" (:name raw-provider)))]
+            (when-not (= before (execution/provider-signature raw-provider)) (denied!)))
+        provider (resolve-planner planner)
         producer (:producer original)
         current-producer (when producer
                            (if (= producer planner) provider (resolve-producer producer)))]
@@ -287,6 +314,7 @@
                 (datasets/import-store! owner (:datasets state) config)
                 (datasets/create-store owner config))
         request {:family-id (:family-id state) :metered? true
+                 :routing-request (atom nil)
                  :usage-context-id (:usage-context-id state)
                  :budget (:budget session) :event event :core-context (atom nil)
                  :durable-session session :scheduled? (:scheduled? state)
@@ -425,11 +453,20 @@
                                   interpreter/*chat-source* (:chat-source event)
                                   interpreter/*current-user* (:user event)
                                   interpreter/*yetibot-user* (:yetibot-user event)]
-                          (execution/with-request* request
-                            (fn []
-                              (let [result
+                          (let [provider
+                                (execution/with-request*
+                                  (assoc request :preparing? true :authorize-inference! (fn [_] (denied!)))
+                                  #(do (execution/require-open!)
+                                       (prepare-source-provider (:provider resolved) (:model resolved))))
+                                _ (when-not (= (execution/provider-signature provider)
+                                               (execution/provider-signature (:provider resolved))) (denied!))
+                                request (assoc request :planner-provider provider)
+                                _ (reset! (:routing-request request) request)]
+                            (execution/with-request* request
+                              (fn []
+                                (let [result
                                     (try
-                                      (tools/complete (:provider resolved) (:model resolved)
+                                      (tools/complete provider (:model resolved)
                                         (get-in state [:loop :messages])
                                         {:actor (:actor (:original resolved))
                                          :toolset (:toolset-name request)
@@ -449,7 +486,7 @@
                                         (zero? (execution/remaining)) :exhausted
                                         (get-in result [:result/data :isError]) :partial
                                         :else :completed))
-                                (publish! session)))))
+                                (publish! session))))))
                         (finally
                           (execution/close-family! request)
                           (datasets/close! (:dataset-store request) (:dataset-owner request))))))))))
@@ -565,6 +602,21 @@
            :toolset-policy (:toolset selected) :tools tools
            :runtime-event {:chat-source source :user user :yetibot-user bot
                            :event-type :message})))
+
+(defn- source-identity! [request]
+  ;; Identity/policy only: this must remain usable before model preparation and
+  ;; while validating a definitive checkpoint with no remaining admissions.
+  (let [event (:event request)
+        grant {:source (saved-source (:chat-source event))
+               :user (identity-fields (:user event))
+               :yetibot-user (identity-fields (:yetibot-user event))
+               :actor (policy/actor event) :tools #{} :toolset-name (:toolset-name request)}
+        current (if (:no-host-execution? request)
+                  {:toolset-policy (:toolset (toolsets/select (mcp/config) (:toolset-name request)))}
+                  (current-authority grant))]
+    (when (and (not (:no-host-execution? request))
+               (not= (:user grant) (:user current))) (denied!))
+    current))
 
 (defn- reauthorize-source! [request]
   (let [grant (authority request)
@@ -769,6 +821,32 @@
     (if execution/*request*
     (do
       (execution/require-open!)
+      (let [prepared
+            (if-let [selection (::execution/prepared-source prepared)]
+              (let [request execution/*request*
+                    current (source-identity! request)
+                    provider (:provider prepared)
+                    policies [(:toolset-policy request) (:toolset-policy current)]
+                    actor (policy/actor execution/*event*)
+                    raw (some #(when (= (:name provider) (:name %)) %) (:providers (ai/grok-config)))
+                    before (get (:provider-identities request) (str "app:" (:name provider)))
+                    _ (when (and (:provider-identities request)
+                                 (not (and before (= before (execution/provider-signature raw))
+                                           (= before (execution/provider-signature provider))))) (denied!))
+                    _ (doseq [t policies] (policy/authorize-provider! t actor provider))
+                    model (or (:model prepared)
+                              (when (= (:name provider) (get-in request [:planner-provider :name]))
+                                (:planner-model request))
+                              (ai/default-model provider
+                                #(every? (fn [t] (policy/model-allowed? t actor provider %)) policies)))
+                    _ (doseq [t policies] (policy/authorize! t actor provider model))
+                    provider (prepare-source-provider provider model)
+                    resolved (assoc prepared :provider provider :model model)]
+                ;; This slot returns selection data only; the existing opaque
+                ;; Context and its finite budget remain the sole authority.
+                (reset! selection (select-keys resolved [:provider :model]))
+                resolved)
+              prepared)]
       (let [current (toolsets/select (mcp/config) (:toolset-name execution/*request*))
             actor (policy/actor execution/*event*)]
         (doseq [t [(:toolset-policy execution/*request*) (:toolset current)]]
@@ -790,25 +868,52 @@
                  (not (:producer-operation? prepared)))
         (reset! (:tool-ceiling execution/*request*) #{})
         (when-let [text-only (:text-only execution/*request*)] (reset! text-only true)))
-      (f))
+      (f)))
     (let [selected (toolsets/select (mcp/config) (:toolset prepared))
+          selected (if-let [original (:toolset-policy prepared)]
+                     (update selected :toolset #(execution/intersect-policy original %)) selected)
           actor (policy/actor execution/*event*)
-          _ (policy/authorize! (:toolset selected) actor (:provider prepared) (:model prepared))
-          producer-provider (prepare-source-provider (:provider prepared) (:model prepared))
-          provider (if (:non-chat? prepared) (ai/provider (ai/config) nil) producer-provider)
-          model (if (:non-chat? prepared)
-                  (ai/default-model provider #(policy/model-allowed? (:toolset selected) actor provider %))
-                  (:model prepared))
-          _ (when-not (ai/nonblank-string? model) (denied!))
-          _ (policy/authorize! (:toolset selected) actor provider model)
-          provider (if (:non-chat? prepared) (prepare-source-provider provider model) provider)
-          producer (cond-> (planner-identity producer-provider (:model prepared))
-                     (:producer-kind prepared) (assoc :transport (:producer-kind prepared)))
+          default-planner (when (:non-chat? prepared) (ai/provider (ai/config) nil))
+          identity-request {:event execution/*event*
+                            :no-host-execution? (nil? execution/*event*)
+                            :toolset-name (get-in selected [:toolset :name])}
+          current (if (or (opencode/provider? (:provider prepared))
+                          (opencode/provider? default-planner))
+                    (source-identity! identity-request)
+                    {:toolset-policy (:toolset selected)})
+          configured (some #(when (= (get-in prepared [:provider :name]) (:name %)) %) (:providers (ai/grok-config)))
+          _ (when (and (opencode/provider? (:provider prepared)) (nil? configured)) (denied!))
+          _ (when (and configured
+                       (not (or (= (execution/provider-signature configured)
+                                   (execution/provider-signature (:provider prepared)))
+                                (and (opencode/provider? (:provider prepared))
+                                     (= (:model prepared) (::opencode/selected-model (:provider prepared)))
+                                     (#{"responses" "chat-completions"} (get-in prepared [:provider :api]))
+                                     (= (::ai/configured-signature (meta (:provider prepared)))
+                                        (execution/provider-signature configured))
+                                     (= (execution/provider-signature (dissoc configured :api))
+                                        (execution/provider-signature (dissoc (:provider prepared) :api))))
+                                (and (:no-tools prepared)
+                                     (not (seq (get-in prepared [:provider :native-tools])))
+                                     (= (execution/provider-signature (dissoc configured :native-tools))
+                                        (execution/provider-signature (dissoc (:provider prepared) :native-tools)))))))
+              (denied!))
+          _ (doseq [t [(:toolset selected) (:toolset-policy current)]]
+              (if (:model prepared)
+                (policy/authorize! t actor (:provider prepared) (:model prepared))
+                (policy/authorize-provider! t actor (:provider prepared))))
+          _ (when default-planner
+              (doseq [t [(:toolset selected) (:toolset-policy current)]]
+                (policy/authorize-provider! t actor default-planner)
+                (when (and (:model default-planner) (not (:ai/free-default default-planner)))
+                  (policy/authorize! t actor default-planner (:model default-planner)))))
           budgets (limits/effective prepared)
+          slot (or *route-slot* (atom nil))
+          completed? (volatile! false)
           request (merge (execution/family (:max-tool-calls budgets)
                                            (:max-output-tokens budgets))
-                         {:event execution/*event* :routing-request *route-slot* :planner-provider provider
-                          :planner-model model :producer producer :provider-identities (provider-identities)
+                         {:event execution/*event* :routing-request slot :planner-provider (:provider prepared)
+                          :planner-model (:model prepared) :provider-identities (provider-identities)
                           :toolset-name (get-in selected [:toolset :name])
                           :toolset-policy (:toolset selected) :no-tools? (boolean (:no-tools prepared))
                           :untrusted-text? (and (nil? execution/*event*)
@@ -817,16 +922,46 @@
                           :tool-ceiling (atom (when (or (:no-tools prepared) (nil? execution/*event*)) #{}))
                           :text-only (atom (boolean (:no-tools prepared)))
                           :stage-timings (atom {}) :planning-responses (atom 0)})
-          request (authorize-source-request request selected provider model)]
-      (policy/authorize! (:toolset-policy request) (policy/actor execution/*event*)
-                         provider model)
+          request (assoc request :preparing? true
+                         :authorize-inference! (fn [_] (denied!)))]
       (try
         (execution/with-request* request
-          #(do
-             (when *command-source* (reset! *command-source* origin/*context*))
-             (origin/mark-output! (f) origin/*context*)))
+          (fn []
+            (let [producer-model (or (:model prepared)
+                                     (ai/default-model (:provider prepared)
+                                       #(every? (fn [t] (policy/model-allowed? t actor (:provider prepared) %))
+                                                [(:toolset selected) (:toolset-policy current)])))
+                  _ (when-not (ai/nonblank-string? producer-model) (denied!))
+                  _ (doseq [t [(:toolset selected) (:toolset-policy current)]]
+                      (policy/authorize! t actor (:provider prepared) producer-model))
+                  producer-provider (prepare-source-provider (:provider prepared) producer-model)
+                  raw-planner (or default-planner producer-provider)
+                  model (if (:non-chat? prepared)
+                          (ai/default-model raw-planner #(policy/model-allowed? (:toolset selected) actor raw-planner %))
+                          producer-model)
+                  _ (when-not (ai/nonblank-string? model) (denied!))
+                  _ (doseq [t [(:toolset selected) (:toolset-policy current)]]
+                      (policy/authorize! t actor raw-planner model))
+                  provider (if (:non-chat? prepared) (prepare-source-provider raw-planner model) raw-planner)
+                  producer (cond-> (planner-identity producer-provider producer-model)
+                             (:producer-kind prepared) (assoc :transport (:producer-kind prepared)))
+                  ready (authorize-source-request
+                          (-> request (dissoc :preparing?)
+                              (assoc :planner-provider provider :planner-model model :producer producer))
+                          selected provider model)]
+              (reset! slot ready)
+              (when-let [selection (::execution/prepared-source prepared)]
+                (reset! selection {:provider provider :model model}))
+              (execution/with-request* ready
+                #(do
+                   (when *command-source* (reset! *command-source* origin/*context*))
+                   (let [result (origin/mark-output! (f) origin/*context*)]
+                     (vreset! completed? true)
+                     result))))))
         (finally
-          (when-not origin/*scope* (execution/close-family! request))))))))
+          (when (and (not origin/*scope*)
+                     (not (and @completed? (::execution/defer-source-close? prepared))))
+            (execution/close-family! request))))))))
 
 
 (defn- route-source! [prepared args f]
@@ -1067,12 +1202,7 @@
               ;; Catalog authorization must not prepare the planner: Zen
               ;; preparation itself uses this metadata boundary. Resolve only
               ;; current registered identity/policy before any credential IO.
-              current (if (:no-host-execution? request)
-                        {:toolset-policy (:toolset (toolsets/select (mcp/config) (:toolset-name request)))}
-                        (current-authority (authority request)))]
-          (when (and (not (:no-host-execution? request))
-                     (not= (identity-fields (get-in request [:event :user])) (:user current)))
-            (denied!))
+              current (source-identity! request)]
           (doseq [t [(:toolset-policy request) (:toolset-policy current)]]
             (policy/authorize-provider! t (when-not (:no-host-execution? request)
                                             (policy/actor execution/*event*)) provider))))

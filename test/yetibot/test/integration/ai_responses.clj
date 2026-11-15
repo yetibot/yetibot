@@ -11,6 +11,7 @@
             [yetibot.core.config :as config]
             [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.core.util.public-result :as public]
             [yetibot.util.ai-execution :as host-execution]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.test.support.mcp :as support]))
@@ -462,7 +463,9 @@
         opaque {:type "reasoning" :id "PROVIDER_SECRET"
                 :encrypted_content "PROVIDER_SECRET" :summary []}
         usage {:input_tokens 739194 :output_tokens 1 :total_tokens 739195}
-        annotated (update-in (text-output "Safe answer") [:content 0 :annotations 0]
+        annotated (update-in (assoc (text-output "Safe answer")
+                                   :extension {:PROVIDER_SECRET "PROVIDER_SECRET" :numeric 739194 :safe "kept"}
+                                   :reasoning_content "PROVIDER_SECRET") [:content 0 :annotations 0]
                              assoc (keyword "PROVIDER_SECRET") "extension"
                              :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
                              :numeric 739194 :safe "kept" :start_index 0 :end_index 11)
@@ -505,12 +508,16 @@
                 (string/includes? (json/generate-string payload) "PROVIDER_SECRET") => false
                 (string/includes? (json/generate-string payload) "739194") => false
                 (:safe payload) => "kept")
+              (get-in result [:result/data :output 1 :extension])
+              => {"[redacted]" "[redacted]" :numeric "[redacted]" :safe "kept"}
+              (get-in result [:result/data :output 1 :reasoning_content]) => "[redacted]"
               (:start_index annotation) => 0
               (:end_index annotation) => 11
               (first (filter #(= "reasoning" (:type %)) (:input next-body))) => opaque
               (get-in result [:result/data :output 0]) => opaque
               (get-in result [:result/data :usage]) => usage
               (:result/value result) => "Safe answer"
+              (string/includes? (json/generate-string (public/projection result)) "PROVIDER_SECRET") => false
               (string/includes? (json/generate-string replay-payload) "PROVIDER_SECRET") => false)))))))
 
 (fact "rewritten untrusted key collisions stop before a next planner and expose only safe failure data"
@@ -528,5 +535,24 @@
           (count @calls) => 1
           (get-in result [:result/data :isError]) => true
           (get-in report [:calls 0 :outcome]) => :unknown
+          (string/includes? (pr-str result) "PROVIDER_SECRET") => false
+          (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))
+
+
+(fact "provider remainder key collisions stop actual next-planner replay without repeating an admitted tool"
+  (let [turns (atom 0)]
+    (with-runtime
+      (fn [body]
+        (swap! turns inc)
+        (response [(assoc (text-output "Safe")
+                          :extension {:PROVIDER_SECRET "one" :CLOUDFLARE_SECRET "two"})
+                   (function-call (account-function-name body) "extension-collision" "{}")]))
+      {:content [] :isError false}
+      (fn [provider _ calls]
+        (let [result (command/safely #(tools/complete provider "grok-4.7" messages
+                                                    {:actor (policy/actor host-execution/*event*)}))]
+          @turns => 1
+          (count @calls) => 1
+          (get-in result [:result/data :isError]) => true
           (string/includes? (pr-str result) "PROVIDER_SECRET") => false
           (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))

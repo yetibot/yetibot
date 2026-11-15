@@ -615,10 +615,10 @@
          actor (policy/actor args)
          _ (when automatic? (policy/authorize-provider! t actor provider))
          model (or (:model options) (when inherited (:planner-model execution/*request*))
-                   (ai/default-model provider
-                     #(policy/model-allowed? t actor provider %)))
+                   (when-not automatic?
+                     (ai/default-model provider #(policy/model-allowed? t actor provider %))))
          provider (cond-> provider automatic? (assoc :ai/verified-free true))]
-     (when-not model
+     (when-not (or model automatic?)
        (ai/fail (str "No default model configured for this provider. "
                      "Use --model <model> or configure its model.")))
      (cond-> (assoc (merge options
@@ -634,7 +634,8 @@
                     :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))
                     :actor (policy/actor args))
        snapshot (assoc :pipeline-input snapshot
-                       :additional-secrets (keep :key (:providers config)))))))
+                       :additional-secrets (keep :key (:providers config)))
+       automatic? (execution/prepare-source)))))
 
 (defn prepare-followup
   "Re-resolve a host-owned route; the body is data, never flags or a pipeline."

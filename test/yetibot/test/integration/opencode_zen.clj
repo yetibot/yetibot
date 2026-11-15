@@ -5,6 +5,9 @@
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
+            [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.util.ai-execution :as source]
+            [yetibot.core.util.agent-execution :as origin]
             [yetibot.api.opencode :as opencode]
             [yetibot.commands.zen]
             [yetibot.core.commands.collections]
@@ -263,3 +266,42 @@
         (string/includes? (str (:value result)) "must-not-run") => false
         (string/includes? (str result) "zen-fixture-secret") => false
         (string/includes? (str (:value result)) "private input") => false))))
+
+
+(fact "literal Zen explicit and default asks establish the same finite official source before credential and catalog IO"
+  (doseq [explicit? [true false]]
+    (let [file (java.io.File/createTempFile "literal-zen-" ".key")
+          observations (atom []) sends (atom [])
+          read-bytes cloudflare/read-bytes
+          provider (-> zen (dissoc :key) (assoc :key-file (.getAbsolutePath file)))
+          observe! (fn [kind]
+                     (swap! observations conj {:kind kind :context (origin/capability? origin/*context*)
+                                               :family (:family-id source/*request*)
+                                               :limit (some-> source/*request* :budget deref :limit)
+                                               :closed? (some-> source/*request* :budget deref :closed?)
+                                               :user (get-in source/*event* [:user :id])}))]
+      (spit file "literal-zen-synthetic")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers []})
+                      context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                      cloudflare/read-bytes (fn [& args]
+                                                ;; The two-argument entry delegates to the physical reader.
+                                                (when (= 3 (count args)) (observe! :credential))
+                                                (apply read-bytes args))
+                      http/get (fn [_ options] (observe! :protocol) (response options))
+                      http/post (fn [_ options]
+                                  (swap! sends conj {:form (:form-params options)
+                                                    :family (:family-id source/*request*)
+                                                    :used (:used @(:budget source/*request*))})
+                                  {:status 200 :body {:choices [{:message {:role "assistant" :content "Literal Zen answer"}}]}})]
+          (:value (execution/run-registered-command execution/request
+                    (str "zen " (when explicit? "--model fixture-chat ") "--max-output-tokens 91 hello")))
+          => "Literal Zen answer")
+        (count @sends) => 1
+        (get-in @sends [0 :form :max_tokens]) => 91
+        (get-in @sends [0 :used]) => 1
+        (every? #(and (:context %) (= "U1" (:user %)) (= 20 (:limit %))
+                       (false? (:closed? %)) (= (get-in @sends [0 :family]) (:family %))) @observations) => true
+        (frequencies (map :kind @observations)) => {:credential 1 :protocol 1}
+        (finally (.delete file))))))

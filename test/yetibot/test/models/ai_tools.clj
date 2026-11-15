@@ -1033,7 +1033,11 @@
 
 (fact "progress-only text completion projects payloads without deepwalking typed response controls"
   (let [secret "CONFIGURED-OPAQUE"
-        body {:id secret :usage {:input_tokens 739194}
+        body {:id secret :model secret :usage {:input_tokens 739194}
+              (keyword secret) {:value secret :numeric 739194 :enum (keyword secret) :safe "kept"}
+              :choices [{:index 739194 :finish_reason "stop" :extension {secret secret}
+                         :message {:role "assistant" :content "Safe" :reasoning_content secret
+                                   :extension {(keyword secret) secret}}}]
               :output [{:type "reasoning" :id secret :encrypted_content secret :summary []}
                        {:type "message" :id secret :role "assistant"
                         :content [{:type "output_text" :text secret
@@ -1043,6 +1047,12 @@
                   ai/complete (fn [& _] {:result/value secret :result/data body})]
       (let [result (tools/complete provider "chat" messages {:on-progress identity})]
         (:result/value result) => "[redacted]"
+        (get-in result [:result/data "[redacted]"])
+        => {:value "[redacted]" :numeric "[redacted]" :enum "[redacted]" :safe "kept"}
+        (get-in result [:result/data :choices 0 :index]) => 739194
+        (get-in result [:result/data :choices 0 :extension]) => {"[redacted]" "[redacted]"}
+        (get-in result [:result/data :choices 0 :message :reasoning_content]) => "[redacted]"
+        (get-in result [:result/data :choices 0 :message :extension]) => {"[redacted]" "[redacted]"}
         (select-keys (:result/data result) [:id :usage]) => (select-keys body [:id :usage])
         (get-in result [:result/data :output 0]) => (first (:output body))
         (get-in result [:result/data :output 1 :id]) => secret
@@ -1066,3 +1076,15 @@
     => (midje.sweet/throws Exception)
     (get-in (datasets/lookup! store owner (:dataset-id descriptor)) [:rows 0 "auth/token"]) => "LEARNED-KEY"
     (datasets/close! store owner)))
+
+
+(fact "only genuine typed positions retain provider controls and all rewritten key collisions fail closed"
+  (let [config {:secrets ["PRIVATE-EXTENSION"]}]
+    (#'tools/current-message {:type "unknown" :role "assistant" :id "PRIVATE-EXTENSION"
+                              :encrypted_content "PRIVATE-EXTENSION"} config)
+    => {:type "unknown" :role "assistant" :id "[redacted]" :encrypted_content "[redacted]"}
+    (#'tools/current-message {:role "assistant" :content "Safe" :id "PRIVATE-EXTENSION"} config)
+    => {:role "assistant" :content "Safe" :id "[redacted]"}
+    (#'tools/current-response {:choices [{:message {:role "assistant" :content "Safe"}}]
+                               :extension {:PRIVATE-EXTENSION "one" "[redacted]" "two"}} config)
+    => (midje.sweet/throws Exception)))

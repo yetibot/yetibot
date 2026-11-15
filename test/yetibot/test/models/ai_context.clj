@@ -4,10 +4,13 @@
             [clj-slack.conversations :as slack]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
+            [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.commands.ai :as command]
             [yetibot.test.support.ai-execution :as support]
             [discljord.messaging :as discord]
-            [midje.sweet :refer [fact facts =>]]
+            [midje.sweet :refer [fact facts => truthy]]
             [yetibot.core.chat :as chat]
             [yetibot.core.adapters.adapter :as adapters]
             [yetibot.core.models.users :as users]
@@ -257,3 +260,129 @@
            => true))
       @reads => 0
       @sends => 0)))
+
+
+(fact "Zen source bootstrap validates current registered identity before credentials or catalogs"
+  (doseq [revoked [:adapter :user] implicit? [false true]]
+    (let [file (java.io.File/createTempFile "zen-bootstrap-" ".key")
+          reads (atom 0) catalogs (atom 0) history (atom 0) sends (atom 0) issued (atom 0)
+          family execution/family read-bytes cloudflare/read-bytes
+          provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                    :key-file (.getAbsolutePath file)}
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      execution/family (fn [& args] (swap! issued inc) (apply family args))
+                      cloudflare/read-bytes (fn [& args] (swap! reads inc) (apply read-bytes args))
+                      http/get (fn [& _] (swap! catalogs inc)
+                                 {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                                                            :modalities {:input ["text"] :output ["text"]}
+                                                            :api {:chat-completions {}}
+                                                            :cost {:text {:input {:price 0} :output {:price 0}}}}]}})
+                      slack/replies (fn [& _] (swap! history inc) {:ok true :messages []})
+                      http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+          (support/in-registered-event support/request "ai --model zen-chat hello"
+            (fn [event]
+              (let [prepared (when-not implicit? (command/prepare-prompt (assoc event :match "--model zen-chat hello")))]
+                (case revoked
+                  :adapter (swap! adapters/adapters dissoc "workspace")
+                  :user (swap! users/users dissoc {:adapter :slack :id "U1"}))
+                (string? (error-message #(command/complete-prompt
+                                          (or prepared (command/prepare-prompt (assoc event :match "hello")))))) => true))))
+        @reads => 0
+        @catalogs => 0
+        @history => 0
+        @sends => 0
+        @issued => 0
+        (finally (.delete file))))))
+
+
+(fact "explicit and implicit Zen sources share one live finite context before protocol IO and history"
+  (doseq [selection [:explicit :configured-default :free-default]]
+    (let [file (java.io.File/createTempFile "zen-authorized-" ".key")
+          provider (cond-> {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                            :key-file (.getAbsolutePath file)}
+                     (= selection :configured-default) (assoc :model "zen-chat"))
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])
+          observations (atom []) sends (atom []) reads (atom 0) family (atom nil)
+          request (assoc-in support/request [:chat-source :raw-event]
+                            {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"})
+          read-bytes cloudflare/read-bytes
+          observe! (fn []
+                     (swap! observations conj {:context (origin/capability? origin/*context*)
+                                               :family (:family-id execution/*request*)
+                                               :user (get-in execution/*event* [:user :id])
+                                               :limit (get-in @(:budget execution/*request*) [:limit])
+                                               :closed? (:closed? @(:budget execution/*request*))}))]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      cloudflare/read-bytes (fn [& args] (observe!) (apply read-bytes args))
+                      http/get (fn [_ options] (observe!)
+                                 (let [body {:data [{:id "zen-chat" :type "chat"
+                                                    :modalities {:input ["text"] :output ["text"]}
+                                                    :api {:chat-completions {}}
+                                                    :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                   {:status 200 :body (if (= :stream (:as options))
+                                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8"))
+                                                       body)}))
+                      slack/replies (fn [& _] (swap! reads inc)
+                                      {:ok true :messages [{:ts "1.0" :user "U1" :text "root"}]})
+                      http/post (fn [endpoint opts]
+                                  (reset! family execution/*request*)
+                                  (swap! sends conj [endpoint (:form-params opts)])
+                                  {:status 200 :body {:choices [{:message {:role "assistant" :content "Zen answer"}}]}})]
+          (support/in-registered-event request "ai hello"
+            (fn [event]
+              (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+                (:result/value
+                  (command/complete-prompt
+                    (command/prepare-prompt
+                      (assoc event :match (str (when (= selection :explicit) "--model zen-chat ")
+                                               "--max-tool-calls 3 --max-output-tokens 91 hello")))))) => "Zen answer")))
+        (count @sends) => 1
+        @reads => 1
+        (get-in @sends [0 0]) => "https://opencode.ai/inference/openai/v1/chat/completions"
+        (get-in @sends [0 1 :max_tokens]) => 91
+        (:used @(:budget @family)) => 1
+        (:closed? @(:budget @family)) => true
+        (seq @observations) => truthy
+        (every? #(and (:context %) (= "U1" (:user %)) (= 3 (:limit %))
+                       (false? (:closed? %)) (= (:family-id @family) (:family %))) @observations) => true
+        (finally (.delete file))))))
+
+(fact "prepared Zen roots reject current provider policy and route changes before protocol or credential IO"
+  (doseq [denial [:provider-policy :model-policy :removed-provider :endpoint :api]]
+    (let [file (java.io.File/createTempFile "zen-route-revoked-" ".key")
+          provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                    :key-file (.getAbsolutePath file)}
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])
+          effects (atom []) issued (atom 0) family execution/family]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      execution/family (fn [& args] (swap! issued inc) (apply family args))
+                      cloudflare/read-bytes (fn [& _] (swap! effects conj :credential) (throw (AssertionError. "revoked credential IO")))
+                      http/get (fn [& _] (swap! effects conj :catalog) (throw (AssertionError. "revoked catalog IO")))
+                      http/post (fn [& _] (swap! effects conj :inference) (throw (AssertionError. "revoked inference IO")))
+                      slack/replies (fn [& _] (swap! effects conj :history) (throw (AssertionError. "revoked history IO")))]
+          (support/in-registered-event support/request "ai --model zen-chat hello"
+            (fn [event]
+              (let [prepared (command/prepare-prompt (assoc event :match "--model zen-chat hello"))
+                    current-provider (case denial
+                                       :removed-provider history-provider
+                                       :endpoint (assoc provider :url "https://changed.invalid/v1")
+                                       :api (assoc provider :api "responses") provider)
+                    current-policy (case denial
+                                     :provider-policy (assoc policy :providers [{:name "other" :models ["zen-chat"]}])
+                                     :model-policy (assoc policy :providers [{:name "zen" :models ["other"]}]) policy)]
+                (with-redefs [ai/config (constantly {:providers [current-provider]})
+                              mcp/config (constantly {:servers [] :toolsets [current-policy]})]
+                  (string? (error-message #(command/complete-prompt prepared))) => true)))))
+        @effects => []
+        @issued => 0
+        (finally (.delete file))))))

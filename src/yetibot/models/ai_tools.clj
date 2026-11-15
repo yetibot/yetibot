@@ -165,13 +165,20 @@
   ;; Attribution and accounting are host metadata; only answer text is payload.
   (mapv #(update % :text clean-data config) answers))
 
+(defn- unique-object [value]
+  (when (map? value)
+    (let [keys (map #(if (keyword? %) (subs (str %) 1) %) (keys value))]
+      (when-not (= (count keys) (count (distinct keys)))
+        (throw (ex-info "Untrusted payload has ambiguous keys."
+                        {:ai/error true :ai/ambiguous-payload true})))))
+  value)
+
 (defn- payload-object [value config controls]
-  ;; Only typed protocol positions may retain controls. Unknown extensions are
-  ;; untrusted payload, including fields named id/key; projection never falls
-  ;; back to the raw object if the live store cannot be read.
+  ;; Controls are retained only at typed protocol positions. The entire
+  ;; remainder, including arbitrary id/key fields, is untrusted payload.
   (if-not (map? value) (clean-data value config)
     (let [kept (into {} (filter (fn [[k v]] (when-let [valid? (get controls k)] (valid? v))) value))]
-      (merge (clean-data (apply dissoc value (keys kept)) config) kept))))
+      (unique-object (merge (clean-data (apply dissoc value (keys kept)) config) kept)))))
 
 (defn- citation [annotation config]
   (let [position? #(and (integer? %) (<= 0 %))
@@ -183,22 +190,22 @@
                    "file_path" {:type #{kind} :file_id string? :index position?}
                    "container_file_citation" (assoc offsets :type #{kind} :file_id string? :container_id string?)
                    {})]
-    (cond-> (payload-object annotation config controls)
+    (unique-object (cond-> (payload-object annotation config controls)
       ;; Chat Completions nests the citation payload; Responses uses flat fields.
       (and (= "url_citation" kind) (map? (:url_citation annotation)))
-      (assoc :url_citation (payload-object (:url_citation annotation) config offsets)))))
+      (assoc :url_citation (payload-object (:url_citation annotation) config offsets))))))
 
 (defn- content-part [part config payload]
   (if-not (and (map? part) (#{"output_text" "text" "input_text" "refusal" "summary_text"} (:type part)))
     (clean-data part config)
-    (cond-> (payload-object (dissoc part :text :annotations) config {:type #{(:type part)}})
+    (unique-object (cond-> (payload-object (dissoc part :text :annotations) config {:type #{(:type part)}})
       (contains? part :text) (assoc :text (if (string? (:text part))
                                           (payload (:text part))
                                           (clean-data (:text part) config)))
       (contains? part :annotations)
       (assoc :annotations (if (vector? (:annotations part))
                             (mapv #(citation % config) (:annotations part))
-                            (clean-data (:annotations part) config))))))
+                            (clean-data (:annotations part) config)))))))
 
 (defn- current-message [message config & [public?]]
   ;; Project payloads, never vendor call IDs, tool names or wire controls. Replay
@@ -207,47 +214,116 @@
         result-payload #(if public? (clean-data % config)
                           (current-content % config {:tool-result? true}))
         plain-payload #(clean-data % config)]
-    (cond-> message
-      (string? (:content message))
-      (update :content (if (= "tool" (:role message)) result-payload payload))
-      (vector? (:content message))
-      (update :content #(mapv (fn [part] (content-part part config payload)) %))
+    (if-not (and (map? message)
+                 (if (contains? message :type)
+                   (#{"message" "reasoning" "function_call" "function_call_output"
+                      "web_search_call" "x_search_call" "file_search_call"} (:type message))
+                   (#{"assistant" "user" "system" "developer" "tool"} (:role message))))
+      (plain-payload message)
+      (unique-object (cond-> (payload-object
+              (apply dissoc message [:content :annotations :refusal :output :summary
+                                     :action :queries :results :arguments :tool_calls])
+              config
+              (merge {:type #{"message" "reasoning" "function_call" "function_call_output"
+                              "web_search_call" "x_search_call" "file_search_call"}}
+                     (when (:type message)
+                       {:id string? :status #{"completed" "in_progress" "incomplete" "searching" "failed"}})
+                     (when (or (nil? (:type message)) (= "message" (:type message)))
+                       {:role #{"assistant" "user" "system" "developer" "tool"}})
+                     (when (#{"function_call" "function_call_output"} (:type message)) {:call_id string?})
+                     (when (= "function_call" (:type message)) {:name string?})
+                     (when (= "tool" (:role message)) {:tool_call_id string?})
+                     (when (#{"reasoning" "web_search_call" "x_search_call"} (:type message))
+                       {:encrypted_content string?})))
+      (contains? message :content)
+      (assoc :content (cond
+                        (string? (:content message))
+                        ((if (= "tool" (:role message)) result-payload payload) (:content message))
+                        (vector? (:content message))
+                        (mapv (fn [part] (content-part part config payload)) (:content message))
+                        :else (plain-payload (:content message))))
       (contains? message :annotations)
-      (update :annotations #(if (vector? %) (mapv (fn [a] (citation a config)) %)
-                               (clean-data % config)))
-      (contains? message :refusal) (update :refusal plain-payload)
-      (string? (:output message))
-      (update :output (if (= "function_call_output" (:type message)) result-payload payload))
-      (and (= "reasoning" (:type message)) (vector? (:summary message)))
-      (update :summary #(mapv (fn [part] (content-part part config plain-payload)) %))
+      (assoc :annotations (if (vector? (:annotations message))
+                            (mapv (fn [a] (citation a config)) (:annotations message))
+                            (clean-data (:annotations message) config)))
+      (contains? message :refusal) (assoc :refusal (plain-payload (:refusal message)))
+      (contains? message :output)
+      (assoc :output ((if (and (= "function_call_output" (:type message)) (string? (:output message)))
+                       result-payload plain-payload) (:output message)))
+      (contains? message :summary)
+      (assoc :summary (if (and (= "reasoning" (:type message)) (vector? (:summary message)))
+                        (mapv (fn [part] (content-part part config plain-payload)) (:summary message))
+                        (plain-payload (:summary message))))
+      (and (contains? message :action) (not (#{"web_search_call" "x_search_call"} (:type message))))
+      (assoc :action (plain-payload (:action message)))
       (and (#{"web_search_call" "x_search_call"} (:type message)) (contains? message :action))
-      (update :action
-              (fn [action]
+      (assoc :action
+              (let [action (:action message)]
                 (cond-> (payload-object action config {:type #{"search" "open_page" "find"}})
                   (and (map? action) (contains? action :sources))
                   (assoc :sources (if (vector? (:sources action))
                                     (mapv (fn [source] (payload-object source config {:type #{"url"}})) (:sources action))
                                     (plain-payload (:sources action)))))))
-      (and (= "file_search_call" (:type message)) (contains? message :queries))
-      (update :queries plain-payload)
+      (contains? message :queries) (assoc :queries (plain-payload (:queries message)))
+      (and (contains? message :results) (not= "file_search_call" (:type message)))
+      (assoc :results (plain-payload (:results message)))
       (and (= "file_search_call" (:type message)) (contains? message :results))
-      (update :results #(if (vector? %)
-                         (mapv (fn [item] (payload-object item config {:file_id string? :score number?})) %)
-                         (plain-payload %)))
-      (string? (:arguments message)) (update :arguments payload)
-      (seq (:tool_calls message))
-      (update :tool_calls
-              #(mapv (fn [call] (update-in call [:function :arguments] payload)) %)))))
+      (assoc :results (if (vector? (:results message))
+                       (mapv (fn [item] (payload-object item config {:file_id string? :score number?})) (:results message))
+                       (plain-payload (:results message))))
+      (contains? message :arguments) (assoc :arguments (payload (:arguments message)))
+      (contains? message :tool_calls)
+      (assoc :tool_calls
+             (if (vector? (:tool_calls message))
+               (mapv (fn [call]
+                       (unique-object
+                         (cond-> (payload-object (dissoc call :function) config
+                                                 {:id string? :type #{"function"} :index #(and (integer? %) (<= 0 %))})
+                           (contains? call :function)
+                           (assoc :function
+                                  (let [function (:function call)]
+                                    (unique-object
+                                      (cond-> (payload-object (dissoc function :arguments) config {:name string?})
+                                        (contains? function :arguments)
+                                        (assoc :arguments (payload (:arguments function))))))))))
+                     (:tool_calls message))
+               (plain-payload (:tool_calls message)))))))))
 
 (defn- current-response [body config]
-  ;; The response envelope, usage and opaque state are protocol, not prose.
-  (cond-> body
-    (vector? (:choices body))
-    (update :choices #(mapv (fn [choice]
-                             (if (map? (:message choice))
-                               (update choice :message current-message config true) choice)) %))
-    (vector? (:output body))
-    (update :output #(mapv (fn [item] (current-message item config true)) %))))
+  ;; Preserve controls only at their typed positions; every extension is payload.
+  (let [position? #(and (integer? %) (<= 0 %))
+        usage (:usage body)
+        counts (zipmap [:prompt_tokens :completion_tokens :total_tokens :input_tokens :output_tokens]
+                       (repeat position?))]
+    (unique-object (cond-> (payload-object (dissoc body :choices :output :usage) config
+                           {:id string? :object #{"response" "chat.completion"}
+                            :model string? :created position? :created_at position?
+                            :status #{"completed" "in_progress" "incomplete" "failed" "cancelled" "queued"}
+                            :system_fingerprint string? :service_tier #{"auto" "default" "flex" "scale" "priority"}})
+      (contains? body :usage)
+      (assoc :usage
+             (reduce (fn [out k]
+                       (if (contains? usage k)
+                         (assoc out k (payload-object (get usage k) config
+                                                     (zipmap [:cached_tokens :audio_tokens :reasoning_tokens
+                                                              :accepted_prediction_tokens :rejected_prediction_tokens]
+                                                             (repeat position?)))) out))
+                     (payload-object (apply dissoc usage [:prompt_tokens_details :completion_tokens_details
+                                                         :input_tokens_details :output_tokens_details]) config counts)
+                     [:prompt_tokens_details :completion_tokens_details :input_tokens_details :output_tokens_details]))
+      (contains? body :choices)
+      (assoc :choices
+             (if (vector? (:choices body))
+               (mapv (fn [choice]
+                       (cond-> (payload-object (dissoc choice :message) config
+                                               {:index position? :finish_reason #{"stop" "length" "tool_calls" "function_call" "content_filter"}})
+                         (contains? choice :message)
+                         (assoc :message (current-message (:message choice) config true)))) (:choices body))
+               (clean-data (:choices body) config)))
+      (contains? body :output)
+      (assoc :output (if (vector? (:output body))
+                       (mapv #(current-message % config true) (:output body))
+                       (clean-data (:output body) config)))))))
 
 (defn- model-tools [config tools]
   (let [servers (into {} (map (juxt :name identity) (:servers config)))

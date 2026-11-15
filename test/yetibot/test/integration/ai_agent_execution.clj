@@ -1880,3 +1880,252 @@
                 ((first @*queued*)) => {:status :not-owner}
                 @wire => 2
                 @sent => []))))))))
+
+
+(fact "deferred Zen children prepare catalogs under their own live allocation after the parent closes"
+  (with-runtime
+    (fn [url]
+      (let [file (java.io.File/createTempFile "zen-child-" ".key")
+            zen {:name "zen" :model "zen-chat" :url "https://opencode.ai/inference/openai/v1"
+                 :key-file (.getAbsolutePath file)}
+            policy (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}])
+            reads (atom []) catalogs (atom []) wire (atom []) parent (atom nil) deliveries (atom [])
+            read-bytes cloudflare/read-bytes]
+        (spit file "synthetic-zen-key")
+        (try
+          (with-redefs [ai/config (constantly {:providers [zen]})
+                        mcp/config (constantly {:servers [] :toolsets [policy]})
+                        cloudflare/read-bytes (fn [& args]
+                                                (swap! reads conj {:family (:family-id execution/*request*)
+                                                                   :context (origin/capability? origin/*context*)
+                                                                   :budget (some-> execution/*request* :budget deref)})
+                                                (apply read-bytes args))
+                        http/get (fn [& _]
+                                   (swap! catalogs conj {:family (:family-id execution/*request*)
+                                                        :context (origin/capability? origin/*context*)
+                                                        :user (get-in execution/*event* [:user :id])
+                                                        :budget (some-> execution/*request* :budget deref)})
+                                   {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                                                              :modalities {:input ["text"] :output ["text"]}
+                                                              :api {:chat-completions {}}}]}})
+                        http/post (fn [_ opts]
+                                    (let [n (count (swap! wire conj {:form (:form-params opts)
+                                                                   :family (:family-id execution/*request*)
+                                                                   :budget @(:budget execution/*request*)}))]
+                                      (when (= n 1) (reset! parent execution/*request*))
+                                      {:status 200 :body (if (= n 1) (tool-call "agent finish") (answer "Zen finished"))}))]
+            (binding [*deliveries* deliveries]
+              (dispatch "ai --model zen-chat --max-tool-calls 3 --max-output-tokens 91 delegate")
+              (count @*queued*) => 1
+              (:closed? @(:budget @parent)) => true
+              (select-keys @(:budget @parent) [:limit :used :reserved]) => {:limit 3 :used 2 :reserved 1}
+              (count @wire) => 1
+              (try ((first @*queued*)) :ran (catch Exception e (:ai/error-code (ex-data e)))) => :ran
+              (count @wire) => 2
+              (count @deliveries) => 1
+              (last (first @deliveries)) => "Zen finished"
+              (get-in @wire [1 :budget :limit]) => 1
+              (get-in @wire [1 :budget :used]) => 1
+              (get-in @wire [1 :form :max_tokens]) => 91
+              (= (get-in @wire [0 :family]) (get-in @wire [1 :family])) => true
+              (:closed? @(:budget @parent)) => true
+              (select-keys @(:budget @parent) [:limit :used :reserved]) => {:limit 3 :used 2 :reserved 1}
+              (every? :context @reads) => true
+              (every? :context @catalogs) => true
+              (every? #(= "U1" (:user %)) @catalogs) => true
+              (every? #(false? (get-in % [:budget :closed?])) @catalogs) => true
+              (let [row (first (jdbc/query url [(str "SELECT * FROM " (db/qualified-table-name "agent_run"))]
+                                          {:identifiers #(string/replace % "_" "-")}))]
+                (:execution-limit row) => 1
+                (:execution-used row) => 1
+                (:execution-reserved row) => 0
+                (:execution-phase row) => "terminal"
+                ((:resume @@#'agent/runtime) row) => {:status :terminal})))
+          (finally (.delete file)))))))
+
+(fact "zero-remainder Zen recovery finalizes saved text without credential catalog or inference IO"
+  (doseq [interrupted [:checkpoint :result-saved]]
+    (with-runtime
+      (fn [url]
+        (let [file (java.io.File/createTempFile "zen-finalize-" ".key")
+              zen {:name "zen" :model "zen-chat" :url "https://opencode.ai/inference/openai/v1"
+                   :key-file (.getAbsolutePath file)}
+              policy (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}])
+              turns (atom 0) committed (atom nil) saved (atom nil) deliveries (atom [])
+              checkpoint runs/checkpoint! save-result runs/save-result!]
+          (spit file "synthetic-zen-key")
+          (try
+            (with-redefs [ai/config (constantly {:providers [zen]})
+                          mcp/config (constantly {:servers [] :toolsets [policy]})
+                          http/get (fn [& _]
+                                     {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                                                                :modalities {:input ["text"] :output ["text"]}
+                                                                :api {:chat-completions {}}}]}})
+                          http/post (fn [& _]
+                                      {:status 200 :body
+                                       (assoc (if (= 1 (swap! turns inc))
+                                                (tool-call "agent finish") (answer "Saved Zen answer"))
+                                              :usage {:prompt_tokens 7 :completion_tokens 3})})]
+              (binding [*deliveries* deliveries]
+                (dispatch "ai --model zen-chat --max-tool-calls 3 --max-output-tokens 91 delegate")
+                (with-redefs [runs/checkpoint!
+                              (fn [session state handle]
+                                (checkpoint session state handle)
+                                (when (and (= interrupted :checkpoint) (= :loop (:phase state))
+                                           (zero? (execution/remaining)))
+                                  (reset! committed @(:row session))
+                                  (throw (AssertionError. "interrupted after Zen checkpoint commit"))))
+                              runs/save-result!
+                              (fn [session result outcome]
+                                (save-result session result outcome)
+                                (when (= interrupted :result-saved)
+                                  (reset! committed @(:row session))
+                                  (throw (AssertionError. "interrupted after Zen result commit"))))]
+                  ((first @*queued*)) => (throws AssertionError))
+                (some? @committed) => true
+                @turns => 2
+                (:execution-limit @committed) => 1
+                (:execution-used @committed) => 1
+                @deliveries => []
+                (let [before (runs/decode (:execution-state @committed) {})
+                      receipts (:operation-receipts @committed)
+                      backend @@#'agent/runtime]
+                  (with-redefs [cloudflare/read-bytes (fn [& _] (throw (AssertionError. "recovery read credentials")))
+                                http/get (fn [& _] (throw (AssertionError. "recovery fetched catalog")))
+                                http/post (fn [& _] (throw (AssertionError. "recovery inferred")))
+                                ai/prepare-provider (fn [& _] (throw (AssertionError. "recovery prepared protocol")))
+                                ai/default-model (fn [& _] (throw (AssertionError. "recovery selected default")))
+                                mcp/with-tools (fn [& _] (throw (AssertionError. "recovery discovered MCP")))
+                                mcp/call-tool (fn [& _] (throw (AssertionError. "recovery called MCP")))
+                                kroki/client-call (fn [& _] (throw (AssertionError. "recovery rendered")))
+                                datasets/retain! (fn [& _] (throw (AssertionError. "recovery collected")))
+                                usage/capture! (fn [& _] (throw (AssertionError. "recovery captured usage")))
+                                runs/save-result! (fn [session result outcome]
+                                                    (reset! saved result)
+                                                    (save-result session result outcome))]
+                    ((:resume backend) @committed)
+                    => {:status :unconfirmed :work-outcome (if (= interrupted :checkpoint) :completed :exhausted)}
+                    (let [final (ledger/read-row url "agent_run" (:id @committed))]
+                      (:execution-used final) => 1
+                      (:execution-reserved final) => 0
+                      (:operation-receipts final) => receipts
+                      (:execution-phase final) => "terminal"
+                      ((:resume backend) final) => {:status :terminal}))
+                  (count @deliveries) => 1
+                  (last (first @deliveries)) => "Saved Zen answer"
+                  (when (= interrupted :checkpoint) (:result/value @saved))
+                  => (when (= interrupted :checkpoint) "Saved Zen answer"))))
+            (finally (.delete file))))))))
+
+(fact "deferred Zen child revocation and terminal states deny preparation before any protected IO"
+  (doseq [denial [:adapter :user :provider-policy :model-policy :endpoint :unknown :terminal]]
+    (with-runtime
+      (fn [url]
+        (let [file (java.io.File/createTempFile "zen-denied-child-" ".key")
+              zen {:name "zen" :model "zen-chat" :url "https://opencode.ai/inference/openai/v1"
+                   :key-file (.getAbsolutePath file)}
+              configured (atom zen)
+              policy (atom (assoc toolset :providers [{:name "zen" :models ["zen-chat"]}]))
+              reads (atom 0) catalogs (atom 0) sends (atom 0) deliveries (atom [])
+              read-bytes cloudflare/read-bytes]
+          (spit file "synthetic-zen-key")
+          (try
+            (with-redefs [ai/config #(hash-map :providers [@configured])
+                          mcp/config #(hash-map :servers [] :toolsets [@policy])
+                          cloudflare/read-bytes (fn [& args] (swap! reads inc) (apply read-bytes args))
+                          http/get (fn [& _] (swap! catalogs inc)
+                                     {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                                                                :modalities {:input ["text"] :output ["text"]}
+                                                                :api {:chat-completions {}}}]}})
+                          http/post (fn [& _] (swap! sends inc)
+                                      {:status 200 :body (tool-call "agent finish")})]
+              (binding [*deliveries* deliveries]
+                (dispatch "ai --model zen-chat --max-tool-calls 3 delegate")
+                (count @*queued*) => 1
+                (reset! reads 0) (reset! catalogs 0)
+                (case denial
+                  :adapter (swap! adapters/adapters dissoc "workspace")
+                  :user (swap! users/users dissoc {:adapter :slack :id "U1"})
+                  :provider-policy (swap! policy assoc :providers [{:name "other" :models ["zen-chat"]}])
+                  :model-policy (swap! policy assoc :providers [{:name "zen" :models ["other"]}])
+                  :endpoint (swap! configured assoc :url "https://changed.invalid/v1")
+                  (:unknown :terminal)
+                  (jdbc/update! url (db/qualified-table-name "agent_run") {:execution_phase (name denial)} ["execution_kind=?" ledger/inherited-kind]))
+                (try ((first @*queued*)) (catch Exception _ nil))
+                @reads => 0
+                @catalogs => 0
+                @sends => 1
+                @deliveries => []))
+            (finally (.delete file))))))))
+
+(fact "nested implicit Zen selection reuses the live parent source without a new allowance"
+  (with-runtime
+    (fn [_]
+      (let [zen {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+            policy (update toolset :providers conj {:name "zen" :models ["zen-chat"]})
+            wire (atom []) catalogs (atom []) root (atom nil)]
+        (with-redefs [ai/config (constantly {:providers [provider zen] :default-provider "fixture"})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      http/get (fn [_ options]
+                                 (swap! catalogs conj {:family (:family-id execution/*request*)
+                                                      :context (origin/capability? origin/*context*)})
+                                 (let [body {:data [{:id "zen-chat" :type "chat"
+                                                    :modalities {:input ["text"] :output ["text"]}
+                                                    :api {:chat-completions {}}
+                                                    :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                   {:status 200 :body (if (= :stream (:as options))
+                                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                      http/post (fn [endpoint options]
+                                  (when-not @root (reset! root execution/*request*))
+                                  (swap! wire conj [endpoint (:form-params options) (:family-id execution/*request*)])
+                                  {:status 200 :body (if (= 1 (count @wire))
+                                                      (tool-call "ai --provider zen nested") (answer "Nested Zen answer"))})]
+          (dispatch "ai --max-tool-calls 3 --max-output-tokens 91 parent")
+          (count @wire) => 2
+          (get-in @wire [1 1 :max_tokens]) => 91
+          (:used @(:budget @root)) => 3
+          (:reserved @(:budget @root)) => 0
+          (:closed? @(:budget @root)) => true
+          (every? #(= (:family-id @root) (nth % 2)) @wire) => true
+          (boolean (seq @catalogs)) => true
+          (every? #(and (:context %) (= (:family-id @root) (:family %))) @catalogs) => true)))))
+
+(fact "native image roots authorize their implicit Zen planner before finite-context protocol preparation"
+  (doseq [access [:allowed :revoked-user :provider-policy]]
+    (with-runtime
+      (fn [_]
+        (let [zen {:name "zen" :model "zen-chat" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+              policy (assoc toolset :providers [{:name "xai" :models ["grok-4.7" "grok-imagine-image-2.0"]}
+                                                {:name "zen" :models [(if (= access :provider-policy) "denied" "zen-chat")]}])
+              catalogs (atom []) wire (atom []) root (atom nil)]
+          (with-redefs [ai/config (constantly {:providers [zen]})
+                        mcp/config (constantly {:servers [] :toolsets [policy]})
+                        xai/config {:key "synthetic-xai-key"}
+                        http/get (fn [& _]
+                                   (reset! root execution/*request*)
+                                   (swap! catalogs conj {:context (origin/capability? origin/*context*)
+                                                        :user (get-in execution/*event* [:user :id])})
+                                   {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                                                              :modalities {:input ["text"] :output ["text"]}
+                                                              :api {:chat-completions {}}}]}})
+                        http/post (fn [url options]
+                                    (swap! wire conj [url (json/parse-string (:body options) true)
+                                                      (:family-id execution/*request*)])
+                                    {:status 200 :body (if (.endsWith url "/responses")
+                                                        {:output [{:type "message" :content [{:text "optimized"}]}]}
+                                                        {:data [{:b64_json "AA=="}]})})]
+            (binding [chat/*target* "C1" chat/*adapter* adapter]
+              (support/in-event support/request "native image"
+                (fn [_]
+                  (when (= access :revoked-user) (swap! users/users dissoc {:adapter :slack :id "U1"}))
+                  (try (xai/generate-image "synthetic") :ran
+                       (catch Exception e (if (= access :allowed) (throw e) :denied))))))
+            (count @wire) => (if (= access :allowed) 2 0)
+            (count @catalogs) => (if (= access :allowed) 1 0)
+            (when (= access :allowed)
+              (every? #(and (:context %) (= "U1" (:user %))) @catalogs) => true
+              (:used @(:budget @root)) => 2
+              (:limit @(:budget @root)) => 20
+              (:closed? @(:budget @root)) => true
+              (get-in @wire [0 1 :max_output_tokens]) => 32768
+              (every? #(= (:family-id @root) (nth % 2)) @wire) => true)))))))

@@ -37,7 +37,7 @@
   (boolean (or (:no-tools? *request*) (some-> *request* :text-only deref))))
 
 (defn require-effects! []
-  (when (or (:routing-pending? *request*) (:no-host-execution? *request*))
+  (when (or (:preparing? *request*) (:routing-pending? *request*) (:no-host-execution? *request*))
     (throw (ex-info "This inference source has no host effect authority."
                     {:ai/error true :ai/request-not-sent true}))))
 
@@ -161,8 +161,20 @@
    The installed host owns selection/policy; model options cannot issue one."
   [prepared f]
   (if-let [source (agent/host-callback :source)]
-    (source prepared f)
+    (if-let [context (::source-context (meta prepared))]
+      (agent/invoke! context :with-request
+        #(try (source prepared f)
+              (finally (when-not agent/*scope* (close-family! *request*)))))
+      (source prepared f))
     (f)))
+
+(defn prepare-source
+  "Resolve an implicit model under the same finite source later used to send."
+  [prepared]
+  (let [selection (atom nil)]
+    (with-source* (assoc prepared ::defer-source-close? true ::prepared-source selection)
+      #(with-meta (merge prepared @selection)
+         (assoc (meta prepared) ::source-context agent/*context*)))))
 
 (defn with-routing-source*
   "Only the installed host may preauthorize and freeze the direct router family."
