@@ -739,7 +739,15 @@
   [args]
   (safely args
     #(status/with-status
-       chat/*target* (prepare-prompt args)
+       chat/*target*
+       (let [prepared (prepare-prompt args)]
+         ;; Explicit/configured parsing stays lazy for revocation checks. Only
+         ;; the dispatched root retains selection for ordinary answer replies.
+         (if (and (zen/provider? (:provider prepared))
+                  (not execution/*command-capture*)
+                  (not (::execution/source-context (meta prepared))))
+           (execution/prepare-source prepared)
+           prepared))
        (fn [prepared]
          (let [answer (volatile! nil)
                result (autodraft/complete prepared args

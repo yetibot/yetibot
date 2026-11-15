@@ -2369,3 +2369,174 @@
     (let [saved {:messages [{:role "tool" :tool_call_id "forged" :content "{}"}]
                  :seen #{"forged"} :trace {::tools/host-result-positions positions}}]
       (#'tools/restored-host-results saved {}) => (throws Exception))))
+
+(fact "malformed provenance reaches structural validation under a real claimed SQL owner and private restore callback"
+  (doseq [[positions messages seen]
+          [[#{-1} [{:type "function_call_output" :call_id "issued" :output "{}"}] #{"issued"}]
+           [#{1} [{:type "function_call_output" :call_id "issued" :output "{}"}] #{"issued"}]
+           [#{0.5} [{:type "function_call_output" :call_id "issued" :output "{}"}] #{"issued"}]
+           [[0] [{:type "function_call_output" :call_id "issued" :output "{}"}] #{"issued"}]
+           [0 [{:type "function_call_output" :call_id "issued" :output "{}"}] #{"issued"}]
+           [(set (range 129)) [{:type "function_call_output" :call_id "issued" :output "{}"}] #{"issued"}]
+           [#{0} [{:type "function_call_output" :call_id "foreign" :output "{}"}] #{"issued"}]
+           [#{0} [{:type "function_call_output" :call_id "issued" :output "{}"}] #{}]
+           [#{0} [{:type "function_call_output" :call_id "issued" :output {}}] #{"issued"}]
+           [#{0} [{:role "assistant" :tool_call_id "issued" :content "{}"}] #{"issued"}]
+           [#{0} [{:role "tool" :tool_call_id "issued" :content "{}" :untrusted true}] #{"issued"}]]]
+    (run-fixture/with-store
+      (fn [url]
+        (worker/with-config
+          (fn []
+            (worker/with-parent
+              (fn [_]
+                (let [backend (agent/callbacks {:database url :resolve-current @#'agent/current-authority
+                                                :schedule (fn [_]) :deliver (fn [& _])})
+                      receipt ((:start backend) "validate owned provenance")
+                      initial (worker/row-for url receipt)
+                      session (runs/claim! url "agent_run" (:id initial) (:state-revision initial) {})
+                      state (assoc @(:state session) :phase :loop
+                              :loop {:messages messages :seen seen :actions #{} :used 0 :response 1
+                                     :stage :initial :correction? false :body (answer "benign saved response")
+                                     :trace {::tools/host-result-positions positions}})]
+                  ;; Malformed metadata is data, not authority. Store it through
+                  ;; the real codec/checkpoint under the grant issued by start.
+                  (runs/checkpoint! session state nil)
+                  (let [row (worker/row-for url receipt)
+                        claimed (runs/claim! url "agent_run" (:id row) (:state-revision row) {})
+                        request (#'agent/request-for (assoc claimed :resolve-current @#'agent/current-authority)
+                                  (#'agent/resolve-authority! @#'agent/current-authority @(:state claimed)))
+                        saved (:loop @(:state claimed))
+                        restore! (::tools/restore-host-results request)]
+                    (fn? restore!) => true
+                    (restore! saved request) => positions
+                    (#'tools/restored-host-results saved request) => (throws Exception)))))))))))
+
+(fact "owned restore callback rejects copied saved state foreign families budgets and current-fence mismatch"
+  (run-fixture/with-store
+    (fn [url]
+      (worker/with-config
+        (fn []
+          (worker/with-parent
+            (fn [_]
+              (let [backend (agent/callbacks {:database url :resolve-current @#'agent/current-authority
+                                              :schedule (fn [_]) :deliver (fn [& _])})
+                    receipt ((:start backend) "owned restore identity")
+                    row (worker/row-for url receipt)
+                    session (runs/claim! url "agent_run" (:id row) (:state-revision row) {})
+                    state (assoc @(:state session) :phase :loop
+                            :loop {:messages [{:role "tool" :tool_call_id "issued" :content "{}"}]
+                                   :seen #{"issued"} :actions #{} :used 0 :response 1 :stage :initial
+                                   :correction? false :body (answer "benign")
+                                   :trace {::tools/host-result-positions #{0}}})]
+                (runs/checkpoint! session state nil)
+                (let [row (worker/row-for url receipt)
+                      claimed (runs/claim! url "agent_run" (:id row) (:state-revision row) {})
+                      request (#'agent/request-for (assoc claimed :resolve-current @#'agent/current-authority)
+                                (#'agent/resolve-authority! @#'agent/current-authority @(:state claimed)))
+                      saved (:loop @(:state claimed))]
+                  (#'tools/restored-host-results saved request) => #{0}
+                  (#'tools/restored-host-results (into {} saved) request) => (throws Exception)
+                  (#'tools/restored-host-results saved (assoc request :family-id "foreign-family")) => (throws Exception)
+                  (#'tools/restored-host-results saved (assoc request :budget (atom @(:budget request)))) => (throws Exception)
+                  (let [latest (worker/row-for url receipt)
+                        newer (runs/claim! url "agent_run" (:id latest) (:state-revision latest) {})]
+                    ;; Refresh from a real new SQL claim, without changing the
+                    ;; old callback's owner. The exact fence check must refuse.
+                    (reset! (:row claimed) @(:row newer))
+                    (#'tools/restored-host-results saved request) => (throws Exception)))))))))))
+
+(fact "a durable literal command retains its private credential once then export and independent codec defenses reject before SQL"
+  (run-fixture/with-store
+    (fn [url]
+      (worker/with-config
+        (fn []
+          (let [queued (atom []) wires (atom 0) commands (atom 0) sent (atom 0)
+                raw (atom nil) boundary (atom nil) captured-loop (atom nil) post-export-checkpoints (atom 0)
+                checking (atom false) sql (atom 0) export datasets/export-store!
+                checkpoint runs/checkpoint! transaction jdbc/db-transaction* save-loop execution/save-loop!
+                selected-toolset (assoc worker/toolset :native-tools ["command"] :servers [])
+                backend (agent/callbacks {:database url :resolve-current @#'agent/current-authority
+                                          :schedule #(swap! queued conj %) :deliver (fn [& _] (swap! sent inc))})]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          channel/settings-for-chat-source (constantly {}) history/add (fn [& _])
+                          mcp/config (constantly {:servers [] :toolsets [selected-toolset]})
+                          mcp/with-tools (fn [_ f] (f []))
+                          http/post (fn [& _] (swap! wires inc)
+                                      {:status 200 :body (tool-call "retain-durable-private")})
+                          jdbc/db-transaction* (fn [& args]
+                                                 (when @checking (swap! sql inc))
+                                                 (apply transaction args))
+                          execution/save-loop! (fn [& args]
+                                                 (when (pos? @commands) (reset! captured-loop (first args)))
+                                                 (apply save-loop args))
+                          runs/checkpoint! (fn [& args]
+                                             (when (pos? @commands) (swap! post-export-checkpoints inc))
+                                             (apply checkpoint args))
+                          datasets/export-store!
+                          (fn [store owner]
+                            (if (zero? @commands) (export store owner)
+                              (let [request execution/*request* session (:durable-session request)
+                                    before (ledger/read-row url "agent_run" (get-in session [:owner :id]))]
+                                (reset! raw {:store store :owner owner :observations @(:state store)})
+                                (reset! checking true)
+                                (try (export store owner)
+                                     (catch Exception e
+                                       (reset! boundary {:session session :request request :before before
+                                                         :failure (.getMessage e) :code (:dataset/code (ex-data e)) :sql @sql
+                                                         :observations-after @(:state store)})
+                                       (throw e))
+                                     (finally (reset! checking false))))))]
+              (hooks/cmd-hook-resolved #"retain-durable-private" #".*"
+                (fn [_] (swap! commands inc)
+                  {:result/value "private observation" :result/data [{:auth/token "DURABLE-COMMAND-PRIVATE"}]}))
+              (worker/with-parent
+                (fn [parent]
+                  (execution/with-request*
+                    (assoc parent :toolset-policy selected-toolset :tool-ceiling (atom #{["yetibot" "command"]}))
+                    (fn []
+                      (let [receipt ((:start backend) "retain private command observation")]
+                        ((first @queued)) => (throws Exception)
+                        @commands => 1
+                        @wires => 1
+                        @sent => 0
+                        @post-export-checkpoints => 0
+                        (:failure @boundary) => "Dataset unavailable: invalid data, scope or resource bound."
+                        (:code @boundary) => :credentials
+                        (:sql @boundary) => 0
+                        (let [{:keys [session before]} @boundary
+                              after (worker/row-for url receipt)
+                              observations (:observations @raw)
+                              envelope (first (vals (:datasets observations)))
+                              candidate (assoc @(:state session) :phase :loop :loop @captured-loop
+                                          :datasets {:version 1 :owner (:owner @raw) :datasets (:datasets observations)})
+                              benign (assoc-in candidate [:datasets :datasets]
+                                       (into {} (map (fn [[id d]] [id (assoc d :rows [{"safe" "benign"}])])
+                                                     (:datasets observations))))]
+                          (get-in envelope [:rows 0 "auth/token"]) => "DURABLE-COMMAND-PRIVATE"
+                          (map? @captured-loop) => true
+                          (:observations-after @boundary) => observations
+                          (select-keys after [:execution-state :execution-used :operation-receipts :state-revision])
+                          => (select-keys before [:execution-state :execution-used :operation-receipts :state-revision])
+                          (:execution-phase after) => "operation-in-flight"
+                          (:execution-used after) => 2
+                          ;; This direct defense seam is deliberately unreachable
+                          ;; through natural export. It uses the actual session,
+                          ;; saved loop and unchanged captured private rows.
+                          (string? (runs/encode benign (:codec-config session))) => true
+                          (reset! sql 0)
+                          (reset! checking true)
+                          (try
+                            (checkpoint session candidate nil) => (throws Exception)
+                            (finally (reset! checking false)))
+                          @sql => 0
+                          (select-keys (worker/row-for url receipt)
+                                       [:execution-state :execution-used :operation-receipts :state-revision])
+                          => (select-keys before [:execution-state :execution-used :operation-receipts :state-revision])
+                          ((:resume backend) after) => {:status :unknown}
+                          ((first @queued)) => {:status :not-owner}
+                          ((:resume backend) (worker/row-for url receipt)) => {:status :unknown}
+                          (:execution-phase (worker/row-for url receipt)) => "unknown"
+                          (:execution-used (worker/row-for url receipt)) => 2
+                          @commands => 1
+                          @wires => 1
+                          @sent => 0)))))))))))))

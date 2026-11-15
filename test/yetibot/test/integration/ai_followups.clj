@@ -26,7 +26,8 @@
             [yetibot.core.models.channel :as channel]
             [yetibot.core.models.history :as history]
             [yetibot.core.models.users :as users]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.test.support.mcp :as scripted]))
 
 (def settings
   {:default-provider "local"
@@ -307,23 +308,40 @@
                      "do not retry automatically") => true)))
 
 
-(defn implicit-zen-followup [mutation]
+(defn implicit-zen-followup
+  ([mutation] (implicit-zen-followup mutation {}))
+  ([mutation {:keys [root-mode api] :or {api :responses}}]
   (let [chat-wire api/chat complete-wire api/complete models-wire api/models
         read-bytes cloudflare/read-bytes preparations (atom []) sent (atom [])
-        remember execution/remember-answer! observations (atom [])
+        post-wire client/post physical-requests (atom [])
+        remember execution/remember-answer! observations (atom []) selected-values (atom []) costs (atom [])
         remember-route discord/remember-command-continuation! routes (atom [])
         prepare-followup command/prepare-followup reply-errors (atom [])
-        dialect (atom :responses) catalog-model (atom "free-a")
+        dialect (atom api) catalog-model (atom "free-a")
         file (java.io.File/createTempFile "zen-continuation-" ".key")
         success? (contains? #{nil :default-model} mutation)
         root-id (System/nanoTime) root (str root-id) root-reply (str (inc root-id))]
     (spit file "zen-followup-fixture")
     (try
-      (session
+      (scripted/with-http-server
+        (fn [{:keys [path] :as request}]
+          (swap! physical-requests conj request)
+          {:body (if (str/includes? path "/ai/run/")
+                   (:body (autodraft/classification :answer))
+                   (if (= api :responses)
+                     {:id "followup-response" :status "completed"
+                      :usage {:input_tokens 7 :output_tokens 3}
+                      :output [{:type "message" :role "assistant"
+                                :content [{:type "output_text" :text "bounded root answer"}]}]}
+                     {:choices [{:message {:role "assistant" :content "bounded root answer"}}]
+                      :usage {:prompt_tokens 7 :completion_tokens 3}}))})
+        (fn [base]
+          (session
         (fn [{:keys [send! config policy messages conn]}]
           (swap! config assoc :default-provider "zen"
                  :providers [{:name "zen" :url "https://opencode.ai/inference/openai/v1"
-                              :key-file (.getAbsolutePath file)}]
+                              :key-file (.getAbsolutePath file)
+                              :model (when (= root-mode :configured) "free-a")}]
                  :intent-router {:enabled true :github-toolset "github-pr"
                                  :account-id (apply str (repeat 32 "a")) :key-file "/fixture/router-key"})
           (let [t {:name "answer" :kind "search" :servers [] :native-tools []
@@ -345,6 +363,8 @@
                           (apply read-bytes args))
                         execution/remember-answer!
                         (fn [command prepared result]
+                          (swap! selected-values conj prepared)
+                          (swap! costs conj (get-in result [:result/data :ai/cost]))
                           (swap! observations conj {:capture execution/*command-capture*
                                                     :direct execution/*direct-input*
                                                     :caption (:caption? prepared) :actor (:actor prepared)
@@ -365,33 +385,34 @@
                           (let [body {:data [{:id @catalog-model :type "chat"
                                              :modalities {:input ["text"] :output ["text"]}
                                              :api {@dialect {}}
-                                             :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                             :cost {:text {:input {:price (if root-mode 1 0)} :output {:price (if root-mode 2 0)}}}}]}]
                             {:status 200 :body (if (= :stream (:as options))
                                                 (java.io.ByteArrayInputStream.
                                                   (.getBytes (json/generate-string body) "UTF-8")) body)}))
                         client/post
                         (fn [url options]
-                          (swap! sent conj {:url url :body (:form-params options)
-                                            :request execution/*request* :direct execution/*direct-input*})
-                          (if (str/includes? url "/ai/run/")
-                            (autodraft/classification :answer)
-                            (let [body {:id "followup-response" :status "completed"
-                                        :output [{:type "message" :role "assistant"
-                                                  :content [{:type "output_text" :text "bounded root answer"}]}]}]
-                              {:status 200 :headers {"content-type" "application/json"}
-                               :body (if (= :stream (:as options))
-                                       (java.io.ByteArrayInputStream.
-                                         (.getBytes (json/generate-string body) "UTF-8")) body)})))]
-            (send! (event root "!ai --max-tool-calls 2 --max-output-tokens 91 Explain owner/repo"))
+                          (swap! sent conj {:url url :body (or (:form-params options)
+                                                            (when (string? (:body options))
+                                                              (json/parse-string (:body options) true)))
+                                            :request execution/*request* :direct execution/*direct-input*
+                                            :admissions (execution/admissions execution/*request*)})
+                          ;; Keep the provider's authenticated origin/signature,
+                          ;; but route its transport to an owned real TCP fixture.
+                          (post-wire (str base (.getRawPath (java.net.URI. url))) options))]
+            (let [text (str "!ai " (when (= root-mode :explicit) "--provider zen --model free-a ")
+                            "--max-tool-calls 2 --max-output-tokens 91 Explain owner/repo")]
+              (send! (event root text)))
             (fact (count @sent) => 2
                   (count @routes) => 1
                   (set (keys @messages)) => #{root root-reply}
                   (mapv #(some-> % :continuation deref :ready?) (vals (:commands @conn))) => [true]
                   (set (keys (first @routes)))
-                  => #{:command :provider :model :provider-signature :verified-free :max-tool-calls :max-output-tokens}
+                  => (cond-> #{:command :provider :model :provider-signature :max-tool-calls :max-output-tokens}
+                       (nil? root-mode) (conj :verified-free))
                   @observations => [{:capture false
-                                     :direct {:raw "ai --max-tool-calls 2 --max-output-tokens 91 Explain owner/repo"
-                                              :evaluated "ai --max-tool-calls 2 --max-output-tokens 91 Explain owner/repo"}
+                                     :direct (let [text (str "ai " (when (= root-mode :explicit) "--provider zen --model free-a ")
+                                                               "--max-tool-calls 2 --max-output-tokens 91 Explain owner/repo")]
+                                               {:raw text :evaluated text})
                                      :caption true
                                      :actor {:adapter "discord" :connection "test" :user "7"
                                              :conversation "test/10" :thread "10"}
@@ -423,7 +444,7 @@
                         (count @sent) => 3
                         (mapv #(get-in % [:body :model]) (remove #(str/includes? (:url %) "/ai/run/") @sent))
                         => ["free-a" "free-a"]
-                        (str/includes? (pr-str (:input (:body (last @sent))))
+                        (str/includes? (pr-str (or (:input (:body (last @sent))) (:messages (:body (last @sent)))))
                                        "--model attacker | echo not-a-command") => true)
                   (send! (event (str (+ root-id 200)) "one more literal turn" (str (+ root-id 101))))
                   (fact (count @sent) => 4))
@@ -431,13 +452,22 @@
                   (fact (count @sent) => 2)
                   (when-not (#{:dialect :model} mutation)
                     (fact (count @preparations) => before)))))
-            (fact (every? some? @preparations) => true
-                  (every? #(= 91 (get-in % [:body :max_output_tokens]))
+            (when root-mode
+              (fact (get-in (first @selected-values) [:provider :api]) => (name api)
+                    (get-in (first @selected-values) [:provider :ai/verified-free]) => nil
+                    (:usd (first @costs)) => 0.000013M
+                    (:scope (first @costs)) => :tokens
+                    (:turns (first @costs)) => 1))
+            (fact (mapv #(get-in % [:admissions :admitted]) (take 2 @sent)) => [1 2]
+                  (every? some? @preparations) => true
+                  (every? #(= 91 (or (get-in % [:body :max_output_tokens]) (get-in % [:body :max_tokens])))
                           (remove #(str/includes? (:url %) "/ai/run/") @sent)) => true
                   (every? #(nil? (:direct %)) @sent) => true
                   (count (distinct (map #(get-in % [:request :family-id]) (take 2 @sent)))) => 1
                   (every? #(= 2 (:limit @(:budget (:request %)))) @sent) => true))))
-      (finally (.delete file)))))
+          (fact (count @physical-requests) => (count @sent)
+                (mapv :body @physical-requests) => (mapv :body @sent))))
+      (finally (.delete file))))))
 
 (fact "implicit Zen routed root answer delivers real continuations with frozen model dialect and caps"
   (doseq [mutation [nil :default-model]] (implicit-zen-followup mutation)))
@@ -445,3 +475,12 @@
 (fact "implicit Zen continuation rejects configured identity access model and catalog dialect drift before inference"
   (doseq [mutation [:api :endpoint :native :turns :gateway :transport :access :dialect :model]]
     (implicit-zen-followup mutation)))
+
+(fact "explicit and configured paid Zen roots retain their selected omitted-API dialect for genuine human replies"
+  (doseq [root-mode [:explicit :configured] api [:responses :chat-completions]]
+    (implicit-zen-followup nil {:root-mode root-mode :api api})))
+
+(fact "explicit and configured Zen roots reject identity policy model and selected catalog drift before continuation inference"
+  (doseq [root-mode [:explicit :configured]
+          mutation [:api :endpoint :native :turns :gateway :transport :access :dialect :model]]
+    (implicit-zen-followup mutation {:root-mode root-mode})))

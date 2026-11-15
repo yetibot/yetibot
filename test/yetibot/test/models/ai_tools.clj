@@ -1195,3 +1195,38 @@
         (json/parse-string (:output replay) true) => {(keyword "[redacted]") "[redacted]" :safe "kept"}
         (get-in result [:result/data :output 0]) => (first (:output body))
         (get-in result [:result/data :usage]) => (:usage body)))))
+
+(fact "descriptor restoration requires both genuine host position and successful current-owner live handles"
+  (doseq [secret ["dataset" "structuredContent" "datasets" "dataset-id" "field-count"]]
+    (let [owner {:actor {:id "descriptor-owner"} :chat-source {:adapter :slack :room "projection"}}
+          foreign (assoc-in owner [:actor :id] "foreign-owner")
+          store (datasets/create-store owner)
+          d (datasets/retain! store owner
+              {:rows [{:auth/token secret}]
+               :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+               :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+          config {:dataset-store store :dataset-owner owner}
+          project (fn [value config host?]
+                    (json/parse-string
+                      (#'tools/current-content (json/generate-string value) config
+                                                {:configured? true :host-result? host?}) true))]
+      (doseq [host? [false true] invalid [{} {:dataset-id "invalid"} {:dataset-id (str (java.util.UUID/randomUUID))}]]
+        (let [data {:dataset invalid}
+              safe (project data config host?)]
+          (contains? safe :dataset) => (not= secret "dataset")))
+      (let [data {:dataset d :structuredContent {:dataset d :datasets [d]}}
+            safe (project data config true)]
+        (:dataset safe) => (json/parse-string (json/generate-string d) true)
+        (get-in safe [:structuredContent :dataset]) => (json/parse-string (json/generate-string d) true)
+        (get-in safe [:structuredContent :datasets]) => [(json/parse-string (json/generate-string d) true)])
+      (doseq [data [{:dataset d} {:structuredContent {:dataset d}} {:structuredContent {:datasets [d]}}]
+              :when (#{"dataset" "structuredContent" "datasets"} secret)]
+        (string/includes? (json/generate-string (project data config false))
+                          (str "\"" secret "\":")) => false)
+      (let [safe (project {:dataset d} (assoc config :dataset-owner foreign) true)]
+        (contains? safe :dataset) => (not= secret "dataset"))
+      (when (= secret "datasets")
+        (contains? (:structuredContent (project {:structuredContent {:datasets [d {}]}} config true)) :datasets) => false)
+      (datasets/close! store owner)
+      (when (= secret "dataset")
+        (project {:dataset d} config true) => (midje.sweet/throws Exception)))))

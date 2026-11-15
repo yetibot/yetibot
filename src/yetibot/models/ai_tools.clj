@@ -169,23 +169,38 @@
                                     {:dataset-store (:dataset-store config)}))]
        (try
          (let [data (json/parse-string content true)
-               ;; Only actual host replies retain typed envelope field names.
-               ;; Provider-supplied output items cannot acquire this provenance.
-               clean (if (and host-result? (map? data))
-                       (host-result-envelope data project)
-                       (project data))
                descriptor (fn [d]
-                            ;; Restore only a real live host handle, not arbitrary
-                            ;; id/key values; describe rechecks the exact owner.
-                            (try (datasets/describe (:dataset-store config)
-                                                    (:dataset-owner config) (:dataset-id d))
-                                 (catch Exception _ (project d))))]
+                            (when (and host-result? (map? d))
+                              ;; Live resolution authenticates the exact current
+                              ;; owner; a copied provider handle is still payload.
+                              (try (datasets/describe (:dataset-store config)
+                                                      (:dataset-owner config) (:dataset-id d))
+                                   (catch Exception _ nil))))
+               root (descriptor (:dataset data))
+               nested (descriptor (get-in data [:structuredContent :dataset]))
+               items (get-in data [:structuredContent :datasets])
+               resolved (when (and host-result? (vector? items) (seq items))
+                          (mapv descriptor items))
+               collection (when (and (seq resolved) (every? some? resolved)) resolved)
+               ;; Remove only successfully authenticated subtrees BEFORE key
+               ;; projection. Failed/mixed paths remain ordinary payload, and
+               ;; cannot reinsert their original names after projection.
+               payload (cond-> data
+                         root (dissoc :dataset)
+                         nested (update :structuredContent dissoc :dataset)
+                         collection (update :structuredContent dissoc :datasets))
+               clean (if (and host-result? (map? payload))
+                       (host-result-envelope payload project)
+                       (project payload))]
            (json/generate-string
-             (cond-> clean
-               (map? (:dataset data)) (assoc :dataset (descriptor (:dataset data)))
-               (vector? (get-in data [:structuredContent :datasets]))
-               (assoc-in [:structuredContent :datasets]
-                         (mapv descriptor (get-in data [:structuredContent :datasets]))))))
+             (unique-object
+               (cond-> clean
+                 root (assoc :dataset root)
+                 (or nested collection)
+                 (update :structuredContent
+                   #(unique-object (cond-> %
+                                     nested (assoc :dataset nested)
+                                     collection (assoc :datasets collection))))))))
          (catch Exception e
            (if (:ai/ambiguous-payload (ex-data e)) (throw e)
              (project content))))))))

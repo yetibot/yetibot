@@ -684,3 +684,79 @@
           (:call_id call) => private
           (:name call) => "yetibot_command"
           (first (filter #(= "reasoning" (:type %)) input)) => opaque)))))
+
+(fact "physical provider descriptor paths cannot be restored by copied or invalid handles after a real command learns their spelling"
+  (doseq [[secret payload-kind] [["dataset" :missing] ["dataset" :invalid] ["dataset" :copied]
+                               ["dataset" :foreign] ["dataset" :expired] ["dataset" :nested] ["dataset" :collision]
+                               ["structuredContent" :array] ["datasets" :array] ["datasets" :mixed]]]
+    (let [requests (atom []) commands (atom 0) retained (atom []) retain datasets/retain!
+          copied (atom nil) foreign-handle (atom nil) foreign-store (atom nil) owner-state (atom nil)]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:body (response (if (= 1 (count @requests))
+                             [{:type "function_call_output" :call_id "provider-extra"
+                               :output (json/generate-string
+                                         (case payload-kind
+                                           :missing {:dataset {}}
+                                           :invalid {:dataset {:dataset-id "invalid"}}
+                                           :foreign {:dataset @foreign-handle}
+                                           :expired {:dataset @foreign-handle}
+                                           :collision {:dataset {} "[redacted]" "collision"}
+                                           :copied {:dataset @copied}
+                                           :nested {:structuredContent {:dataset {}}}
+                                           :array {:structuredContent {:datasets [{}]}}
+                                           :mixed {:structuredContent {:datasets [@copied {}]}}))}
+                              (function-call "yetibot_command" "learn-descriptor" "{\"command\":\"learn-descriptor-secret\"}")]
+                             [(text-output "Safe answer")]))})
+        (fn [base]
+          (let [provider {:name "descriptor-fixture" :model "chat" :api "responses" :url (str base "/v1")}
+                t {:name "descriptor-private" :kind "search" :servers [] :native-tools ["command"]
+                   :users ["U1"] :adapters ["slack"] :providers [{:name "descriptor-fixture" :models ["chat"]}]}
+                post client/post]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [provider]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          client/post (fn [& args]
+                                        (when-not @copied
+                                          (let [r host-execution/*request*]
+                                            (reset! owner-state r)
+                                            (let [owner (assoc-in (:dataset-owner r) [:actor :user] "FOREIGN")
+                                                  store (datasets/create-store owner)
+                                                  envelope {:rows [{:safe "foreign"}]
+                                                            :fields [{:name "safe" :path ["safe"] :type :nominal}]
+                                                            :source "fixture" :captured-at "2026-11-11T10:00:00Z"
+                                                            :coverage {:status :unknown}}]
+                                              (reset! foreign-store {:store store :owner owner})
+                                              (reset! foreign-handle (retain store owner envelope))
+                                              (when (= payload-kind :expired) (datasets/close! store owner)))
+                                            (reset! copied (retain (:dataset-store r) (:dataset-owner r)
+                                                             {:rows [{:safe "benign"}]
+                                                              :fields [{:name "safe" :path ["safe"] :type :nominal}]
+                                                              :source "fixture" :captured-at "2026-11-11T10:00:00Z"
+                                                              :coverage {:status :unknown}}))))
+                                        (apply post args))
+                          datasets/retain! (fn [store owner envelope]
+                                             (let [d (retain store owner envelope)]
+                                               (swap! retained conj (datasets/lookup! store owner (:dataset-id d))) d))]
+              (hooks/cmd-hook-resolved #"learn-descriptor-secret" #".*"
+                (fn [_] (swap! commands inc)
+                  {:result/value "learned" :result/data [{:auth/token secret}]}))
+              (try
+                (let [result (execution/run-registered-command execution/request "ai --max-tool-calls 3 replay")]
+                  (when (= payload-kind :collision) (get-in result [:data :isError]) => true))
+                (finally
+                  (when-let [{:keys [store owner]} @foreign-store] (datasets/close! store owner))))))))
+      @commands => 1
+      (get-in (first @retained) [:rows 0 "auth/token"]) => secret
+      (count @requests) => (if (= payload-kind :collision) 1 2)
+      (:used @(:budget @owner-state)) => (if (= payload-kind :collision) 2 3)
+      (when-not (= payload-kind :collision)
+        (let [items (get-in @requests [1 :body :input])
+              supplied (first (filter #(= "provider-extra" (:call_id %)) items))
+              value (json/parse-string (:output supplied) true)
+              host (last (filter #(= "function_call_output" (:type %)) items))]
+          (string/includes? (json/generate-string value) (str "\"" secret "\":")) => false
+          (:call_id supplied) => "provider-extra"
+          (:content (json/parse-string (:output host) true)) => vector?)))))
