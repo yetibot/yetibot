@@ -4,6 +4,8 @@
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.mcp :as mcp]
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.core.util.agent-execution :as origin]
             [yetibot.models.ai-github :as github]
             [yetibot.test.models.ai-proposals :as proposals])
   (:import [java.util Base64]))
@@ -246,3 +248,42 @@
       (fn [calls]
         (:status (github/execute! config proposal)) => :failed
         (some #(= "push_files" (first %)) @calls) => nil))))
+
+
+(fact "ai-github fixed workflow admits each actual MCP and ancestry send under one unresolved parent"
+  (let [request (assoc (execution/family 20 91) :authorize-github! (fn [_]))]
+    (execution/with-request* request
+      #(let [parent (execution/admit-operation! :tool)]
+         (binding [origin/*operation* parent]
+           (with-fixture (fn [& _] nil)
+             (fn [calls]
+               (fact (:status (github/execute! config proposal)) => :succeeded
+                     (count @calls) => 10
+                     (:used @(:budget request)) => 11
+                     (:state (first (:receipts @(:budget request)))) => :intent
+                     (mapv :parent-ordinal (rest (:receipts @(:budget request)))) => (vec (repeat 10 1))
+                     (every? (fn [receipt] (= :definitive (:state receipt))) (rest (:receipts @(:budget request)))) => true))))))))
+
+(fact "ai-github empty, closed and pending families stop before MCP discovery or REST submission"
+  (doseq [mode [:empty :closed :pending]]
+    (let [discoveries (atom 0)
+          request (cond-> (assoc (execution/family (if (= mode :empty) 0 20) 91)
+                                :authorize-github! (fn [_]))
+                    (= mode :pending) (assoc :routing-pending? true))]
+      (when (= mode :closed) (execution/close-family! request))
+      (with-redefs [mcp/with-tools (fn [& _] (swap! discoveries inc))]
+        (execution/with-request* request #(github/execute! config proposal))
+        (fact @discoveries => 0)))))
+
+(fact "ai-github unknown MCP child never permits a later send or clears its parent's intent"
+  (let [request (assoc (execution/family 20 91) :authorize-github! (fn [_]))]
+    (execution/with-request* request
+      #(let [parent (execution/admit-operation! :tool)]
+         (binding [origin/*operation* parent]
+           (with-fixture (fn [name _] (when (= name "get_commit") {:unknownOutcome true}))
+             (fn [calls]
+               (github/execute! config proposal)
+               (fact (count @calls) => 1
+                     (:unknown? @(:budget request)) => true
+                     (:state (first (:receipts @(:budget request)))) => :intent
+                     (try (execution/admit-operation! :tool) false (catch Exception _ true)) => true))))))))

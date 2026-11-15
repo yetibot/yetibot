@@ -42,11 +42,13 @@
     (fact (contains? (ai/prompt-cmd {:match input}) :result/error) => true)))
 
 (fact "real interpreter passes trusted policy context separately from messages"
-  (with-redefs [api/config (constantly {:providers [provider]})
+  (with-redefs [mcp/config (constantly (assoc-in fixture/config [:toolsets 0 :providers]
+                                                 [{:name "local" :models ["chat"]}]))
+                api/config (constantly {:providers [provider]})
                 context/messages (fn [_ prompt] [{:role "user" :content prompt}])
                 tools/complete (fn [_ _ _ execution]
                                  {:result/value execution})]
-    (:value (chat/run-command chat/request "ai --toolset github-pr change it"))
+    (:value (chat/run-registered-command chat/request "ai --toolset github-pr change it"))
     => {:toolset "github-pr" :actor actor
         :max-tool-calls 20 :max-output-tokens 32768}))
 

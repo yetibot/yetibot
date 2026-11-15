@@ -1,5 +1,16 @@
 # Yetibot changelog
 
+## 2026-11-12 — Autonomous command data charts
+
+- Run caller-authorized commands/aliases (including writes) automatically in AI;
+  retain bounded complete data for typed Kroki charts without a summary turn.
+- Reuse full validated Wise statements beyond display limits. Keep coverage,
+  currency scales and historical-balance limitations honest; never invent a
+  baseline, sample silently or replay collection/effects to repair a chart.
+- Share nested AI budgets/identity, preserve host-owned artifacts and expose
+  safe field diagnostics plus stage timings. Financial charts use configured
+  public rendering/temporary URLs automatically; credentials remain blocked.
+
 ## 2026-11-06 — Model outcomes and measured run costs
 
 - Keep usable child answers and per-call errors on partial failures. Recognize

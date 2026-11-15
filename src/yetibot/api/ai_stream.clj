@@ -66,7 +66,8 @@
                                         (mcp/redact (:label row) config)))
                            (assoc row :label progress/redacted-label) row))
             budget (progress/tool-budget (:tool-budget event))
-            event (cond-> (select-keys event [:phase :summary :text])
+            event (cond-> (merge (select-keys event [:phase :summary :text])
+                                  (progress/timing-details event))
                     tool-event (assoc :tool-event tool-event)
                     budget (assoc :tool-budget budget)
                     answer

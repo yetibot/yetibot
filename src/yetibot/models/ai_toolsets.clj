@@ -20,7 +20,7 @@
 (def native-names
   (into (set default-native-tools)
         ["meme" "gi" "clef" "clairic" "wise" "ai" "cf" "util"
-         "aliases" "react" "weather" "cron" "kroki_types" "kroki_render"]))
+         "aliases" "react" "weather" "cron" "kroki_types" "kroki_render" "command" "chart"]))
 
 (defn github? [toolset]
   (contains? #{"github-read" "github-pr"} (:kind toolset)))

@@ -37,7 +37,7 @@
    :invalid-arguments
    (str "The AI provider sent invalid tool arguments. "
         "No tools from that response were run.")
-   :exclusive-batch "Stage changes in a separate, single-tool response."
+   :exclusive-batch "Call this tool alone in a single-tool response."
    :uncertain-result
    (str "The AI provider requested more tools after an uncertain result. "
         "No further tools were run.")
@@ -59,6 +59,119 @@
 
 (defn- field [schema k]
   (get schema k (get schema (name k))))
+
+(defn sanitize-problem [problem]
+  (progress/sanitize-problem problem))
+
+(defn argument-problem
+  "Diagnose a rejection against an authored native schema, not a validator.
+   Call only after authoritative validation fails. Remote schemas never enter
+   this path; dynamic object keys and array indices are literal wildcards."
+  [schema args]
+  (let [nodes (atom 0)
+        make (fn [path code expected]
+               (sanitize-problem
+                 {:stage :arguments :field (if (seq path) (string/join "." path) "*")
+                  :code code :expected expected :execution-began false}))]
+    (letfn [(typed? [v t]
+              (case t "object" (map? v) "array" (vector? v) "string" (string? v)
+                "integer" (integer? v) "number" (and (number? v) (Double/isFinite (double v)))
+                "boolean" (boolean? v) "null" (nil? v) true))
+            (spelling [k] (if (keyword? k) (name k) k))
+            (properties [s]
+              (into (sorted-map) (map (fn [[k v]] [(spelling k) v])) (field s :properties)))
+            (branch [s v]
+              (let [variants (or (field s :oneOf) (field s :anyOf))
+                    matches (filter
+                              (fn [b]
+                                (and
+                                  (typed? v (field b :type))
+                                  (every? (fn [[k p]]
+                                            (or (not (field p :enum))
+                                                (some #{(get v k)} (field p :enum))))
+                                          (filter (fn [[_ p]] (field p :enum)) (properties b)))
+                                  (every? #(contains? v %) (field b :required))))
+                              variants)]
+                ;; A discriminator still identifies its branch when a required
+                ;; payload is missing. Do not guess across ambiguous branches.
+                (or (when (= 1 (count matches)) (first matches))
+                    (let [tagged (filter
+                                   (fn [b]
+                                     (some (fn [[k p]]
+                                             (and (contains? v k) (field p :enum)
+                                                  (some #{(get v k)} (field p :enum))))
+                                           (properties b))) variants)]
+                      (when (= 1 (count tagged)) (first tagged))))))
+            (discriminator-problem [s v path]
+              (when (map? v)
+                (let [variants (or (field s :oneOf) (field s :anyOf))
+                      tags (when (seq variants)
+                             (filter (fn [k]
+                                       (every? #(field (get (properties %) k) :enum) variants))
+                                     (keys (properties (first variants)))))]
+                  (some (fn [k]
+                          (cond
+                            (not (contains? v k)) (make (conj path k) :required nil)
+                            (not-any? #(some #{(get v k)}
+                                             (field (get (properties %) k) :enum)) variants)
+                            (make (conj path k) :enum nil))) tags))))
+            (walk [s v path depth]
+              (when (and (map? s) (<= depth 8) (<= (swap! nodes inc) 256))
+                (let [t (field s :type)
+                      ts (if (sequential? t) t [t])
+                      props (properties s)
+                      additional (field s :additionalProperties)]
+                  (or
+                    (when (and t (not-any? #(typed? v %) ts))
+                      (make path :type (when (string? t) (keyword t))))
+                    (when (and (field s :enum) (not (some #{v} (field s :enum))))
+                      (make path :enum nil))
+                    (when (map? v)
+                      (or
+                        (some #(when-not (contains? v %) (make (conj path %) :required nil))
+                              (field s :required))
+                        (when (and (false? additional) (some #(not (contains? props %)) (keys v)))
+                          (make (conj path "*") :unknown-field nil))
+                        (when (or (and (field s :minProperties) (< (count v) (field s :minProperties)))
+                                  (and (field s :maxProperties) (> (count v) (field s :maxProperties))))
+                          (make path :size nil))
+                        (some (fn [[k sub]]
+                                (when (contains? v k) (walk sub (get v k) (conj path k) (inc depth)))) props)
+                        (when (map? additional)
+                          (some (fn [[k value]]
+                                  (when-not (contains? props k)
+                                    (walk additional value (conj path "*") (inc depth))))
+                                (take 64 v)))))
+                    (when (string? v)
+                      (or
+                        (when (and (field s :minLength) (< (count v) (field s :minLength)))
+                          (make path :size nil))
+                        (when (and (field s :maxLength) (> (count v) (field s :maxLength)))
+                          (make path :size nil))
+                        (when (and (field s :pattern) (not (re-find (re-pattern (field s :pattern)) v)))
+                          (make path :format nil))))
+                    (when (number? v)
+                      (when (or (and (field s :minimum) (< v (field s :minimum)))
+                                (and (field s :maximum) (> v (field s :maximum))))
+                        (make path :range
+                              (get {[0 6] :integer-0-6 [0 127] :integer-0-127
+                                    [0 128] :integer-0-128 [1 20] :integer-1-20
+                                    [1 50] :integer-1-50 [1 365] :integer-1-365
+                                    [1 32768] :integer-1-32768 [1 262144] :integer-1-262144
+                                    [0 2147483647] :integer-0-2147483647
+                                    [1 2147483647] :integer-1-2147483647}
+                                   [(field s :minimum) (field s :maximum)]))))
+                    (when (vector? v)
+                      (or
+                        (when (or (and (field s :minItems) (< (count v) (field s :minItems)))
+                                  (and (field s :maxItems) (> (count v) (field s :maxItems))))
+                          (make path :size nil))
+                        (some #(walk (field s :items) % (conj path "*") (inc depth)) (take 64 v))))
+                    (if-let [b (branch s v)]
+                      (walk b v path (inc depth))
+                      (discriminator-problem s v path))))))]
+      (or (try (walk schema args [] 0) (catch Exception _ nil))
+          (make [] :invalid-arguments nil)))))
 
 (defn- arguments [raw schema redact]
   (let [value (when (and (string? raw) (<= (count raw) 16384))
@@ -160,18 +273,21 @@
                  rows))))
 
 (defn detail! [state ordinal details]
-  (swap! state
-    (fn [s]
-      (let [rows (mapv #(if (= ordinal (:call %)) (merge % details) %)
-                       (:calls s))
-            rows (if (<= (bytes rows) 11500) rows
-                   (mapv #(assoc % :details-shortened true
-                                  :arguments {:omitted "Execution details retained."})
-                         rows))]
-        (loop [rows rows omitted (:omitted s)]
-          (if (<= (bytes rows) 11500)
-            (assoc s :calls rows :omitted omitted)
-            (recur (pop rows) (inc omitted))))))))
+  (let [details (cond-> (dissoc details :problem)
+                  (sanitize-problem (:problem details))
+                  (assoc :problem (sanitize-problem (:problem details))))]
+    (swap! state
+      (fn [s]
+        (let [rows (mapv #(if (= ordinal (:call %)) (merge % details) %)
+                         (:calls s))
+              rows (if (<= (bytes rows) 11500) rows
+                     (mapv #(assoc % :details-shortened true
+                                    :arguments {:omitted "Execution details retained."})
+                           rows))]
+          (loop [rows rows omitted (:omitted s)]
+            (if (<= (bytes rows) 11500)
+              (assoc s :calls rows :omitted omitted)
+              (recur (pop rows) (inc omitted)))))))))
 
 (defn- outcome-kind [{:keys [outcome operation code]}]
   (cond
@@ -193,7 +309,10 @@
   [state row]
   (let [row (select-keys row [:call :tool :outcome :operation :provider :model
                               :code :http_status :error-class :error-code
-                              :parameter :output-cap :output_count :thinking_count])
+                              :parameter :output-cap :output_count :thinking_count :problem])
+        row (cond-> (dissoc row :problem)
+              (sanitize-problem (:problem row))
+              (assoc :problem (sanitize-problem (:problem row))))
         row (reduce (fn [r k]
                       (if (string? (get r k))
                         (update r k progress/clip 200) r))
@@ -203,7 +322,8 @@
         (-> s
             (update :failures
                     #(vec (take 3 (sort-by
-                                    (fn [r] (if (= :unknown (:outcome r)) 0 1))
+                                    (fn [r] (cond (= :unknown (:outcome r)) 0
+                                                  (:problem r) 1 :else 2))
                                     (conj (or % []) row)))))
             (update-in [:failure-counts (outcome-kind row)] (fnil inc 0)))))))
 
@@ -211,12 +331,13 @@
   (let [{:keys [used requested calls omitted failures failure-counts]} @state]
     (loop [rows calls omitted omitted]
       (let [r (cond->
-                {:reason reason :budget {:limit limit :used used
-                                         :remaining (max 0 (- limit used))
-                                         :requested requested}
-                 :calls rows :omitted omitted
-                 :truncated (boolean
-                              (or (pos? omitted) (some :details-shortened rows)))}
+                (merge (progress/timing-details @state)
+                       {:reason reason :budget {:limit limit :used used
+                                                :remaining (max 0 (- limit used))
+                                                :requested requested}
+                        :calls rows :omitted omitted
+                        :truncated (boolean
+                                     (or (pos? omitted) (some :details-shortened rows)))})
                 (seq failures) (assoc :failures failures
                                      :failure-counts failure-counts))]
         ;; Leave room for a closed batch-validation code added by the caller.
@@ -233,8 +354,10 @@
 
 (defn failure-reason
   "Authored explanations only; never exception or provider message text."
-  [{:keys [outcome code error-code error-class parameter http_status]} report]
+  [{:keys [outcome code error-code error-class parameter http_status problem]} report]
   (cond
+    (and (not= :unknown outcome) (sanitize-problem problem))
+    (progress/problem-text problem)
     (= :unknown outcome)
     "Delivery could not be confirmed. Not retried; cost may be unknown."
     (= :skipped outcome) "Not run after an earlier uncertain outcome."
@@ -279,10 +402,16 @@
           (when (not= :tool-error code) (str label ".")))
         "A specific failure reason was not retained.")))
 
+(defn failure-message [report]
+  (let [problem (some #(sanitize-problem (:problem %))
+                      (concat (:failures report) (:calls report)))]
+    (str (get reasons (:reason report))
+         (when problem (str " " (progress/problem-text problem))))))
+
 (defn public-errors
   "Failure-first DTO fits the unchanged 64-node/4000-char core error budget.
-   Three bounded rows, eight fields each, eight detail scalars at most. Full
-   chronology/technical receipts remain in execution, not this error pane."
+   Three bounded rows; a safe problem replaces technical detail scalars rather
+   than expanding the frozen viewer budget. Full chronology stays in execution."
   [report]
   (let [failures (or (:failures report)
                     (filter #(not= :success (:outcome %)) (:calls report)))
@@ -298,10 +427,12 @@
                   :operation (:operation row)
                   :provider (label (:provider row)) :model (label (:model row))
                   :reason (failure-reason row report)
-                  :details (assoc (select-keys row
-                                    [:code :error-class :error-code :parameter
-                                     :output-cap :output_count :thinking_count])
-                                  :outcome (:outcome row))}
+                  :details (if-let [problem (sanitize-problem (:problem row))]
+                             {:outcome (:outcome row) :problem problem}
+                             (assoc (select-keys row
+                                      [:code :error-class :error-code :parameter
+                                       :output-cap :output_count :thinking_count])
+                                    :outcome (:outcome row)))}
                  (integer? (:http_status row))
                  (assoc :http_status (:http_status row))))) rows)
      :omitted omitted :trace_omitted (:omitted report)
@@ -323,14 +454,17 @@
 
 (defn public-report [report]
   ;; Deliberately omit arguments and IDs; not a generic tool-payload viewer.
-  (-> (select-keys report [:reason :budget :omitted :truncated])
+  (-> (merge (select-keys report [:reason :budget :host-budget :omitted :truncated])
+             (progress/timing-details report))
       (assoc :calls
-             (mapv #(select-keys % [:call :tool :outcome :attempted :confirmed
+             (mapv #(cond-> (select-keys % [:call :tool :outcome :attempted :confirmed
                                     :operation :provider :model :code :elapsed_ms
                                     :cost :finish :status :text-present :output-cap
                                     :input_count :output_count :thinking_count
                                     :http_status :error-class :error-code
                                     :parameter])
+                      (sanitize-problem (:problem %))
+                      (assoc :problem (sanitize-problem (:problem %))))
                    (:calls report)))))
 
 (defn- trace-summary [report]
@@ -338,6 +472,9 @@
         header (str (get reasons (:reason report))
                     (when-let [label (progress/failure-labels (:code report))]
                       (str " " label ".")) "\n"
+                    (when-let [{:keys [limit admitted reserved remaining]} (:host-budget report)]
+                      (str "Host admissions: " admitted "/" limit
+                           "; reserved=" reserved "; remaining=" remaining ".\n"))
                     "Tool budget: total=" limit " used=" used
                     " remaining=" remaining " requested=" requested
                     ". Trace (redacted arguments; ordinal references, "
@@ -399,7 +536,13 @@
        (string/join "\n\n" (remove string/blank?
                              [parent-text (outcome-line report answers)
                               (failure-lines report)]))
-       (trace-summary report))
+       (if (some #(sanitize-problem (:problem %))
+                 (concat (:failures report) (:calls report)))
+         (let [failures (progress/clip (or (failure-lines report) "") 1800)]
+           (str failures "\n\n"
+                (progress/clip (trace-summary report)
+                               (max 0 (- 1900 (count failures) 2)))))
+         (trace-summary report)))
      (string/join "\n\n"
        (remove string/blank?
          [(if (seq answers)

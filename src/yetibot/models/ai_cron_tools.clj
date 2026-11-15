@@ -6,6 +6,9 @@
             [hara.io.scheduler.tab :as tab]
             [yetibot.api.ai :as ai]
             [yetibot.core.db.util :as db]
+            [yetibot.core.db.cron :as cron]
+            [yetibot.core.db.agent-run :as ledger]
+            [cuerdas.core :refer [snake]]
             [yetibot.core.models.admin :as admin]
             [yetibot.models.ai-alias-tools :as aliases]
             [yetibot.models.ai-tool-policy :as policy]
@@ -111,7 +114,7 @@
 
 (defn- version [row]
   (let [bytes (.digest (MessageDigest/getInstance "SHA-256")
-                       (.getBytes (pr-str (mapv row [:id :content-hash]))
+                       (.getBytes (pr-str (mapv row [:id :content-hash :state-revision :worker-fence]))
                                   "UTF-8"))]
     (apply str (map #(format "%02x" (bit-and 255 %)) bytes))))
 
@@ -150,7 +153,7 @@
                    (.getID (TimeZone/getDefault)))
      :scheduler_initialized (boolean scheduler)
      :scheduler_running (when scheduler
-                          ((ns-resolve 'hara.io.scheduler 'started?)
+                          ((ns-resolve 'hara.io.scheduler 'running?)
                             scheduler))}))
 
 (defn- query [tx sql params]
@@ -164,7 +167,7 @@
 (def columns
   ;; Bound legacy fields before transferring them from the store. Hashes are
   ;; for freshness, not authorization; access is independently rechecked.
-  (str "id, chat_source_adapter, chat_source_room, user_id, "
+  (str "id, chat_source_adapter, chat_source_room, user_id, state_revision, worker_fence, "
        "CASE WHEN octet_length(schedule) <= 200 THEN schedule END AS schedule, "
        "CASE WHEN octet_length(cmd) <= 65536 THEN cmd END AS cmd, "
        "md5(schedule || chr(1) || cmd) AS content_hash"))
@@ -223,23 +226,22 @@
                                       (and (nil? (:schedule old))
                                            (not (contains? args "schedule")))))
                         (ai/fail "Supply replacements for oversized fields."))
+                    existing (when old (ledger/lock-row! tx "cron" (:id old)))
+                    entity (when-not (= action "delete")
+                             (cron/prepare-write! tx existing
+                               {:chat-source-adapter (first scope)
+                                :chat-source-room (second scope) :user-id (if old (:user-id old) (:user actor))
+                                :schedule (get args "schedule" (:schedule old))
+                                :cmd (get args "command" (:cmd old))}))
                     row (if (= action "delete") old
-                          (first
-                            (if old
-                              (query tx (str "UPDATE " table
-                                             " SET schedule = ?, cmd = ?"
-                                             " WHERE id = ? RETURNING " columns)
-                                     [(get args "schedule" (:schedule old))
-                                      (get args "command" (:cmd old))
-                                      (:id old)])
-                              (query tx (str "INSERT INTO " table
-                                             " (chat_source_adapter,"
-                                             " chat_source_room,user_id,"
-                                             "schedule,cmd) VALUES (?,?,?,?,?)"
-                                             " RETURNING " columns)
-                                     (into scope [(:user actor)
-                                                  (get args "schedule")
-                                                  (get args "command")])))))]
+                          (let [id (if old
+                                     (do (jdbc/update! tx table entity ["id=?" (:id old)]
+                                                       {:entities snake :timeout 2})
+                                         (:id old))
+                                     (:id (first (jdbc/insert! tx table entity
+                                                             {:entities snake :timeout 2}))))]
+                            (first (query tx (str "SELECT " columns " FROM " table where " AND id=?")
+                                          (conj scope id)))))]
                 (when (= action "delete")
                   (jdbc/execute! tx [(str "DELETE FROM " table " WHERE id = ?")
                                      (:id row)] {:timeout 2}))

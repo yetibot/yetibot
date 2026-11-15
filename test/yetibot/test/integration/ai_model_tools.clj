@@ -19,7 +19,10 @@
             [yetibot.models.ai-wise-tools :as wise]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.util.ai-limits :as limits]
-            [yetibot.util.ai-capacity :as capacity]))
+            [yetibot.util.ai-capacity :as capacity]
+            [yetibot.util.ai-execution :as host]
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.api.opencode :as zen]))
 
 (fact "structured model output compiles redaction patterns once per traversal"
   (let [compile-pattern re-pattern
@@ -73,9 +76,10 @@
   (try (f) nil (catch Exception e (.getMessage e))))
 
 (defn in-request [f]
-  (execution/in-event execution/request "ai ask another model"
+  (execution/in-registered-event execution/request "ai ask another model"
     (fn [request]
-      (with-redefs [ai/config (constantly settings)]
+      (with-redefs [ai/config (constantly settings)
+                    mcp/config (constantly {:servers [] :toolsets [toolset]})]
         (f request)))))
 
 (fact "larger host budgets reach stateless children and bound model-selected caps"
@@ -474,7 +478,7 @@
                     {:result/value "Real handler answer"})
                   context/messages
                   (fn [& _] (throw (AssertionError. "history")))]
-      (:value (execution/run-command
+      (:value (execution/run-registered-command
                 execution/request
                 "cf --model @cf/vendor/chat only supplied text"))
       => "Real handler answer"
@@ -521,19 +525,19 @@
                          (str "cf " private " " path)
                          (str "cf --invalid " private " " token)
                          (str "cf --model " private " " token)]]
-          (private-error! (execution/run-command execution/request command)
+          (private-error! (execution/run-registered-command execution/request command)
                           [token path private] false))
         (with-redefs [ai/config
                       (fn [] (throw (ex-info (str token " " path) {})))]
           (private-error!
-            (execution/run-command execution/request
+            (execution/run-registered-command execution/request
                                    (str "cf " private " " token))
             [token path private] false)
-          (private-error! (execution/run-command execution/request "cf models")
+          (private-error! (execution/run-registered-command execution/request "cf models")
                           [token path] false))
         (with-redefs [mcp/config (constantly {:toolsets [] :servers []})]
           (private-error!
-            (execution/run-command execution/request
+            (execution/run-registered-command execution/request
                                    (str "cf " private " " token))
             [token path private] false))
         @posts => 0))))
@@ -547,7 +551,7 @@
                         (swap! echoes inc)
                         {:result/value token})]
           (private-error!
-            (execution/run-command execution/request
+            (execution/run-registered-command execution/request
                                    "echo private-fixture | cf | echo later")
             [token "private-fixture"] false)
           @echoes => 1
@@ -565,7 +569,7 @@
                            (swap! echoes inc)
                            {:result/value "must not run"})]
           (private-error!
-            (execution/run-command
+            (execution/run-registered-command
               execution/request
               "cf PRIVATE-PAID-PROMPT | echo later | echo again")
             ["PRIVATE-PAID-PROMPT" "PRIVATE-POST-ERROR"] true)
@@ -681,6 +685,7 @@
                                     :api "responses" :key "zen-token"
                                     :url "https://opencode.ai/inference/openai/v1"}]
                        :default-provider "zen"})
+                    mcp/config (constantly {:servers [] :toolsets [(assoc (dissoc toolset :providers) :native-tools [])]})
                     http/get (fn [& _] {:status 200 :body {:data zen-catalog}})]
         (f request (update config :toolset dissoc :providers))))))
 
@@ -795,9 +800,11 @@
                       yetibot.core.util.ai-usage/capture!
                       (fn [& _] (swap! effects conj :reservation))]
           (let [e (try
-                    (ai/chat (ai/provider (ai/config) "zen") "b-paid"
-                             [{:role "user" :content "question"}]
-                             {:max-output-tokens 32768})
+                    (let [provider (ai/prepare-provider (ai/provider (ai/config) "zen") "b-paid")]
+                      (yetibot.util.ai-execution/with-source*
+                        {:provider provider :model "b-paid" :no-tools true}
+                        #(ai/chat provider "b-paid" [{:role "user" :content "question"}]
+                                  {:max-output-tokens 32768})))
                     (catch Exception e e))]
             (:ai/request-not-sent (ex-data e)) => true
             (:ai/error-code (ex-data e)) => :model-capacity-exceeded
@@ -814,6 +821,7 @@
                             {:name "local" :models ["p"]})
             effects (atom [])]
         (with-redefs [ai/config (constantly cfg)
+                      mcp/config (constantly {:servers [] :toolsets [(:toolset host)]})
                       ai/resolve-provider (fn [p] (swap! effects conj :credential) p)
                       ai/models (fn [_] (swap! effects conj :models) ["p"])
                       ai/complete (fn [& _] {:result/value "explicit answer"})]
@@ -915,3 +923,58 @@
           (get-in (ex-data error) [:ai/tool-failure :budget])
           => {:limit 20 :used 0 :remaining 20 :requested 0}
           (get-in (ex-data error) [:ai/tool-failure :calls]) => [])))))
+
+
+(fact "automatic native Zen children choose free catalog pricing rather than their paid prepared parent"
+  (doseq [explicit? [false true]]
+    (in-request
+      (fn [request]
+        (let [provider {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+              t (assoc toolset :native-tools ["ai"] :providers [{:name "zen" :models ["a-free" "b-paid"]}])
+              wire (atom []) accounting (atom []) turn cost/turn]
+          (with-redefs [ai/config (constantly {:providers [provider]})
+                        mcp/config (constantly {:servers [] :toolsets [t]})
+                        http/get (fn [_ options]
+                                   (let [body {:data zen-catalog}]
+                                     {:status 200 :body (if (= :stream (:as options))
+                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                        cost/turn (fn [p m body]
+                                    (let [value (turn p m body)]
+                                      (swap! accounting conj {:model m :role cost/*role* :free (:ai/verified-free p)
+                                                              :pricing (::zen/pricing p) :cost value}) value))
+                        http/post
+                        (fn [_ options]
+                          (swap! wire conj {:form (:form-params options) :request host/*request*})
+                          {:status 200 :body
+                           (assoc
+                             (if (= 1 (count @wire))
+                               {:choices [{:message {:role "assistant" :tool_calls
+                                 [{:id "delegate" :type "function" :function
+                                   {:name "yetibot_ai" :arguments
+                                    (json/generate-string
+                                      (cond-> {"action" "ask" "provider" "zen" "prompt" "Only supplied text"}
+                                        explicit? (assoc "model" "b-paid")))}}]}}]}
+                               {:choices [{:message {:role "assistant" :content "Done"}}]})
+                             :usage {:prompt_tokens 10 :completion_tokens 8})})]
+            (let [result (tools/complete provider "b-paid" [] {:actor (policy/actor request)})]
+              (get-in result [:result/data :ai/accounting :delegated :requests]) => 1
+              (get-in result [:result/data :ai/accounting :parent :requests]) => 2
+              (get-in result [:result/data :ai/accounting :delegated :estimated_usd])
+              => (if explicit? 0.0000126M 0M))
+            (count @wire) => 3
+            (mapv #(get-in % [:form :model]) @wire) => ["b-paid" (if explicit? "b-paid" "a-free") "b-paid"]
+            (count (distinct (map #(get-in % [:request :family-id]) @wire))) => 1
+            (let [children (filter #(= :delegated (:role %)) @accounting)
+                  child (first children)]
+              (count (distinct children)) => 1
+              (get-in child [:pricing :kind]) => (if explicit? "paid" "free")
+              (:free child) => (when-not explicit? true)
+              (get-in child [:cost :usd]) => (if explicit? 0.0000126M 0M)
+              (get-in child [:pricing :input]) => (if explicit? 0.3M 0M)
+              (get-in child [:pricing :output]) => (if explicit? 1.2M 0M))
+            (let [budget @(:budget (:request (first @wire)))]
+              (:used budget) => 4
+              (mapv :ordinal (:receipts budget)) => [1 2 3 4]
+              (mapv :kind (:receipts budget)) => [:inference :tool :inference :inference])
+            (when explicit?
+              (every? #(not (:free %)) @accounting) => true)))))))

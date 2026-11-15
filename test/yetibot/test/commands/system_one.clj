@@ -60,7 +60,7 @@
   (reset! calls [])
   (with-redefs [config/get-config command-config
                 http/post reply]
-    (let [r (chat/run-command chat/request
+    (let [r (chat/run-registered-command chat/request
                             "echo service is down | clef Is this an outage?")]
       (get-in r [:data :answers :decision :noul]) => 0.98
       (string/includes? (str (:value r)) "0.98") => true
@@ -68,14 +68,14 @@
       (get-in (first @calls) [2 :questions :decision :instructions])
       => "Is this an outage?"
       (get-in (first @calls) [1 :headers "cf-aig-gateway-id"]) => "test")
-    (let [r (chat/run-command
+    (let [r (chat/run-registered-command
               chat/request
               "echo total 42 | clairic --fields '{:amount :number}'")]
       (:error r) => nil
       (get-in r [:data :answers :amount :value]) => 42
       (get-in (last @calls) [2 :state]) => "total 42"
       (get-in (last @calls) [2 :fields :amount :type]) => "number")
-    (let [r (chat/run-command
+    (let [r (chat/run-registered-command
               chat/request
               (str "echo total 42 | clairic --fields '{:amount :number}'"
                    " | data $.answers.amount.value"))]
@@ -102,7 +102,7 @@
                                          "accounts/" (:account-id settings)
                                          "/ai/run/@cf/cloudflare/clairic"))
                        (real-post (str base "/infer") options))]
-          (let [r (chat/run-command
+          (let [r (chat/run-registered-command
                     chat/request
                     "echo no amount | clairic --fields '{:amount :number}'")]
             (:error r) => nil
@@ -120,7 +120,7 @@
     (spit (:key-file settings) "fixture-token")
     (with-redefs [config/get-config command-config http/post reply
                   sample-answer (fn [_] {:type "text" :value text})]
-      (let [r (chat/run-command
+      (let [r (chat/run-registered-command
                 chat/request
                 "echo report | clairic --fields '{:note :text}'")]
         (:error r) => nil
@@ -143,7 +143,7 @@
                                  {:model "clairic" :truncated true
                                   :answers {:note {:type "text" :value text}}}})
                               "UTF-8"))})]
-      (let [r (chat/run-command
+      (let [r (chat/run-registered-command
                 chat/request
                 "echo report | clairic --fields '{:note :text}'")]
         (:error r) => nil
@@ -172,7 +172,7 @@
               "one\ntwo"]
              ["json parse {\"total\":42} | clef Are both present?" {:total 42}]
              ["json parse false | clef Are both present?" "false"]]]
-      (let [r (chat/run-command chat/request command)]
+      (let [r (chat/run-registered-command chat/request command)]
         (:error r) => nil
         (get-in (last @calls) [2 :state]) => state
         (get-in (last @calls) [2 :questions :decision :instructions])
@@ -196,7 +196,7 @@
                              {:status 200
                               :body (ByteArrayInputStream. (fixture/png))})
                   http/post reply]
-      (let [r (chat/run-command
+      (let [r (chat/run-registered-command
                 chat/request
                 (str "echo urgent | clef --questions "
                      "'{:team {:type :choice :instructions \"Which?\" "
@@ -204,33 +204,33 @@
         (:error r) => nil
         (get-in r [:data :answers :team :type]) => "choice"
         (get-in (last @calls) [2 :state]) => "urgent")
-      (let [r (chat/run-command
+      (let [r (chat/run-registered-command
                 chat/request
                 (str "echo urgent | clef --questions "
                      "'{:severity {:type :score :instructions \"How bad?\" "
                      ":criteria [\"low\" \"high\"]}}'"))]
         (get-in r [:data :answers :severity :score]) => 0.5)
-      (let [r (chat/run-command
+      (let [r (chat/run-registered-command
                 chat/request
                 "clairic --fields '{:amount :number}' total 42")]
         (get-in r [:data :answers :amount :value]) => 42
         (get-in (last @calls) [2 :state]) => "total 42")
-      (:error (chat/run-command attachment "clef Is this a receipt?")) => nil
+      (:error (chat/run-registered-command attachment "clef Is this a receipt?")) => nil
       (get-in (last @calls) [2 :images 0 :content_type]) => "image/png"
       (some? (get-in (last @calls) [2 :images 0 :base64])) => true
-      (:error (chat/run-command
+      (:error (chat/run-registered-command
                 chat/request
                 (str "echo https://images.example/receipt.png"
                      " | clairic --fields '{:amount :number}'"))) => nil
       (count @downloads) => 2
-      (:error (chat/run-command
+      (:error (chat/run-registered-command
                 attachment
                 (str "clef Is https://images.example/other.png newer than "
                      "https://images.example/receipt.png today?"))) => nil
       (count (get-in (last @calls) [2 :images])) => 2
       (get-in (last @calls) [2 :questions :decision :instructions])
       => "Is Image 2 newer than Image 1 today?"
-      (:error (chat/run-command
+      (:error (chat/run-registered-command
                 chat/request
                 (str "json parse {\"image\":"
                      "\"https://images.example/receipt.png?x=1&y=2\"}"
@@ -240,7 +240,7 @@
       => "https://images.example/receipt.png?x=1&y=2"
       (every? #(nil? (get-in % [1 :headers "Authorization"])) @downloads)
       => true
-      (:error (chat/run-command
+      (:error (chat/run-registered-command
                 chat/request "echo fixture-token | clef Is this a token?"))
       => (midje.sweet/contains "configured credential")))
   (.delete (java.io.File. (:key-file settings))))
@@ -271,13 +271,13 @@
               {:type "text" :instructions "read the pilot callsign"}]
              ["list the pilots" :items
               {:type "list" :items "text" :instructions "list the pilots"}]]]
-      (let [r (chat/run-command
+      (let [r (chat/run-registered-command
                 chat/request (str "echo source text | clairic " request))]
         (:error r) => nil
         (get-in (last @calls) [2 :state]) => "source text"
         (get-in (last @calls) [2 :fields]) => {id expected}
         (get-in r [:data :request :fields]) => {id expected}))
-    (let [r (chat/run-command
+    (let [r (chat/run-registered-command
               chat/request
               (str "echo eight helicopters | clairic rate "
                    "how absurd this commute is"))
@@ -289,7 +289,7 @@
                         "rate how absurd this commute is") => true
       (string/includes? (str (:value r)) "rating: 8/10") => true
       (get-in r [:data :answers :rating :p10]) => 6)
-    (let [r (chat/run-command
+    (let [r (chat/run-registered-command
               chat/request
               (str "echo eight helicopters | clairic count helicopters"
                    " | data $.answers.count.value"))]
@@ -319,7 +319,7 @@
                [request "clairic count helicopters" :count]
                [chat/request
                 (str "clairic rate how absurd this commute is " url) :rating]]]
-        (let [r (chat/run-command context command)]
+        (let [r (chat/run-registered-command context command)]
           (:error r) => nil
           (get-in r [:data :answers id :value]) => 8
           (get-in (last @calls) [2 :images 0 :content_type]) => "image/png"
@@ -342,7 +342,7 @@
                                   (fact urls => []) [])
                   sample-answer (fn [_] {:type "number" :value 3})]
       (doseq [command ["clairic demo" "echo unrelated input | clairic demo"]]
-        (let [r (chat/run-command attachment command)]
+        (let [r (chat/run-registered-command attachment command)]
           (:error r) => nil
           (get-in r [:data :answers :count :value]) => 3
           (string/includes? (str (:value r)) "Demo passed") => true
@@ -351,7 +351,7 @@
     (doseq [value [7 nil]]
       (with-redefs [config/get-config command-config http/post reply
                     sample-answer (fn [_] {:type "number" :value value})]
-        (let [r (chat/run-command chat/request "clairic demo")]
+        (let [r (chat/run-registered-command chat/request "clairic demo")]
           (string/includes? (str (:value r)) "Demo passed") => false
           (string/includes? (str (:value r)) "expected 3") => true))))
   (.delete (java.io.File. (:key-file settings))))
@@ -371,7 +371,7 @@
                            (ByteArrayInputStream.
                              (.getBytes (json/generate-string body)
                                         "UTF-8")))))]
-    (let [r (chat/run-command
+    (let [r (chat/run-registered-command
               chat/request
               (str "clairic count helicopters "
                    "https://images.example/meme.png"))]
@@ -385,7 +385,7 @@
   (reset! calls [])
   (with-redefs [config/get-config command-config http/post reply
                 sample-answer quick-answer]
-    (let [r (chat/run-command
+    (let [r (chat/run-registered-command
               chat/request
               "json parse false | clairic rate how surprising this is")]
       (:error r) => nil
@@ -412,7 +412,7 @@
   "malformed schemas produce actionable errors instead of generic failures"
   (with-redefs [config/get-config command-config http/post reply]
     (doseq [schema ["'{:x :number}" ":number" "42" "[]"]]
-      (let [r (chat/run-command chat/request
+      (let [r (chat/run-registered-command chat/request
                                 (str "echo source | clairic --fields " schema))]
         (some? (:error r)) => true
         (string/includes? (str (:error r))

@@ -5,6 +5,7 @@
             [yetibot.api.cloudflare :as cloudflare]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.ai :as ai]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-limits :as limits]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.models.ai-model-tools :as models]
@@ -30,7 +31,11 @@
                    :error message}}))
 
 (defn- safely [args f]
-  (try (f) (catch Exception _ (failure args false))))
+  (try (f)
+       (catch Exception e
+         (if (and execution/*request* (= :policy-denied (:ai/error-code (ex-data e))))
+           (throw e)
+           (failure args false)))))
 
 (def catalog-usage
   "Usage: cf models [--categories | --category <category>]")
@@ -109,10 +114,11 @@
   [{:keys [match chat-source] :as args}]
   (safely args
     (fn []
-      (let [options (ai/parse-prompt match usage)
+      (let [_ (when execution/*command-capture* (execution/charge!))
+            options (ai/parse-prompt match usage)
             _ (when (or (:provider options) (:max-tool-calls options))
                 (api/fail usage))
-            config (merge (toolsets/select (mcp/config) (:toolset options))
+            config (merge (toolsets/select (mcp/config) (execution/inherited-toolset (:toolset options)))
                           (limits/effective options))
             result (models/call!
                      config "cf"

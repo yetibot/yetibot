@@ -11,7 +11,8 @@
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.util.image-input :as image-input]
             [yetibot.util.ai-config :as settings]
-            [yetibot.util.ai-execution :as execution])
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.models.ai-tool-policy :as policy])
   (:import [java.io PushbackReader StringReader]))
 
 (defn- schema! [text]
@@ -218,6 +219,13 @@
 (defn- run [model args]
   (try
     (execution/sensitive!)
+    (when execution/*command-capture*
+      (execution/charge!)
+      ;; These typed classifiers have no autoregressive generation allowance.
+      ;; Use the actual wire provider/model identity, not a chat-model default.
+      (policy/authorize! (:toolset-policy execution/*request*)
+                         (policy/actor execution/*event*)
+                         {:name "cloudflare"} (str "@cf/cloudflare/" model)))
     (let [{:keys [urls payload mode demo?]} (prepare model args)
           {:keys [value error]} (config/get-config map? [:ai])
           config (:intent-router (settings/ai value))
@@ -225,7 +233,14 @@
               (cf/fail! "Configure ai.intent-router account-id/key-file."))
           _ (cf/account-url (:account-id config))
           _ (cf/gateway-headers (:gateway-id config))
-          token (try (clef/credential! config)
+          result
+          (execution/with-source*
+            {:provider {:name "cloudflare" :url (cf/account-url (:account-id config))}
+             :model (str "@cf/cloudflare/" model) :no-tools true :non-chat? true
+             :producer-kind "cloudflare-classifier" :producer-operation? true
+             :structured-config config
+             :schema-fields (count (or (:questions payload) (:fields payload)))}
+            #(let [token (try (clef/credential! config)
                   (catch Exception _
                     (cf/fail!
                       "Could not read the configured Cloudflare token.")))
@@ -233,7 +248,7 @@
               (cf/fail! "Inference input contains the configured credential."))
           media (images/images urls)
           payload (cond-> payload (seq media) (assoc :images media))
-          result (cf/infer! config token model payload)
+          result (cf/infer! config token model payload)] result))
           result (cond-> result
                    mode (assoc :request {:mode (if demo? "demo" mode)
                                          :fields (:fields payload)}))]

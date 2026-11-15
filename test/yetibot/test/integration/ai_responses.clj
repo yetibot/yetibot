@@ -6,9 +6,17 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.grok]
+            [yetibot.commands.ai :as command]
+            [yetibot.models.ai-tool-policy :as policy]
             [yetibot.core.config :as config]
             [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-datasets :as datasets]
+            [yetibot.core.hooks :as hooks]
+            [yetibot.models.ai-context :as context]
+            [yetibot.test.integration.ai-command-charts :as caller]
+            [yetibot.core.util.public-result :as public]
+            [yetibot.util.ai-execution :as host-execution]
             [yetibot.test.support.ai-execution :as execution]
             [yetibot.test.support.mcp :as support]))
 
@@ -82,8 +90,10 @@
                                  :url (str url "/mcp") :tools ["whoami"]
                                  :headers {"Authorization"
                                            "Bearer CLOUDFLARE_SECRET"}}]}]
-          (with-redefs [mcp/config (constantly config)]
-            (f provider requests calls)))))))
+          (with-redefs [mcp/config (constantly config)
+                        ai/config (constantly {:providers [(assoc provider :model "grok-4.7")]})]
+            (execution/in-registered-event execution/request "grok fixture"
+              (fn [_] (f provider requests calls)))))))))
 
 (defn write-event! [out event]
   (.write ^java.io.OutputStream out
@@ -253,7 +263,31 @@
                            (get-in % [:headers "authorization"])))
                   @requests) => true))))))
 
-(fact "both real commands enforce named-toolset identity and model policy"
+(defn- command-with-admissions [request command expected]
+  (let [post client/post family (atom nil)
+        result (with-redefs [client/post (fn [& args]
+                                          (reset! family host-execution/*request*)
+                                          (apply post args))]
+                 (execution/run-registered-command request command))]
+    (fact (select-keys (host-execution/admissions @family) [:limit :admitted])
+          => {:limit expected :admitted expected})
+    result))
+
+(fact "ordinary ai and grok roots retain config2 and deny the third physical admission without retry"
+  (doseq [command ["ai --provider grok Identify us." "grok Identify us."]]
+    (with-runtime
+      (fn [body]
+        (response [(function-call (account-function-name body) "limited-call" "{}")]))
+      {:structuredContent {:name "Yetibot"} :content [] :isError false}
+      (fn [_ requests calls]
+        (let [request (update-in execution/request [:chat-source :raw-event] dissoc :thread_ts)
+              result (command-with-admissions request command 2)]
+          (fact (count (filter #(= "/v1/responses" (:path %)) @requests)) => 1
+                (count @calls) => 1
+                (string/includes? (:value result) "tool-call limit") => true
+                (< (count (:value result)) 1500) => true))))))
+
+(fact "explicit caller allowance3 composes real commands with named-toolset identity and model policy"
   (with-runtime
     (fn [body]
       (if (= "function_call_output" (:type (last (:input body))))
@@ -280,9 +314,9 @@
                       mcp/config (constantly restricted)]
           (doseq [command ["ai --provider grok" "grok"]]
             (let [command (str command
-                               " --toolset cloudflare_read Identify us.")]
+                               " --max-tool-calls 3 --toolset cloudflare_read Identify us.")]
               (fact
-                (get-in (execution/run-command request command)
+                (get-in (command-with-admissions request command 3)
                         [:data :mcp :tool-calls]) => 1)
               (let [before (count @requests)
                     unauthorized (-> request
@@ -291,18 +325,18 @@
                                                "U2"))]
                 (fact
                   (string/includes?
-                    (:error (execution/run-command unauthorized command))
+                    (:error (execution/run-registered-command unauthorized command))
                     "do not have access") => true
                   (count @requests) => before))))
           (fact
             (string/includes?
-              (:error (execution/run-command
+              (:error (execution/run-registered-command
                         request (str "grok --model forbidden "
                                      "--toolset cloudflare_read Identify us.")))
               "provider/model is not allowed") => true
             (count @calls) => 2))))))
 
-(fact "legacy xAI credentials keep Grok identity with real HTTP and MCP"
+(fact "explicit caller allowance3 keeps legacy xAI Grok identity with real HTTP and MCP"
   (let [endpoints (atom [])
         post client/post]
     (with-runtime
@@ -331,7 +365,7 @@
                           (when-not (= url "https://api.x.ai/v1/responses")
                             (throw (ex-info "Wrong provider endpoint" {})))
                           (post (str (:url provider) "/responses") options))]
-            (let [result (execution/run-command request "grok Identify us.")
+            (let [result (command-with-admissions request "grok --max-tool-calls 3 Identify us." 3)
                   turns (filter #(= "/v1/responses" (:path %)) @requests)]
               (fact
                 (:error result) => nil
@@ -427,3 +461,302 @@
                 (contains? body :tool_choice) => false
                 (mapv :call_id (take-last 2 (:input body)))
                 => ["one" "two"]))))))
+
+(fact "configured credentials in an empty live store protect untrusted keys and scalar spellings"
+  (let [turns (atom 0) stores (atom []) chat ai/chat
+        opaque {:type "reasoning" :id "PROVIDER_SECRET"
+                :encrypted_content "PROVIDER_SECRET" :summary []}
+        usage {:input_tokens 739194 :output_tokens 1 :total_tokens 739195}
+        annotated (update-in (assoc (text-output "Safe answer")
+                                   :extension {:PROVIDER_SECRET "PROVIDER_SECRET" :numeric 739194 :safe "kept"}
+                                   :reasoning_content "PROVIDER_SECRET") [:content 0 :annotations 0]
+                             assoc (keyword "PROVIDER_SECRET") "extension"
+                             :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
+                             :numeric 739194 :safe "kept" :start_index 0 :end_index 11)
+        source {:type "web_search_call" :id "source-item" :status "completed"
+                :action {:type "search" :sources [{:type "url" :url "https://safe.example"
+                                                   (keyword "PROVIDER_SECRET") "extension"
+                                                   :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
+                                                   :numeric 739194 :safe "kept"}]}}]
+    (with-runtime
+      (fn [body]
+        (assoc (response (if (= 1 (swap! turns inc))
+                           [opaque annotated source (function-call (account-function-name body) "safe-call" "{}")]
+                           [opaque annotated source])) :usage usage))
+      {:structuredContent {(keyword "PROVIDER_SECRET") "reflection"
+                           :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
+                           :numeric 739194 :safe "kept"}
+       :content [] :isError false}
+      (fn [provider requests calls]
+        (let [config (update (mcp/config) :secrets conj "739194")]
+          (with-redefs [mcp/config (constantly config)
+                        ai/chat (fn [& args]
+                                  (swap! stores conj @(get-in host-execution/*request* [:dataset-store :state]))
+                                  (apply chat args))]
+            (let [result (tools/complete provider "grok-4.7" messages
+                                         {:actor (policy/actor host-execution/*event*)})
+                  next-body (last-turn requests)
+                  reply (last (:input next-body))
+                  annotation (get-in result [:result/data :output 1 :content 0 :annotations 0])
+                  public-source (get-in result [:result/data :output 2 :action :sources 0])
+                  replay-payload (remove #(= "reasoning" (:type %)) (:input next-body))]
+              (count @stores) => 2
+              (every? #(and (false? (:closed? %)) (= {} (:datasets %))) @stores) => true
+              @calls => [{:name "whoami" :arguments {}}]
+              @turns => 2
+              (:call_id reply) => "safe-call"
+              (get-in (json/parse-string (:output reply) true) [:structuredContent :safe]) => "kept"
+              (string/includes? (:output reply) "PROVIDER_SECRET") => false
+              (string/includes? (:output reply) "739194") => false
+              (doseq [payload [annotation public-source]]
+                (string/includes? (json/generate-string payload) "PROVIDER_SECRET") => false
+                (string/includes? (json/generate-string payload) "739194") => false
+                (:safe payload) => "kept")
+              (get-in result [:result/data :output 1 :extension])
+              => {"[redacted]" "[redacted]" :numeric "[redacted]" :safe "kept"}
+              (get-in result [:result/data :output 1 :reasoning_content]) => "[redacted]"
+              (:start_index annotation) => 0
+              (:end_index annotation) => 11
+              (first (filter #(= "reasoning" (:type %)) (:input next-body))) => opaque
+              (get-in result [:result/data :output 0]) => opaque
+              (get-in result [:result/data :usage]) => usage
+              (:result/value result) => "Safe answer"
+              (string/includes? (json/generate-string (public/projection result)) "PROVIDER_SECRET") => false
+              (string/includes? (json/generate-string replay-payload) "PROVIDER_SECRET") => false)))))))
+
+(fact "rewritten untrusted key collisions stop before a next planner and expose only safe failure data"
+  (let [turns (atom 0)]
+    (with-runtime
+      (fn [body]
+        (swap! turns inc)
+        (response [(function-call (account-function-name body) "collision-call" "{}")]))
+      {:structuredContent {:PROVIDER_SECRET "one" :CLOUDFLARE_SECRET "two"} :content []}
+      (fn [provider _ calls]
+        (let [result (command/safely #(tools/complete provider "grok-4.7" messages
+                                                    {:actor (policy/actor host-execution/*event*)}))
+              report (get-in result [:result/data :tool-trace])]
+          @turns => 1
+          (count @calls) => 1
+          (get-in result [:result/data :isError]) => true
+          (get-in report [:calls 0 :outcome]) => :unknown
+          (string/includes? (pr-str result) "PROVIDER_SECRET") => false
+          (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))
+
+
+(fact "provider remainder key collisions stop actual next-planner replay without repeating an admitted tool"
+  (let [turns (atom 0)]
+    (with-runtime
+      (fn [body]
+        (swap! turns inc)
+        (response [(assoc (text-output "Safe")
+                          :extension {:PROVIDER_SECRET "one" :CLOUDFLARE_SECRET "two"})
+                   (function-call (account-function-name body) "extension-collision" "{}")]))
+      {:content [] :isError false}
+      (fn [provider _ calls]
+        (let [result (command/safely #(tools/complete provider "grok-4.7" messages
+                                                    {:actor (policy/actor host-execution/*event*)}))]
+          @turns => 1
+          (count @calls) => 1
+          (get-in result [:result/data :isError]) => true
+          (string/includes? (pr-str result) "PROVIDER_SECRET") => false
+          (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))
+
+
+(fact "physical Responses replay cleans malformed call positions after a command learns a new secret"
+  (doseq [secret ["NEWLY-LEARNED-CREDENTIAL" 987654321]]
+    (let [spelling (str secret) requests (atom []) retained (atom []) retain datasets/retain!
+          malformed {:type "reasoning" :id spelling :encrypted_content spelling :summary []
+                     :arguments {spelling secret :safe "kept"}
+                     :tool_calls [{:id spelling :type "function" :index secret
+                                   :function {:name spelling :arguments {spelling secret}}}]
+                     :role spelling :tool_call_id spelling :call_id spelling :name spelling :index secret}]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:body (response (if (= 1 (count @requests))
+                             [malformed (function-call "yetibot_command" spelling "{\"command\":\"learn-response-secret\"}")]
+                             [(text-output "Safe answer")]))})
+        (fn [base]
+          (let [provider {:name "response-fixture" :model "chat" :api "responses" :url (str base "/v1")}
+                t {:name "response-private" :kind "search" :servers [] :native-tools ["command"]
+                   :users ["U1"] :adapters ["slack"] :providers [{:name "response-fixture" :models ["chat"]}]}]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [provider]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          datasets/retain! (fn [store owner envelope]
+                                             (let [d (retain store owner envelope)]
+                                               (swap! retained conj (datasets/lookup! store owner (:dataset-id d))) d))]
+              (hooks/cmd-hook-resolved #"learn-response-secret" #".*"
+                (fn [_] {:result/value "learned" :result/data [{:auth/token secret}]}))
+              (caller/with-current-caller #(execution/run-command execution/request "ai --max-tool-calls 3 replay"))))))
+      (count @requests) => 2
+      (get-in (first @retained) [:rows 0 "auth/token"]) => secret
+      (let [input (get-in @requests [1 :body :input])
+            replay (first (filter #(= "reasoning" (:type %)) input))
+            call (first (filter #(= "function_call" (:type %)) input))]
+        (select-keys replay [:id :encrypted_content]) => {:id spelling :encrypted_content spelling}
+        (:arguments replay) => {(keyword "[redacted]") "[redacted]" :safe "kept"}
+        (:tool_calls replay) => [{:id "[redacted]" :type "function" :index "[redacted]"
+                                  :function {:name "[redacted]" :arguments {(keyword "[redacted]") "[redacted]"}}}]
+        (select-keys replay [:role :tool_call_id :call_id :name :index])
+        => {:role "[redacted]" :tool_call_id "[redacted]" :call_id "[redacted]" :name "[redacted]" :index "[redacted]"}
+        (:call_id call) => spelling
+        (:name call) => "yetibot_command"))))
+
+(fact "malformed arguments key collisions seal physical replay after the genuine tool executes once"
+  (let [turns (atom 0)]
+    (with-runtime
+      (fn [body]
+        (swap! turns inc)
+        (response [{:type "reasoning" :id "collision-state" :summary []
+                    :arguments {:PROVIDER_SECRET "one" :CLOUDFLARE_SECRET "two"}}
+                   (function-call (account-function-name body) "typed-collision" "{}")]))
+      {:content [] :isError false}
+      (fn [provider _ calls]
+        (let [result (command/safely #(tools/complete provider "grok-4.7" messages
+                                                    {:actor (policy/actor host-execution/*event*)}))]
+          @turns => 1
+          (count @calls) => 1
+          (get-in result [:result/data :isError]) => true
+          (get-in result [:result/data :tool-trace :calls 0 :outcome]) => :success
+          (string/includes? (pr-str result) "PROVIDER_SECRET") => false
+          (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))
+
+
+(fact "provider supplied result envelope keys are projected after one real command learns credentials"
+  (doseq [mode [:string :numeric :both :collision]]
+    (let [collision? (boolean (#{:both :collision} mode))
+          requests (atom []) retained (atom []) commands (atom 0) families (atom [])
+          retain datasets/retain! post client/post
+          private "ENVELOPE-LEARNED-STRING" numeric 987654321
+          payload (merge {:safe "kept"}
+                         (case mode
+                           :string {private "string-key"}
+                           :numeric {(str numeric) "numeric-key"}
+                           :both {private "string-key" (str numeric) "numeric-key"}
+                           :collision {private "string-key" "[redacted]" "collision"}))
+          supplied {:type "function_call_output" :call_id private
+                    :output (json/generate-string payload)}
+          opaque {:type "reasoning" :id private :encrypted_content private :summary []}]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:body (response (if (= 1 (count @requests))
+                             [opaque supplied (function-call "yetibot_command" private
+                                                             "{\"command\":\"learn-envelope-secret\"}")]
+                             [(text-output "Safe answer")]))})
+        (fn [base]
+          (let [provider {:name "envelope-fixture" :model "chat" :api "responses" :url (str base "/v1")}
+                t {:name "envelope-private" :kind "search" :servers [] :native-tools ["command"]
+                   :users ["U1"] :adapters ["slack"]
+                   :providers [{:name "envelope-fixture" :models ["chat"]}]}]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [provider]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          client/post (fn [& args]
+                                        (swap! families conj host-execution/*request*)
+                                        (apply post args))
+                          datasets/retain! (fn [store owner envelope]
+                                             (let [d (retain store owner envelope)]
+                                               (swap! retained conj (datasets/lookup! store owner (:dataset-id d))) d))]
+              (hooks/cmd-hook-resolved #"learn-envelope-secret" #".*"
+                (fn [_] (swap! commands inc)
+                  {:result/value "learned" :result/data [{:auth/token private :auth/key numeric}]}))
+              (let [result (execution/run-registered-command execution/request "ai --max-tool-calls 3 replay")]
+                (when collision?
+                  (get-in result [:data :isError]) => true
+                  (get-in result [:data :tool-trace :calls 0 :outcome]) => :success))))))
+      @commands => 1
+      (get-in (first @retained) [:rows 0 "auth/token"]) => private
+      (get-in (first @retained) [:rows 0 "auth/key"]) => numeric
+      (:used @(:budget (first @families))) => (if collision? 2 3)
+      (count @requests) => (if collision? 1 2)
+      (when-not collision?
+        (let [input (get-in @requests [1 :body :input])
+              replay (first (filter #(= "function_call_output" (:type %)) input))
+              call (first (filter #(= "function_call" (:type %)) input))]
+          (:call_id replay) => private
+          (string/includes? (:output replay) private) => false
+          (string/includes? (:output replay) (str numeric)) => false
+          (:safe (json/parse-string (:output replay) true)) => "kept"
+          (:call_id call) => private
+          (:name call) => "yetibot_command"
+          (first (filter #(= "reasoning" (:type %)) input)) => opaque)))))
+
+(fact "physical provider descriptor paths cannot be restored by copied or invalid handles after a real command learns their spelling"
+  (doseq [[secret payload-kind] [["dataset" :missing] ["dataset" :invalid] ["dataset" :copied]
+                               ["dataset" :foreign] ["dataset" :expired] ["dataset" :nested] ["dataset" :collision]
+                               ["structuredContent" :array] ["datasets" :array] ["datasets" :mixed]]]
+    (let [requests (atom []) commands (atom 0) retained (atom []) retain datasets/retain!
+          copied (atom nil) foreign-handle (atom nil) foreign-store (atom nil) owner-state (atom nil)]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:body (response (if (= 1 (count @requests))
+                             [{:type "function_call_output" :call_id "provider-extra"
+                               :output (json/generate-string
+                                         (case payload-kind
+                                           :missing {:dataset {}}
+                                           :invalid {:dataset {:dataset-id "invalid"}}
+                                           :foreign {:dataset @foreign-handle}
+                                           :expired {:dataset @foreign-handle}
+                                           :collision {:dataset {} "[redacted]" "collision"}
+                                           :copied {:dataset @copied}
+                                           :nested {:structuredContent {:dataset {}}}
+                                           :array {:structuredContent {:datasets [{}]}}
+                                           :mixed {:structuredContent {:datasets [@copied {}]}}))}
+                              (function-call "yetibot_command" "learn-descriptor" "{\"command\":\"learn-descriptor-secret\"}")]
+                             [(text-output "Safe answer")]))})
+        (fn [base]
+          (let [provider {:name "descriptor-fixture" :model "chat" :api "responses" :url (str base "/v1")}
+                t {:name "descriptor-private" :kind "search" :servers [] :native-tools ["command"]
+                   :users ["U1"] :adapters ["slack"] :providers [{:name "descriptor-fixture" :models ["chat"]}]}
+                post client/post]
+            (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                          ai/config (constantly {:providers [provider]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          client/post (fn [& args]
+                                        (when-not @copied
+                                          (let [r host-execution/*request*]
+                                            (reset! owner-state r)
+                                            (let [owner (assoc-in (:dataset-owner r) [:actor :user] "FOREIGN")
+                                                  store (datasets/create-store owner)
+                                                  envelope {:rows [{:safe "foreign"}]
+                                                            :fields [{:name "safe" :path ["safe"] :type :nominal}]
+                                                            :source "fixture" :captured-at "2026-11-11T10:00:00Z"
+                                                            :coverage {:status :unknown}}]
+                                              (reset! foreign-store {:store store :owner owner})
+                                              (reset! foreign-handle (retain store owner envelope))
+                                              (when (= payload-kind :expired) (datasets/close! store owner)))
+                                            (reset! copied (retain (:dataset-store r) (:dataset-owner r)
+                                                             {:rows [{:safe "benign"}]
+                                                              :fields [{:name "safe" :path ["safe"] :type :nominal}]
+                                                              :source "fixture" :captured-at "2026-11-11T10:00:00Z"
+                                                              :coverage {:status :unknown}}))))
+                                        (apply post args))
+                          datasets/retain! (fn [store owner envelope]
+                                             (let [d (retain store owner envelope)]
+                                               (swap! retained conj (datasets/lookup! store owner (:dataset-id d))) d))]
+              (hooks/cmd-hook-resolved #"learn-descriptor-secret" #".*"
+                (fn [_] (swap! commands inc)
+                  {:result/value "learned" :result/data [{:auth/token secret}]}))
+              (try
+                (let [result (execution/run-registered-command execution/request "ai --max-tool-calls 3 replay")]
+                  (when (= payload-kind :collision) (get-in result [:data :isError]) => true))
+                (finally
+                  (when-let [{:keys [store owner]} @foreign-store] (datasets/close! store owner))))))))
+      @commands => 1
+      (get-in (first @retained) [:rows 0 "auth/token"]) => secret
+      (count @requests) => (if (= payload-kind :collision) 1 2)
+      (:used @(:budget @owner-state)) => (if (= payload-kind :collision) 2 3)
+      (when-not (= payload-kind :collision)
+        (let [items (get-in @requests [1 :body :input])
+              supplied (first (filter #(= "provider-extra" (:call_id %)) items))
+              value (json/parse-string (:output supplied) true)
+              host (last (filter #(= "function_call_output" (:type %)) items))]
+          (string/includes? (json/generate-string value) (str "\"" secret "\":")) => false
+          (:call_id supplied) => "provider-extra"
+          (:content (json/parse-string (:output host) true)) => vector?)))))

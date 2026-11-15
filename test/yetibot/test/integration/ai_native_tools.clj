@@ -20,6 +20,7 @@
             [yetibot.core.commands.grokimage :as gi]
             [yetibot.core.util.gemini :as gemini]
             [yetibot.core.util.xai :as xai]
+            [yetibot.core.util.agent-execution :as origin]
             [yetibot.core.util.http :as http]
             [yetibot.core.webapp.routes.images :as images]
             [yetibot.models.imgflip :as imgflip]
@@ -46,8 +47,10 @@
 (def messages [{:role "user" :content "Find the launch discussion."}])
 
 (defn with-plugin-tools [names]
-  (into names (when (io/resource "yetibot_kroki/client.clj")
-                ["yetibot/kroki_types" "yetibot/kroki_render"])))
+  (let [plugin? (io/resource "yetibot_kroki/client.clj")]
+    (vec (concat (take 4 names) ["yetibot/command"]
+                 (when plugin? ["yetibot/chart"]) (drop 4 names)
+                 (when plugin? ["yetibot/kroki_types" "yetibot/kroki_render"])))))
 
 (def default-tool-names
   (with-plugin-tools
@@ -71,6 +74,14 @@
                          (:calls report))
                  => (not= :tool-exception (:reason report))))
          (.getMessage e))))
+
+(defn invalid-arguments-message? [message]
+  (and (string? message)
+       (string/starts-with? message
+         (str "The AI provider sent invalid tool arguments. "
+              "No tools from that response were run."))
+       (string/includes? message "execution did not begin.")
+       (<= (count message) 500)))
 
 (defn with-history [f]
   (let [config (assoc (db/config) :table
@@ -102,10 +113,11 @@
 (defn run-calls
   "Exercise shared validation/execution; only replace the model boundary."
   [settings calls & [request]]
-  (execution/in-event (or request execution/request) "ai find launch"
+  (execution/in-registered-event (or request execution/request) "ai find launch"
     (fn [request]
       (let [sent (atom [])]
         (with-redefs [mcp/config (constantly settings)
+                      ai/config (constantly {:providers [(assoc provider :model "grok-4.7")]})
                       ai/chat
                       (fn [_ _ msgs options]
                         (swap! sent conj {:messages msgs :options options})
@@ -163,8 +175,8 @@
   (with-redefs [mcp/config (constantly nil)
                 ai/chat (fn [& _] (throw (AssertionError. "No model calls")))
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
-    (let [normal (execution/run-command execution/request "ai tools yetibot")
-          data (execution/run-command execution/request
+    (let [normal (execution/run-registered-command execution/request "ai tools yetibot")
+          data (execution/run-registered-command execution/request
                                       "ai tools yetibot | data show")]
       (fact (mapv #(first (string/split % #" — " 2)) (:value normal))
             => (mapv #(str "`" % "`") default-tool-names)
@@ -185,7 +197,7 @@
                 mcp/call-tool
                 (fn [& _] (throw (AssertionError. "No tool call")))
                 help/get-docs (fn [] (throw (AssertionError. "No help read")))]
-    (let [result (execution/run-command execution/request
+    (let [result (execution/run-registered-command execution/request
                    "ai tools | tail 3 | xargs ai tools")
           ids (vec (take-last 3 default-tool-names))]
       (mapv #(some-> % string/split-lines first) (:value result)) => ids
@@ -284,8 +296,7 @@
                                (throw (AssertionError. "Database accessed")))]
       (fact (error-message #(run-calls config
                              [["history_count" {}] ["history" args]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run.")))))
+            => invalid-arguments-message?))))
 
 (facts "help reads docs without executing a command or leaking alias bodies"
   (with-redefs [help/get-docs (constantly {"echo" #{"echo <text> # repeat"}
@@ -485,7 +496,7 @@
                              "grok find launch"]]
                   (reset! requests [])
                   (let [result (with-redefs [mcp/config (constantly settings)]
-                                 (execution/run-command execution/request cmd))
+                                 (execution/run-registered-command execution/request cmd))
                         first-turn (first @requests)
                         reply (last (:input (last @requests)))]
                     (fact (string/includes? (:value result)
@@ -497,7 +508,7 @@
                     (fact (get-in (json/parse-string (:output reply) true)
                                   [:structuredContent :count]) => 25)))
                 (reset! requests [])
-                (execution/run-command execution/request
+                (execution/run-registered-command execution/request
                                        "grok --no-tools find launch")
                 (fact (count @requests) => 1)
                 (fact (empty? (:tools (first @requests))) => true)))))))))
@@ -661,8 +672,7 @@
                          "top" (apply str (repeat 1001 "x")) "bottom" "y"}]]]
         (fact (error-message #(run-calls nil
                                [["gi" {"prompt" "valid image"}] [op args]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @calls => []))))
 
 (fact "configured credentials cannot become media prompts or captions"
@@ -676,8 +686,7 @@
                       "private-model-key"]]
         (fact (error-message #(run-calls nil
                                [["gi" {"prompt" (str "render " secret)}]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @calls => []))))
 
 (fact "an uncertain image call is sanitized and halts the rest of the batch"
@@ -721,8 +730,7 @@
                                               :name (str "meme " secret)}]}})]
       (fact (error-message #(run-calls nil
                              [["gi" {"prompt" (str "render " secret)}]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run.")
+            => invalid-arguments-message?
             (get-in (run-calls nil [["meme" {"action" "search"
                                              "query" "meme"}]])
                     [:replies 0 :structuredContent :templates 0 :name])
@@ -762,12 +770,13 @@
               => "https://yetibot.test/generated-images/edited.png")))))
 
 (fact "media generation rechecks policy immediately before the side effect"
-  (let [authorizations (atom 0)
-        calls (atom 0)]
+  (let [calls (atom 0)
+        authorize policy/authorize!]
     (with-redefs [xai/config {:key "fake-image-key"}
-                  policy/authorize! (fn [& _]
-                                      (when (> (swap! authorizations inc) 1)
-                                        (ai/fail "Policy changed.")))
+                  policy/authorize! (fn [& args]
+                                      (if (= :tool (:kind origin/*operation*))
+                                        (ai/fail "Policy changed.")
+                                        (apply authorize args)))
                   gi/grokimage-cmd (fn [_] (swap! calls inc))]
       (fact (error-message #(run-calls media-config
                              [["gi" {"prompt" "a yeti"}]]))
@@ -886,8 +895,7 @@
               #(run-calls nil [["clef" native-decision]
                                 ["wise" {"action" "balance"
                                          "account" "unconfigured"}]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run.")
+            => invalid-arguments-message?
             @inference => [] @wise => []))))
 
 (fact "Wise conversation policy also narrows explicit native discovery"
@@ -957,8 +965,7 @@
       (fact (error-message
               #(run-calls nil [["gi" {"prompt" "a yeti"}]
                                 ["util" (util-args "sum" ["not a number"])]]))
-            => (str "The AI provider sent invalid tool arguments. "
-                    "No tools from that response were run."))
+            => invalid-arguments-message?)
       (fact @paid => 0)))
   (let [calls (atom 0)]
     (with-redefs [help/get-docs (fn [] (swap! calls inc) {})
@@ -972,8 +979,7 @@
                 #(run-calls nil [["help" {}]
                                   ["util" (util-args "random" [1 2])]
                                   ["util" bad]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @calls => 0))))
 
 (facts "util shares duplicate and total call budgets before any effect"
@@ -1021,6 +1027,5 @@
                 #(run-calls nil
                    [["wise" {"action" "balance"}]
                     ["clairic" {"fields" {"x" field} "input" "Value 42"}]]))
-              => (str "The AI provider sent invalid tool arguments. "
-                      "No tools from that response were run.")))
+              => invalid-arguments-message?))
       (fact @wise => [] @inference => []))))

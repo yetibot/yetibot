@@ -1,14 +1,23 @@
 (ns yetibot.test.models.ai-tools
   (:require [cheshire.core :as json]
             [clojure.string :as string]
-            [midje.sweet :refer [fact facts =>]]
+            [midje.sweet :refer [fact facts background =>]]
             [clj-http.client :as client]
             [yetibot.models.ai-tool-trace :as trace]
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-datasets :as datasets]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.test.support.mcp :as support])
   (:import [java.io ByteArrayInputStream]))
+
+;; These synchronous planner-component facts provide neither chat ingress nor
+;; authenticated callers. Public source activation/current authority is tested
+;; through real dispatch and physical HTTP in integration.ai-agent-execution.
+(background
+  (around :facts
+    (with-redefs [execution/with-source* (fn [_ f] (f))] ?form)))
 
 (def provider {:name "local" :model "chat" :url "http://localhost/v1"})
 (def config {:servers [{:name "search" :url "https://search.test/mcp" :tools ["web_search"]}]})
@@ -107,7 +116,7 @@
       (get-in @requests [0 2 0 :content]) => tools/instructions
       (vec (drop 2 (get-in @requests [0 2]))) => messages
       (string/includes? (get-in @requests [0 2 1 :content])
-                        "total=20 used=0 remaining=20") => true)))
+                        "total=20 admitted=0 reserved=0 remaining=20; tool calls=0") => true)))
 
 (fact "web search results return as tool messages with source links and the original call ID"
   (let [requests (atom []) executions (atom [])]
@@ -330,8 +339,8 @@
       (fact (first @requests)
             => (into [{:role "system" :content tools/instructions}
                       {:role "system" :content
-                       (str "Host tool-call budget: "
-                            "total=20 used=0 remaining=20. "
+                       (str "Host admission budget: "
+                            "total=20 admitted=0 reserved=0 remaining=20; tool calls=0. "
                             "Keep the entire next batch within remaining. "
                             "When exhausted, stop fetching and answer "
                             "with available evidence.")}]
@@ -480,7 +489,7 @@
               => "hello")
         (fact (string/includes? (get-in @sent [1 :content])
                                 (str "total=" expected
-                                     " used=0 remaining=" expected))
+                                     " admitted=0 reserved=0 remaining=" expected "; tool calls=0"))
               => true)))))
 
 (fact "direct invalid budgets fail before credentials and discovery"
@@ -537,7 +546,7 @@
           (fact @executions => 1)
           (fact (count (filter #(= "system" (:role %)) (last @turns))) => 2)
           (fact (string/includes? (get-in (last @turns) [1 :content])
-                                  "total=2 used=1 remaining=1") => true))))))
+                                  "total=2 admitted=1 reserved=0 remaining=1; tool calls=1") => true))))))
 
 (facts "late provider and thrown tool failures retain safe attempted history"
   (doseq [kind [:http :stream :tool]]
@@ -838,3 +847,386 @@
       (fact (string? (error-message
                        #(tools/complete provider "chat" messages))) => true
             @calls => []))))
+
+(defn native-rejection [args & [remote? validation-config]]
+  (let [dispatches (atom 0) events (atom [])
+        definition (get (var-get (requiring-resolve
+                                  'yetibot.models.ai-kroki-tools/definitions))
+                        "kroki_render")
+        definition (cond-> definition
+                     remote? (assoc :inputSchema
+                                    {:type "object" :required ["PRIVATE@everyone\n秘密"]
+                                     :properties {:PRIVATE {:type "string"}}}))
+        validate (requiring-resolve 'yetibot.models.ai-kroki-tools/arguments!)
+        advertised (assoc definition :name "kroki_render" :native? (not remote?)
+                          :session (:session tool)
+                          :validate-arguments #(if remote?
+                                                 (if (= 3 (get % "type"))
+                                                   (throw (ex-info "PRIVATE upstream" {:ai/problem {:field "PRIVATE"}})) %)
+                                                 (validate (or validation-config {}) "kroki_render" %))
+                          :host-call (fn [_] (swap! dispatches inc)))]
+    (with-redefs [mcp/config (constantly (merge config validation-config))
+                  mcp/with-tools (fn [_ f] (f [advertised]))
+                  ai/chat (fn [_ _ _ opts]
+                            (let [name (first-name opts)]
+                              (tool-response
+                                [(tool-call name "valid" "{\"type\":\"mermaid\",\"source\":\"graph TD; A-->B\"}")
+                                 (tool-call name "invalid" (json/generate-string args))])))]
+      (let [failure (try
+                      (tools/complete provider "chat" []
+                                      {:on-progress #(swap! events conj %)})
+                      (catch Exception e
+                        {:report (:ai/tool-failure (ex-data e))
+                         :primary-error (.getMessage e)}))]
+        (assoc failure :dispatches @dispatches :events @events)))))
+
+(facts "authored native field errors survive whole-batch preflight without effects"
+  (doseq [[args field code expected]
+          [[{"type" "mermaid" "source" "PRIVATE" "options" []} "options" :type :object]
+           [{"type" "mermaid"} "source" :required nil]
+           [{"type" "mermaid" "source" "PRIVATE" "format" "PRIVATE"} "format" :enum nil]
+           [{"type" "mermaid" "source" (apply str (repeat 262145 "x"))} "source" :size :source-bytes]
+           [{"type" "mermaid" "source" "PRIVATE" "@everyone\n秘密" "PRIVATE"} "*" :unknown-field nil]
+           [{"type" "mermaid" "source" "PRIVATE" "options" {"@everyone\n秘密" "PRIVATE"}} "options.*" :format :option-name]
+           [{"type" "mermaid" "source" "PRIVATE" "options" {"layout" []}} "options.*" :type :scalar]]]
+    (let [{:keys [report dispatches events primary-error]} (native-rejection args)
+          problem (get-in report [:calls 1 :problem])
+          text (trace/summary report)
+          public (trace/public-errors report)]
+      (fact dispatches => 0)
+      (fact (select-keys problem [:stage :field :code :execution-began])
+            => {:stage :arguments :field field :code code :execution-began false})
+      (when expected (fact (:expected problem) => expected))
+      (fact (get-in report [:budget :used]) => 0)
+      (fact (mapv :attempted (:calls report)) => [false false])
+      (fact (string/includes? text field) => true)
+      (fact (string/includes? text "execution did not begin") => true)
+      (fact (string/includes? primary-error field) => true)
+      (fact (string/includes? primary-error "execution did not begin") => true)
+      (fact (string/includes? primary-error (:remedy problem)) => true)
+      (fact (string/includes? (get-in public [:calls 0 :reason]) field) => true)
+      (fact (get-in (trace/public-report report) [:calls 1 :problem]) => problem)
+      (fact (get-in (last (keep :tool-event events)) [:problem :field]) => field)
+      (fact (boolean (re-find #"PRIVATE|@everyone|秘密" (pr-str [public events problem]))) => false))))
+
+(fact "remote schemas and arbitrary upstream diagnostics cannot author field paths"
+  (let [{:keys [report dispatches]} (native-rejection {"type" 3} true)
+        problem (get-in report [:calls 1 :problem])]
+    dispatches => 0
+    (:field problem) => "*"
+    (:code problem) => :invalid-arguments
+    (boolean (re-find #"PRIVATE|type" (pr-str problem))) => false))
+
+(fact "opaque native validation failure reports only the truthful root fallback"
+  (let [dispatches (atom 0) messages (atom [])
+        advertised {:name "help" :native? true :inputSchema {:type "object"}
+                    :validate-arguments (fn [_]
+                                          (throw (ex-info "PRIVATE upstream" {:source "PRIVATE"})))
+                    :host-call (fn [_] (swap! dispatches inc))}]
+    (with-redefs [mcp/config (constantly config)
+                  mcp/with-tools (fn [_ f] (f [advertised]))
+                  ai/chat (fn [& _]
+                            (tool-response [(tool-call "yetibot_help" "private-id" "{}")]))]
+      (let [r (try (tools/complete provider "chat" [])
+                   (catch Exception e (swap! messages conj (.getMessage e))
+                     (:ai/tool-failure (ex-data e))))]
+        @dispatches => 0
+        (get-in r [:calls 0 :problem :field]) => "*"
+        (get-in r [:calls 0 :problem :code]) => :invalid-arguments
+        (string/includes? (first @messages) "execution did not begin") => true
+        (string/includes? (pr-str [r @messages]) "PRIVATE") => false))))
+
+(fact "credential rejection remains useful without exposing rejected values in any public projection"
+  (let [{:keys [report events dispatches]}
+        (native-rejection {"type" "mermaid" "source" "graph TD; PRIVATE-CREDENTIAL-->B"}
+                          false {:secrets ["PRIVATE-CREDENTIAL"]})
+        public [(trace/public-report report) (trace/public-errors report)
+                (trace/summary report) events]]
+    dispatches => 0
+    (get-in report [:calls 1 :problem :code]) => :credential-input
+    (get-in report [:calls 1 :problem :execution-began]) => false
+    (string/includes? (trace/summary report) "Remove credentials") => true
+    (string/includes? (pr-str public) "PRIVATE-CREDENTIAL") => false))
+
+(fact "reserved allowance is unavailable, not reported as spent"
+  (let [budget (atom {:limit 20 :used 3 :reserved 17 :closed? false})]
+    (binding [yetibot.util.ai-execution/*request* {:budget budget}]
+      (yetibot.util.ai-execution/remaining) => 0
+      (yetibot.util.ai-execution/charge!) => (midje.sweet/throws clojure.lang.ExceptionInfo)
+      (:used @budget) => 3)))
+
+(fact "request payload projection preserves Responses controls and call correlation but not untrusted id values"
+  ;; This exercises projection only, not source activation or execution authority.
+  (let [owner {:actor {:id "projection-owner"} :chat-source {:adapter :discord :room "projection"}}
+        store (datasets/create-store owner)
+        secret "PRIVATE-WIRE-VALUE"
+        d (datasets/retain! store owner
+            {:rows [{:auth/token secret}]
+             :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+             :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+        config {:dataset-store store :dataset-owner owner}
+        message {:type "message" :id secret :role "assistant"
+                 :content [{:type "output_text" :text secret}]}
+        output {:type "function_call_output" :call_id secret
+                :output (json/generate-string {:id secret :ordinary secret
+                                              :structuredContent {:datasets [d]}})}
+        safe-output (#'tools/current-message output config)]
+    (#'tools/current-message message config)
+    => (assoc message :content [{:type "output_text" :text "[redacted]"}])
+    (:call_id safe-output) => secret
+    (get-in (json/parse-string (:output safe-output) true) [:id]) => "[redacted]"
+    (get-in (json/parse-string (:output safe-output) true) [:ordinary]) => "[redacted]"
+    (get-in (json/parse-string (:output safe-output) true) [:structuredContent :datasets 0 :dataset-id])
+    => (:dataset-id d)))
+
+(fact "typed citation and source payloads protect nested human fields without treating untrusted ids as controls"
+  ;; Projection-only shapes supplement the registered physical Responses proof.
+  (doseq [secret ["NESTED-PRIVATE" "private-\"quote\\slash" 1]]
+    (let [owner {:actor {:id "citation-owner"} :chat-source {:adapter :discord :room "projection"}}
+          store (datasets/create-store owner)
+          d (datasets/retain! store owner
+              {:rows [{:auth/token secret}]
+               :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+               :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+          encoded (json/generate-string secret)
+          spelling (if (string? secret) (subs encoded 1 (dec (count encoded))) encoded)
+          config {:dataset-store store :dataset-owner owner :secrets ["CONFIGURED-PRIVATE"]}
+          annotation {:type "url_citation"
+                      :url_citation {:start_index 1 :end_index 2 :url (str "https://example.test/" spelling)
+                                     :title (str secret) :text "CONFIGURED-PRIVATE" :id secret}}
+          chat {:role "assistant" :content "Safe" :annotations [annotation]}
+          projected (#'tools/current-response {:id (str secret) :model (str secret) :usage {:input_tokens 1}
+                                               :choices [{:index 1 :message chat}]} config)
+          nested (get-in projected [:choices 0 :message :annotations 0 :url_citation])
+          state {:type "reasoning" :id (str secret) :encrypted_content (str secret)
+                 :summary [{:type "summary_text" :text (str secret) :annotations [annotation]}]}
+          search {:type "web_search_call" :id "search" :status "completed"
+                  :encrypted_content (str secret)
+                  :action {:type "search" :query (str secret)
+                           :sources [{:type "url" :url (str secret) :title spelling :id secret}]}}
+          files {:type "file_search_call" :id (str secret) :queries [(str secret)]
+                 :results [{:file_id (str secret) :score 1 :filename (str secret) :text spelling
+                            :attributes {:id secret :key secret}}]}]
+      nested => {:start_index 1 :end_index 2 :url "https://example.test/[redacted]"
+                 :title "[redacted]" :text "[redacted]" :id "[redacted]"}
+      (select-keys projected [:id :model :usage]) => {:id (str secret) :model (str secret) :usage {:input_tokens 1}}
+      (get-in projected [:choices 0 :index]) => 1
+      (#'tools/current-message state config)
+      => (-> state (assoc-in [:summary 0 :text] "[redacted]")
+                   (assoc-in [:summary 0 :annotations 0 :url_citation] nested))
+      (#'tools/current-message search config)
+      => (-> search (assoc-in [:action :query] "[redacted]")
+                    (assoc-in [:action :sources] [{:type "url" :url "[redacted]" :title "[redacted]" :id "[redacted]"}]))
+      (#'tools/current-message files config)
+      => (assoc files :queries ["[redacted]"]
+                      :results [{:file_id (str secret) :score 1 :filename "[redacted]" :text "[redacted]"
+                                 :attributes {:id "[redacted]" :key "[redacted]"}}])
+      (#'tools/current-message {:role "assistant" :content [{:type "output_text" :text {:id secret}
+                                                            :annotations {:id secret :type "unknown"}}
+                                                           {:type "unknown" :id secret}]} config)
+      => {:role "assistant" :content [{:type "output_text" :text {:id "[redacted]"}
+                                       :annotations {:id "[redacted]" :type "unknown"}}
+                                      {:type "unknown" :id "[redacted]"}]}
+      (get-in (datasets/lookup! store owner (:dataset-id d)) [:rows 0 "auth/token"]) => secret
+      (datasets/close! store owner)
+      (#'tools/current-message chat config) => (midje.sweet/throws Exception))))
+
+(fact "progress-only text completion projects payloads without deepwalking typed response controls"
+  (let [secret "CONFIGURED-OPAQUE"
+        body {:id secret :model secret :usage {:input_tokens 739194}
+              (keyword secret) {:value secret :numeric 739194 :enum (keyword secret) :safe "kept"}
+              :choices [{:index 739194 :finish_reason "stop" :extension {secret secret}
+                         :message {:role "assistant" :content "Safe" :reasoning_content secret
+                                   :extension {(keyword secret) secret}}}]
+              :output [{:type "reasoning" :id secret :encrypted_content secret :summary []}
+                       {:type "message" :id secret :role "assistant"
+                        :content [{:type "output_text" :text secret
+                                   :annotations [{:type "url_citation" :start_index 0 :end_index 1
+                                                  (keyword secret) "extension" :id secret :number 739194}]}]}]}]
+    (with-redefs [mcp/config (constantly {:servers [] :secrets [secret "739194"]})
+                  ai/complete (fn [& _] {:result/value secret :result/data body})]
+      (let [result (tools/complete provider "chat" messages {:on-progress identity})]
+        (:result/value result) => "[redacted]"
+        (get-in result [:result/data "[redacted]"])
+        => {:value "[redacted]" :numeric "[redacted]" :enum "[redacted]" :safe "kept"}
+        (get-in result [:result/data :choices 0 :index]) => 739194
+        (get-in result [:result/data :choices 0 :extension]) => {"[redacted]" "[redacted]"}
+        (get-in result [:result/data :choices 0 :message :reasoning_content]) => "[redacted]"
+        (get-in result [:result/data :choices 0 :message :extension]) => {"[redacted]" "[redacted]"}
+        (select-keys (:result/data result) [:id :usage]) => (select-keys body [:id :usage])
+        (get-in result [:result/data :output 0]) => (first (:output body))
+        (get-in result [:result/data :output 1 :id]) => secret
+        (get-in result [:result/data :output 1 :content 0 :text]) => "[redacted]"
+        (get-in result [:result/data :output 1 :content 0 :annotations 0])
+        => {:type "url_citation" :start_index 0 :end_index 1
+            "[redacted]" "extension" :id "[redacted]" :number "[redacted]"}))))
+
+(fact "live learned key rewrites reject collisions on replay without changing retained rows"
+  (let [owner {:actor {:id "projection-owner"} :chat-source {:adapter :slack :room "projection"}}
+        store (datasets/create-store owner)
+        descriptor (datasets/retain! store owner
+                     {:rows [{:auth/token "LEARNED-KEY"}]
+                      :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+                      :source "projection" :captured-at "2026-11-11T10:00:00Z"
+                      :coverage {:status :unknown}})
+        message {:role "tool" :tool_call_id "correlation"
+                 :content (json/generate-string
+                            {:structuredContent {"LEARNED-KEY" "one" "[redacted]" "two"}})}]
+    (#'tools/current-message message {:dataset-store store :dataset-owner owner})
+    => (midje.sweet/throws Exception)
+    (get-in (datasets/lookup! store owner (:dataset-id descriptor)) [:rows 0 "auth/token"]) => "LEARNED-KEY"
+    (datasets/close! store owner)))
+
+
+(fact "only genuine typed positions retain provider controls and all rewritten key collisions fail closed"
+  (let [config {:secrets ["PRIVATE-EXTENSION"]}]
+    (#'tools/current-message {:type "unknown" :role "assistant" :id "PRIVATE-EXTENSION"
+                              :encrypted_content "PRIVATE-EXTENSION"} config)
+    => {:type "unknown" :role "assistant" :id "[redacted]" :encrypted_content "[redacted]"}
+    (#'tools/current-message {:role "assistant" :content "Safe" :id "PRIVATE-EXTENSION"} config)
+    => {:role "assistant" :content "Safe" :id "[redacted]"}
+    (#'tools/current-response {:choices [{:message {:role "assistant" :content "Safe"}}]
+                               :extension {:PRIVATE-EXTENSION "one" "[redacted]" "two"}} config)
+    => (midje.sweet/throws Exception)))
+
+(fact "malformed call positions are ordinary payload while genuine Chat and Responses controls stay opaque"
+  (doseq [secret ["MISPLACED-CREDENTIAL" 739194]]
+    (let [spelling (str secret)
+          owner {:actor {:id "typed-owner"} :chat-source {:adapter :slack :room "projection"}}
+          store (datasets/create-store owner)
+          descriptor (datasets/retain! store owner
+                       {:rows [{:auth/token secret}]
+                        :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+                        :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+          config {:dataset-store store :dataset-owner owner :secrets ["CONFIGURED-MISPLACED"]}
+          call {:id spelling :type "function" :index 1
+                :function {:name spelling :arguments "{}"}}
+          misplaced {:arguments {spelling secret :configured "CONFIGURED-MISPLACED" :safe "kept"}
+                     :tool_calls [call] :function {:name spelling} :tool_call_id spelling
+                     :call_id spelling :name spelling :index secret}]
+      (doseq [kind ["reasoning" "message" "web_search_call"]]
+        (let [message (merge misplaced {:type kind :id spelling})
+              safe (#'tools/current-message message config)]
+          (:id safe) => spelling
+          (:arguments safe) => {"[redacted]" "[redacted]" :configured "[redacted]" :safe "kept"}
+          (:tool_calls safe) => [{:id "[redacted]" :type "function" :index 1
+                                 :function {:name "[redacted]" :arguments "{}"}}]
+          (select-keys safe [:function :tool_call_id :call_id :name :index])
+          => {:function {:name "[redacted]"} :tool_call_id "[redacted]" :call_id "[redacted]"
+              :name "[redacted]" :index "[redacted]"}))
+      (#'tools/current-message {:role "assistant" :tool_calls [call]} config)
+      => {:role "assistant" :tool_calls [call]}
+      (#'tools/current-message {:type "function_call" :id spelling :call_id spelling :name spelling :arguments "{}"} config)
+      => {:type "function_call" :id spelling :call_id spelling :name spelling :arguments "{}"}
+      (get-in (#'tools/current-message {:type "function_call" :arguments {spelling secret}} config) [:arguments])
+      => {"[redacted]" "[redacted]"}
+      (doseq [message [{:role "user" :tool_calls [call]}
+                       {:role "assistant" :tool_calls [(assoc call :type "unknown")]}
+                       {:role "assistant" :tool_calls [(assoc-in call [:function :arguments] {spelling secret})]}]]
+        (get-in (#'tools/current-message message config) [:tool_calls 0 :id]) => "[redacted]")
+      (#'tools/current-message {:type "reasoning" :role "tool" :tool_call_id spelling
+                               :content {spelling secret} :annotations [{:type "file_citation" :file_id spelling :index secret}]} config)
+      => {:type "reasoning" :role "tool" :tool_call_id "[redacted]"
+          :content {"[redacted]" "[redacted]"} :annotations [{:type "file_citation" :file_id "[redacted]" :index "[redacted]"}]}
+      (#'tools/current-message {:type "reasoning" :arguments {spelling "one" "[redacted]" "two"}} config)
+      => (midje.sweet/throws Exception)
+      (get-in (datasets/lookup! store owner (:dataset-id descriptor)) [:rows 0 "auth/token"]) => secret
+      (datasets/close! store owner))))
+
+(fact "progress-only public projection cleans misplaced call controls without touching actual IDs and opaque state"
+  (let [secret "PUBLIC-MISPLACED"
+        body {:id secret :usage {:input_tokens 739194}
+              :output [{:type "reasoning" :id secret :encrypted_content secret :summary []
+                        :arguments {(keyword secret) secret :safe "kept"}
+                        :tool_calls [{:id secret :type "function" :function {:name secret :arguments {secret secret}}}]}]}]
+    (with-redefs [mcp/config (constantly {:servers [] :secrets [secret]})
+                  ai/complete (fn [& _] {:result/value "Safe" :result/data body})]
+      (let [result (tools/complete provider "chat" messages {:on-progress identity})
+            reasoning (get-in result [:result/data :output 0])]
+        (select-keys reasoning [:id :encrypted_content]) => {:id secret :encrypted_content secret}
+        (:arguments reasoning) => {"[redacted]" "[redacted]" :safe "kept"}
+        (:tool_calls reasoning) => [{:id "[redacted]" :type "function"
+                                    :function {:name "[redacted]" :arguments {"[redacted]" "[redacted]"}}}]
+        (get-in result [:result/data :id]) => secret
+        (get-in result [:result/data :usage]) => (:usage body)))))
+
+(fact "host result provenance alone preserves typed envelope controls while all other keys and values are projected"
+  (let [owner {:actor {:id "envelope-owner"} :chat-source {:adapter :slack :room "projection"}}
+        store (datasets/create-store owner)
+        d (datasets/retain! store owner
+            {:rows [{:auth/token ["content" "type" "text" "isError" "structuredContent"]
+                     :auth/key 739194}]
+             :fields [{:name "key" :path ["auth/key"] :type :nominal}]
+             :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+        config {:dataset-store store :dataset-owner owner :secrets ["CONFIGURED-ENVELOPE"]}
+        envelope {:isError false :content [{:type "text" :text "content"}]
+                  :structuredContent {:safe "kept" :datasets [d]}
+                  :CONFIGURED-ENVELOPE "CONFIGURED-ENVELOPE" :numeric 739194}
+        parsed (try
+                 (json/parse-string
+                   (#'tools/current-content (json/generate-string envelope) config
+                                             {:configured? true :host-result? true}) true)
+                 (catch Exception e {:projection/error (:ai/ambiguous-payload (ex-data e))}))]
+    (:projection/error parsed) => nil
+    (select-keys parsed [:isError :content])
+    => {:isError false :content [{:type "text" :text "[redacted]"}]}
+    (get-in parsed [:structuredContent :safe]) => "kept"
+    (get-in parsed [:structuredContent :datasets 0 :dataset-id]) => (:dataset-id d)
+    (get parsed (keyword "[redacted]")) => "[redacted]"
+    (:numeric parsed) => "[redacted]"
+    (get-in (datasets/lookup! store owner (:dataset-id d)) [:rows 0 "auth/key"]) => 739194
+    (#'tools/current-content "{\"content\":[]}" config {:configured? true})
+    => "{\"[redacted]\":[]}"
+    (#'tools/current-content "{\"content\":[],\"[redacted]\":\"collision\"}" config {:configured? true})
+    => (midje.sweet/throws Exception)
+    (datasets/close! store owner)))
+
+(fact "progress-only provider result strings do not acquire host envelope exemptions"
+  (let [body {:id "CONFIGURED-ENVELOPE" :usage {:input_tokens 739194}
+              :output [{:type "reasoning" :id "CONFIGURED-ENVELOPE"
+                        :encrypted_content "CONFIGURED-ENVELOPE" :summary []}
+                       {:type "function_call_output" :call_id "CONFIGURED-ENVELOPE"
+                        :output "{\"CONFIGURED-ENVELOPE\":\"CONFIGURED-ENVELOPE\",\"safe\":\"kept\"}"}]}]
+    (with-redefs [mcp/config (constantly {:servers [] :secrets ["CONFIGURED-ENVELOPE"]})
+                  ai/complete (fn [& _] {:result/value "Safe" :result/data body})]
+      (let [result (tools/complete provider "chat" messages {:on-progress identity})
+            replay (get-in result [:result/data :output 1])]
+        (:call_id replay) => "CONFIGURED-ENVELOPE"
+        (json/parse-string (:output replay) true) => {(keyword "[redacted]") "[redacted]" :safe "kept"}
+        (get-in result [:result/data :output 0]) => (first (:output body))
+        (get-in result [:result/data :usage]) => (:usage body)))))
+
+(fact "descriptor restoration requires both genuine host position and successful current-owner live handles"
+  (doseq [secret ["dataset" "structuredContent" "datasets" "dataset-id" "field-count"]]
+    (let [owner {:actor {:id "descriptor-owner"} :chat-source {:adapter :slack :room "projection"}}
+          foreign (assoc-in owner [:actor :id] "foreign-owner")
+          store (datasets/create-store owner)
+          d (datasets/retain! store owner
+              {:rows [{:auth/token secret}]
+               :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+               :source "projection" :captured-at "2026-11-11T10:00:00Z" :coverage {:status :unknown}})
+          config {:dataset-store store :dataset-owner owner}
+          project (fn [value config host?]
+                    (json/parse-string
+                      (#'tools/current-content (json/generate-string value) config
+                                                {:configured? true :host-result? host?}) true))]
+      (doseq [host? [false true] invalid [{} {:dataset-id "invalid"} {:dataset-id (str (java.util.UUID/randomUUID))}]]
+        (let [data {:dataset invalid}
+              safe (project data config host?)]
+          (contains? safe :dataset) => (not= secret "dataset")))
+      (let [data {:dataset d :structuredContent {:dataset d :datasets [d]}}
+            safe (project data config true)]
+        (:dataset safe) => (json/parse-string (json/generate-string d) true)
+        (get-in safe [:structuredContent :dataset]) => (json/parse-string (json/generate-string d) true)
+        (get-in safe [:structuredContent :datasets]) => [(json/parse-string (json/generate-string d) true)])
+      (doseq [data [{:dataset d} {:structuredContent {:dataset d}} {:structuredContent {:datasets [d]}}]
+              :when (#{"dataset" "structuredContent" "datasets"} secret)]
+        (string/includes? (json/generate-string (project data config false))
+                          (str "\"" secret "\":")) => false)
+      (let [safe (project {:dataset d} (assoc config :dataset-owner foreign) true)]
+        (contains? safe :dataset) => (not= secret "dataset"))
+      (when (= secret "datasets")
+        (contains? (:structuredContent (project {:structuredContent {:datasets [d {}]}} config true)) :datasets) => false)
+      (datasets/close! store owner)
+      (when (= secret "dataset")
+        (project {:dataset d} config true) => (midje.sweet/throws Exception)))))

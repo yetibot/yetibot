@@ -10,7 +10,8 @@
             [yetibot.core.util.public-result :as public-result]
             [yetibot.models.ai-context :as context]
             [yetibot.models.ai-tools :as tools]
-            [yetibot.test.support.ai-execution :as execution]))
+            [yetibot.test.support.ai-execution :as execution]
+            [yetibot.test.integration.ai-command-charts :as caller]))
 
 (def local-provider {:name "local" :url "http://localhost:11434/v1" :model "llama3"})
 (def hosted-provider {:name "hosted" :url "https://example.com/v1" :key "secret" :model "chat"})
@@ -202,8 +203,11 @@
                   client/post (fn [_ options]
                                 (swap! requests conj (:form-params options))
                                 {:status 200 :body {:choices [{:message {:content "answer"}}]}})]
-      (:result/value (ai/prompt-cmd {:match "first"})) => "answer"
-      (:result/value (ai/prompt-cmd {:match "second"})) => "answer"
+      (doseq [prompt ["first" "second"]]
+        (caller/with-current-caller
+          #(execution/in-event (update-in execution/request [:chat-source :raw-event] dissoc :thread_ts) (str "ai --no-tools " prompt)
+             (fn [args]
+               (fact (:result/value (ai/prompt-cmd (assoc args :match (str "--no-tools " prompt)))) => "answer")))))
       (mapv :messages @requests)
       => [(tools/host-messages [{:role "user" :content "first"}])
           (tools/host-messages [{:role "user" :content "second"}])])))

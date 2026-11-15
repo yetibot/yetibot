@@ -9,6 +9,9 @@
             [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.test.support.mcp :as support]
+            [yetibot.test.support.ai-execution :as caller]
+            [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.observers.ai-mcp-catalog :as observer]
             [yetibot.core.loader :as loader]))
 
@@ -353,6 +356,8 @@
     (with-redefs [catalog/shared-cache cache
                   catalog/start! (constantly nil)
                   mcp/config (constantly {:servers servers})
+                  ai/config (constantly {:providers [{:name "local" :url "http://unused.test/v1"
+                                                     :model "chat"}]})
                   mcp/connect! (fn [& _] (throw (Exception. "private")))
                   native/tools (fn [& _]
                                  [(assoc tool :name "help" :native? true
@@ -364,9 +369,12 @@
                             (reset! advertised (:tools options))
                             {:choices [{:message {:role "assistant"
                                                   :content "No calls."}}]})]
-      (let [result (tools/complete
-                     {:name "local" :url "http://unused.test/v1"}
-                     "chat" [{:role "user" :content "Hi"}])]
+      (let [result (caller/in-registered-event caller/request "ai Hi"
+                     (fn [_]
+                       (tools/complete
+                         {:name "local" :url "http://unused.test/v1"}
+                         "chat" [{:role "user" :content "Hi"}]
+                         {:actor (policy/actor execution/*event*)})))]
         (is (= "No calls." (:result/value result)))
         (is (= ["yetibot_help"]
                (mapv #(get-in % [:function :name]) @advertised)))

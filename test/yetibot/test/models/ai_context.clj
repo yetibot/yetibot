@@ -1,8 +1,19 @@
 (ns yetibot.test.models.ai-context
-  (:require [clj-slack.conversations :as slack]
+  (:require [cheshire.core :as json]
+            [clj-http.client :as http]
+            [clj-slack.conversations :as slack]
+            [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.api.cloudflare :as cloudflare]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.commands.ai :as command]
+            [yetibot.test.support.ai-execution :as support]
             [discljord.messaging :as discord]
-            [midje.sweet :refer [fact facts =>]]
+            [midje.sweet :refer [fact facts => truthy]]
             [yetibot.core.chat :as chat]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.models.users :as users]
             [yetibot.models.ai-context :as context]))
 
 (def slack-args
@@ -147,3 +158,290 @@
     (with-redefs [discord/get-channel! (fn [& _] (throw (Exception. "secret")))]
       (error-message #(context/messages discord-args "current"))
       => "Could not read the conversation. No prompt was sent to the AI provider.")))
+
+(def history-policy
+  {:name "history" :kind "search" :servers [] :native-tools ["command" "chart"]
+   :users ["U1"] :adapters ["slack" "discord"]
+   :providers [{:name "history" :models ["history-model"]}]})
+(def history-provider {:name "history" :model "history-model" :url "https://history.invalid/v1"})
+
+(fact "genuine threaded actors denied by current source policy cause zero physical history or inference IO"
+  (doseq [kind [:slack :discord]]
+    (let [reads (atom 0) sends (atom 0)
+          request (assoc support/request :chat-source
+                    (if (= kind :slack)
+                      {:adapter :slack :uuid "workspace" :room "C1"
+                       :raw-event {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"}}
+                      {:adapter :discord :uuid "workspace" :room "100"
+                       :raw-event {:author {:id "U1"} :channel-id "100" :id "400"}}))]
+      (with-redefs [ai/config (constantly {:providers [history-provider]})
+                    mcp/config (constantly {:servers [] :toolsets [(assoc history-policy :users ["denied"])]})
+                    slack/replies (fn [& _] (swap! reads inc) {:ok true :messages []})
+                    discord/get-channel! (fn [& _] (swap! reads inc) (delivered {:id "100" :type 12}))
+                    discord/get-channel-messages! (fn [& _] (swap! reads inc) (delivered []))
+                    http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+        (support/in-registered-event request "ai --no-tools hello"
+          (fn [event]
+            (when (= kind :discord) (reset! (:conn chat/*adapter*) {:rest :connection}))
+            (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+              (string? (error-message #(command/complete-prompt
+                                        (command/prepare-prompt (assoc event :match "--no-tools hello"))))))
+            => true))
+        @reads => 0
+        @sends => 0))))
+
+(fact "authorized source reads complete ordered Slack history once before descriptor and final prompt"
+  (let [reads (atom []) sends (atom [])
+        request (assoc-in support/request [:chat-source :raw-event]
+                          {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"})]
+    (with-redefs [ai/config (constantly {:providers [history-provider]})
+                  mcp/config (constantly {:servers [] :toolsets [history-policy]})
+                  slack/replies (fn [_ _ _ options]
+                                  (swap! reads conj options)
+                                  (if (:cursor options)
+                                    {:ok true :messages [{:ts "2.0" :user "BOT" :text "answer"}]}
+                                    {:ok true :messages [{:ts "1.0" :user "U1" :text "root"}]
+                                     :has_more true :response_metadata {:next_cursor "next"}}))
+                  http/post (fn [_ options] (swap! sends conj (:form-params options))
+                              {:status 200 :body {:choices [{:message {:role "assistant" :content "done"}}]}})]
+      (support/in-registered-event request "ai hello"
+        (fn [event]
+          (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+            (command/complete-prompt (command/prepare-prompt
+                                      (assoc event :yetibot-user {:id "BOT"}
+                                             :match "hello" :data [{:label "A" :reading 2}] :raw "rows"))))))
+      (count @reads) => 2
+      (count @sends) => 1
+      (let [messages (:messages (first @sends)) tail (vec (take-last 5 messages))]
+        (subvec tail 0 2) => [{:role "user" :content "U1: root"} {:role "assistant" :content "answer"}]
+        (:source (json/parse-string (:content (nth tail 3)) true)) => "yetibot-pipeline-dataset"
+        (last tail) => {:role "user" :content "hello"}))))
+
+(fact "prepared live thread requests reauthorize before any protected history read"
+  (doseq [kind [:slack :discord] revoked [:adapter :user]]
+    (let [reads (atom 0) sends (atom 0)
+          request (assoc support/request :chat-source
+                    (if (= kind :slack)
+                      {:adapter :slack :uuid "workspace" :room "C1"
+                       :raw-event {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"}}
+                      {:adapter :discord :uuid "workspace" :room "100"
+                       :raw-event {:author {:id "U1"} :channel-id "100" :id "400"}}))]
+      (with-redefs [ai/config (constantly {:providers [history-provider]})
+                    mcp/config (constantly {:servers [] :toolsets [history-policy]})
+                    slack/replies (fn [& _] (swap! reads inc) {:ok true :messages []})
+                    discord/get-channel! (fn [& _] (swap! reads inc) (delivered {:id "100" :type 12}))
+                    discord/get-channel-messages! (fn [& _] (swap! reads inc) (delivered []))
+                    http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+        (support/in-registered-event request "ai --no-tools hello"
+          (fn [event]
+            (when (= kind :discord) (reset! (:conn chat/*adapter*) {:rest :connection}))
+            (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+              (let [prepared (command/prepare-prompt (assoc event :match "--no-tools hello"))]
+                (case revoked
+                  :adapter (swap! adapters/adapters dissoc "workspace")
+                  :user (swap! users/users dissoc {:adapter kind :id "U1"}))
+                (string? (error-message #(command/complete-prompt prepared))) => true))))
+        @reads => 0
+        @sends => 0))))
+
+(fact "plaintext compatibility cannot acquire history from supplied chat source data"
+  (let [reads (atom 0) sends (atom 0)
+        request (assoc-in support/request [:chat-source :raw-event]
+                          {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"})]
+    (with-redefs [ai/config (constantly {:providers [history-provider]})
+                  mcp/config (constantly {:servers []})
+                  slack/replies (fn [& _] (swap! reads inc) {:ok true :messages []})
+                  http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+      (support/with-registered-caller request
+        #(binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+           (string? (error-message
+                      (fn [] (command/complete-prompt
+                               (command/prepare-prompt (assoc request :match "--no-tools hello"))))))
+           => true))
+      @reads => 0
+      @sends => 0)))
+
+
+(fact "Zen source bootstrap validates current registered identity before credentials or catalogs"
+  (doseq [revoked [:adapter :user] implicit? [false true]]
+    (let [file (java.io.File/createTempFile "zen-bootstrap-" ".key")
+          reads (atom 0) catalogs (atom 0) history (atom 0) sends (atom 0) issued (atom 0)
+          family execution/family read-bytes cloudflare/read-bytes
+          provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                    :key-file (.getAbsolutePath file)}
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      execution/family (fn [& args] (swap! issued inc) (apply family args))
+                      cloudflare/read-bytes (fn [& args] (swap! reads inc) (apply read-bytes args))
+                      http/get (fn [& _] (swap! catalogs inc)
+                                 {:status 200 :body {:data [{:id "zen-chat" :type "chat"
+                                                            :modalities {:input ["text"] :output ["text"]}
+                                                            :api {:chat-completions {}}
+                                                            :cost {:text {:input {:price 0} :output {:price 0}}}}]}})
+                      slack/replies (fn [& _] (swap! history inc) {:ok true :messages []})
+                      http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+          (support/in-registered-event support/request "ai --model zen-chat hello"
+            (fn [event]
+              (let [prepared (when-not implicit? (command/prepare-prompt (assoc event :match "--model zen-chat hello")))]
+                (case revoked
+                  :adapter (swap! adapters/adapters dissoc "workspace")
+                  :user (swap! users/users dissoc {:adapter :slack :id "U1"}))
+                (string? (error-message #(command/complete-prompt
+                                          (or prepared (command/prepare-prompt (assoc event :match "hello")))))) => true))))
+        @reads => 0
+        @catalogs => 0
+        @history => 0
+        @sends => 0
+        @issued => 0
+        (finally (.delete file))))))
+
+
+(fact "explicit and implicit Zen sources share one live finite context before protocol IO and history"
+  (doseq [selection [:explicit :configured-default :free-default]]
+    (let [file (java.io.File/createTempFile "zen-authorized-" ".key")
+          provider (cond-> {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                            :key-file (.getAbsolutePath file)}
+                     (= selection :configured-default) (assoc :model "zen-chat"))
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])
+          observations (atom []) sends (atom []) reads (atom 0) family (atom nil)
+          request (assoc-in support/request [:chat-source :raw-event]
+                            {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"})
+          read-bytes cloudflare/read-bytes
+          observe! (fn []
+                     (swap! observations conj {:context (origin/capability? origin/*context*)
+                                               :family (:family-id execution/*request*)
+                                               :user (get-in execution/*event* [:user :id])
+                                               :limit (get-in @(:budget execution/*request*) [:limit])
+                                               :closed? (:closed? @(:budget execution/*request*))}))]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      cloudflare/read-bytes (fn [& args] (observe!) (apply read-bytes args))
+                      http/get (fn [_ options] (observe!)
+                                 (let [body {:data [{:id "zen-chat" :type "chat"
+                                                    :modalities {:input ["text"] :output ["text"]}
+                                                    :api {:chat-completions {}}
+                                                    :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                   {:status 200 :body (if (= :stream (:as options))
+                                                       (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8"))
+                                                       body)}))
+                      slack/replies (fn [& _] (swap! reads inc)
+                                      {:ok true :messages [{:ts "1.0" :user "U1" :text "root"}]})
+                      http/post (fn [endpoint opts]
+                                  (reset! family execution/*request*)
+                                  (swap! sends conj [endpoint (:form-params opts)])
+                                  {:status 200 :body {:choices [{:message {:role "assistant" :content "Zen answer"}}]}})]
+          (support/in-registered-event request "ai hello"
+            (fn [event]
+              (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+                (:result/value
+                  (command/complete-prompt
+                    (command/prepare-prompt
+                      (assoc event :match (str (when (= selection :explicit) "--model zen-chat ")
+                                               "--max-tool-calls 3 --max-output-tokens 91 hello")))))) => "Zen answer")))
+        (count @sends) => 1
+        @reads => 1
+        (get-in @sends [0 0]) => "https://opencode.ai/inference/openai/v1/chat/completions"
+        (get-in @sends [0 1 :max_tokens]) => 91
+        (:used @(:budget @family)) => 1
+        (:closed? @(:budget @family)) => true
+        (seq @observations) => truthy
+        (every? #(and (:context %) (= "U1" (:user %)) (= 3 (:limit %))
+                       (false? (:closed? %)) (= (:family-id @family) (:family %))) @observations) => true
+        (finally (.delete file))))))
+
+(fact "prepared Zen roots reject current provider policy and route changes before protocol or credential IO"
+  (doseq [denial [:provider-policy :model-policy :removed-provider :endpoint :api]]
+    (let [file (java.io.File/createTempFile "zen-route-revoked-" ".key")
+          provider {:name "zen" :url "https://opencode.ai/inference/openai/v1"
+                    :key-file (.getAbsolutePath file)}
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])
+          effects (atom []) issued (atom 0) family execution/family]
+      (spit file "synthetic-zen-key")
+      (try
+        (with-redefs [ai/config (constantly {:providers [provider]})
+                      mcp/config (constantly {:servers [] :toolsets [policy]})
+                      execution/family (fn [& args] (swap! issued inc) (apply family args))
+                      cloudflare/read-bytes (fn [& _] (swap! effects conj :credential) (throw (AssertionError. "revoked credential IO")))
+                      http/get (fn [& _] (swap! effects conj :catalog) (throw (AssertionError. "revoked catalog IO")))
+                      http/post (fn [& _] (swap! effects conj :inference) (throw (AssertionError. "revoked inference IO")))
+                      slack/replies (fn [& _] (swap! effects conj :history) (throw (AssertionError. "revoked history IO")))]
+          (support/in-registered-event support/request "ai --model zen-chat hello"
+            (fn [event]
+              (let [prepared (command/prepare-prompt (assoc event :match "--model zen-chat hello"))
+                    current-provider (case denial
+                                       :removed-provider history-provider
+                                       :endpoint (assoc provider :url "https://changed.invalid/v1")
+                                       :api (assoc provider :api "responses") provider)
+                    current-policy (case denial
+                                     :provider-policy (assoc policy :providers [{:name "other" :models ["zen-chat"]}])
+                                     :model-policy (assoc policy :providers [{:name "zen" :models ["other"]}]) policy)]
+                (with-redefs [ai/config (constantly {:providers [current-provider]})
+                              mcp/config (constantly {:servers [] :toolsets [current-policy]})]
+                  (string? (error-message #(command/complete-prompt prepared))) => true)))))
+        @effects => []
+        @issued => 0
+        (finally (.delete file))))))
+
+(fact "prepared metadata never replaces a distinct live allocation even when app binding is lost"
+  (doseq [stale? [false true] lost-binding? [false true]]
+    (let [provider {:name "zen" :url "https://opencode.ai/inference/openai/v1" :key "synthetic-zen-key"}
+          policy (assoc history-policy :providers [{:name "zen" :models ["zen-chat"]}])
+          sent (atom []) issued (atom []) make-family execution/family
+          prepared-context ::execution/source-context]
+      (with-redefs [ai/config (constantly {:providers [provider] :max-tool-calls 2})
+                    mcp/config (constantly {:servers [] :toolsets [policy]})
+                    execution/family (fn [& args]
+                                       (let [request (apply make-family args)] (swap! issued conj request) request))
+                    context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                    http/get (fn [_ options]
+                               (let [body {:data [{:id "zen-chat" :type "chat"
+                                  :modalities {:input ["text"] :output ["text"]} :api {:chat-completions {}}
+                                  :cost {:text {:input {:price 0} :output {:price 0}}}}]}]
+                                 {:status 200 :body (if (= :stream (:as options))
+                                   (java.io.ByteArrayInputStream. (.getBytes (json/generate-string body) "UTF-8")) body)}))
+                    http/post (fn [_ _]
+                                (swap! sent conj execution/*request*)
+                                {:status 200 :body {:choices [{:message {:role "assistant" :content "bounded answer"}}]}})]
+        (support/in-registered-event support/request "ai --no-tools hello"
+          (fn [event]
+            (let [older (command/prepare-prompt (assoc event :match "--no-tools hello"))
+                  active (command/prepare-prompt (assoc event :match "--no-tools hello"))
+                  older-context (get (meta older) prepared-context)
+                  close-older! #(origin/invoke! older-context :with-request
+                                  (fn [] (execution/close-family! execution/*request*)))]
+              (when stale? (close-older!))
+              (try
+                (try
+                  (execution/with-source* active
+                  (fn []
+                    (let [allocation execution/*request*
+                          run (fn []
+                                (execution/with-source* older
+                                  (fn []
+                                    (identical? (:budget allocation) (:budget execution/*request*)) => true
+                                    (command/complete-prompt older))))]
+                      (if lost-binding?
+                        (binding [execution/*request* nil] (run))
+                        (run))
+                      (:used @(:budget allocation)) => 1
+                      (if lost-binding?
+                        (binding [execution/*request* nil] (run))
+                        (run))
+                      (:used @(:budget allocation)) => 2
+                      (string? (error-message run)) => true)))
+                  :completed
+                  (catch Exception _ :denied)) => :completed
+                (finally (close-older!)))
+              (count @issued) => 2
+              (count @sent) => 2
+              (every? #(identical? (:budget (second @issued)) (:budget %)) @sent) => true
+              (:used @(:budget (first @issued))) => 0
+              (:closed? @(:budget (first @issued))) => true
+              (:closed? @(:budget (second @issued))) => true
+              (string? (error-message #(command/complete-prompt older))) => true
+              (count @sent) => 2)))))))

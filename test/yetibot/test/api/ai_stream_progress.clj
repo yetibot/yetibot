@@ -112,3 +112,13 @@
       (catch Exception _ nil))
     (mapv :outcome (keep :tool-event @seen)) => [:running :unknown]
     (some #(re-find #"PRIVATE" (pr-str %)) @seen) => nil))
+
+(fact "host stage timings cross the public progress boundary without arbitrary event data"
+  (let [seen (atom [])]
+    (stream/notify! #(swap! seen conj %) {}
+      {:stage-timings [{:stage :planning :elapsed-ms 10}
+                      {:stage :private-stage :elapsed-ms 1}
+                      {:stage :render :elapsed-ms -1}]
+       :planning-responses 2 :source "PRIVATE-SOURCE"})
+    @seen => [{:stage-timings [{:stage :planning :elapsed-ms 10}]
+               :planning-responses 2}]))

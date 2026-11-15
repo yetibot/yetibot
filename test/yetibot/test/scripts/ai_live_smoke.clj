@@ -3,7 +3,14 @@
             [clj-http.client :as http]
             [midje.sweet :refer :all]
             [taoensso.timbre :as log]
-            [yetibot.api.ai :as ai])
+            [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-tools :as tools]
+            [yetibot.models.ai-native-tools :as native]
+            [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.test.support.ai-execution :as support]
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.core.util.agent-execution :as origin])
   (:import [java.io ByteArrayInputStream File]
            [java.net SocketTimeoutException]))
 
@@ -65,39 +72,69 @@
   [{:type "message" :role "assistant"
     :content [{:type "output_text" :text "0.3"}]}])
 
-(fact "the live gate runs real callbacks but never exceeds its POST budget"
+(fact "standalone callback cases are known not sent before credentials or ledger mutation"
   (fresh-ledger
     {:cap 2 :used 0 :attempts []}
     (fn [file]
-      (let [posts (atom [])]
-        (with-redefs
-          [http/post
-           (fn [_ options]
-             (let [body (:form-params options)]
-               (swap! posts conj body)
-               (response
-                 options
-                 (if (seq (:tools body))
-                   [{:type "function_call" :id "fc-smoke"
-                     :call_id "call-smoke"
-                     :name (:name (first (:tools body)))
-                     :arguments (json/generate-string
-                                  {:operation "sum"
-                                   :input_json "[0.1,0.2]"})}]
-                   answer))))]
-          (let [result (run-case "grok" "budget")]
-            (:passed result) => true
-            (:real-tool-callbacks result) => 1
-            (:callback-results-correct result) => true
-            (:terminal-wire-correct result) => true)
-          (:used (read-state file)) => 2
-          (:pending (read-state file)) => false
-          (:tools (second @posts)) => []
-          (contains? (second @posts) :tool_choice) => false
-          (mapv :max_output_tokens @posts) => [2048 2048]
-          (:passed (run-case "grok" "greeting")) => false
-          (count @posts) => 2
-          (:used (read-state file)) => 2)))))
+      (let [before (slurp file) posts (atom 0)]
+        (with-redefs [ai/config (fn [] (throw (AssertionError. "No credential/config lookup")))
+                      http/post (fn [& _] (swap! posts inc))]
+          (doseq [event [nil {:user {:id "operator-smoke"}
+                             :chat-source {:adapter :discord :uuid "forged"}}]
+                  case-name ["sum" "budget" "aliases" "unknown" "random-model"]]
+            (binding [execution/*event* event]
+              (:known-not-sent (run-case "grok" case-name)) => true
+              (:unsupported-live-callback (run-case "grok" case-name)) => true))
+          (let [request (execution/family 0 2048)]
+            (execution/with-request* request
+              #(:known-not-sent (run-case "grok" "budget"))) => true)
+          @posts => 0
+          (slurp file) => before)))))
+
+(fact "registered offline native callback retains two POST terminal budget proof"
+  (let [provider (first providers) posts (atom []) callbacks (atom [])
+        native-tools native/tools
+        t {:name "offline-smoke" :kind "search" :servers [] :native-tools ["util"]
+           :users ["U1"] :adapters ["slack"]
+           :providers [{:name "grok" :models ["grok-4.7"]}]}]
+    (with-redefs [ai/config (constantly {:providers [provider]})
+                  mcp/config (constantly {:servers [] :toolsets [t]})
+                  native/tools
+                  (fn [& args]
+                    (mapv (fn [tool]
+                            (let [callback (:host-call tool)]
+                              (assoc tool :host-call
+                                     (fn [input]
+                                       (let [result (callback input)]
+                                         (swap! callbacks conj (get-in result [:structuredContent :result]))
+                                         result)))))
+                          (apply native-tools args)))
+                  http/post
+                  (fn [_ options]
+                    (let [body (:form-params options)]
+                      (swap! posts conj body)
+                      (response options
+                        (if (seq (:tools body))
+                          [{:type "function_call" :id "fc-smoke" :call_id "call-smoke"
+                            :name (:name (first (:tools body)))
+                            :arguments (json/generate-string {:operation "sum" :input_json "[0.1,0.2]"})}]
+                          answer))))]
+      (support/in-registered-event support/request "ai offline callback"
+        (fn [event]
+          ;; Three physical admissions (parent, host callback, terminal parent),
+          ;; independent of the single tool-attempt presentation budget.
+          (execution/with-source* {:provider provider :model "grok-4.7"
+                                   :toolset "offline-smoke" :max-tool-calls 3}
+            #(let [result (tools/complete provider "grok-4.7" []
+                                          {:actor (policy/actor event) :toolset "offline-smoke"
+                                           :max-tool-calls 1 :max-output-tokens 2048})]
+               (:result/value result) => "0.3"
+               (:admitted (execution/admissions execution/*request*)) => 3)))))
+    @callbacks => [0.3M]
+    (count @posts) => 2
+    (:tools (second @posts)) => []
+    (contains? (second @posts) :tool_choice) => false
+    (mapv :max_output_tokens @posts) => [2048 2048]))
 
 (fact "a possible paid timeout durably stops subsequent requests"
   (fresh-ledger

@@ -11,8 +11,38 @@
             [yetibot.models.ai-context :as context]
             [yetibot.test.models.ai-tool-policy :refer [actor]]
             [yetibot.test.support.ai-execution :as chat]
-            [yetibot.test.support.mcp :as support])
-  (:import [java.util Base64]))
+            [yetibot.test.support.mcp :as support]
+            [yetibot.test.integration.ai-command-charts :as caller]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.models.users :as users]
+            [yetibot.core.chat :as core-chat]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.models.ai-mcp-catalog :as catalog])
+  (:import [java.util Base64]
+           [java.util.concurrent Executors ExecutorService]))
+
+(def discord-adapter
+  (reify
+    clojure.lang.ILookup
+    (valAt [_ k] (when (= k :yetibot-user) (atom {:id "BOT"})))
+    (valAt [_ k not-found] (if (= k :yetibot-user) (atom {:id "BOT"}) not-found))
+    adapters/Adapter
+    (uuid [_] "discord-prod") (platform-name [_] "Discord")
+    (channels [_] ["parent" "thread"]) (connected? [_] true)
+    (send-msg [_ _] nil) (send-paste [_ _] nil)
+    (join [_ _]) (leave [_ _]) (chat-source [_ _]) (start [_]) (stop [_])
+    (connection-last-active-timestamp [_] 0) (connection-latency [_] 0)))
+
+(defn run-command [request text]
+  (with-redefs [adapters/adapters (atom {"workspace" caller/caller-adapter "discord-prod" discord-adapter})
+                users/users (atom {{:adapter :slack :id "U1"} (:user chat/request)
+                                   {:adapter :slack :id "BOT"} {:id "BOT"}
+                                   {:adapter :discord :id "U1"} (:user chat/request)})]
+    (binding [core-chat/*adapter* (get @adapters/adapters (get-in request [:chat-source :uuid]))
+              core-chat/*target* (or (get-in request [:chat-source :raw-event :channel])
+                                    (get-in request [:chat-source :raw-event :channel-id]))]
+      (chat/run-command request text))))
 
 (def base-sha (string/join (repeat 40 "a")))
 (def commit-sha (string/join (repeat 40 "b")))
@@ -88,6 +118,61 @@
             {:headers {"Mcp-Session-Id" "integration-session"}
              :body {:jsonrpc "2.0" :id (:id body) :result result}}))))))
 
+(fact "MCP loopback discovery converges in synchronous live source and non-conveying catalog worker"
+  (let [requests (atom []) stages (atom [])
+        connect mcp/connect-with-config! list-tools mcp/list-tools]
+    (support/with-http-server
+      (support/rpc-handler requests false)
+      (fn [url]
+        (let [provider {:name "catalog-fixture" :url (str url "/v1") :model "model"}
+              config {:servers [{:name "loopback" :url (str url "/mcp") :tools ["web_search"]}]}
+              observe! (fn [stage f]
+                         (swap! stages conj {:stage stage
+                                             :admitted (some-> execution/*request* execution/admissions :admitted)
+                                             :open (when execution/*request* (not (:closed? @(:budget execution/*request*))))
+                                             :unknown (boolean (some-> execution/*request* :budget deref :unknown?))})
+                         (try (f)
+                              (catch Exception e
+                                ;; Closed diagnostics only: never messages,
+                                ;; ex-data, arguments, headers or credentials.
+                                (println "MCP-DISCOVERY-CLOSED" {:stage stage :server "loopback"
+                                                               :class (.getName (class e))
+                                                               :code :discovery-failed
+                                                               :initialize-reached (boolean (some #(= "initialize" (get-in % [:body :method])) @requests))
+                                                               :list-reached (boolean (some #(= "tools/list" (get-in % [:body :method])) @requests))})
+                                (throw e))))]
+          (with-redefs [api/config (constantly {:providers [provider]})
+                        mcp/config (constantly {:servers []})
+                        mcp/connect-with-config! (fn [& args] (observe! :connect #(apply connect args)))
+                        mcp/list-tools (fn [session] (observe! :list #(list-tools session)))]
+            (execution/with-source* {:provider provider :model "model" :no-tools true}
+              (fn []
+                (let [sync (catalog/new-cache (constantly 0) (fn [job] (job)))
+                      workers (Executors/newSingleThreadExecutor (#'catalog/daemon-factory "qualification-mcp"))
+                      completed (promise)
+                      async-cache (catalog/new-cache (constantly 0)
+                                    (fn [job]
+                                      (.execute workers
+                                        (fn []
+                                          (try
+                                            (fact execution/*request* => nil origin/*context* => nil)
+                                            (job)
+                                            (finally (deliver completed true)))))))]
+                  (try
+                    (fact (get-in (catalog/snapshot sync config) [:servers 0 :status]) => "fresh")
+                    (catalog/snapshot async-cache config)
+                    (fact (deref completed 5000 :timeout) => true
+                          (get-in (catalog/snapshot async-cache config) [:servers 0 :status]) => "fresh"
+                          (mapv :stage @stages) => [:connect :list :connect :list]
+                          (select-keys (first @stages) [:admitted :open :unknown])
+                          => {:admitted 0 :open true :unknown false}
+                          (:admitted (nth @stages 2)) => nil
+                          (count (filter #(= "initialize" (get-in % [:body :method])) @requests)) => 2
+                          (count (filter #(= "tools/list" (get-in % [:body :method])) @requests)) => 4
+                          (some #(= "tools/call" (get-in % [:body :method])) @requests) => nil)
+                    (println "MCP-DISCOVERY-OBSERVED" (pr-str @stages))
+                    (finally (.shutdownNow ^ExecutorService workers))))))))))))
+
 (defn- check-transports [discovery]
   (let [requests (atom []) pushed (atom false)
         handler (fixture-handler requests pushed)]
@@ -140,10 +225,10 @@
                         client/get (fn [url _] {:status 200 :body {:sha (last (string/split url #"/"))
                                                                   :parents [{:sha base-sha}]}})]
             (fact
-              (:value (chat/run-command request "ai --toolset search Search current news"))
+              (:value (run-command request "ai --toolset search Search current news"))
               => "Source: https://source.test/news"
               (some #(= "/read" (:path %)) @requests) => nil)
-            (let [names (:value (chat/run-command request "ai tools"))]
+            (let [names (:value (run-command request "ai tools"))]
               (fact (some #{"`web/web_search` — web_search"} names)
                     => "`web/web_search` — web_search"
                     (some #{"`reader/get_commit` — get_commit"} names)
@@ -151,17 +236,17 @@
                     (some #(re-find #"push_files|unknown_operation" %) names)
                     => nil
                     (some #(= "/write" (:path %)) @requests) => nil))
-            (let [result (chat/run-command request "ai --toolset github-pr Fix src/a.clj")
+            (let [result (run-command request "ai --toolset github-pr Fix src/a.clj")
                   id (get-in result [:data :proposal])
                   p (proposals/review! id actor)]
               (fact (string? id) => true
                     (some #(= "/write" (:path %)) @requests) => nil)
               (doseq [page (range 1 (inc (proposals/page-count p)))]
-                (chat/run-command request (str "ai proposal " id " " page)))
+                (run-command request (str "ai proposal " id " " page)))
               (fact
-                (get-in (chat/run-command request (str "ai approve " id))
+                (get-in (run-command request (str "ai approve " id))
                         [:data :status]) => :succeeded
-                (contains? (chat/run-command request (str "ai approve " id)) :error) => true
+                (contains? (run-command request (str "ai approve " id)) :error) => true
                 (count (filter #(= "push_files" (get-in % [:body :params :name])) @requests)) => 1
                 (some #(= "delete_repository"
                           (get-in % [:body :params :name])) @requests) => nil
@@ -207,7 +292,7 @@
                                       (json/generate-string
                                         {"query"
                                          (str "PRIVATE-QUERY" turn)})}}]}}]}))]
-      (let [result (chat/run-command chat/request
+      (let [result (run-command chat/request
                                     (str "ai --max-tool-calls 12 "
                                          "PRIVATE-PROMPT | echo later"))
             report (get-in result [:data :tool-trace])]
@@ -264,11 +349,11 @@
                  context/messages (fn [_ prompt]
                                     [{:role "user" :content prompt}])]
                 (fact
-                  (:value (chat/run-command request "ai toolsets")) => ["repo"]
+                  (:value (run-command request "ai toolsets")) => ["repo"]
                   (some #{"`reader/get_commit` — get_commit"}
-                        (:value (chat/run-command request "ai tools")))
+                        (:value (run-command request "ai tools")))
                   => "`reader/get_commit` — get_commit"
-                  (:value (chat/run-command request
+                  (:value (run-command request
                                            "ai --toolset repo Read owner/repo"))
                   => (if (= :discord (get-in request [:chat-source :adapter]))
                        #(boolean (re-matches

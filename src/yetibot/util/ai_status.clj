@@ -31,7 +31,7 @@
                          (get-in prepared [:provider :key-file])])
         tools (get-in result [:result/data :mcp :tool-calls]
                       (when (:no-tools prepared) 0))]
-    (if (and (discord? prepared) (not (false? (:caption? prepared)))
+    (if (and (not execution/*command-capture*) (discord? prepared) (not (false? (:caption? prepared)))
              (string? (:result/value result))
              (string? model) (re-matches #"[A-Za-z0-9@._:/-]{1,200}" model)
              (= model (mcp/metadata-redact model {:secrets secrets})))
@@ -54,7 +54,9 @@
   "Fork typed host progress from the existing answer callback. Never finish
    core status here: the collector still has to flush the terminal answer."
   [target prepared complete]
-  (let [started (System/nanoTime)
+  (if execution/*command-capture*
+    (complete (dissoc prepared :on-progress))
+    (let [started (System/nanoTime)
         accepted? (try
                     (= :accepted (discord/start-command-status!
                                    target "Working"))
@@ -71,7 +73,8 @@
                   (let [next-state (progress/advance
                                      (:progress @state)
                                      (select-keys event
-                                                  [:tool-event :tool-budget]))]
+                                                  [:tool-event :tool-budget
+                                                   :stage-timings :planning-responses]))]
                     (swap! state assoc :progress next-state)
                     (discord/update-command-status!
                       (progress/render next-state)))
@@ -86,4 +89,4 @@
           (caption prepared result
                    (/ (- (System/nanoTime) started) 1000000.0))))
       (finally
-        (locking state (swap! state assoc :open? false))))))
+        (locking state (swap! state assoc :open? false)))))))

@@ -2,6 +2,7 @@
   (:require [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.api.ai-outcome :as outcome]
+            [yetibot.api.opencode :as zen]
             [yetibot.core.hooks :refer [cmd-hook]]
             [yetibot.core.chat :as chat]
             [yetibot.core.models.admin :as admin]
@@ -15,6 +16,7 @@
             [yetibot.models.ai-provider-catalog :as provider-catalog]
             [yetibot.models.ai-autodraft :as autodraft]
             [yetibot.models.ai-tools :as tools]
+            [yetibot.util.ai-agent-execution :as agent-execution]
             [yetibot.models.ai-tool-trace :as trace]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-toolsets :as toolsets]
@@ -601,8 +603,12 @@
                                 (:providers config)))
              (ai/fail (str "AI provider " provider-name
                            " is not configured. Add it to ai.providers.")))
-         provider (ai/provider config provider-name)
-         automatic? (and (= "zen" (:name provider))
+         inherited (when (execution/text-only?) (:planner-provider execution/*request*))
+         _ (when (and inherited provider-name (not= provider-name (:name inherited)))
+             (ai/fail "Text-only continuation cannot change provider."))
+         provider (or inherited (ai/provider config provider-name))
+         automatic? (and (not (and inherited (:planner-model execution/*request*)))
+                         (= "zen" (:name provider))
                          (or (nil? (:model provider))
                              (:ai/free-default provider))
                          (not (:model options)))
@@ -610,11 +616,11 @@
              (:toolset (toolsets/select (mcp/config) (:toolset options))))
          actor (policy/actor args)
          _ (when automatic? (policy/authorize-provider! t actor provider))
-         model (or (:model options)
-                   (ai/default-model provider
-                     #(policy/model-allowed? t actor provider %)))
+         model (or (:model options) (when inherited (:planner-model execution/*request*))
+                   (when-not automatic?
+                     (ai/default-model provider #(policy/model-allowed? t actor provider %))))
          provider (cond-> provider automatic? (assoc :ai/verified-free true))]
-     (when-not model
+     (when-not (or model automatic?)
        (ai/fail (str "No default model configured for this provider. "
                      "Use --model <model> or configure its model.")))
      (cond-> (assoc (merge options
@@ -626,30 +632,43 @@
                             options))
                     :provider provider :model model
                     :caption? (empty? (:next-cmds args))
-                    :messages (context/messages args (:prompt options))
+                    :read-messages #(context/messages args (:prompt options))
+                    :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))
                     :actor (policy/actor args))
        snapshot (assoc :pipeline-input snapshot
-                       :additional-secrets (keep :key (:providers config)))))))
+                       :additional-secrets (keep :key (:providers config)))
+       automatic? (execution/prepare-source)))))
 
 (defn prepare-followup
   "Re-resolve a host-owned route; the body is data, never flags or a pipeline."
   [args route resolve-config]
   (let [provider (ai/provider (resolve-config) (:provider route))
-        _ (execution/ensure-followup! route provider)
+        _ (execution/ensure-followup-config! route provider)
         actor (policy/actor args)
         _ (when-not actor
             (ai/fail "AI follow-ups require a trusted chat user."))
-        _ (when (:verified-free route)
-            (policy/authorize!
-              (when-not (:no-tools route)
-                (:toolset (toolsets/select (mcp/config) (:toolset route))))
-              actor provider (:model route)))
-        provider (execution/revalidate-free-followup! route provider)
-        messages (context/messages args (:match args))]
+        _ (policy/authorize!
+            (when-not (:no-tools route)
+              (:toolset (toolsets/select (mcp/config) (:toolset route))))
+            actor provider (:model route))
+        prepared (merge (select-keys route [:no-tools :toolset :max-tool-calls :max-output-tokens])
+                        {:provider (cond-> provider (:verified-free route) (assoc :ai/verified-free true))
+                         :model (:model route) :actor actor :prompt (:match args) :caption? true
+                         :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))})
+        ;; Resolve the pinned Zen model's dialect only in this human turn's
+        ;; one finite source, after checking its original configured identity.
+        prepared (if (zen/provider? provider) (execution/prepare-source prepared) prepared)
+        provider (:provider prepared)]
     (execution/ensure-followup! route provider)
-    (merge (select-keys route [:no-tools :toolset :max-tool-calls :max-output-tokens])
-           {:provider provider :model (:model route) :messages messages
-            :actor actor :prompt (:match args) :caption? true})))
+    (assoc prepared :read-messages
+      #(do
+         (execution/ensure-followup-config! route (ai/provider (resolve-config) (:provider route)))
+         (execution/ensure-followup! route provider)
+         (execution/revalidate-free-followup! route provider)
+         (execution/ensure-followup-config! route (ai/provider (resolve-config) (:provider route)))
+         (let [messages (context/messages args (:match args))]
+           (execution/ensure-followup! route provider)
+           messages)))))
 
 (defn- complete-prompt*
   [{:keys [provider model messages no-tools toolset actor on-progress
@@ -665,9 +684,9 @@
                      (input/messages messages pipeline-input redactions))]
       (if on-progress
         (ai/complete (dissoc provider :native-tools) model messages
-                     {:on-progress on-progress :max-output-tokens max-output-tokens})
+                     {:on-progress on-progress :max-output-tokens max-output-tokens :no-tools true})
         (ai/complete (dissoc provider :native-tools) model messages
-                     {:max-output-tokens max-output-tokens})))
+                     {:max-output-tokens max-output-tokens :no-tools true})))
     (tools/complete provider model messages
                     (cond-> {:toolset toolset :actor actor
                              :max-output-tokens max-output-tokens}
@@ -678,14 +697,28 @@
                       on-progress (assoc :on-progress on-progress)))))
 
 (defn complete-prompt [prepared]
-  (let [budgets (limits/effective prepared)
-        result (complete-prompt* (merge prepared budgets))]
+  (execution/with-source* prepared
+   (fn []
+    (let [_ (when execution/*command-capture*
+                  (execution/charge!)
+                  (policy/authorize! (:toolset-policy execution/*request*)
+                                     (policy/actor execution/*event*)
+                                     (:provider prepared) (:model prepared)))
+        _ (when (and (:read-messages prepared)
+                     (or execution/*event* (:read-chat-history? prepared)))
+            (if-let [reauthorize (:reauthorize-expression! execution/*request*)]
+              (reauthorize)
+              (ai/fail "Chat history authority is unavailable.")))
+        budgets (limits/effective prepared)
+        result (complete-prompt* (cond-> (merge prepared budgets)
+                                  (:read-messages prepared)
+                                  (assoc :messages ((:read-messages prepared)))))]
     (if-not (map? result) result
       (public-result/reviewed
         (-> result
             (assoc-in [:result/data :ai/limits] (limits/public-values budgets))
             (assoc-in [:result/public-data :limits]
-                      (limits/public-values budgets)))))))
+                      (limits/public-values budgets)))))))))
 
 (defn prompt-cmd
   {:doc (str "ai <prompt> # ask the default AI provider; "
@@ -706,12 +739,30 @@
   [args]
   (safely args
     #(status/with-status
-       chat/*target* (prepare-prompt args)
+       chat/*target*
+       (let [prepared (prepare-prompt args)]
+         ;; Explicit/configured parsing stays lazy for revocation checks. Only
+         ;; the dispatched root retains selection for ordinary answer replies.
+         (if (and (zen/provider? (:provider prepared))
+                  (not execution/*command-capture*)
+                  (not (::execution/source-context (meta prepared))))
+           (execution/prepare-source prepared)
+           prepared))
        (fn [prepared]
-         (autodraft/complete prepared args
-           (fn [selected]
-             (execution/remember-answer! "ai" selected
-                                         (complete-prompt selected))))))))
+         (let [answer (volatile! nil)
+               result (autodraft/complete prepared args
+                        (fn [selected]
+                          (let [result (complete-prompt selected)]
+                            (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+                              (execution/require-live!)
+                              (reauthorize))
+                            (vreset! answer selected)
+                            result)))]
+           ;; Root remembrance runs after inherited routing has unwound. A
+           ;; draft, duplicate, clarification or failed route is not an answer.
+           (if-let [selected @answer]
+             (execution/remember-answer! "ai" selected result)
+             result))))))
 
 (defmethod execution/run-followup "ai" [route args]
   (safely args
@@ -734,3 +785,6 @@
   #"^servers\s*$" servers-cmd
   #"(?s)^tools(?:\s+(.+?))?\s*$" tools-cmd
   #"(?s)^.*$" prompt-cmd)
+
+;; Tools are loaded above; the bridge never requires commands.ai.
+(agent-execution/install!)

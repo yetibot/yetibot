@@ -68,10 +68,12 @@
         (str/includes? (pr-str reply) "PRIVATE-") => false))))
 
 (fact "the model receives a fresh tool-role snapshot to build its suggestion"
-  (let [reads (atom 0) sent (atom [])]
+  (let [reads (atom 0) sent (atom [])
+        provider {:name "fake" :url "https://weather-fixture.invalid/v1" :model "fake"}]
     (with-redefs [weather/default-zip "Seattle"
                   weather/current (fn [_] (swap! reads inc) {:data [current]})
                   mcp/config (constantly {:servers [] :toolsets [toolset]})
+                  ai/config (constantly {:providers [provider]})
                   ai/chat
                   (fn [_ _ messages _]
                     (swap! sent conj messages)
@@ -85,10 +87,10 @@
                                          :arguments "{}"}}]}
                          {:role "assistant"
                           :content "Suggested: weather $s | render {{temp}}°C {{city_name}}"})}]})]
-      (execution/in-event execution/request "grok run weather and suggest an alias"
+      (execution/in-registered-event execution/request "grok run weather and suggest an alias"
         (fn [request]
           (:result/value
-            (tools/complete {:name "fake"} "fake"
+            (tools/complete provider "fake"
                             [{:role "user"
                               :content "Run weather, inspect data, suggest a one-line alias."}]
                             {:actor (policy/actor request)}))

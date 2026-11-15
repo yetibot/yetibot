@@ -8,7 +8,8 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-toolsets :as toolsets]
             [yetibot.models.ai-tools :as tools]
-            [yetibot.util.ai-execution :as execution]))
+            [yetibot.util.ai-execution :as execution]
+            [yetibot.core.util.agent-execution :as origin]))
 
 (defonce ^:private requests (atom {}))
 (def receipt-ttl-ms 86400000)
@@ -39,11 +40,14 @@
     (when (= 1 (count matches)) (first matches))))
 
 (defn- execute-change!
-  [{:keys [provider model messages actor max-tool-calls max-output-tokens
+  [{:keys [provider model messages read-messages actor max-tool-calls max-output-tokens
            on-progress]}
-   args key router config t repo]
-  (let [secret (clef/credential! router)
+   router config t repo claim!]
+  (let [_ (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+            (reauthorize))
+        secret (clef/credential! router)
         private-config (update config :secrets #(concat % [secret (:key provider)]))
+        messages (if read-messages (read-messages) messages)
         messages (mapv #(update % :content (fn [text] (if (string? text) (mcp/redact text private-config) text))) messages)
         generated (tools/complete provider model
                                   (into [{:role "system"
@@ -74,8 +78,17 @@
         (proposals/cancel! id actor)
         (ai/fail "The generated repository or execution policy changed. No GitHub writes were made."))
       (policy/authorize! current-t actor current-provider model)
-      (let [claimed (proposals/claim-automatic! id actor key args)
-            result (github/execute! current-config claimed)]
+      (let [claimed (claim! id)
+            handle (execution/admit-operation! :tool)
+            result (try
+                     (let [result (binding [origin/*operation* (or handle origin/*operation*)]
+                                    (github/execute! current-config claimed))]
+                       (execution/finish-operation! handle {:state (if (= :unknown (:status result)) :unknown :definitive)})
+                       result)
+                     (catch Exception e
+                       (when handle
+                         (try (execution/finish-operation! handle {:state :unknown}) (catch Exception _ nil)))
+                       (throw e)))]
         (proposals/finish! id result)
         {:result/data result
          :result/value (if (= :succeeded (:status result))
@@ -92,7 +105,7 @@
   (let [router (:intent-router (ai/config))
         key (when (and (clef/enabled? router) (not no-tools) (nil? toolset) actor)
               (execution/direct-request-key args))]
-    (if-not key
+    (if-not (and key (nil? execution/*request*))
       (fallback prepared)
       (let [config (mcp/config)
             t (:toolset (toolsets/select config (:github-toolset router)))]
@@ -103,26 +116,46 @@
             (let [{:keys [duplicate]} (reserve! key)]
               (if duplicate
                 (or (:result duplicate) "This request is already running; it will not be executed twice.")
-                (let [code-started (atom false)]
+                (let [code-started (atom false)
+                      request-text (execution/direct-request-text args)
+                      direct-input execution/*direct-input*
+                      event execution/*event*]
                   (try
-                    (let [request-text (execution/direct-request-text args)
-                          cleaned (mcp/redact request-text (update config :secrets (fnil conj []) (:key provider)))
+                    (execution/with-routing-source* prepared args
+                      (fn [freeze!]
+                      (let [family-id (:family-id execution/*request*)
+                            ;; This lexical host callback restores only the original
+                            ;; claim proof, never the router/model/tool bindings.
+                            claim! (fn [id]
+                                     (execution/require-live!)
+                                     (when-not (and family-id
+                                                    (= family-id (:family-id execution/*request*))
+                                                    (= event execution/*event* (:event execution/*request*))
+                                                    (= actor (policy/actor execution/*event*)))
+                                       (ai/fail "Automatic request ownership changed."))
+                                     (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+                                       (reauthorize))
+                                     (binding [execution/*direct-input* direct-input
+                                               execution/*direct-command* nil
+                                               execution/*command-capture* true]
+                                       (proposals/claim-automatic! id actor key args)))
+                            cleaned (mcp/redact request-text (update config :secrets (fnil conj []) (:key provider)))
                           _ (when-not (= cleaned request-text)
                               (ai/fail "The request contains configured credentials; no classification or writes were performed."))
                           decision (clef/classify! router request-text)
                           result (case decision
-                                   :answer (fallback prepared)
-                                   :clarify "Do you want repository changes, or just an answer? For changes, name owner/repo and the requested edit."
+                                   :answer (freeze! :answer #(fallback prepared))
+                                   :clarify (freeze! :answer #(str "Do you want repository changes, or just an answer? For changes, name owner/repo and the requested edit."))
                                    :code-change (if-let [repo (repository t prompt)]
                                                   (do (reset! code-started true)
-                                                      (execute-change! prepared args key router config t repo))
-                                                  "Which repository should I change? Include owner/repo in a new !ai request.")
+                                                      (freeze! :code-change #(execute-change! prepared router config t repo claim!)))
+                                                  (freeze! :answer #(str "Which repository should I change? Include owner/repo in a new !ai request.")))
                                    (ai/fail "Invalid intent decision. No automatic changes were made."))]
                       (if @code-started
                         (swap! requests update key assoc :state :done :result result)
                         (swap! requests update key assoc :state :read-only
                                :result "This request was already handled without GitHub writes. Send a new !ai message for a new change request."))
-                      result)
+                      result)))
                     (catch Exception e
                       ;; Only code work can leave a write outcome needing a receipt.
                       (if @code-started

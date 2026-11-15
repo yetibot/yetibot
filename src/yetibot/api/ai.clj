@@ -11,11 +11,13 @@
             [yetibot.api.mcp :as mcp]
             [yetibot.api.gemma-tools :as gemma]
             [yetibot.core.config :refer [get-config]]
+            [yetibot.core.util.xai :as xai]
             [yetibot.core.util.ai-usage :as usage]
             [yetibot.util.ai-config :as settings]
             [yetibot.util.ai-limits :as limits]
             [yetibot.util.ai-capacity :as capacity]
-            [yetibot.util.ai-cost :as cost])
+            [yetibot.util.ai-cost :as cost]
+            [yetibot.util.ai-execution :as execution])
   (:import [java.io File FileInputStream]
            [java.net URI]
            [java.util UUID]))
@@ -125,6 +127,24 @@
     (or (some #(when (= provider-name (:name %)) %) (:providers config))
         (fail (str "Unknown AI provider. Use ai providers to list "
                    "available providers.") :configuration-unavailable))))
+
+(defn grok-config
+  "Current host Grok configuration; an absent shared config is not malformed.
+   The xai.key fallback is local to Grok/source resolution, never a mutation."
+  []
+  (let [config (try (config)
+                    (catch Exception e
+                      (if (= :not-found (:error (get-config map? [:ai])))
+                        {:providers []}
+                        (throw e))))
+        key (:key xai/config)]
+    (if (and (not-any? #(= "grok" (:name %)) (:providers config))
+             (nonblank-string? key))
+      (update config :providers conj
+              {:name "grok" :url "https://api.x.ai/v1" :key key
+               :model "grok-4.7" :api "responses"
+               :native-tools ["web_search" "x_search"]})
+      config)))
 
 (defn automatic-discovery? [provider]
   (not (false? (:automatic-discovery provider))))
@@ -239,7 +259,8 @@
   ([provider] (default-model provider (constantly true)))
   ([provider allowed?]
    (if (= "zen" (:name provider))
-     (opencode/default-model (resolve-provider provider) allowed?)
+     (opencode/default-model (if (and (:model provider) (not (:ai/free-default provider)))
+                               provider (resolve-provider provider)) allowed?)
      (:model provider))))
 
 (defn models [provider]
@@ -288,7 +309,9 @@
       (try
         (let [catalog (:catalog (meta (models provider)))
               record (some #(when (= model (:id %)) %) (:models catalog))]
-          (opencode/model-provider provider record))
+          (let [prepared (opencode/model-provider provider record)]
+            (with-meta prepared (assoc (meta prepared) ::configured-signature
+                                       (execution/provider-signature provider)))))
         (catch Exception e
           (throw (ex-info
                    "Zen text model routing is unavailable. No inference was sent."
@@ -342,6 +365,78 @@
                                  calls)))))
       body)))
 
+(defn- native-xai-response [messages options]
+  (let [cap (:max-output-tokens (limits/effective options))
+        endpoint "https://api.x.ai/v1/responses"
+        key (:key xai/config)
+        ;; The original native first hop has no store/include/reasoning fields.
+        ;; Keep that wire shape distinct from registry Responses requests.
+        body (cond-> {:model "grok-4.7" :input messages :max_output_tokens cap}
+               (not (:no-tools options)) (assoc :tools [{:type "web_search"} {:type "x_search"}]))
+        response (usage/capture!
+                   {:provider "xai" :model "grok-4.7" :operation "text" :endpoint endpoint
+                    :output-cap {:field "max_output_tokens" :value cap} :secrets [key]}
+                   #(client/post endpoint
+                      {:headers {"Authorization" (str "Bearer " key)}
+                       :content-type :json :body (json/generate-string body)
+                       :as :json :throw-exceptions false
+                       :conn-timeout 5000 :socket-timeout 120000
+                       :redirect-strategy :none :retry-handler (fn [& _] false)})
+                   (partial usage/xai-metrics "grok-4.7"))
+        _ (when-not (<= 200 (:status response) 299)
+            (fail "Native xAI text request failed."))
+        actual-body (:body response)]
+    (outcome/check! {:name "xai" :api "responses" :url "https://api.x.ai/v1"}
+                    "grok-4.7" actual-body
+                    (assoc options :max-output-tokens cap))
+    actual-body))
+
+(defn- native-item-text [item reasoning?]
+  (let [content (if reasoning? (:content item)
+                 (or (:content item) (get-in item [:message :content])))]
+    (cond
+      (string? content) content
+      (sequential? content) (let [texts (keep #(when (map? %) (:text %)) content)]
+                              (when (seq texts) (string/join "" texts)))
+      (string? (:text item)) (:text item)
+      (and reasoning? (string? (get-in item [:reasoning :text])))
+      (get-in item [:reasoning :text]))))
+
+(defn native-xai-first-text
+  "Outcome-aware first native producer hop, retaining its legacy result shape.
+   Transport usage is recorded once before validation and normalization."
+  [prompt options]
+  (let [input (if (and (sequential? prompt) (map? (first prompt))) prompt
+                [{:role "user" :content prompt}])
+        body (native-xai-response input options)
+        extract (fn [type reasoning?]
+                  (some #(when (= type (some-> (:type %) name))
+                           (native-item-text % reasoning?)) (:output body)))
+        text (extract "message" false)
+        reasoning (extract "reasoning" true)]
+    (when-not (or text reasoning)
+      (outcome/fail! :no-answer {:name "xai" :api "responses" :url "https://api.x.ai/v1"}
+                     "grok-4.7" body options))
+    (let [usage (:usage body)
+          input (or (:prompt_tokens usage) (:input_tokens usage) 0)
+          output (or (:completion_tokens usage) (:output_tokens usage) 0)
+          cost (/ (Math/round (* (+ (* input 0.000002) (* output 0.000006)) 1000000.0))
+                  1000000.0)]
+      (cond-> {:cost cost}
+        text (assoc :text text)
+        reasoning (assoc :reasoning reasoning)))))
+
+(defn native-xai-text
+  "App-owned continuation for the legacy native producer, not registry routing.
+   Explicit no-tools is distinct from that producer's default vendor searches."
+  [messages options]
+  (let [body (native-xai-response messages options)
+        text (some #(when (= "message" (some-> (:type %) name))
+                      (native-item-text % false)) (:output body))]
+    (assoc (select-keys body [:status :usage :incomplete_details])
+           :status (or (:status body) "completed")
+           :output [{:type "message" :content [{:type "output_text" :text text}]}])))
+
 (defn chat
   "Request a provider turn, keeping encrypted Responses state client-side."
   [provider model messages options]
@@ -350,7 +445,8 @@
                        (<= 1 (:max-output-tokens options) 262144))))
     (fail "AI output token limit must be an integer from 1 to 262144."))
   (let [options (merge (limits/effective options) options)
-        provider (prepare-provider provider model)
+        provider (prepare-provider (if (execution/text-only?)
+                                     (dissoc provider :native-tools) provider) model)
         _ (when-let [record (::capacity/model provider)]
             (when (= model (:id record))
               (capacity/check! record (:max-output-tokens options))))
@@ -381,18 +477,8 @@
                  {:model model
                   :messages (if (cloudflare/provider-account provider)
                               (cloudflare-messages messages) messages)})]
-    (let [body
-          (try
-            (usage/capture!
-              {:provider (:name provider) :model model :operation "text"
-               :secrets [(:key provider)]}
-              (fn []
-                (request
-                  client/post provider
-                  (if responses-api? "/responses" "/chat/completions")
-                  {:content-type :json
-                   :form-params
-                   (merge
+    (let [path (if responses-api? "/responses" "/chat/completions")
+          form (merge
                      (cond-> params
                        progress (assoc :stream true)
                        (:max-output-tokens options)
@@ -410,7 +496,23 @@
                        ;; Stateless Workers AI rejects empty tool fields.
                        (and (cloudflare/provider-account provider)
                             (empty? (:tools options)))
-                       (dissoc :tools :tool_choice)))}
+                       (dissoc :tools :tool_choice)))
+          body
+          (try
+            (usage/capture!
+              {:provider (:name provider) :model model :operation "text"
+               :secrets [(:key provider)]
+               :endpoint (str (string/replace (:url provider) #"/+$" "") path)
+               :provider-signature (execution/provider-signature provider)
+               :output-cap (or (:max_output_tokens form) (:max_completion_tokens form)
+                               (:max_tokens form))}
+              (fn []
+                (request
+                  client/post provider
+                  path
+                  {:content-type :json
+                   :form-params
+                   form}
                   progress (::diagnostics/stage options :initial)))
               (partial cost/ledger-metrics provider model))
             (catch Exception e

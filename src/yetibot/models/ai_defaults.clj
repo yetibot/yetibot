@@ -9,7 +9,7 @@
 
 (defn authorize! [event]
   (execution/sensitive!)
-  (when-not (and (policy/actor event)
+  (when-not (and (not execution/*command-capture*) (policy/actor event)
                  (ai/nonblank-string? (get-in event [:chat-source :room])))
     (ai/fail "Changing global AI defaults requires a trusted chat request.")))
 

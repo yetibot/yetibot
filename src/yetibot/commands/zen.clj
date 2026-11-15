@@ -68,11 +68,15 @@
           {:result/value models :result/data data
            :result/collection-path [:models]}
           (:models data))))
-    (catch Exception _ (failure args false))))
+    (catch Exception e
+      (if (and execution/*request* (= :policy-denied (:ai/error-code (ex-data e))))
+        (throw e)
+        (failure args false)))))
 
 (defn- ask-prompt [{:keys [chat-source continuation-route] :as args} options]
   (try
-    (let [started (System/nanoTime)
+    (let [_ (when execution/*command-capture* (execution/charge!))
+          started (System/nanoTime)
           _ (when (or (:provider options) (:max-tool-calls options)
                       (:no-tools options))
               (api/fail usage))
@@ -80,7 +84,7 @@
           _ (when-not (or (opencode/configured-key? (:key provider))
                           (:key-file provider))
               (api/fail "Configure the Zen API key first."))
-          config (merge (toolsets/select (mcp/config) (:toolset options))
+          config (merge (toolsets/select (mcp/config) (execution/inherited-toolset (:toolset options)))
                         (limits/effective options))
           _ (when continuation-route
               (execution/ensure-followup! continuation-route provider)

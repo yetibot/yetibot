@@ -100,3 +100,92 @@
           (get-in @snapshot [:errors 0 "calls"])) => [262144 262144 262144]
     (get-in @snapshot [:errors 0 "truncated"]) => false
     (get-in @snapshot [:errors 0 "omitted"]) => 0))
+
+(facts "safe problems are closed, canonical and never retain rejected prose"
+  (let [sanitize (requiring-resolve 'yetibot.models.ai-tool-trace/sanitize-problem)]
+    (sanitize {:stage :arguments :field "options" :code :type :expected :object
+               :remedy "PRIVATE" :execution-began false :source "PRIVATE"})
+    => {:stage :arguments :field "options" :code :type :expected :object
+        :remedy "Use an object." :execution-began false}
+    (doseq [p [{:stage :PRIVATE :field "source" :code :type :execution-began false}
+               {:stage :arguments :field "@everyone\nPRIVATE" :code :type :execution-began false}
+               {:stage :arguments :field "source" :code :PRIVATE :execution-began false}
+               {:stage :arguments :field "source" :code :type :execution-began "false"}]]
+      (fact (sanitize p) => nil))))
+
+(fact "three diagnostic failures survive frozen limits and chronology omission"
+  (let [sanitize (requiring-resolve 'yetibot.models.ai-tool-trace/sanitize-problem)
+        problem (sanitize {:stage :arguments :field "options.*" :code :size
+                           :expected :option-string :execution-began false})
+        state (atom {:calls [] :failures [] :omitted 40 :used 0 :requested 3})
+        snapshot (atom (viewer/initial))]
+    (doseq [n [41 42 43]]
+      (trace/remember-failure! state {:call n :tool (apply str (repeat 64 "x"))
+                                     :outcome :rejected :problem problem
+                                     :provider (apply str (repeat 200 "p"))
+                                     :model (apply str (repeat 200 "m"))
+                                     :operation :inference :http_status 422}))
+    (let [r (trace/report state 20 :invalid-arguments)]
+      (binding [result/*capture* #(viewer/capture! snapshot %)]
+        (result/observe!
+          (public/reviewed {:result/value (trace/summary r)
+                            :result/data {:isError true}
+                            :result/public-error (trace/public-errors r)})))
+      (mapv #(get-in % ["details" "problem" "field"])
+            (get-in @snapshot [:errors 0 "calls"])) => ["options.*" "options.*" "options.*"]
+      (every? #(string/includes? (get % "reason") "2048")
+              (get-in @snapshot [:errors 0 "calls"])) => true
+      (string/includes? (trace/summary r) "execution did not begin") => true)))
+
+(fact "generated discriminator schemas diagnose authored suffixes but wildcard private names"
+  (let [diagnose (requiring-resolve 'yetibot.models.ai-tool-trace/argument-problem)
+        schema (:inputSchema
+                 (get (var-get (requiring-resolve 'yetibot.models.ai-inference-tools/definitions))
+                      "clairic"))
+        p (diagnose schema {"fields" {"PRIVATE" {"type" "number" "decimals" 99}}})]
+    (:field p) => "fields.*.decimals"
+    (:code p) => :range
+    (string/includes? (pr-str p) "PRIVATE") => false))
+
+(facts "generated schema rejection preserves missing and invalid discriminator causes"
+  (let [schema (:inputSchema
+                 (get (var-get (requiring-resolve 'yetibot.models.ai-inference-tools/definitions))
+                      "clairic"))]
+    (doseq [[value field code]
+            [[{"fields" {"PRIVATE" {"type" "boolean"}}} "fields.*.type" :enum]
+             [{"fields" {"PRIVATE" {"decimals" 1}}} "fields.*.type" :required]
+             [{"fields" {"PRIVATE" {"type" "number" "decimals" 99}}} "fields.*.decimals" :range]
+             [{"fields" {"PRIVATE" {"type" "number" "@everyone\n秘密" 99}}} "fields.*.*" :unknown-field]]]
+      (let [p (trace/argument-problem schema value)]
+        (fact (:field p) => field)
+        (fact (:code p) => code)
+        (when (= code :range)
+          (fact (:remedy p) => "Use an integer from 0 through 6."))
+        (fact (boolean (re-find #"PRIVATE|@everyone|秘密" (pr-str p))) => false)))))
+
+(fact "late actionable rejection survives earlier generic failures and omitted chronology"
+  (let [state (atom {:calls [] :omitted 40 :used 3 :requested 1})
+        p {:stage :arguments :field "options" :code :type :expected :object
+           :execution-began false}]
+    (doseq [n [1 2 3]]
+      (trace/remember-failure! state {:call n :outcome :error :code :tool-error}))
+    (trace/remember-failure! state {:call 41 :outcome :rejected :problem p})
+    (let [r (trace/report state 20 :invalid-arguments)]
+      (get-in (trace/public-errors r) [:calls 0 :call]) => 41
+      (string/includes? (trace/failure-message r) "options: Use an object.") => true
+      (string/includes? (trace/summary r) "options: Use an object.") => true)))
+
+(facts "timing projection is closed and bounded independently of tool rows"
+  (let [r (assoc report :stage-timings
+                 [{:stage :planning :elapsed-ms 300000 :source "PRIVATE"}
+                  {:stage :collection :elapsed-ms -1}
+                  {:stage :render :elapsed-ms 7}
+                  {:stage :render :elapsed-ms 20}
+                  {:stage :PRIVATE :elapsed-ms 1}
+                  {:stage :handoff :elapsed-ms 9}]
+                 :planning-responses 3)
+        data (trace/public-report r)]
+    (:stage-timings data) => [{:stage :planning :elapsed-ms 300000}
+                             {:stage :render :elapsed-ms 7}]
+    (:planning-responses data) => 3
+    (string/includes? (pr-str data) "PRIVATE") => false))

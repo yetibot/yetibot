@@ -3,11 +3,10 @@
     [midje.sweet :refer [fact => =not=>]]
     [yetibot.models.imgflip :refer :all]))
 
-(def ms (memes))
-
 (def not-nil? (complement nil?))
 
 (when configured?
+  (def ms (memes))
 
   (fact "it can parse ids from hrefs"
         (parse-id-from-href "/memetemplate/170703314/jocko-eyes") => "170703314"

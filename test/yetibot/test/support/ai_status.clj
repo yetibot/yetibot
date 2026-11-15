@@ -10,6 +10,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.commands.ai]
             [yetibot.commands.grok]
+            [yetibot.core.adapters.adapter :as adapters]
             [yetibot.core.adapters.discord :as discord]
             [yetibot.core.chat :as chat]
             [yetibot.core.commands.grok :as legacy]
@@ -71,7 +72,7 @@
 
 (defn scenario
   "Pump the genuine SDK endpoints on isolated synthetic REST queues."
-  [{:keys [generate missing-lane? status-failure? hold-create hold-edit]}
+  [{:keys [generate provider-options missing-lane? status-failure? hold-create hold-edit]}
    check]
   (let [answer-queue (async/chan 32)
         status-queue (async/chan 32)
@@ -128,7 +129,11 @@
                              {:code 50001} {:id id}))})))))]
     (reset! conn (cond-> {:rest answer-queue}
                    (not missing-lane?) (assoc :status-rest status-queue)))
-    (reset! (:yetibot-user adapter) {:id "status-fixture-bot"})
+    ;; Ready current-source snapshot on this SDK fixture's actual adapter,
+    ;; not a live gateway/start-lifecycle qualification.
+    (reset! (:connected? adapter) true)
+    (reset! (:connection-last-active-timestamp adapter) (System/currentTimeMillis))
+    (reset! (:yetibot-user adapter) {:id "status-fixture-bot" :yetibot? true})
     (binding [*fixture* true]
       (with-redefs
         [http/post (partial request! :post)
@@ -142,8 +147,9 @@
              (apply (:config originals) args)))
          ai/config
          (fn [] (if *fixture*
-                  {:providers [{:name "grok" :model model
-                                :url "http://status-fixture.invalid/v1"}]}
+                  {:providers [(merge {:name "grok" :model model
+                                        :url "http://status-fixture.invalid/v1"}
+                                       provider-options)]}
                   ((:ai originals))))
          tools/complete
          (fn [p m messages options]
@@ -178,7 +184,11 @@
              (deliver (promise) {:id (nth args 2) :type 11
                                  :parent-id (second args)})
              (apply (:create-thread originals) args)))
-         users/users (atom {})]
+         adapters/adapters (atom (assoc @adapters/adapters "status-fixture-adapter" adapter))
+         users/users (atom {{:adapter :discord :id "status-fixture-user"}
+                            {:id "status-fixture-user" :username "synthetic"}
+                            {:adapter :discord :id "status-fixture-bot"}
+                            @(:yetibot-user adapter)})]
         (let [pump (fn [lane queue]
                      (async/thread
                        (binding [*lane* lane]

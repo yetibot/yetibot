@@ -32,9 +32,9 @@
             "ai limits --max-output-tokens 65536 --max-tool-calls 40")
           @limits/runtime => {:max-output-tokens 65536 :max-tool-calls 40}
           @calls => []
-          (execution/run-command execution/request "ai --no-tools hello")
+          (execution/run-registered-command execution/request "ai --no-tools hello")
           (:max-output-tokens (last @calls)) => 65536
-          (let [result (execution/run-command execution/request
+          (let [result (execution/run-registered-command execution/request
                          "ai --no-tools --max-output-tokens 131072 hello")]
             (:max-output-tokens (last @calls)) => 131072
             (get-in result [:data :ai/limits])

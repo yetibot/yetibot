@@ -4,7 +4,14 @@
             [clojure.spec.alpha :as s]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.commands.ai]
+            [yetibot.models.ai-tools :as tools]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.test.support.mcp :as support]
             [yetibot.core.chat :as chat]
+            [yetibot.core.util.ai-usage :as usage]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.core.config :as config]
             [yetibot.models.ai-context :as context])
   (:import [com.sun.net.httpserver HttpServer HttpHandler]
@@ -127,3 +134,172 @@
           (mapv :path @requests)
           => ["/custom/v1/models" "/custom/v1/chat/completions" "/slack/conversations.replies" "/redirect/models"]))
       (finally (.stop server 0)))))
+
+
+(fact "actual prepared chat and Responses wire facts precede each physical send"
+  (doseq [api [nil "responses"]]
+    (let [p (cond-> (assoc provider :url "https://routed.invalid/private/v1/")
+              api (assoc :api api))
+          admissions (atom []) wires (atom [])
+          response (if api {:status "completed" :output [{:type "message"
+                                    :content [{:type "output_text" :text "answer"}]}]}
+                       {:choices [{:message {:role "assistant" :content "answer"}}]})]
+      (with-redefs [client/post (fn [url opts]
+                                 (swap! wires conj [url (:form-params opts)])
+                                 (count @admissions) => (count @wires)
+                                 {:status 200 :body response})]
+        (binding [usage/*admit-inference* #(do (swap! admissions conj %) {:ordinal 1})
+                  usage/*finish-inference* (fn [_ _])]
+          (ai/chat p "chat" messages {:max-output-tokens 91}) => response)
+        (select-keys (first @admissions) [:provider :model :provider-signature :output-cap])
+        => {:provider "example" :model "chat"
+            :provider-signature (execution/provider-signature p) :output-cap 91}
+        (:endpoint (first @admissions)) => (ffirst @wires)
+        (get-in @wires [0 1 (if api :max_output_tokens :max_completion_tokens)]) => 91
+        (binding [usage/*admit-inference* (fn [_] (throw (ex-info "denied" {})))]
+          (ai/chat p "other" messages {:max-output-tokens 91})) => (midje.sweet/throws Exception)
+        (count @wires) => 1
+        (boolean (re-find #"secret" (pr-str (first @admissions)))) => false))))
+
+(fact "installed host raw SDK Responses preserves native and function wire definitions and valid root caps"
+  (let [requests (atom []) admissions (atom [])
+        response {:status "completed" :output [{:type "message" :content [{:type "output_text" :text "bounded"}]}]}
+        function {:type "function" :function {:name "wire_only" :description "Not a host tool"
+                                               :parameters {:type "object" :properties {}}}}]
+    (support/with-http-server
+      (fn [request]
+        (swap! requests conj request)
+        (fact (count @admissions) => (count @requests))
+        {:body response})
+      (fn [url]
+        (let [p {:name "raw-sdk" :url (str url "/v1") :api "responses"
+                 :native-tools ["web_search" "x_search"]}]
+          (with-redefs [config/get-config (constantly {:error :not-found})
+                        mcp/config (constantly {:servers []})]
+            (fact (origin/host-active?) => true)
+            (binding [usage/*admit-inference* #(do (swap! admissions conj %) nil)]
+              (doseq [cap [2048 120 65536 262144]]
+                (fact (ai/chat p "model" messages {:tools [function] :max-output-tokens cap}) => response))
+              (fact (ai/chat p "model" messages {:tools [function] :tool_choice "none"}) => response))
+            (fact (mapv #(get-in % [:body :max_output_tokens]) @requests) => [2048 120 65536 262144 32768]
+                  (get-in @requests [0 :body :tools])
+                  => [{:type "web_search"} {:type "x_search"} (assoc (:function function) :type "function")]
+                  (get-in @requests [4 :body :tools]) => [])
+            (doseq [cap [0 -1 262145 "65536" 1.5]]
+              (fact (ai/chat p "model" messages {:max-output-tokens cap}) => (midje.sweet/throws Exception)))
+            (fact (count @requests) => 5)))))))
+
+(fact "installed host raw SDK progress cannot execute host work or reset its live finite Context"
+  (let [requests (atom []) captured (atom nil) progress (atom 0)
+        response {:status "completed" :output [{:type "message" :content [{:type "output_text" :text "bounded"}]}]}
+        write! (fn [out event]
+                 (.write ^java.io.OutputStream out (.getBytes (str "data: " (json/generate-string event) "\n\n") "UTF-8"))
+                 (.flush ^java.io.OutputStream out))]
+    (support/with-http-server
+      (fn [request]
+        (swap! requests conj request)
+        (if (get-in request [:body :stream])
+          {:stream (fn [out]
+                     (write! out {:type "response.output_item.done" :output_index 0 :item (first (:output response))})
+                     (write! out {:type "response.completed" :response response}))}
+          {:body response}))
+      (fn [url]
+        (let [p {:name "raw-progress" :url (str url "/v1") :api "responses" :native-tools ["web_search"]}]
+          (with-redefs [config/get-config (constantly {:error :not-found})
+                        mcp/config (constantly {:servers []})]
+            (fact
+              (ai/chat p "model" messages
+                {:max-tool-calls 2 :max-output-tokens 91
+                 ;; Serialized options cannot turn a wire schema into rights.
+                 :no-host-execution? false :actor {:user "admin"} :transport-capability true
+                 :on-progress
+                 (fn [_]
+                   (when (= 1 (swap! progress inc))
+                     (reset! captured origin/*context*)
+                     (fact (origin/capability? @captured) => true
+                           (execution/admissions execution/*request*)
+                           => {:limit 2 :admitted 1 :reserved 0 :remaining 1})
+                     (doseq [[action args] [[:start [{:match ["agent run work" "work"]}]] [:execute-command [{:match ["echo work" "echo work"]}]] [:admit-command [{:cmd "echo" :args "work"}]]]]
+                       (fact (apply origin/invoke! @captured action args) => (midje.sweet/throws Exception)))
+                     (fact (tools/complete p "model" messages) => (midje.sweet/throws Exception))
+                     (doseq [[changed model options] [[(assoc p :url (str url "/other")) "model" {}]
+                                                       [(assoc p :native-tools ["x_search"]) "model" {}]
+                                                       [p "other-model" {}]
+                                                       [p "model" {:max-output-tokens 92}]
+                                                       [(assoc p :url (str url "/other")) "model"
+                                                        {:producer-operation? true :non-chat? true :no-tools false}]]]
+                       (fact (ai/chat changed model messages options) => (midje.sweet/throws Exception)))
+                     (let [resolutions (atom 0) resolve-provider ai/resolve-provider]
+                       (with-redefs [ai/resolve-provider
+                                     (fn [provider] (swap! resolutions inc) (resolve-provider provider))]
+                         (fact (ai/complete (assoc p :url (str url "/other") :key-file "/unread/key")
+                                            "model" messages {:producer-operation? true})
+                               => (midje.sweet/throws Exception)
+                               @resolutions => 0)))
+                     ;; Losing only the app binding must recover the SAME core
+                     ;; family, not mint another root or larger generation cap.
+                     (binding [execution/*request* nil]
+                       (fact (ai/chat p "model" messages {:max-output-tokens 91}) => response
+                             (ai/chat p "model" messages {:max-output-tokens 91}) => (midje.sweet/throws Exception)))
+                     (fact (execution/admissions execution/*request*)
+                           => {:limit 2 :admitted 2 :reserved 0 :remaining 0})))})
+              => response
+              (count @requests) => 2
+              (pos? @progress) => true)
+            (binding [execution/*request* nil origin/*context* @captured]
+              (fact (ai/chat p "model" messages {}) => (midje.sweet/throws Exception)))
+            (binding [origin/*context* {:callbacks {:transport true}}]
+              (fact (ai/chat p "model" messages {}) => (midje.sweet/throws Exception)))
+            (fact (count @requests) => 2)))))))
+
+(fact "installed host raw SDK configured identity revocation and malformed configuration fail before credential or wire IO"
+  (let [requests (atom []) credentials (atom 0)
+        p {:name "configured-sdk" :url "http://127.0.0.1:9/v1" :model "model" :key-file "/unread/fixture-key"}
+        resolve-provider ai/resolve-provider]
+    (with-redefs [mcp/config (constantly {:servers []})
+                  ai/config (constantly {:providers [p]})
+                  ai/resolve-provider (fn [provider] (swap! credentials inc) (resolve-provider provider))
+                  client/post (fn [& _] (swap! requests conj :forbidden))]
+      (doseq [changed [(assoc p :url "http://127.0.0.1:9/changed")
+                       (assoc p :api "responses")
+                       (assoc p :native-tools ["web_search"])]]
+        (fact (ai/chat changed "model" messages {}) => (midje.sweet/throws Exception)))
+      (fact @credentials => 0 @requests => [])
+      (with-redefs [ai/config (fn [] (throw (ex-info "Malformed fixture configuration" {})))
+                    config/get-config (constantly {:error :invalid})]
+        (fact (ai/complete p "model" messages) => (midje.sweet/throws Exception)))
+      (fact @credentials => 0 @requests => []))))
+
+(fact "installed host raw SDK cannot reclassify revoked configured sources or reuse unknown Contexts"
+  (doseq [mode [:revoked :policy :unknown]]
+    (let [requests (atom []) checks (atom 0)
+          response {:status "completed" :output [{:type "message" :content [{:type "output_text" :text "bounded"}]}]}
+          write! (fn [out event]
+                   (.write ^java.io.OutputStream out (.getBytes (str "data: " (json/generate-string event) "\n\n") "UTF-8"))
+                   (.flush ^java.io.OutputStream out))]
+      (support/with-http-server
+        (fn [request]
+          (swap! requests conj request)
+          {:stream (fn [out]
+                     (write! out {:type "response.output_item.done" :output_index 0 :item (first (:output response))})
+                     (write! out {:type "response.completed" :response response}))})
+        (fn [url]
+          (let [p {:name "configured-live-sdk" :url (str url "/v1") :api "responses"}
+                providers (atom [p]) policy (atom {:servers []})
+                send! #(ai/chat p "model" messages
+                         {:on-progress
+                          (fn [_]
+                            (when (= 1 (swap! checks inc))
+                              (case mode
+                                :revoked (reset! providers [])
+                                :policy (reset! policy {:servers [] :toolsets [{:name "restricted" :users ["other"]}]})
+                                :unknown (execution/finish-operation! origin/*operation* {:state :unknown}))
+                              (binding [execution/*request* nil]
+                                (fact (ai/chat p "model" messages {}) => (midje.sweet/throws Exception)))))} )]
+            (with-redefs [ai/config (fn [] {:providers @providers})
+                          mcp/config (fn [] @policy)]
+              (if (= mode :unknown)
+                (fact (send!) => (midje.sweet/throws Exception))
+                (fact (send!) => response))
+              (fact (pos? @checks) => true
+                    (count @requests) => 1))))))))

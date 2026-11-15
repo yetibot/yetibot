@@ -12,9 +12,7 @@
             ;; Require before registering our hook: the loader may encounter
             ;; core before or after this namespace, but require is idempotent.
             [yetibot.core.commands.grok :as legacy]
-            [yetibot.core.config :refer [get-config]]
             [yetibot.core.hooks :refer [cmd-hook]]
-            [yetibot.core.util.xai :as xai]
             [yetibot.core.util.public-result :as public]
             [yetibot.util.ai-execution :as execution]
             [yetibot.util.ai-cost :as cost]
@@ -190,24 +188,13 @@
                 (assoc :result/public-error (:result/public-error result)))
               {}))))))))
 
-(defn- grok-config []
-  (let [config (if (= :not-found (:error (get-config map? [:ai])))
-                 {:providers []}
-                 (api/config))
-        key (:key xai/config)]
-    (if (and (not-any? #(= "grok" (:name %)) (:providers config))
-             (api/nonblank-string? key))
-      (update config :providers conj
-              {:name "grok" :url "https://api.x.ai/v1" :key key
-               :model "grok-4.7" :api "responses"
-               :native-tools ["web_search" "x_search"]})
-      config)))
+(defn- grok-config [] (api/grok-config))
 
 (defn- execute-prepared [args prepared]
   (let [event (get-in args [:chat-source :raw-event])
         channel-id (or (:channel-id event) chat/*target*)
         message-id (:id event)]
-    (if (and (legacy/discord?) channel-id message-id)
+    (if (and (not execution/*command-capture*) (legacy/discord?) channel-id message-id)
       (in-discord prepared args channel-id)
       (generate prepared))))
 

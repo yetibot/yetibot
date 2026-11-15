@@ -13,7 +13,17 @@
 
 (defn complete
   "complete <phrase> # complete phrase from Google Complete"
-  {:test #(complete {:args "why does"})}
+  {:test (fn []
+           (let [requests (atom [])
+                 xml "<toplevel><CompleteSuggestion><suggestion data=\"why does testing help?\"/></CompleteSuggestion><CompleteSuggestion><suggestion data=\"why does XML preserve &amp; characters?\"/></CompleteSuggestion></toplevel>"
+                 suggestions (with-redefs [fetch (fn [url]
+                                                   (swap! requests conj url)
+                                                   xml)]
+                               (vec (complete {:args "why does"})))]
+             (assert (= [(str endpoint (encode "why does"))] @requests))
+             (assert (= ["why does testing help?"
+                         "why does XML preserve & characters?"]
+                        suggestions))))}
   [{phrase :args}]
   (->> (encode phrase)
        (str endpoint)

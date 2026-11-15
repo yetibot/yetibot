@@ -1,9 +1,10 @@
 (ns yetibot.models.ai-native-tools
-  "Structured native capabilities, never a command interpreter."
+  "Structured native capabilities with host-owned caller authorization."
   (:require [cheshire.core :as json]
             [clojure.string :as string]
             [yetibot.api.ai :as ai]
             [yetibot.core.models.help :as help]
+            [yetibot.models.ai-data-tools :as data-tools]
             [yetibot.models.ai-alias-tools :as aliases]
             [yetibot.models.ai-cron-tools :as cron]
             [yetibot.models.ai-history :as history]
@@ -125,7 +126,9 @@
         wise-tools (wise/available-tools)
         defaults (cond-> toolsets/default-native-tools
                    (not (toolsets/github? t))
-                   (into (concat (media/available-tools)
+                   (into (concat ["command"]
+                                 (when (seq (kroki/available-tools)) ["chart"])
+                                 (media/available-tools)
                                  (inference/available-tools)
                                  (models/available-tools) wise-tools
                                  (react/available-tools)
@@ -139,10 +142,13 @@
       (empty? wise-tools) (filterv #(not= "wise" %))
       (empty? (react/available-tools)) (filterv #(not= "react" %))
       (empty? (kroki/available-tools))
-      (filterv #(not (contains? kroki/definitions %))))))
+      (filterv #(not (or (= "chart" %) (contains? kroki/definitions %)))))))
 
 (defn- adapter [config operation]
   (cond
+    (contains? data-tools/definitions operation)
+    {:definition (get data-tools/definitions operation)
+     :arguments data-tools/arguments! :call data-tools/call!}
     (contains? kroki/definitions operation)
     {:definition (get kroki/definitions operation)
      :arguments kroki/arguments! :call kroki/call!}
@@ -212,7 +218,13 @@
                        (policy/authorize! (:toolset config) actor
                                           provider model)
                        (if-let [call (:call capability)]
-                         (call config operation args source)
+                         (if (= operation "wise")
+                           (let [{:keys [result datasets problems]}
+                                 (data-tools/observe config #(call config operation args source))]
+                             (cond-> result
+                               (seq datasets) (assoc-in [:structuredContent :datasets] datasets)
+                               (seq problems) (assoc-in [:structuredContent :problems] problems)))
+                           (call config operation args source))
                          (cond
                            (= operation "help")
                            {:structuredContent (help-result args)}

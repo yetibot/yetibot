@@ -103,6 +103,71 @@ strings. The host delivers generated media independently of the model's prose,
 with structured artifact data and reviewed Kroki error diagnostics. See
 [Kroki commands, native tools and release ordering](KROKI.md).
 
+## Command data charts
+
+Trusted general/search requests advertise `command` and, when the Kroki client is
+available, `chart`. Explicit `:native-tools` lists remain authoritative: add
+`"command"`/`"chart"` to opt in. Empty lists, GitHub-only scopes, untrusted HTTP
+callers and `--no-tools` do not acquire these capabilities.
+
+For example, `!ai Chart temps as a temperature comparison` can execute the actual
+`temps` alias and chart its structured observations. The valid known-alias path
+uses two planning responses and one render, with no summary model turn. Supplied
+structured pipeline input can be charted directly. The host delivers its coverage
+caption and actual artifact even when model prose omits the URL; model image
+placeholders are not artifact evidence.
+
+`command` runs one literal Yetibot expression through the normal parser,
+interpreter, aliases and permissions as the original caller. **All authorized
+commands, including writes, run automatically** without a new AI confirmation or
+per-command allowlist. Existing admin, category, source and original-direct AI
+control restrictions still apply. A five-second timeout can leave effects
+uncertain: the host does not replay collection or writes to repair a chart.
+Nested command-driven AI shares the original tool allowance, generation ceiling,
+actor and toolset; it cannot reset budgets, change global AI controls or publish a
+duplicate child status/answer. Built-in defaults remain **32768/20**.
+
+Host-code `yetibot.api.ai/chat` and `complete` also use a live, finite transport
+family when the application host is installed. Explicit provider records need
+not be registered, but remain subject to applicable original/current policy,
+actual endpoint/model/output-cap admission and the **262144/128** ceilings.
+Vendor-native and function wire definitions do not grant host tool execution.
+This transport cannot execute commands, discover/call host MCP tools, create
+agent jobs or transfer durable allowance; an inherited Context keeps its own
+identity, remaining allowance and lifetime instead of creating a fresh root.
+
+Unauthenticated HTTP plaintext requests still select configured provider names,
+never arbitrary URLs or credential records. They acquire no actor or host tool
+rights. Operator-configured vendor-native wire defaults remain available where
+policy allows; explicit `--no-tools` removes them as well as function/MCP tools,
+without changing the frozen planner identity or bypassing current policy.
+
+Datasets exist only for the live root request: at most eight, 2 MiB total, 10,000
+rows each and 64 fields. The model sees opaque handles, checked field types/units,
+coverage and at most five redacted preview rows, not a requirement to copy all
+values into chart source. Every retained row is compiled; oversize data/source is
+refused, never silently sampled. Generic upstream completeness is unknown;
+failed locations and missing measurements stay explicit. A known chart validation
+failure gets at most one chart-only correction using the same data. Rendering
+failure/uncertainty does not trigger a retry. Handles expire and private rows are
+cleared when the root request finishes, including failures.
+
+Wise charts reuse the entire already-validated statement, even when ordinary
+command/native display is limited to 20 rows. No extra statement request or
+invented paging/baseline is used. Current balances are snapshots; historical
+lines require complete authoritative same-currency running-balance points.
+Internal moves are not automatically income/spending, fees are not deducted
+again, and unlike currencies use separate scales. See [Kroki](KROKI.md).
+
+Chart values, **including financial data**, automatically use the configured
+renderer (currently public Kroki by default) and public temporary artifact URLs;
+there is no privacy confirmation. Configured credentials and sensitive selected
+fields remain blocked/redacted. This is not a universal secret detector. Safe
+field-level errors explain what to change without exposing rejected arguments,
+command/source text or private transport errors. Bounded execution timings
+separate planning, collection, preparation, rendering and host handoff; handoff
+is not proof of Discord delivery or live-provider latency.
+
 ## Configuration
 
 Add `:ai` inside `:yetibot` in `config/config.edn` (or your `CONFIG_PATH` file):
@@ -1047,7 +1112,8 @@ percent regardless of display units. These `current` fields are the **root**
 fields available to `weather ... | render {{temp}}°C {{city_name}}`; do not
 put `current.` in that command's template. AQI may be unavailable. A failed
 lookup reports unavailable weather, never a fabricated or historical reading.
-This does not grant a general command interpreter or execute templates/aliases.
+The `weather` capability itself does not execute templates/aliases; the separate
+`command` capability uses normal caller authorization as described above.
 
 The `cron` tool accepts `action` (`list`, `get`, `create`, `update`, `delete`;
 default `list`). All access is scoped to the requesting adapter/channel, never
@@ -1557,7 +1623,9 @@ entries, not Yetibot's full environment or its other API keys.
   accepts 1–128 as a legacy startup default. The built-in fallback is **20**.
   This total host invocation budget spans selected MCP servers, native tools,
   batches and parent-model turns, not nesting depth or a per-round allowance.
-  A stateless delegated child counts as one host call.
+  A stateless delegated child counts as one host call. Command-driven nested
+  inference entries also consume the original allowance; child tool loops cannot
+  start fresh budgets or widen the active toolset.
 - Leading `ai --max-tool-calls N` and `grok --max-tool-calls N` choose a strict
   integer 1–128, overriding runtime/startup defaults. Named toolset selection
   narrows access; it does not grant additional calls or permissions. There is no
@@ -2180,3 +2248,72 @@ sending a partial conversation or silently dropping context.
 History is not silently shortened. Very long threads may exceed the selected
 model's context limit; the provider's HTTP error is reported. Provider errors do
 not expose API keys, request headers or provider response bodies.
+
+### Inherited persistent execution (integration qualification pending)
+
+A model-derived executable expression retains its finite source family through
+aliases, formatting, subexpressions and `xargs`. Actual model sends and host tool
+admissions share that family; source planning sends are included. The defaults
+remain **32768 output tokens and 20 host admissions**, with the existing
+262144/128 ceilings. Tool counts, host admissions and durable reservations are
+separate measurements: reserving unused allowance is not spending it.
+
+An inherited `agent` uses the app's existing continuation loop, **not Gemini
+CLI**. A compatible native text source retains its actual transport and model,
+even when it is configured only in the core helper rather than `ai.providers`.
+An image/media/classifier source records its producer separately and selects a
+permitted configured default text planner **before the first source request**;
+missing or forbidden configuration stops before IO, not by trying a fallback.
+Its receipt means accepted/queued, not completed collection or a delivered chart. Persistence transfers unused allowance once;
+restarts, recurring ticks and later edits of an inherited schedule do not grant
+another default allocation. Both core cron writes and native schedule management
+use the published transactional origin seam. Legacy null-kind agent jobs and
+compatibility schedules retain their legacy classification, not an assertion
+that their old synthetic/nil caller is authenticated. Genuine human-literal
+`agent` actions, including an explicit literal action receiving piped report
+data, retain the existing CLI branch, model and process settings.
+
+A `--no-tools` source may continue through generated `ai` or queue an `agent`
+for text only, with the same planner, cap and remaining allocation. Its frozen
+empty host-native/MCP/command ceiling cannot be repopulated by a nested call or
+broader current configuration. Generated generic effects, computed `agent run`
+and provider/model switching do not gain authority from that text. This does
+not disable a native provider's existing built-in search behavior; host tools
+and provider-internal work are different controls.
+
+Restored execution resolves the registered connected adapter, current users,
+current policy and provider configuration. Model results, HTTP EDN and stored
+conversation data cannot supply a live capability or direct-control rights.
+Unknown effects and delivery-started uncertainty are non-replayable. Slack and
+Discord's existing return contracts do not prove whole-response delivery;
+nonthrowing sends are still unconfirmed. Retained artifacts must remain in the
+trusted in-memory store; expiration is a limitation, not permission to collect
+or render again.
+
+These are host admission and request-field controls, not a monetary guarantee or
+a bound on all provider/MCP internal work. In particular, xAI Responses
+`max_output_tokens` caps visible output, not reasoning or function-call work.
+Gemini's actual inherited GenerateContent request uses
+`generationConfig.maxOutputTokens` and one candidate; the default image model's
+thinking/image-specific enforcement remains unqualified. Typed Cloudflare
+classifiers and media starts have schema/image/duration resource facts, not
+invented text-token support. No paid inference or live-latency qualification is
+claimed. The existing automatic public Kroki/temporary bearer-URL financial
+sharing path and credential protections are unchanged.
+
+This integration is not yet qualified for shipping: activation across the
+direct-only autodraft intent router, remaining qualification and fresh
+independent whole-feature review remain pending. The router currently precedes
+the ordinary `ai` source entry; its classifier/effect boundary must be included
+in the same finite family before claiming complete public activation. No
+completion claim here supersedes those acceptance requirements.
+
+Inherited recurring schedules retain their enclosing tick fence during delivery.
+With the current Slack/Discord adapters, even a nonthrowing send is unconfirmed:
+the first delivery attempt therefore leaves the schedule unknown and stops later
+automatic occurrences. Spent/reserved allowance is retained; neither the command
+nor its send is replayed. Rewiring or editing that schedule does not clear this
+uncertainty. Human-literal legacy schedules keep their existing behavior.
+Legacy unauthenticated HTTP `ai --no-tools` plaintext remains finite and permitted
+only by the original/current provider policy; it grants no chat actor, generated
+command, durable agent, native-tool, or direct-control authority.

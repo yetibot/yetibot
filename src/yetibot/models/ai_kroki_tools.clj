@@ -6,7 +6,9 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.core.util.public-result :as public]
+            [yetibot.models.ai-datasets :as datasets]
             [yetibot.models.ai-tool-policy :as policy]
+            [yetibot.models.ai-tool-trace :as trace]
             [yetibot.util.ai-execution :as execution]))
 
 (defn available-tools []
@@ -61,26 +63,74 @@
 (defn- render-request [args]
   (into {} (map (fn [[k v]] [(keyword k) v])) args))
 
+(defn- render-problem [args]
+  (let [problem (fn [field code expected]
+                  (trace/sanitize-problem
+                    {:stage :arguments :field field :code code :expected expected
+                     :execution-began false}))
+        source (get args "source")
+        options (get args "options")]
+    (or
+      (when (and (contains? args "type") (string? (get args "type"))
+                 (not (type? (get args "type"))))
+        (problem "type" :format :engine-name))
+      (when (and (contains? args "format") (some? (get args "format"))
+                 (not (contains? #{"auto" "png" "svg" "jpeg" "pdf" "txt" "utxt" "base64"}
+                                 (get args "format"))))
+        (problem "format" :enum :render-format))
+      (when (and (string? source)
+                 (or (str/blank? source)
+                     (> (alength (.getBytes ^String source "UTF-8")) 262144)))
+        (problem "source" :size :source-bytes))
+      (when (map? options)
+        (or
+          (when (> (count options) 32) (problem "options" :size :options-count))
+          (some (fn [[k v]]
+                  (cond
+                    (not (and (string? k) (re-matches #"[A-Za-z][A-Za-z0-9_-]{0,63}" k)))
+                    (problem "options.*" :format :option-name)
+                    (and (string? v) (> (count v) 2048))
+                    (problem "options.*" :size :option-string)
+                    (not (or (boolean? v) (string? v)
+                             (and (number? v) (Double/isFinite (double v)))))
+                    (problem "options.*" :type :scalar))) options)))
+      (trace/argument-problem (get-in definitions ["kroki_render" :inputSchema]) args))))
+
 (defn arguments! [config operation args]
-  (when-not (map? args) (invalid!))
-  (case operation
-    "kroki_types"
-    (when-not (and (every? #{"type" "after" "limit"} (keys args))
-                   (every? #(or (not (contains? args %)) (type? (get args %)))
-                           ["type" "after"])
-                   (or (not (contains? args "limit"))
-                       (and (integer? (get args "limit")) (<= 1 (get args "limit") 50))))
-      (invalid!))
-    "kroki_render"
-    (do
-      (when-not (and (every? #{"type" "source" "format" "options"} (keys args))
-                     (type? (get args "type")) (ai/nonblank-string? (get args "source")))
+  (try
+    (when-not (map? args) (invalid!))
+    (case operation
+      "kroki_types"
+      (when-not (and (every? #{"type" "after" "limit"} (keys args))
+                     (every? #(or (not (contains? args %)) (type? (get args %)))
+                             ["type" "after"])
+                     (or (not (contains? args "limit"))
+                         (and (integer? (get args "limit")) (<= 1 (get args "limit") 50))))
         (invalid!))
-      (when-not (= args (walk/postwalk #(if (string? %) (mcp/redact % config) %) args))
-        (ai/fail "Diagram source/options contain configured credentials."))
-      (client-call "validate-render!" (render-request args)))
-    (invalid!))
-  args)
+      "kroki_render"
+      (do
+        (when-not (and (every? #{"type" "source" "format" "options"} (keys args))
+                       (type? (get args "type")) (ai/nonblank-string? (get args "source")))
+          (invalid!))
+        (when (or (not= args (walk/postwalk #(if (string? %) (mcp/redact % config) %) args))
+                  (and (:dataset-store config)
+                       (datasets/credential-input? (:dataset-store config) nil args)))
+          (throw (ex-info "Diagram input contains configured credentials."
+                          {:ai/error true :ai/error-code :credential-input
+                           :ai/problem {:stage :arguments :field "*" :code :credential-input
+                                        :execution-began false}})))
+        (client-call "validate-render!" (render-request args)))
+      (invalid!))
+    args
+    (catch Exception e
+      (let [problem (or (trace/sanitize-problem (:ai/problem (ex-data e)))
+                        (if (and (= operation "kroki_render") (map? args))
+                          (render-problem args)
+                          (trace/argument-problem (get-in definitions [operation :inputSchema]) args)))]
+        (throw (ex-info "Invalid Kroki tool arguments."
+                        (cond-> {:ai/error true :ai/problem problem}
+                          (= :credential-input (:code problem))
+                          (assoc :ai/error-code :credential-input))))))))
 
 (defn call! [config operation args source]
   (try
@@ -123,5 +173,9 @@
             (when (and (= operation "kroki_render") (:kroki-artifacts config))
               (swap! (:kroki-artifacts config) conj data))
             {:structuredContent (assoc data :untrusted true)}))))
-    (catch Exception _
-      {:isError true :structuredContent {:error "Kroki could not complete this request."}})))
+    (catch Exception e
+      {:isError true
+       :structuredContent
+       (cond-> {:error "Kroki could not complete this request."}
+         (:ai/problem (ex-data e))
+         (assoc :problem (trace/sanitize-problem (:ai/problem (ex-data e)))))})))

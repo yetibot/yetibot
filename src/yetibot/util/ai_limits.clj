@@ -1,7 +1,8 @@
 (ns yetibot.util.ai-limits
   "Host-owned generation and tool budgets; runtime overrides hold numbers only."
   (:require [yetibot.core.config :refer [get-config]]
-            [yetibot.util.ai-config :as settings]))
+            [yetibot.util.ai-config :as settings]
+            [yetibot.util.ai-execution :as execution]))
 
 (def defaults {:max-output-tokens 32768 :max-tool-calls 20})
 (def ceilings {:max-output-tokens 262144 :max-tool-calls 128})
@@ -45,13 +46,14 @@
                   (assoc :max-tool-calls (get-in config [:mcp :max-tool-calls])))
          values (merge defaults (select-keys config (keys defaults))
                        @runtime (select-keys options (keys defaults)))]
-     (into {} (map (fn [[field value]]
+     (execution/clamp-budgets
+      (into {} (map (fn [[field value]]
                      (let [n (request! field value)]
                        (when-not n
                          (throw (ex-info "AI budget cannot be empty."
                                          {:ai/error true
                                           :ai/request-not-sent true})))
-                       [field n])) values)))))
+                       [field n])) values))))))
 
 (defn public-values [values]
   {:generation_limit (:max-output-tokens values)

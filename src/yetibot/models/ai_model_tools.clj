@@ -50,13 +50,24 @@
                          (or (nil? (:model provider))
                              (:ai/free-default provider))
                          (not (contains? args "model")))
-         _ (when automatic? (policy/authorize-provider! t actor provider))
+         _ (when automatic?
+             (policy/authorize-provider! t actor provider)
+             (when execution/*command-capture*
+               (policy/authorize-provider! (:toolset-policy execution/*request*) actor provider)))
+         ready (when (and resolve? (= (:name provider) (get-in execution/*request* [:planner-provider :name]))
+                          (= (:planner-model execution/*request*)
+                             (::opencode/selected-model (:planner-provider execution/*request*))))
+                 (:planner-provider execution/*request*))
          model (if automatic?
                  (when resolve?
-                   (ai/default-model provider
-                     #(policy/model-allowed? t actor provider %)))
+                   (or (when (and ready (= "free" (get-in ready [::opencode/pricing :kind])))
+                         (:planner-model execution/*request*))
+                       (ai/default-model provider
+                         #(and (policy/model-allowed? t actor provider %)
+                               (or (not execution/*command-capture*)
+                                   (policy/model-allowed? (:toolset-policy execution/*request*) actor provider %))))))
                  (or (get args "model") (:model provider)))
-         provider (cond-> provider
+         provider (cond-> (if (and ready (= model (:planner-model execution/*request*))) ready provider)
                     (and automatic? resolve? model)
                     (assoc :ai/verified-free true))]
      (when (and (= "cf" operation) (not (cf/provider-account provider)))
@@ -64,7 +75,9 @@
                 :configuration-unavailable))
      (when (or model (not automatic?))
        (when-not (text? model 200) (invalid!))
-       (policy/authorize! t actor provider model))
+       (policy/authorize! t actor provider model)
+       (when execution/*command-capture*
+         (policy/authorize! (:toolset-policy execution/*request*) actor provider model)))
      [provider model])))
 
 (defn- generation-budget [config]
@@ -330,8 +343,17 @@
     (try
       (trusted! config source)
       (arguments! config operation args)
-      (let [action (get args "action")]
-        (cond
+      (let [action (get args "action")
+            [raw model] (when (= "ask" action) (selected config operation args))]
+        (if (and (= "ask" action) (opencode/provider? raw) (nil? execution/*request*))
+          (execution/with-source*
+            (merge (limits/effective config)
+                   {:provider raw :model model :no-tools true :single-hop? true
+                    :toolset (get-in config [:toolset :name])
+                    :toolset-policy (:toolset config)
+                    :max-output-tokens (get args "max_output_tokens" (generation-budget config))})
+            #(invoke! config operation args source read-messages))
+          (cond
           (= "defaults" action)
           {:structuredContent (assoc (defaults/view) :untrusted true)}
           (= "reset_default" action)
@@ -395,9 +417,6 @@
                       allowance (get args "max_output_tokens"
                                      (generation-budget config))
                       _ (when record (capacity/check! record allowance))
-                      messages (if read-messages (read-messages)
-                                 [{:role "user" :content (get args "prompt")}])
-                      _ (credential-input! redactions messages)
                       p (cond-> (ai/prepare-provider p model)
                           record (assoc ::capacity/model record))
                       _ (when-let [record (::capacity/model p)]
@@ -405,23 +424,34 @@
                       _ (trusted! config source)
                       _ (policy/authorize! (:toolset config)
                           (policy/actor execution/*event*) p model)
-                      _ (reset! attempted? true)
-                      result (binding [cost/*role* (if read-messages
-                                                    :parent :delegated)]
-                               (ai/complete
-                                 (assoc p :native-tools []) model messages
-                                 {::diagnostics/stage :delegation
-                                  :tools [] :tool_choice "none"
-                                  :max-output-tokens
-                                  (get args "max_output_tokens"
-                                       (generation-budget config))}))]
+                      result
+                      (execution/with-source*
+                        (merge (limits/effective config)
+                               {:provider p :model model :no-tools true :single-hop? true
+                                :toolset (get-in config [:toolset :name])
+                                :max-output-tokens allowance})
+                        (fn []
+                          ;; Context/history reads need the same current caller
+                          ;; as the subsequent send, not merely a copied actor.
+                          (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+                            (reauthorize))
+                          (let [messages (if read-messages (read-messages)
+                                           [{:role "user" :content (get args "prompt")}])]
+                            (credential-input! redactions messages)
+                            (reset! attempted? true)
+                            (binding [cost/*role* (if read-messages :parent :delegated)]
+                              (ai/complete
+                                (assoc p :native-tools []) model messages
+                                {::diagnostics/stage :delegation
+                                 :tools [] :tool_choice "none"
+                                 :max-output-tokens allowance})))))]
                   {:structuredContent
                    (cond-> (project p model (:result/value result) redactions)
                      (get-in result [:result/data :ai/cost])
                      (assoc :ai/cost (get-in result [:result/data :ai/cost]))
                      (get-in result [:result/data :ai/accounting])
                      (assoc :ai/accounting
-                            (get-in result [:result/data :ai/accounting])))}))))))
+                            (get-in result [:result/data :ai/accounting])))})))))))
       (catch Exception e
         (let [data (ex-data e)
               output-error (:ai/output-error data)

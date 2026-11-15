@@ -62,6 +62,31 @@ Raster previews remain inline. SVG/PDF/text are downloadable file components,
 not unsupported image galleries. Existing ownership, no-ping and frozen
 inspection controls remain in force.
 
+## Complete-data AI charts
+
+The separate native `chart` tool resolves a live request-owned `dataset_id` and
+accepts `kind` (`bar`, `line`, `point`, `area`), `x`, `y`, optional `series` and
+`title`. It compiles checked fields and **every retained row** into inline
+Vega-Lite JSON, not a relationship diagram or model-copied display text. No
+external data URLs, expressions or arbitrary transforms enter this interface.
+The existing source/output ceilings and guarded renderer/storage path apply.
+Mixed currency/unit series require independent scales or fail explicitly.
+
+Use `command` first for an actual named command/alias; supplied pipeline data
+can skip collection. Successful `chart` must be alone in its batch and is
+terminal: one render, host coverage caption and actual retained artifact, no
+extra summary model response. A known validation problem permits one chart-only
+correction without recollecting. Render failure/uncertainty stops without retry;
+retained data lasts until root cleanup, never across requests.
+
+Financial values may use the configured public Kroki and public temporary URLs
+automatically, just like other chart data. There is no privacy confirmation.
+Credentials remain blocked/redacted. Raw `kroki_render`, engine discovery, source
+fences, formats and multi-artifact retention retain their existing behavior;
+this typed chart interface does not impose an engine allowlist on raw diagrams.
+See [AI command data charts](AI.md#command-data-charts) for caller authority,
+dataset bounds, complete Wise capture and historical-balance limitations.
+
 ## Data and errors
 
 Command success carries `:result/value`, artifact `:result/data` and reviewed
