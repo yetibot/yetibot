@@ -203,9 +203,10 @@
         (fn [_] {:result/value "private rows" :result/data rows}))
       (let [result (support/in-registered-event support/request "ai chart private rows"
                      (fn [event]
-                       (complete (ai-command/prepare-prompt
-                                   (cond-> (assoc event :match "chart private rows")
-                                     pipeline? (assoc :data rows :raw "private rows"))))))]
+                       (ai-command/safely
+                         (fn [] (complete (ai-command/prepare-prompt
+                                           (cond-> (assoc event :match "chart private rows")
+                                             pipeline? (assoc :data rows :raw "private rows"))))))))]
         {:result result :turns @turns :renders @renders :raw @raw :resolved @resolved}))))
 
 (fact "complete supplied datasets redact sensitive sibling and cross-row copies before planning and reject renderer IO"
@@ -235,7 +236,11 @@
     (:rows (:raw r)) => [{"label" secret "reading" 2}]
     (every? #{"fake"} (:resolved r)) => true
     (seq (:resolved r)) => truthy
-    (string/includes? (str (:turns r)) "credential-input") => true))
+    (count (:turns r)) => 2
+    (get-in r [:result :result/data :execution :calls 1 :problem])
+    => {:stage :arguments :field "*" :code :credential-input
+        :remedy "Remove credentials from the request." :execution-began false}
+    (string/includes? (pr-str (:result r)) "credential-input") => true))
 
 (fact "real nested alias failures count each failed weather input once independent of depth"
   (doseq [depth [1 2 3]

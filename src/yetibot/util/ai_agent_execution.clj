@@ -33,6 +33,8 @@
             [yetibot.models.ai-cron-tools :as cron-tools]
             [yetibot.core.interpreter :as interpreter]
             [yetibot.core.chat :as chat]
+            [yetibot.core.config :as config]
+            [yetibot.util.ai-config :as settings]
             [yetibot.core.util.public-result :as public-result]
             [yetibot.models.ai-agent-runs :as runs]
             [yetibot.models.ai-datasets :as datasets]
@@ -693,8 +695,17 @@
 
 (declare runtime)
 
+(def ^:dynamic *pending-chat-completion* nil)
+(def ^:dynamic *finishing-chat-handle* nil)
+
+(defn- pending-chat-completion! []
+  (when (some-> *pending-chat-completion* deref) (denied!)))
+
 (defn- request-context [request]
-  (letfn [(run [f]
+  (letfn [(run
+            ([f] (run f false))
+            ([f finishing?]
+            (when-not finishing? (pending-chat-completion!))
             (let [request (if (= (:family-id request) (:family-id execution/*request*))
                             execution/*request* (or (some-> request :routing-request deref) request))]
               (binding [execution/*event* (:event request)
@@ -704,7 +715,7 @@
                                          (some-> (find-ns 'yetibot.core.commands.cron)
                                                  (ns-resolve '*scheduled?*)))]
                   (with-bindings {scheduled true} (execution/with-request* request f))
-                  (execution/with-request* request f)))))]
+                  (execution/with-request* request f))))))]
     (origin/context
       {:generation-limit #(run (fn [] (execution/require-open!)
                                  (:generation-limit execution/*request*)))
@@ -742,7 +753,7 @@
                                (execution/admit-operation! :inference)))
        :admit-command (fn [_] (run #(execution/admit-operation! :command)))
        :finish-operation (fn [handle outcome]
-                           (run #(execution/finish-operation! handle outcome)))})))
+                           (run #(execution/finish-operation! handle outcome) true))})))
 
 (def ^:dynamic *command-source* nil)
 
@@ -835,13 +846,99 @@
 
 (def ^:private ^:dynamic *route-slot* nil)
 
+(defn- native-config []
+  ;; Intent-router-only installations deliberately have no chat registry. An
+  ;; invalid/revoked registry is not the same thing as an absent planner.
+  (try (ai/config)
+    (catch Exception e
+      (let [{:keys [value error]} (config/get-config map? [:ai])
+            value (settings/ai value)]
+        (if (and (= :configuration-unavailable (:ai/error-code (ex-data e)))
+                 (nil? @ai/runtime-default)
+                 (or (= :not-found error)
+                     (and (nil? error) (map? value)
+                          (not (contains? value :providers))
+                          (not (contains? value :default-provider)))))
+          (or value {})
+          (throw e))))))
+
+(defn- with-structured-transport* [config model fields command? f]
+  ;; Explicit native SDK inputs identify one transport, never a host grant.
+  ;; A command additionally proves its current registered caller before key or
+  ;; image IO; without a selected planner its output remains producer-only.
+  (let [provider {:name "cloudflare" :url (cloudflare/account-url (:account-id config))}
+        _ (when-not (#{"@cf/cloudflare/clef" "@cf/cloudflare/clairic"} model) (denied!))
+        selected (toolsets/select (mcp/config) nil)
+        original (:toolset selected)
+        router (:intent-router (native-config))
+        event (when command? execution/*event*)
+        identity-request {:event event :toolset-name (:name original)}
+        _ (when command? (source-identity! identity-request))
+        _ (policy/authorize! original (when command? (policy/actor event)) provider model)
+        budgets (limits/effective {})
+        upstream-admit usage/*admit-inference*
+        upstream-finish usage/*finish-inference*
+        request (assoc (execution/family (:max-tool-calls budgets) (:max-output-tokens budgets))
+                       :event event :no-host-execution? true :producer-only? true
+                       :planner-provider nil :planner-model nil
+                       :toolset-name (:name original) :toolset-policy original
+                       :tool-ceiling (atom #{}))
+        request (assoc request
+                  :reauthorize-expression! denied!
+                  :authorize-tool! (fn [_] (denied!))
+                  :authorize-inference!
+                  (fn [attrs]
+                    (execution/require-open!)
+                    (when command? (source-identity! identity-request))
+                    (when-not (and (= router (:intent-router (native-config)))
+                                   (= "cloudflare" (:provider attrs))
+                                   (= model (:model attrs))
+                                   (= "classification" (:operation attrs))
+                                   (= (str (:url provider) "/ai/run/" model) (:endpoint attrs))
+                                   (= {:schema-fields fields} (:resource-limits attrs))
+                                   (integer? fields) (<= 1 fields 64)
+                                   (nil? (:output-cap attrs)))
+                      (denied!))
+                    (doseq [t [original (:toolset (toolsets/select (mcp/config) (:name original)))]]
+                      (policy/authorize! t (when command? (policy/actor event)) provider model))))]
+    (try
+      (binding [execution/*event* event]
+        (execution/with-request* request
+          (fn []
+            (when *command-source* (reset! *command-source* origin/*context*))
+            (let [admit usage/*admit-inference* finish usage/*finish-inference*]
+              (binding [usage/*admit-inference*
+                        (fn [attrs]
+                          (let [handle (admit attrs)]
+                            (cond-> handle upstream-admit (assoc ::upstream (upstream-admit attrs)))))
+                        usage/*finish-inference*
+                        (fn [handle outcome]
+                          (when (and upstream-finish (::upstream handle))
+                            (upstream-finish (::upstream handle) outcome))
+                          (finish handle outcome))]
+                (origin/mark-output! (f) origin/*context*))))))
+      (finally
+        (when-not origin/*scope* (execution/close-family! request))
+        (when-not origin/*scope*
+          (when-let [context @(:core-context request)] (origin/close! context)))))))
+
 (defn- source! [prepared f]
+  (cond
+    (and (:structured-config prepared) (nil? execution/*request*) (nil? (origin/value-origin))
+         (empty? (:providers (native-config))))
+    (with-structured-transport* (:structured-config prepared) (:model prepared)
+                                (:schema-fields prepared) true f)
+    :else
   (if (and (nil? execution/*request*) (origin/value-origin))
     (origin/invoke! (origin/value-origin) :with-request
       #(do (when-not execution/*request* (denied!)) (source! prepared f)))
     (if execution/*request*
     (do
       (execution/require-open!)
+      (when (:structured-config prepared)
+        (execution/require-effects!)
+        (source-identity! execution/*request*)
+        (reauthorize-source! execution/*request*))
       (let [prepared
             (if-let [selection (::execution/prepared-source prepared)]
               (let [request execution/*request*
@@ -894,11 +991,11 @@
           selected (if-let [original (:toolset-policy prepared)]
                      (update selected :toolset #(execution/intersect-policy original %)) selected)
           actor (policy/actor execution/*event*)
-          default-planner (when (:non-chat? prepared) (ai/provider (ai/config) nil))
+          default-planner (when (:non-chat? prepared) (ai/provider (native-config) nil))
           identity-request {:event execution/*event*
                             :no-host-execution? (nil? execution/*event*)
                             :toolset-name (get-in selected [:toolset :name])}
-          current (if (or (opencode/provider? (:provider prepared))
+          current (if (or (:structured-config prepared) (opencode/provider? (:provider prepared))
                           (opencode/provider? default-planner))
                     (source-identity! identity-request)
                     {:toolset-policy (:toolset selected)})
@@ -982,7 +1079,7 @@
         (finally
           (when (and (not origin/*scope*)
                      (not (and @completed? (::execution/defer-source-close? prepared))))
-            (execution/close-family! request))))))))
+            (execution/close-family! request)))))))))
 
 
 (defn- route-source! [prepared args f]
@@ -1142,14 +1239,97 @@
         (execution/close-family! request)
         (when-let [context @(:core-context request)] (origin/close! context))))))
 
+(defn- with-chat-completion* [f]
+  ;; Core cannot distinguish a transport exception from a definite HTTP
+  ;; rejection. Hold only a failed/sent completion until this chat call throws
+  ;; its host-authored diagnostic; never rewrite an already finished receipt.
+  (pending-chat-completion!)
+  (let [pending (atom nil) issued (atom nil) finished? (atom false)
+        request execution/*request*
+        admit usage/*admit-inference* finish usage/*finish-inference*
+        complete! (fn [handle outcome]
+                    (try (finish handle outcome)
+                         (catch Throwable e
+                           (execution/close-family! request)
+                           (throw e))))
+        guard! (fn []
+                 (pending-chat-completion!)
+                 (when-let [live (:require-live! request)] (live)))
+        guarded (assoc request :require-live! guard!
+                       :admit! (fn [kind _]
+                                 (pending-chat-completion!)
+                                 (binding [execution/*request* request]
+                                   (execution/admit-operation! kind))))
+        flush! (fn [error]
+                 (when-let [{:keys [handle outcome claimed?]} @pending]
+                   (when-not claimed?
+                     (swap! pending assoc :claimed? true)
+                     (when-not (compare-and-set! finished? false true)
+                       (execution/close-family! request)
+                       (denied!))
+                     (let [diagnostic (:ai/diagnostic (ex-data error))
+                           rejected? (and (= :http (:failure diagnostic))
+                                          (contains? #{400 401 403 404 405 413 415 422 429}
+                                                     (:status diagnostic)))]
+                       (try
+                         (binding [*finishing-chat-handle* handle]
+                           (complete! handle (cond-> outcome rejected? (assoc :state :definitive))))
+                         (catch Throwable e
+                           ;; A broken upstream finish is not proof of completion.
+                           ;; Seal this same allocation; never replay its callback.
+                           (execution/close-family! request)
+                           (throw e))
+                         (finally (reset! pending nil)))))))]
+    (binding [*pending-chat-completion* pending
+              execution/*request* guarded
+              usage/*admit-inference*
+              (when admit (fn [attrs]
+                            (pending-chat-completion!)
+                            (when @issued (denied!))
+                            (let [handle (admit attrs)] (reset! issued handle) handle)))
+              usage/*finish-inference*
+              (when finish
+                (fn [handle outcome]
+                  (cond
+                    (= handle *finishing-chat-handle*)
+                    (if (and (identical? handle @issued) (compare-and-set! finished? false true))
+                      (complete! handle outcome)
+                      (do (execution/close-family! request) (denied!)))
+                    (and (= :unknown (:state outcome)) (:sent? outcome) (:failed? outcome))
+                    (do
+                      (when-not (and handle (identical? handle @issued))
+                        (execution/close-family! request)
+                        (denied!))
+                      (when-not (compare-and-set! pending nil {:handle handle :outcome outcome})
+                        (flush! nil)
+                        (execution/close-family! request)
+                        (denied!)))
+                    :else
+                    (do (pending-chat-completion!)
+                        (when-not (and (identical? handle @issued) (compare-and-set! finished? false true))
+                          (execution/close-family! request)
+                          (denied!))
+                        (complete! handle outcome)))))]
+      (try
+        (let [result (f)]
+          ;; Even a caller that swallowed an unknown cannot gain another send.
+          (flush! nil)
+          result)
+        (catch Throwable e
+          (flush! e)
+          (throw e))
+        (finally (flush! nil))))))
+
 (defn- source-chat [callback provider model messages options]
   (cond
     execution/*request*
     (execution/with-source* {:provider provider :model model :single-hop? true}
-      #(case (:continuation-transport provider)
-         "xai-text" (ai/native-xai-text messages options)
-         "openai-text" (:body ((ns-resolve 'yetibot.commands.openai 'openai-completions) messages options))
-         (callback provider model messages options)))
+      #(with-chat-completion*
+         (fn []
+           (case (:continuation-transport provider)
+             "xai-text" (ai/native-xai-text messages options)
+             "openai-text" (:body ((ns-resolve 'yetibot.commands.openai 'openai-completions) messages options))
+             (callback provider model messages options)))))
 
     (origin/value-origin)
     (origin/invoke! (origin/value-origin) :with-request
@@ -1157,7 +1337,9 @@
            (source-chat callback provider model messages options)))
 
     :else
-    (with-sdk-transport* provider model options #(callback % model messages options))))
+    (with-sdk-transport* provider model options
+      (fn [prepared]
+        (with-chat-completion* #(callback prepared model messages options))))))
 
 (defn- source-complete [callback provider model messages & [options]]
   (let [options (or options {})]
@@ -1199,18 +1381,44 @@
     #(apply callback args)))
 
 (defn- source-structured [callback config token model payload]
-  (execution/with-source* {:provider {:name "cloudflare"
-                                     :url (cloudflare/account-url (:account-id config))}
-                           :model (str "@cf/cloudflare/" model) :no-tools true :non-chat? true :producer-kind "cloudflare-classifier"
-                           :producer-operation? true}
-    #(callback config token model payload)))
+  (cond
+    (or execution/*request* (origin/value-origin))
+    (execution/with-source* {:provider {:name "cloudflare"
+                                       :url (cloudflare/account-url (:account-id config))}
+                             :model (str "@cf/cloudflare/" model) :no-tools true
+                             :producer-operation? true}
+      #(callback config token model payload))
+    *command-source*
+    (execution/with-source* {:provider {:name "cloudflare"
+                                       :url (cloudflare/account-url (:account-id config))}
+                             :model (str "@cf/cloudflare/" model) :no-tools true
+                             :non-chat? true :producer-kind "cloudflare-classifier" :structured-config config
+                             :schema-fields (count (or (:questions payload) (:fields payload)))
+                             :producer-operation? true}
+      #(callback config token model payload))
+    :else
+    (with-structured-transport* config (str "@cf/cloudflare/" model)
+                                (count (or (:questions payload) (:fields payload))) false
+      #(callback config token model payload))))
 
 (defn- source-classify [callback config text]
-  (execution/with-source* {:provider {:name "cloudflare"
-                                     :url (cloudflare/account-url (:account-id config))}
-                           :model "@cf/cloudflare/clef" :no-tools true :non-chat? true :producer-kind "cloudflare-classifier"
-                           :producer-operation? true}
-    #(callback config text)))
+  (cond
+    (or execution/*request* (origin/value-origin))
+    (execution/with-source* {:provider {:name "cloudflare"
+                                       :url (cloudflare/account-url (:account-id config))}
+                             :model "@cf/cloudflare/clef" :no-tools true
+                             :producer-operation? true}
+      #(callback config text))
+    *command-source*
+    (execution/with-source* {:provider {:name "cloudflare"
+                                       :url (cloudflare/account-url (:account-id config))}
+                             :model "@cf/cloudflare/clef" :no-tools true
+                             :non-chat? true :producer-kind "cloudflare-classifier" :structured-config config :schema-fields 2
+                             :producer-operation? true}
+      #(callback config text))
+    :else
+    (with-structured-transport* config "@cf/cloudflare/clef" 2 false
+      #(callback config text))))
 
 (defn- source-models [callback provider]
   (if (and (nil? execution/*request*) (origin/value-origin))

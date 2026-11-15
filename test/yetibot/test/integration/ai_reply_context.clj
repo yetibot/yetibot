@@ -159,7 +159,8 @@
 
 (fact "top-level Zen inherits context but retains single-hop/tool-free inference"
   (let [calls (atom [])]
-    (binding [chat/*adapter* adapter]
+    (execution/with-registered-caller request
+      #(do (reset! (:conn chat/*adapter*) {:rest :connection})
       (with-redefs [ai/config (constantly settings)
                     ai/models (constantly zen-models)
                     mcp/config (constantly {:servers []})
@@ -180,19 +181,21 @@
           (:native-tools provider) => []
           (:tools options) => []
           (:tool_choice options) => "none"
-          (count @calls) => 1)))))
+          (count @calls) => 1))))))
 
 (fact "unreadable Zen conversation sends no inference and is explicitly reported"
   (let [calls (atom 0)]
-    (binding [chat/*adapter* adapter]
+    (execution/with-registered-caller request
+      #(do (reset! (:conn chat/*adapter*) {:rest :connection})
       (with-redefs [ai/config (constantly settings)
+                    ai/models (constantly zen-models)
                     mcp/config (constantly {:servers []})
                     discord/get-channel! (fn [& _] (delivered {:status 403}))
                     ai/complete (fn [& _] (swap! calls inc))]
         (let [result (execution/run-command request "zen follow up")]
           (get-in result [:data :isError]) => true
           (str/includes? (:value result) "No prompt was sent") => true
-          @calls => 0)))))
+          @calls => 0))))))
 
 (fact "native AI children remain stateless even in a reply's ambient context"
   (let [calls (atom [])]
@@ -203,7 +206,7 @@
                   ai/complete (fn [_ _ messages _]
                                 (swap! calls conj messages)
                                 {:result/value "child answer"})]
-      (execution/in-event request "ai ask"
+      (execution/in-registered-event request "ai ask"
         (fn [request]
           (:isError (models/call! {} "ai"
                       {"action" "ask" "provider" "zen" "prompt" "child only"}

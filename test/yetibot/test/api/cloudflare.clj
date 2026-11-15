@@ -4,6 +4,10 @@
             [clojure.string :as string]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.commands.ai]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.api.cloudflare :as cf]
             [yetibot.api.cloudflare-images :as images]
             [yetibot.test.support.cloudflare :as fixture])
@@ -189,3 +193,73 @@
         (fact (some? (error-message
                        #(images/fetch-image "https://images.example/a.png"))))
               => true)))))
+
+(fact "explicit structured SDK source is finite and never grants host effects"
+  (let [sent (atom 0) captured (atom nil)]
+    (with-redefs [http/post
+                  (fn [& _]
+                    (swap! sent inc)
+                    (reset! captured execution/*request*)
+                    (fact (origin/capability? origin/*context*) => true
+                          execution/*event* => nil
+                          (:event execution/*request*) => nil
+                          (execution/admissions execution/*request*)
+                          => {:limit 20 :admitted 1 :reserved 0 :remaining 19}
+                          (try (execution/require-effects!) false (catch Exception _ true)) => true)
+                    (stream-response {:success true :result
+                                      {:model "clef" :answers {:decision {:type "noul" :noul 0.9}}}}))]
+      (binding [execution/*event* {:user {:id "forged"}}]
+        (:model (cf/infer! {:account-id account} "secret" "clef" payload)) => "clef")
+      @sent => 1
+      (:closed? @(:budget @captured)) => true
+      (mapv :state (:receipts @(:budget @captured))) => [:definitive])))
+
+(fact "structured SDK inherits the official Context without reset, fallback or host grants"
+  (let [sent (atom 0) context (atom nil) request (atom nil)
+        infer #(cf/infer! {:account-id account} "secret" "clef" payload)]
+    (with-redefs [http/post
+                  (fn [& _]
+                    (swap! sent inc)
+                    (reset! context origin/*context*)
+                    (reset! request execution/*request*)
+                    (stream-response {:success true :result
+                                      {:model "clef" :answers {:decision {:type "noul" :noul 0.9}}}}))]
+      (origin/with-scope*
+        (fn []
+          (infer)
+          (let [first-context @context
+                inherited (fn [f]
+                            ;; Losing the app binding must not mint another family.
+                            (binding [execution/*request* nil origin/*context* first-context] (f)))]
+            (doseq [f [#(cf/infer! {:account-id (apply str (repeat 32 "b"))} "secret" "clef" payload)
+                       #(cf/infer! {:account-id account} "secret" "clairic"
+                                   {:state "input" :fields {:x {:type "number"}}})
+                       #(cf/infer! {:account-id account} "secret" "clef"
+                                   (assoc-in payload [:questions :other] {:type "noul" :instructions "Other?"}))
+                       #(ai/complete {:name "unavailable-planner" :url "https://planner.invalid/v1"}
+                                     "chat" [])
+                       #(origin/invoke! first-context :start "do work")
+                       #(origin/invoke! first-context :execute-command {:match ["cmd" "echo derived"]})
+                       #(origin/invoke! first-context :admit-command {:cmd "echo"})]]
+              (some? (error-message #(inherited f))) => true)
+            (with-redefs [mcp/config (constantly {:servers [] :toolsets
+                                                 [{:name "restricted" :kind "search" :servers []
+                                                   :providers [{:name "other" :models ["other"]}]}]
+                                                 :default-toolset "restricted"})]
+              (some? (error-message #(inherited infer))) => true)
+            (with-redefs [ai/config (constantly {:providers [] :intent-router {:account-id account}})]
+              (some? (error-message #(inherited infer))) => true)
+            @sent => 1
+            (dotimes [_ 19] (inherited infer))
+            (identical? first-context @context) => true
+            (some? (error-message #(inherited infer))) => true
+            @sent => 20
+            (:used @(:budget @request)) => 20
+            (every? #(= :definitive (:state %)) (:receipts @(:budget @request))) => true)))
+      (:closed? @(:budget @request)) => true
+      (binding [execution/*request* nil origin/*context* @context]
+        (some? (error-message infer)) => true)
+      (origin/close! @context)
+      (binding [execution/*request* nil origin/*context* @context]
+        (some? (error-message infer)) => true)
+      @sent => 20)))

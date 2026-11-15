@@ -233,7 +233,14 @@
               (cf/fail! "Configure ai.intent-router account-id/key-file."))
           _ (cf/account-url (:account-id config))
           _ (cf/gateway-headers (:gateway-id config))
-          token (try (clef/credential! config)
+          result
+          (execution/with-source*
+            {:provider {:name "cloudflare" :url (cf/account-url (:account-id config))}
+             :model (str "@cf/cloudflare/" model) :no-tools true :non-chat? true
+             :producer-kind "cloudflare-classifier" :producer-operation? true
+             :structured-config config
+             :schema-fields (count (or (:questions payload) (:fields payload)))}
+            #(let [token (try (clef/credential! config)
                   (catch Exception _
                     (cf/fail!
                       "Could not read the configured Cloudflare token.")))
@@ -241,7 +248,7 @@
               (cf/fail! "Inference input contains the configured credential."))
           media (images/images urls)
           payload (cond-> payload (seq media) (assoc :images media))
-          result (cf/infer! config token model payload)
+          result (cf/infer! config token model payload)] result))
           result (cond-> result
                    mode (assoc :request {:mode (if demo? "demo" mode)
                                          :fields (:fields payload)}))]

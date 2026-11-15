@@ -116,7 +116,7 @@
 (fact "native rounds and delegated models record calls, not accumulated captions"
   (with-ledger
     (fn [events]
-      (execution/in-event execution/request "ai delegate"
+      (execution/in-registered-event execution/request "ai delegate"
         (fn [request]
           (let [parent (assoc provider :name "parent" :model "p"
                                       :url "https://api.x.ai/v1")

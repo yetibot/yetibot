@@ -26,8 +26,12 @@
       (assoc log/*config* :level :trace :middleware []
              :appenders
              {:capture {:enabled? true :async? false
-                        :fn #(swap! logs conj (:vargs %))}})
+                        :fn #(swap! logs conj (with-meta (vec (:vargs %)) {:logger-ns (:?ns-str %)}))}})
       (let [result (f)] [result @logs]))))
+
+(defn diagnostic-logs [logs]
+  (filterv #(and (= "ai-provider-diagnostic" (first %))
+                 (= "yetibot.api.ai-diagnostics" (:logger-ns (meta %)))) logs))
 
 (fact "HTTP400 captures only finite categories, not arbitrary error text"
   (let [[error logs]
@@ -55,8 +59,8 @@
          :tool-choice :auto :item-types [:message] :opaque-state? false
          :failure :http :status 400 :error-class :invalid-request
          :error-code :invalid-tool-schema :parameter :tools}}
-    (count logs) => 1
-    (first logs) => ["ai-provider-diagnostic" (:ai/diagnostic (ex-data error))]
+    (count (diagnostic-logs logs)) => 1
+    (update (first (diagnostic-logs logs)) 1 dissoc :run-id) => ["ai-provider-diagnostic" (:ai/diagnostic (ex-data error))]
     (string/includes? (pr-str [(ex-data error) logs]) sentinel) => false
     (.getMessage error)
     => (str "AI provider " sentinel " returned HTTP 400.")))
@@ -94,7 +98,7 @@
       (fact (:error-class record) => :unrecognized)
       (fact (:error-code record) => :unrecognized)
       (fact (:parameter record) => :unrecognized)
-      (fact (count logs) => 1)
+      (fact (count (diagnostic-logs logs)) => 1)
       (fact (string/includes? (pr-str [record logs]) sentinel) => false))))
 
 (facts "historical Grok and Cloudflare validation text yields categories only"
@@ -120,8 +124,8 @@
       (fact (select-keys record [:error-class :error-code :parameter])
             => {:error-class expected-class :error-code expected-code
                 :parameter :unrecognized})
-      (fact (count logs) => 1)
-      (fact (first logs) => ["ai-provider-diagnostic" record])
+      (fact (count (diagnostic-logs logs)) => 1)
+      (fact (update (first (diagnostic-logs logs)) 1 dissoc :run-id) => ["ai-provider-diagnostic" record])
       (fact (some #(re-find #"SECRET|123456|account|balance|yetibot_clef|1000"
                             (pr-str %)) [(ex-data error) logs]) => nil)
       (fact (.getCause error) => nil)
@@ -281,7 +285,7 @@
       (fact @closed => true)
       (fact (<= @reads 16385) => true)
       (fact (get-in (ex-data error) [:ai/diagnostic :error-code]) => expected)
-      (fact (count logs) => 1)
+      (fact (count (diagnostic-logs logs)) => 1)
       (fact (some #(re-find #"SECRET|123456|account|balance|yetibot_clef|1000"
                             (pr-str %)) [(ex-data error) logs]) => nil))))
 
@@ -307,7 +311,7 @@
                 => (str "AI provider " sentinel " returned HTTP 400."))
           (fact (get-in (ex-data error) [:ai/diagnostic :error-code])
                 => :unrecognized)
-          (fact (count logs) => 1))))))
+          (fact (count (diagnostic-logs logs)) => 1))))))
 
 (fact "blocking error reads stop on owner abort, before body close"
   (let [owner (HttpGet. "https://example.test/v1/responses")
@@ -348,7 +352,7 @@
         (fact (select-keys (:ai/diagnostic (ex-data error))
                            [:failure :status :error-code])
               => {:failure :http :status 400 :error-code :unrecognized})
-        (fact (count logs) => 1)))))
+        (fact (count (diagnostic-logs logs)) => 1)))))
 
 (fact "ownerless potentially blocking bodies are closed but never read"
   (let [reads (atom 0)
@@ -516,7 +520,7 @@
                  [:error-class :error-code :parameter])
     => {:error-class :unrecognized :error-code :unrecognized
         :parameter :unrecognized}
-    (count logs) => 1
+    (count (diagnostic-logs logs)) => 1
     (some #(re-find #"SECRET|123456|account|balance" (pr-str %))
           [(ex-data error) logs]) => nil))
 
@@ -557,7 +561,7 @@
       (fact (:error-code record) => :unrecognized)
       (fact (:parameter record) => :unrecognized)
       (fact (:failure record) => :stream)
-      (fact (count logs) => 1)
+      (fact (count (diagnostic-logs logs)) => 1)
       (fact (some #(re-find #"SECRET|123456|account|balance" (pr-str %))
                   [(ex-data error) logs]) => nil))))
 
@@ -586,5 +590,5 @@
                  [:failure :status :error-code :parameter])
     => {:failure :stream :status 200 :error-code :unsupported-parameter
         :parameter :tool-choice}
-    (count logs) => 1
+    (count (diagnostic-logs logs)) => 1
     (string/includes? (pr-str [(ex-data error) logs]) sentinel) => false))

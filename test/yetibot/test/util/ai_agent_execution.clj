@@ -633,3 +633,147 @@
     ;; Only local liveness is tested here; real worker/SQL completion is covered
     ;; by integration.ai-agent-execution's blocked physical-send regression.
     (#'agent/schedule-worker! "local-owner-fixture" row (fn [f] (f)) (fn [_] :exited)) => :exited))
+
+
+(def capture-attrs {:provider "local" :model "chat" :operation "text"
+                    :endpoint "https://synthetic.invalid/v1/chat/completions"})
+
+(defn completion-case [diagnostic nested?]
+  (with-parent
+    (fn [request]
+      (let [finishes (atom []) finish usage/*finish-inference*
+            error (ex-info "Synthetic host rejection" {:ai/diagnostic diagnostic})]
+        (binding [usage/*finish-inference*
+                  (fn [handle outcome]
+                    (swap! finishes conj [handle outcome])
+                    (finish handle outcome))]
+          (try
+            (#'agent/with-chat-completion*
+              (fn []
+                (let [send #(usage/capture! capture-attrs (fn [] (throw error)) identity)]
+                  (if nested? (#'agent/with-chat-completion* send) (send)))))
+            (catch Exception _ nil)))
+        {:budget @(:budget request) :finishes @finishes
+         :next (try (execution/admit-operation! :tool) :allowed
+                    (catch Exception _ :denied))}))))
+
+(facts "source-chat classifies only host definite HTTP rejections before the one physical finish"
+  (doseq [status [400 401 403 404 405 413 415 422 429]
+          nested? [false true]]
+    (let [{:keys [budget finishes next]} (completion-case {:failure :http :status status} nested?)]
+      (:used budget) => 1
+      (:unknown? budget) => nil
+      (mapv #(select-keys (second %) [:state :sent? :failed?]) finishes)
+      => [{:state :definitive :sent? true :failed? true}]
+      next => :allowed))
+  (doseq [diagnostic [{:failure :transport :status 422}
+                      {:failure :http :status 500}
+                      {:failure :http :status :unrecognized}
+                      {:body {:failure :http :status 422}}]
+          nested? [false true]]
+    (let [{:keys [budget finishes next]} (completion-case diagnostic nested?)]
+      (:used budget) => 1
+      (:unknown? budget) => true
+      (mapv #(select-keys (second %) [:state :sent? :failed?]) finishes)
+      => [{:state :unknown :sent? true :failed? true}]
+      next => :denied)))
+
+(fact "swallowing an unfinished failure cannot admit a host effect or another inference"
+  (with-parent
+    (fn [request]
+      (let [sends (atom 0) denied (atom [])]
+        (#'agent/with-chat-completion*
+          (fn []
+            (try (usage/capture! capture-attrs
+                   #(do (swap! sends inc) (throw (Exception. "Synthetic transport failure"))) identity)
+                 (catch Exception _ nil))
+            (doseq [attempt [#(execution/admit-operation! :tool)
+                             #(usage/capture! capture-attrs (fn [] (swap! sends inc)) identity)]]
+              (swap! denied conj (try (attempt) false (catch Exception _ true))))))
+        @denied => [true true]
+        @sends => 1
+        (:used @(:budget request)) => 1
+        (:unknown? @(:budget request)) => true))))
+
+(fact "successful output and later semantic failure retain one definitive charge"
+  (with-parent
+    (fn [request]
+      (let [finishes (atom 0) finish usage/*finish-inference*]
+        (binding [usage/*finish-inference* (fn [handle outcome] (swap! finishes inc) (finish handle outcome))]
+          (try (#'agent/with-chat-completion*
+                 #(do (usage/capture! capture-attrs (constantly :response) identity)
+                      (throw (ex-info "Synthetic output limit" {:ai/output-error :output-limit}))))
+               (catch Exception _ nil)))
+        @finishes => 1
+        (:used @(:budget request)) => 1
+        (mapv :state (:receipts @(:budget request))) => [:definitive]
+        (:unknown? @(:budget request)) => nil))))
+
+(fact "not-sent admission denial never creates a completion or charge"
+  (with-parent
+    (fn [request]
+      (let [finishes (atom 0) sends (atom 0)]
+        (binding [usage/*admit-inference* (fn [_] (throw (ex-info "Not sent" {:ai/request-not-sent true})))
+                  usage/*finish-inference* (fn [& _] (swap! finishes inc))]
+          (try (#'agent/with-chat-completion*
+                 #(usage/capture! capture-attrs (fn [] (swap! sends inc)) identity))
+               (catch Exception _ nil)))
+        @finishes => 0
+        @sends => 0
+        (:used @(:budget request)) => 0))))
+
+(fact "upstream completion failure seals the same family without replaying the callback"
+  (with-parent
+    (fn [request]
+      (let [finishes (atom 0)]
+        (binding [usage/*finish-inference* (fn [& _] (swap! finishes inc) (throw (Exception. "Upstream finish failed")))]
+          (try (#'agent/with-chat-completion*
+                 #(usage/capture! capture-attrs
+                    (fn [] (throw (ex-info "Synthetic rejection" {:ai/diagnostic {:failure :http :status 422}}))) identity))
+               (catch Exception _ nil)))
+        @finishes => 1
+        (:used @(:budget request)) => 1
+        (:closed? @(:budget request)) => true
+        (execution/admit-operation! :tool) => (throws Exception)))))
+
+
+(fact "a forged failed completion has no admitted identity and never reaches the original finish"
+  (with-parent
+    (fn [request]
+      (let [finishes (atom 0)]
+        (binding [usage/*finish-inference* (fn [& _] (swap! finishes inc))]
+          (try (#'agent/with-chat-completion*
+                 #(usage/*finish-inference* {:family-id (:family-id request) :ordinal 1}
+                                            {:state :unknown :sent? true :failed? true}))
+               (catch Exception _ nil)))
+        @finishes => 0
+        (:used @(:budget request)) => 0
+        (:closed? @(:budget request)) => true))))
+
+(fact "duplicate pending completion flushes the real unknown once before sealing"
+  (with-parent
+    (fn [request]
+      (let [finishes (atom 0) finish usage/*finish-inference*]
+        (binding [usage/*finish-inference* (fn [handle outcome] (swap! finishes inc) (finish handle outcome))]
+          (try (#'agent/with-chat-completion*
+                 #(let [handle (usage/*admit-inference* capture-attrs)
+                        outcome {:state :unknown :sent? true :failed? true}]
+                    (usage/*finish-inference* handle outcome)
+                    (usage/*finish-inference* handle outcome)))
+               (catch Exception _ nil)))
+        @finishes => 1
+        (:used @(:budget request)) => 1
+        (:unknown? @(:budget request)) => true
+        (:closed? @(:budget request)) => true))))
+
+(fact "even an upstream finish error after a successful response cannot reopen that allocation"
+  (with-parent
+    (fn [request]
+      (let [finishes (atom 0)]
+        (binding [usage/*finish-inference* (fn [& _] (swap! finishes inc) (throw (Exception. "Upstream finish failed")))]
+          (try (#'agent/with-chat-completion*
+                 #(usage/capture! capture-attrs (constantly :response) identity))
+               (catch Exception _ nil)))
+        @finishes => 1
+        (:used @(:budget request)) => 1
+        (:closed? @(:budget request)) => true))))

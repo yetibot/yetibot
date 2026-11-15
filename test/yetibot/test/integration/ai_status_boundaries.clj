@@ -44,11 +44,10 @@
         tool {:name "lookup" :inputSchema {:type "object"}
               :session {:server server}}]
     (proof/scenario
-      {:generate
+      {:provider-options {:api "responses" :native-tools ["web_search"]}
+       :generate
        (fn [p model messages options]
-         (let [result (complete (assoc p :api "responses"
-                                        :native-tools ["web_search"])
-                                model messages options)]
+         (let [result (complete p model messages options)]
            (deliver done true)
            (proof/await release-final)
            result))}
@@ -222,8 +221,10 @@
            :allowed-paths ["src/"] :write-server "writer"
            :servers [{:name "status-reader"
                       :tools ["get_commit" "get_file_contents"]}]
-           :providers [{:name "grok" :models [proof/model]}]}
-        router {:enabled true :github-toolset "status-pr"}]
+           :providers [{:name "grok" :models [proof/model]}
+                       {:name "cloudflare" :models ["@cf/cloudflare/clef"]}]}
+        router {:enabled true :github-toolset "status-pr"
+                :account-id "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}]
     (proof/scenario
       {:generate
        (fn [p model _ options]

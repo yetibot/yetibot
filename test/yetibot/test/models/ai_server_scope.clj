@@ -3,7 +3,9 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.models.ai-tools :as tools]
-            [yetibot.models.ai-toolsets :as toolsets]))
+            [yetibot.models.ai-toolsets :as toolsets]
+            [yetibot.test.support.ai-execution :as execution]
+            [yetibot.models.ai-tool-policy :as policy]))
 
 (def config
   {:default-toolset "search"
@@ -19,27 +21,39 @@
               {:name "private" :kind "search" :users ["owner"]
                :adapters ["discord"] :servers [{:name "private"}]}]})
 
+(def provider {:name "local" :url "http://localhost/v1" :model "chat"})
+
 (fact "default catalog filters adapter-only servers before connection"
-  (doseq [[actor expected]
-          [[{:adapter "discord" :user "reader"} ["web" "alpaca"]]
-           [{:adapter "slack" :user "reader"} ["web"]]
-           [nil ["web"]]]]
-    (let [connected (atom nil)]
+  (doseq [[kind expected] [[:discord ["web" "alpaca"]] [:slack ["web"]]]]
+    (let [request (-> execution/request
+                      (assoc :user {:id "reader" :username "reader"})
+                      (assoc-in [:chat-source :adapter] kind)
+                      (assoc-in [:chat-source :raw-event :user] "reader")
+                      (assoc-in [:chat-source :raw-event :author] {:id "reader"})
+                      (assoc-in [:chat-source :raw-event :channel-id] "C1")
+                      (assoc-in [:chat-source :raw-event :id] "message"))
+          connected (atom nil)]
       (with-redefs [mcp/config (constantly config)
-                    mcp/with-tools (fn [cfg f]
-                                     (reset! connected cfg)
-                                     (f []))
-                    ai/chat (fn [& _]
-                              {:choices [{:message {:role "assistant"
-                                                    :content "No tool needed."}}]})]
-        (:result/value
-          (tools/complete {:name "local" :url "http://localhost/v1"}
-                          "chat" [{:role "user" :content "Hello"}]
-                          {:actor actor})) => "No tool needed."
+                    ai/config (constantly {:providers [provider]})
+                    mcp/with-tools (fn [cfg f] (reset! connected cfg) (f []))
+                    ai/chat (fn [& _] {:choices [{:message {:role "assistant"
+                                                           :content "No tool needed."}}]})]
+        (execution/in-registered-event request "ai hello"
+          (fn [event]
+            (:result/value (tools/complete provider "chat" [] {:actor (policy/actor event)}))
+            => "No tool needed."))
         (mapv :name (:servers @connected)) => expected
-        ;; Credentials from excluded connections still participate in redaction.
-        (mapv :name (:redaction-servers @connected))
-        => ["web" "alpaca" "private"]))))
+        (mapv :name (:redaction-servers @connected)) => ["web" "alpaca" "private"]))))
+
+(fact "public visibility is not a nil or copied actor execution grant"
+  (let [connections (atom 0)]
+    (with-redefs [mcp/config (constantly config)
+                  ai/config (constantly {:providers [provider]})
+                  mcp/with-tools (fn [& _] (swap! connections inc))]
+      (doseq [actor [nil {:adapter "discord" :user "reader"}]]
+        (try (tools/complete provider "chat" [] {:actor actor}) false
+             (catch Exception _ true)) => true)
+      @connections => 0)))
 
 (fact "discovery has the same adapter boundary and retains private-tool policy"
   (with-redefs [mcp/config (constantly config)]

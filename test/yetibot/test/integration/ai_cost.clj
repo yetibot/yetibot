@@ -56,7 +56,7 @@
   (with-redefs [ai/chat (fn [& _]
                          {:choices [{:message {:content "Answer"}}]
                           :ai/cost {:usd 0M :kind :reported :scope :api}})]
-    (get-in (ai/complete {:url "https://other.example/v1"} "model" [])
+    (get-in (ai/complete {:name "unpriced-sdk" :url "https://other.example/v1"} "model" [])
             [:result/data :ai/cost]) => nil))
 
 (fact "token estimates account for cache and the long-context rate boundary"
@@ -103,7 +103,7 @@
       [{:content [{:type "input_image" :image_url "private"}]}] "Hello") => nil))
 
 (fact "tool-loop accounting sums every parent turn, not just the last usage"
-  (execution/in-event execution/request "ai hello"
+  (execution/in-registered-event execution/request "ai hello"
     (fn [request]
       (let [calls (atom 0)
             t {:name "search" :kind "search" :servers [] :native-tools ["ai"]

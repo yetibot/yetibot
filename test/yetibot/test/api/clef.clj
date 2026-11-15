@@ -3,7 +3,10 @@
             [clj-http.client :as client]
             [clojure.string :as string]
             [midje.sweet :refer [facts fact =>]]
-            [yetibot.api.clef :as clef]))
+            [yetibot.api.clef :as clef]
+            [yetibot.commands.ai]
+            [yetibot.core.util.agent-execution :as origin]
+            [yetibot.util.ai-execution :as execution]))
 
 (def response
   {:status 200 :body {:success true :errors []
@@ -25,6 +28,10 @@
       (with-redefs [client/post
                     (fn [url options]
                       (let [payload (json/parse-string (:body options) true)]
+                        (fact (origin/capability? origin/*context*) => true
+                              execution/*event* => nil
+                              (:no-host-execution? execution/*request*) => true
+                              (:admitted (execution/admissions execution/*request*)) => 1)
                         (fact url => (str "https://api.cloudflare.com/client/v4/accounts/" (:account-id config)
                                          "/ai/run/@cf/cloudflare/clef")
                               (get-in options [:headers "Authorization"]) => "Bearer fixture-clef-secret"

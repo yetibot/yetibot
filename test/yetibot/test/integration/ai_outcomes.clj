@@ -12,6 +12,7 @@
             [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.util.ai-cost :as cost]
+            [yetibot.util.ai-execution :as execution]
             [yetibot.core.util.public-result :as public]
             [yetibot.core.adapters.discord-inspection :as viewer]
             [yetibot.test.integration.ai-model-tools :as fixtures])
@@ -123,7 +124,9 @@
 (facts "host-side eligibility reasons survive without exposing exceptions"
   (fixtures/with-zen-catalog
     (fn [request cfg]
-      (doseq [code [:model-ineligible :credentials-unavailable :policy-denied]]
+      (execution/with-source*
+        {:provider (ai/provider (ai/config) "zen") :model "a-free"}
+        #(doseq [code [:model-ineligible :credentials-unavailable :policy-denied]]
         (with-redefs [ai/prepare-provider (fn [& _] (ai/fail "PRIVATE-THROW" code))
                       http/post (fn [& _] (throw (AssertionError. "No inference")))]
           (let [r (models/call! cfg "ai"
@@ -132,7 +135,7 @@
             (fact (:error-code r) => code)
             (fact (:unknownOutcome r) => false)
             (fact (get-in r [:structuredContent :provider]) => "zen")
-            (fact (boolean (re-find #"PRIVATE" (pr-str r))) => false)))))))
+            (fact (boolean (re-find #"PRIVATE" (pr-str r))) => false))))))))
 
 (fact "batch policy rejection is explained in the bounded public error view"
   (let [r (command/safely {}
@@ -154,9 +157,11 @@
     (fn [request cfg]
       (let [parent {:name "grok" :url "https://api.x.ai/v1" :api "responses"
                     :model "grok-4.7" :key "ROOT-SECRET"}
-            parents (atom 0) children (atom 0) published (atom [])]
+            parents (atom 0) children (atom 0) published (atom [])
+            active (update (ai/config) :providers conj parent)]
         (with-redefs
-          [mcp/config (constantly {:servers [] :max-tool-calls 4
+          [ai/config (constantly active)
+           mcp/config (constantly {:servers [] :max-tool-calls 4
                                    :toolsets [(assoc (:toolset cfg)
                                                      :native-tools ["ai"]
                                                      :providers
@@ -225,10 +230,14 @@
     (fn [request cfg]
       (let [parent {:name "grok" :url "https://api.x.ai/v1" :api "responses"
                     :model "grok-4.7" :key "ROOT-SECRET"}
-            parents (atom 0) children (atom 0) gets (atom 0)]
+            parents (atom 0) children (atom 0) gets (atom 0)
+            physical-budget (atom nil) families (atom #{})
+            cap (if (= total 52) 128 64)
+            active (update (ai/config) :providers conj parent)]
         (with-redefs
-          [mcp/config (constantly
-                        {:servers [] :max-tool-calls 64
+          [ai/config (constantly active)
+           mcp/config (constantly
+                        {:servers [] :max-tool-calls cap
                          :toolsets [(assoc (:toolset cfg) :native-tools ["ai"]
                                      :providers [{:name "grok" :models ["grok-4.7"]}
                                                  {:name "zen" :models ["b-paid"]}])]})
@@ -242,8 +251,12 @@
                {:status 200 :body {:data fixtures/zen-catalog}}))
            http/post
            (fn [url _]
+             (swap! families conj (:family-id execution/*request*))
              (if (string/includes? url "api.x.ai")
                (let [n (swap! parents inc)]
+                 (when (= 2 n)
+                   (reset! physical-budget (select-keys @(:budget execution/*request*)
+                                                      [:limit :used :reserved :unknown?])))
                  {:status 200
                   :body {:status "completed"
                          :output
@@ -273,18 +286,22 @@
                    {:status 200 :body {:choices [{:finish_reason "stop"
                                                  :message {:content "323"}}]}}))))]
           {:result (tools/complete parent "grok-4.7" []
-                     {:actor (policy/actor request) :max-tool-calls 64})
-           :parents @parents :children @children :gets @gets})))))
+                     {:actor (policy/actor request) :max-tool-calls cap})
+           :parents @parents :children @children :gets @gets
+           :physical-budget @physical-budget :family-count (count @families)})))))
 
 (facts "failed discovery and model calls survive the real frozen error budget"
  (doseq [[catalog-status child-status expected total]
          [[403 422 "generation-budget" 12] [401 413 "too large" 12]
           [401 413 "too large" 52]]]
-  (let [{:keys [result parents children]}
+  (let [{:keys [result parents children physical-budget family-count]}
         (mixed-diagnostic-run catalog-status child-status total)
         snapshot (atom (viewer/initial))]
     parents => 2
     children => (dec total)
+    physical-budget => {:limit (if (= total 52) 128 64)
+                        :used (inc (* 2 total)) :reserved 0}
+    family-count => 1
     (<= (alength (.getBytes (json/generate-string
                              (get-in result [:result/data :tool-trace])) "UTF-8"))
         12000) => true
@@ -424,7 +441,7 @@
 
 (fact "explicit Responses output limits retain streamed wire usage and costs"
   (fixtures/with-zen-catalog
-    (fn [_ _]
+    (fn [_ cfg]
       (let [posts (atom 0) events (atom [])
             body {:status "incomplete" :output []
                   :incomplete_details {:reason "max_output_tokens"}
@@ -432,7 +449,11 @@
                           :output_tokens_details {:reasoning_tokens 120}
                           :cost 0.0001668M}}]
         (with-redefs
-          [http/get
+          [mcp/config (constantly {:servers []
+                                  :toolsets [(assoc (dissoc (:toolset cfg) :users :adapters)
+                                                    :native-tools []
+                                                    :providers [{:name "zen" :models ["b-paid"]}])]})
+           http/get
            (fn [& _]
              {:status 200 :body {:data [(assoc (second fixtures/zen-catalog)
                                               :api {:responses {}})]}})

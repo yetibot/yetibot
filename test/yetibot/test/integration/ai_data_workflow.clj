@@ -47,7 +47,8 @@
   (let [turns (atom []) renders (atom []) sent (atom []) request-state (atom nil)
         child-post http/post
         configured (try (ai/config) (catch Exception _ {}))
-        parent {:name "fake" :model "fake" :url "https://planner.invalid/v1"}]
+        parent {:name "fake" :model "fake" :url "https://planner.invalid/v1"
+                :key "SYNTHETIC-CREDENTIAL"}]
     (with-redefs [hooks/hooks (atom @hooks/hooks)
                   hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
                   channel/settings-for-chat-source (constantly {})
@@ -81,10 +82,9 @@
       (charts/with-current-caller
        #(support/in-event support/request "ai synthetic workflow"
         (fn [request]
-          (let [result (try (tools/complete parent "fake" [{:role "user" :content "Synthetic request"}]
-                                      (merge {:actor (policy/actor request)} options))
-                            (catch Exception e {:result/error (.getMessage e)
-                                                :result/data {:tool-trace (:ai/tool-failure (ex-data e))}}))]
+          (let [result (ai-command/safely
+                         (fn [] (tools/complete parent "fake" [{:role "user" :content "Synthetic request"}]
+                                          (merge {:actor (policy/actor request)} options))))]
             {:result result :turns @turns :renders @renders :sent @sent :request @request-state})))))))
 
 (fact "pipeline data charts directly, timings are bounded and the store closes"

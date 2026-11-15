@@ -72,7 +72,7 @@
 
 (defn scenario
   "Pump the genuine SDK endpoints on isolated synthetic REST queues."
-  [{:keys [generate missing-lane? status-failure? hold-create hold-edit]}
+  [{:keys [generate provider-options missing-lane? status-failure? hold-create hold-edit]}
    check]
   (let [answer-queue (async/chan 32)
         status-queue (async/chan 32)
@@ -147,8 +147,9 @@
              (apply (:config originals) args)))
          ai/config
          (fn [] (if *fixture*
-                  {:providers [{:name "grok" :model model
-                                :url "http://status-fixture.invalid/v1"}]}
+                  {:providers [(merge {:name "grok" :model model
+                                        :url "http://status-fixture.invalid/v1"}
+                                       provider-options)]}
                   ((:ai originals))))
          tools/complete
          (fn [p m messages options]

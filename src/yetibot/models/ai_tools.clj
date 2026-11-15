@@ -846,7 +846,11 @@
                              (mapv #(parse-call %1 by-name seen config trace-state (+ start %2 1)) calls (range))
                              (catch Exception e
                                (if (and chart-only? (= :invalid-arguments (::trace/reason (ex-data e))))
-                                 nil (throw e))))
+                                 (do
+                                   (when (= :credential-input (::trace/code (ex-data e)))
+                                     (reset! (:chart-stop config) "Chart request was rejected before rendering; collected data was not replayed."))
+                                   nil)
+                                 (throw e))))
                     requested-actions (mapv request-action parsed)]
                 (when (or (not= (count requested-actions)
                                 (count (distinct requested-actions)))

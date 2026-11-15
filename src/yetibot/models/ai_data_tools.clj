@@ -1,6 +1,7 @@
 (ns yetibot.models.ai-data-tools
   "Host adapters for request-owned command datasets and terminal data charts."
   (:require [clojure.string :as string]
+            [cheshire.core :as json]
             [yetibot.api.mcp :as mcp]
             [yetibot.api.wise :as wise]
             [yetibot.core.util.public-result :as public]
@@ -46,6 +47,25 @@
                      (every? (fn [[k v]] (and (string? v) (<= 1 (count v) (if (= k "title") 160 64)))) args)
                      (#{"bar" "line" "point" "area"} (get args "kind")))
         (throw (ex-info "Invalid chart arguments." {:ai/error true})))
+      ;; Pure preflight over the current owner's retained snapshot. Missing or
+      ;; expired datasets keep their existing correctable chart failure; they
+      ;; must never be misreported as credential detections.
+      (when-let [dataset (try (datasets/lookup! (:dataset-store config)
+                                                (:dataset-owner config) (get args "dataset_id"))
+                             (catch clojure.lang.ExceptionInfo e
+                               (when-not (:dataset/code (ex-data e)) (throw e))
+                               nil))]
+        (let [selected (filter #(some #{(:name %)} (keep args ["x" "y" "series"])) (:fields dataset))
+              values (mapv (fn [row] (mapv #(get-in row (:path %)) selected)) (:rows dataset))
+              compiled (charts/compile-chart dataset (dissoc args "dataset_id"))]
+          (let [value (json/generate-string
+                        [values (when (:ok? compiled) (:request compiled))])]
+            (when (not= value (mcp/metadata-redact value (:redaction-config (:dataset-store config))))
+            (throw (ex-info "Chart request contains configured credentials."
+                            {:ai/error true :ai/error-code :credential-input
+                             :ai/problem (trace/sanitize-problem
+                                           {:stage :arguments :field "*" :code :credential-input
+                                            :execution-began false})}))))))
       args)))
 
 (defn timed [config stage f]

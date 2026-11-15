@@ -7,6 +7,7 @@
             [yetibot.api.ai :as ai]
             [yetibot.commands.grok]
             [yetibot.core.adapters.discord :as discord]
+            [yetibot.core.adapters.adapter :as adapters]
             [yetibot.core.chat :as chat]
             [yetibot.core.commands.echo]
             [yetibot.core.commands.thread]
@@ -28,9 +29,13 @@
             event {:id "100" :channel-id "200" :guild-id "300"
                    :author {:id "U1" :username "alice"} :content body}]
         (reset! conn {:rest :synthetic})
-        (reset! (:yetibot-user adapter) {:id "BOT"})
+        (reset! (:yetibot-user adapter) {:id "BOT" :yetibot? true})
+        (reset! (:connected? adapter) true)
+        (reset! (:connection-last-active-timestamp adapter) (System/currentTimeMillis))
         (with-redefs
-          [users/users (atom {})
+          [adapters/adapters (atom (assoc @adapters/adapters "native-admin-fixture" adapter))
+           users/users (atom {{:adapter :discord :id "U1"} {:id "U1" :username "alice"}
+                              {:adapter :discord :id "BOT"} @(:yetibot-user adapter)})
            channel/settings-for-chat-source (constantly {})
            observers/find-all (constantly [])
            messaging/get-channel!
