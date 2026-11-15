@@ -58,17 +58,19 @@
 
 (defn chart-temps
   ([failed-location correction?] (chart-temps failed-location correction? {}))
-  ([failed-location correction? {:keys [alias-depth field imperial?] :or {alias-depth 0 field "temp"}}]
+  ([failed-location correction? {:keys [alias-depth field imperial? learn-order] :or {alias-depth 0 field "temp"}}]
    (try (deref alias/loader) (catch Exception _ nil))
    (let [collected (atom []) renders (atom []) turns (atom []) sent (atom [])
          by-city (zipmap fixtures/locations fixtures/rows)
-         final-result (atom nil) complete ai-command/complete-prompt]
+         final-result (atom nil) retained (atom []) lookup datasets/lookup! complete ai-command/complete-prompt]
      (with-redefs [hooks/hooks (atom @hooks/hooks)
                    hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
                    channel/settings-for-chat-source (constantly {})
                    handler/add-user-message-to-history (fn [& _])
                    handler/dispatch-command-response #(swap! sent conj %)
                    history/add (fn [& _])
+                   datasets/lookup! (fn [& args]
+                                      (let [d (apply lookup args)] (swap! retained conj d) d))
                    weather/current (fn [loc]
                                      (swap! collected conj loc)
                                      (if (if (set? failed-location) (contains? failed-location loc) (= loc failed-location)) {:error "Unavailable"}
@@ -96,13 +98,22 @@
                                                     :test-budget (:content (second messages))
                                                     :dataset (descriptor messages)})
                                  {:status 200
-                                  :body (if (= 1 (count @turns))
+                                  :body (cond
+                                          (and learn-order (= (count @turns) (if (= learn-order :before) 1 2)))
+                                          (call "learn" "command" {"command" "caption-secret"})
+                                          (= (count @turns) (if (= learn-order :before) 2 1))
                                           (call "collect" "command" {"command" "temps"})
-                                          (let [d (descriptor messages)]
+                                          :else
+                                          (let [d (or (some #(when (= "weather" (get % "source")) %)
+                                                           (keep #(try (get-in (json/parse-string (:content %)) ["structuredContent" "datasets" 0])
+                                                                       (catch Exception _ nil)) messages))
+                                                      (descriptor messages))]
                                             (call (str "chart" (count @turns)) "chart"
                                               {"dataset_id" (get d "dataset-id") "kind" "bar"
                                                "x" "city_name" "y" (if (and correction? (= 2 (count @turns)))
                                                                       "missing" field)})))}))]
+       (hooks/cmd-hook-resolved #"caption-secret" #".*"
+         (fn [_] {:result/value "learned" :result/data [{:auth/token "nyc"}]}))
        (hooks/cmd-hook #"weather" #".+" weather/weather-cmd)
        (doseq [i (range alias-depth)]
          (#'alias/wire-alias {:cmd-name (str "nested-weather-" i)
@@ -117,7 +128,7 @@
          (#'alias/wire-alias {:cmd-name name :cmd body}))
        (let [pipeline (with-current-caller #(support/run-command support/request "gemma chart temps"))]
          {:result @final-result :pipeline pipeline
-          :collected @collected :renders @renders :turns @turns :sent @sent})))))
+          :collected @collected :renders @renders :turns @turns :sent @sent :retained @retained})))))
 
 (fact "real five-location alias terminates after two plans and one render, without model links"
   (let [{:keys [result collected renders turns sent]} (chart-temps nil false)
@@ -348,3 +359,116 @@
         (get-in r [:result :error :ai/tool-failure :code])
         (when (string/includes? (str (:turns r)) "credential-input") :credential-input))
       => :credential-input)))
+
+(fact "terminal safe weather caption uses live knowledge in either collection order without altering private coverage"
+  (doseq [order [:before :after]]
+    (let [{:keys [result collected renders turns retained]} (chart-temps "nyc" false {:learn-order order})
+          weather (first (filter #(= "weather" (:source %)) retained))]
+      (count turns) => 3
+      (count renders) => 1
+      (frequencies collected) => (zipmap fixtures/locations (repeat 1))
+      (get-in weather [:coverage :failed-inputs]) => ["nyc"]
+      (select-keys (:coverage weather) [:requested :succeeded :failed]) => {:requested 5 :succeeded 4 :failed 1}
+      (count (:rows weather)) => 4
+      (string/includes? (:result/value result) "4 of 5 inputs") => true
+      (string/includes? (:result/value result) "[redacted]") => true
+      (string/includes? (pr-str result) "nyc") => false
+      (get-in result [:result/public-data :artifacts]) => [artifact])))
+
+(defn learned-answer-exit [exit secret]
+  (let [turns (atom []) children (atom 0) raw (atom []) close datasets/close!
+        final-result (atom nil) failure (atom nil) safely ai-command/safely complete ai-command/complete-prompt
+        operations (cond-> [["ask" "ai" {"action" "ask" "provider" "fake" "model" "fake" "prompt" "child"}]
+                            ["learn" "command" {"command" "answer-secret"}]]
+                     (= exit :retained) (conj ["artifact" "kroki_render" {"type" "mermaid" "source" "graph TD; A-->B"}])
+                     true (conj ["fail" "command" {"command" (if (= exit :halted) "answer-unknown" "answer-error")}]))]
+    (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                  channel/settings-for-chat-source (constantly {}) history/add (fn [& _])
+                  mcp/config (constantly {:servers [] :toolsets [(assoc toolset :native-tools ["ai" "command" "kroki_render"])]})
+                  ai/config (constantly {:providers [{:name "fake" :model "fake" :url "https://synthetic.invalid/v1"}]})
+                  context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                  datasets/close! (fn [store owner]
+                                    (reset! raw (vec (vals (:datasets @(:state store)))))
+                                    (close store owner))
+                  ai-command/safely (fn [& args]
+                                      (let [r (apply safely args)] (reset! final-result r) r))
+                  ai-command/complete-prompt (fn [prepared]
+                                               (try (complete prepared)
+                                                    (catch Exception e (reset! failure (ex-data e)) (throw e))))
+                  kroki/available-tools (constantly ["kroki_render"])
+                  kroki/client-call (fn [op request] (if (= op "validate-render!") request
+                                                     (public/reviewed {:result/value (:url artifact) :result/data artifact :result/public-data artifact})))
+                  http/post (fn [_ opts]
+                              (let [messages (get-in opts [:form-params :messages])]
+                                (if (= "child" (:content (last messages)))
+                                  (do (swap! children inc)
+                                      {:status 200 :body {:choices [{:message {:role "assistant" :content (str secret)}}]}})
+                                  (let [n (count (swap! turns conj messages))]
+                                    (if (<= n (count operations))
+                                      (let [[id op args] (nth operations (dec n))] {:status 200 :body (call id op args)})
+                                      (if (#{:thrown :retained} exit) (throw (Exception. "scripted provider failure"))
+                                        {:status 200 :body {:id "response-1" :usage {:prompt_tokens 1 :completion_tokens 1}
+                                                           :choices [{:message {:role "assistant" :content "partial answer"}}]}}))))))]
+      (hooks/cmd-hook-resolved #"answer-secret" #".*" (fn [_] {:result/value "learned" :result/data [{:auth/token secret}]}))
+      (hooks/cmd-hook-resolved #"answer-error" #".*" (fn [_] {:result/error "known command failure"}))
+      (hooks/cmd-hook-resolved #"answer-unknown" #".*" (fn [_] (throw (Exception. "uncertain command"))))
+      (with-current-caller #(support/run-command support/request "ai partial"))
+      {:result @final-result :failure @failure :turns @turns :raw @raw :children @children})))
+
+(fact "cached real child answer is reprojected at partial unknown thrown and retained-artifact exits"
+  (doseq [exit [:partial :halted :thrown :retained]]
+    (let [{:keys [result failure turns raw children]} (learned-answer-exit exit "LATER-PRIVATE-ANSWER")]
+      children => 1
+      (string/includes? (:result/value result) "fake/fake") => true
+      (when (= :thrown exit)
+        (select-keys (first (:ai/answers failure)) [:provider :model :text]))
+      => (when (= :thrown exit) {:provider "fake" :model "fake" :text "[redacted]"})
+      (get-in (first raw) [:rows 0 "auth/token"]) => "LATER-PRIVATE-ANSWER"
+      (string/includes? (pr-str result) "LATER-PRIVATE-ANSWER") => false
+      (string/includes? (pr-str result) "[redacted]") => true
+      (count turns) => (case exit :halted 3 :retained 5 4)
+      (when (= exit :retained) (get-in result [:result/public-data :artifacts])) => (when (= exit :retained) [artifact]))))
+
+(fact "Responses replay projects learned plaintext reasoning and native search payloads but preserves opaque protocol"
+  (let [secret "REPLAY-PRIVATE" turns (atom [])
+        state [{:type "reasoning" :id "REPLAY-PRIVATE-id" :status "completed"
+                :encrypted_content "REPLAY-PRIVATE-opaque"
+                :summary [{:type "summary_text" :text secret}]}
+               {:type "web_search_call" :id "search-id" :status "completed"
+                :action {:type "search" :query secret :queries [secret]}}
+               {:type "x_search_call" :id "x-id" :status "completed"
+                :action {:type "search" :query secret}}]]
+    (with-redefs [hooks/hooks (atom @hooks/hooks) hooks/re-prefix->topic (atom @hooks/re-prefix->topic)
+                  channel/settings-for-chat-source (constantly {}) history/add (fn [& _])
+                  context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                  mcp/config (constantly {:servers [] :toolsets [toolset]})
+                  ai/config (constantly {:providers [{:name "fake" :model "fake" :api "responses" :url "https://synthetic.invalid/v1"}]})
+                  http/post (fn [_ opts]
+                              (let [n (count (swap! turns conj (:form-params opts)))]
+                                {:status 200 :body {:status "completed"
+                                  :output (if (= n 1)
+                                            (conj state {:type "function_call" :id "item" :call_id "REPLAY-PRIVATE-call"
+                                                         :name "yetibot_command" :arguments "{\"command\":\"replay-learn\"}"})
+                                            [{:type "message" :role "assistant" :content [{:type "output_text" :text "done"}]}])}}))]
+      (hooks/cmd-hook-resolved #"replay-learn" #".*" (fn [_] {:result/value "learned" :result/data [{:auth/token secret}]}))
+      (with-current-caller #(support/run-command support/request "ai replay"))
+      (count @turns) => 2
+      (let [replayed (filter :type (:input (second @turns)))
+            reasoning (first (filter #(= "reasoning" (:type %)) replayed))
+            searches (filter #(#{"web_search_call" "x_search_call"} (:type %)) replayed)]
+        (select-keys reasoning [:id :status :encrypted_content]) => (select-keys (first state) [:id :status :encrypted_content])
+        (get-in reasoning [:summary 0 :text]) => "[redacted]"
+        (mapv #(get-in % [:action :query]) searches) => ["[redacted]" "[redacted]"]
+        (get-in (first searches) [:action :queries]) => ["[redacted]"]
+        (mapv :id searches) => ["search-id" "x-id"]
+        (:call_id (last replayed)) => "REPLAY-PRIVATE-call"))))
+
+(fact "cached numeric answer projection leaves actual provider response IDs usage counters and host diagnostics intact"
+  (let [{:keys [result children raw]} (learned-answer-exit :partial 1)]
+    children => 1
+    (get-in (first raw) [:rows 0 "auth/token"]) => 1
+    (string/starts-with? (:result/value result) "[redacted]\n-# fake/fake") => true
+    (get-in result [:result/data :id]) => "response-1"
+    (get-in result [:result/data :usage]) => {:prompt_tokens 1 :completion_tokens 1}
+    (get-in result [:result/data :mcp :tool-calls]) => 3
+    (get-in result [:result/data :execution :calls 0 :call]) => 1))

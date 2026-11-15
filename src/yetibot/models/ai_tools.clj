@@ -123,23 +123,54 @@
                          (mapv descriptor (get-in data [:structuredContent :datasets]))))))
          (catch Exception _ (project content)))))))
 
-(defn- current-message [message config]
-  ;; Project payloads, never vendor call IDs, tool names or wire controls. This
-  ;; runs immediately before inference, including earlier replies in one batch.
-  (cond-> message
-    (string? (:content message))
-    (update :content current-content config {:tool-result? (= "tool" (:role message))})
-    (vector? (:content message))
-    (update :content #(mapv (fn [part]
-                             (cond-> part
-                               (string? (:text part)) (update :text current-content config))) %))
-    (string? (:output message))
-    (update :output current-content config {:tool-result? (= "function_call_output" (:type message))})
-    (string? (:arguments message)) (update :arguments current-content config)
-    (seq (:tool_calls message))
-    (update :tool_calls
-            #(mapv (fn [call] (update-in call [:function :arguments]
-                                        current-content config)) %))))
+(defn- current-answers [answers config]
+  ;; Attribution and accounting are host metadata; only answer text is payload.
+  (mapv #(update % :text clean-data config) answers))
+
+(defn- current-message [message config & [public?]]
+  ;; Project payloads, never vendor call IDs, tool names or wire controls. Replay
+  ;; adds live knowledge; public response payloads also apply configured secrets.
+  (let [payload #(if public? (clean-data % config) (current-content % config))
+        result-payload #(if public? (clean-data % config)
+                          (current-content % config {:tool-result? true}))
+        plain-payload #(clean-data % config)]
+    (cond-> message
+      (string? (:content message))
+      (update :content (if (= "tool" (:role message)) result-payload payload))
+      (vector? (:content message))
+      (update :content #(mapv (fn [part]
+                               (cond-> part
+                                 (string? (:text part)) (update :text payload))) %))
+      (string? (:output message))
+      (update :output (if (= "function_call_output" (:type message)) result-payload payload))
+      (and (= "reasoning" (:type message)) (vector? (:summary message)))
+      (update :summary
+              #(mapv (fn [part]
+                       (if (and (= "summary_text" (:type part)) (string? (:text part)))
+                         (update part :text plain-payload) part)) %))
+      (and (#{"web_search_call" "x_search_call"} (:type message)) (map? (:action message)))
+      (update :action
+              (fn [action]
+                (cond-> action
+                  (string? (:query action)) (update :query plain-payload)
+                  (vector? (:queries action)) (update :queries #(mapv plain-payload %))
+                  (string? (:text action)) (update :text plain-payload)
+                  (string? (:url action)) (update :url plain-payload)
+                  (string? (:pattern action)) (update :pattern plain-payload))))
+      (string? (:arguments message)) (update :arguments payload)
+      (seq (:tool_calls message))
+      (update :tool_calls
+              #(mapv (fn [call] (update-in call [:function :arguments] payload)) %)))))
+
+(defn- current-response [body config]
+  ;; The response envelope, usage and opaque state are protocol, not prose.
+  (cond-> body
+    (vector? (:choices body))
+    (update :choices #(mapv (fn [choice]
+                             (if (map? (:message choice))
+                               (update choice :message current-message config true) choice)) %))
+    (vector? (:output body))
+    (update :output #(mapv (fn [item] (current-message item config true)) %))))
 
 (defn- model-tools [config tools]
   (let [servers (into {} (map (juxt :name identity) (:servers config)))
@@ -437,7 +468,7 @@
             text (or caption (str @(:chart-stop config)
                                   (when problem (str " " (progress/problem-text problem)))))]
         (public/reviewed
-          {:result/value (str text (when artifact (str "\n" (:url artifact))))
+          {:result/value (str (clean-data text config) (when artifact (str "\n" (:url artifact))))
            :result/data (cond-> {:mcp {:tool-calls used} :ai/cost accounting
                                  :execution (trace/public-report report)}
                           (not artifact) (assoc :isError true :tool-trace report))
@@ -588,7 +619,7 @@
                     (let [report (trace/report trace-state limit :unknown-result)]
                       (public/reviewed
                         {:result/value
-                         (trace/summary report (:answers @trace-state))
+                         (trace/summary report (current-answers (:answers @trace-state) config))
                          :result/data
                          {:isError true :tool-trace report
                           :execution (trace/public-report report)
@@ -639,18 +670,16 @@
                 (public/reviewed
                  {:result/value
                  (if partial?
-                   (trace/summary report (:answers @trace-state)
+                   (trace/summary report (current-answers (:answers @trace-state) config)
                                   (clean-data text config))
                    (clean-data text config))
                  :result/data
                  (cond->
-                   (clean-data
-                     (assoc body :mcp {:tool-calls used} :ai/cost accounting
-                                 :execution
-                                 (trace/public-report
-                                   (or report
-                                       (trace/report trace-state limit :completed))))
-                     config)
+                   (assoc (current-response body config)
+                          :mcp {:tool-calls used} :ai/cost accounting
+                          :execution
+                          (trace/public-report
+                            (or report (trace/report trace-state limit :completed))))
                    partial? (assoc :isError true :tool-trace report
                                    :execution (trace/public-report report)))
                   :result/public-data
@@ -668,7 +697,7 @@
             (notify-tool! config trace-state (:call row) :rejected))
           (throw (ex-info (trace/failure-message report)
                           (cond-> {:ai/error true :ai/tool-failure report
-                                   :ai/answers (:answers @trace-state)}
+                                   :ai/answers (current-answers (:answers @trace-state) config)}
                             (:ai/diagnostic (ex-data e))
                             (assoc :ai/diagnostic
                                    (:ai/diagnostic (ex-data e)))))))))))

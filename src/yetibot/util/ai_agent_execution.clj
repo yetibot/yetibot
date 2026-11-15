@@ -624,8 +624,14 @@
                                 :actor (policy/actor event)
                                 :toolset (:toolset-policy execution/*request*)
                                 :before-expression! (fn [& _] (execution/require-live!))})]
-                 {:result/value (get-in capture [:pipeline :value])
-                  :result/data (get-in capture [:pipeline :data])})))
+                 (case (:status capture)
+                   :unknown (throw (ex-info "Inherited command outcome is unknown; do not retry automatically."
+                                            {:ai/error true :ai/unknown-outcome true}))
+                   :error {:result/error (or (get-in capture [:pipeline :error])
+                                             "Inherited command failed.")}
+                   :success {:result/value (get-in capture [:pipeline :value])
+                             :result/data (get-in capture [:pipeline :data])}
+                   (denied!)))))
        :admit-inference #(run (fn []
                                ((:authorize-inference! execution/*request*) %)
                                (execution/admit-operation! :inference)))
@@ -977,10 +983,11 @@
       :else (with-sdk-transport* provider model options
               #(callback % model messages options)))))
 
-(defn- source-xai-text [callback prompt]
+(defn- source-xai-text [_callback prompt]
   (execution/with-source* {:provider (native-text-provider "xai-text")
                            :model "grok-4.7" :no-tools true :producer-operation? true}
-    #(callback prompt)))
+    #(ai/native-xai-first-text prompt
+       {:max-output-tokens (origin/generation-limit)})))
 
 (defn- source-xai-image [callback & args]
   (execution/with-source* {:provider {:name "xai" :url "https://api.x.ai/v1"}

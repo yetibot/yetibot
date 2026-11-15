@@ -362,13 +362,12 @@
                                  calls)))))
       body)))
 
-(defn native-xai-text
-  "App-owned continuation for the legacy native producer, not registry routing.
-   Explicit no-tools is distinct from that producer's default vendor searches."
-  [messages options]
+(defn- native-xai-response [messages options]
   (let [cap (:max-output-tokens (limits/effective options))
         endpoint "https://api.x.ai/v1/responses"
         key (:key xai/config)
+        ;; The original native first hop has no store/include/reasoning fields.
+        ;; Keep that wire shape distinct from registry Responses requests.
         body (cond-> {:model "grok-4.7" :input messages :max_output_tokens cap}
                (not (:no-tools options)) (assoc :tools [{:type "web_search"} {:type "x_search"}]))
         response (usage/capture!
@@ -383,19 +382,56 @@
                    (partial usage/xai-metrics "grok-4.7"))
         _ (when-not (<= 200 (:status response) 299)
             (fail "Native xAI text request failed."))
-        actual-body (:body response)
-        _ (outcome/check! {:name "xai" :api "responses" :url "https://api.x.ai/v1"}
-                          "grok-4.7" actual-body
-                          (assoc options :max-output-tokens cap))
-        text (some (fn [item]
-                     (when (= "message" (some-> (:type item) name))
-                       (let [content (or (:content item) (get-in item [:message :content]))]
-                         (cond (string? content) content
-                               (sequential? content) (string/join "" (keep :text content))
-                               :else (:text item)))))
-                   (get-in response [:body :output]))]
-    (assoc (select-keys actual-body [:status :usage :incomplete_details])
-           :status (or (:status actual-body) "completed")
+        actual-body (:body response)]
+    (outcome/check! {:name "xai" :api "responses" :url "https://api.x.ai/v1"}
+                    "grok-4.7" actual-body
+                    (assoc options :max-output-tokens cap))
+    actual-body))
+
+(defn- native-item-text [item reasoning?]
+  (let [content (if reasoning? (:content item)
+                 (or (:content item) (get-in item [:message :content])))]
+    (cond
+      (string? content) content
+      (sequential? content) (let [texts (keep #(when (map? %) (:text %)) content)]
+                              (when (seq texts) (string/join "" texts)))
+      (string? (:text item)) (:text item)
+      (and reasoning? (string? (get-in item [:reasoning :text])))
+      (get-in item [:reasoning :text]))))
+
+(defn native-xai-first-text
+  "Outcome-aware first native producer hop, retaining its legacy result shape.
+   Transport usage is recorded once before validation and normalization."
+  [prompt options]
+  (let [input (if (and (sequential? prompt) (map? (first prompt))) prompt
+                [{:role "user" :content prompt}])
+        body (native-xai-response input options)
+        extract (fn [type reasoning?]
+                  (some #(when (= type (some-> (:type %) name))
+                           (native-item-text % reasoning?)) (:output body)))
+        text (extract "message" false)
+        reasoning (extract "reasoning" true)]
+    (when-not (or text reasoning)
+      (outcome/fail! :no-answer {:name "xai" :api "responses" :url "https://api.x.ai/v1"}
+                     "grok-4.7" body options))
+    (let [usage (:usage body)
+          input (or (:prompt_tokens usage) (:input_tokens usage) 0)
+          output (or (:completion_tokens usage) (:output_tokens usage) 0)
+          cost (/ (Math/round (* (+ (* input 0.000002) (* output 0.000006)) 1000000.0))
+                  1000000.0)]
+      (cond-> {:cost cost}
+        text (assoc :text text)
+        reasoning (assoc :reasoning reasoning)))))
+
+(defn native-xai-text
+  "App-owned continuation for the legacy native producer, not registry routing.
+   Explicit no-tools is distinct from that producer's default vendor searches."
+  [messages options]
+  (let [body (native-xai-response messages options)
+        text (some #(when (= "message" (some-> (:type %) name))
+                      (native-item-text % false)) (:output body))]
+    (assoc (select-keys body [:status :usage :incomplete_details])
+           :status (or (:status body) "completed")
            :output [{:type "message" :content [{:type "output_text" :text text}]}])))
 
 (defn chat

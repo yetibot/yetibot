@@ -30,6 +30,7 @@
             [yetibot.core.db :as database]
             [yetibot.core.db.util :as db]
             [yetibot.core.db.agent-run :as ledger]
+            [yetibot.core.db.ai-usage :as usage-store]
             [yetibot.core.db.cron :as cron]
             [yetibot.core.handler :as handler]
             [yetibot.core.webapp.routes.api :as http-api]
@@ -41,6 +42,7 @@
             [yetibot.core.util.xai :as xai]
             [yetibot.core.util.gemini :as gemini]
             [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-tools :as tools]
             [yetibot.models.ai-agent-runs :as runs]
             [yetibot.models.ai-cron-tools :as native-cron]
             [yetibot.util.ai-execution :as execution]
@@ -1465,3 +1467,146 @@
             => (when expected {:provider :grok :model :grok :endpoint :responses :status (keyword status)
                                :output-cap 91 :text-present true :input_count 7 :output_count 91})
             (count @*queued*) => 0))))))
+
+(fact "nested agent run preserves uncertain effect in the actual live and durable command owner without replay"
+  (doseq [durable? [false true]]
+    (with-runtime
+      (fn [url]
+        (let [wire (atom []) effects (atom 0) later (atom 0) families (atom []) results (atom [])
+              complete tools/complete]
+          (hooks/cmd-hook-resolved #"uncertain-run-write" #".*"
+            (fn [_] (swap! effects inc) (throw (Exception. "effect performed before receipt"))))
+          (hooks/cmd-hook-resolved #"after-uncertain-run" #".*"
+            (fn [_] (swap! later inc) {:result/value "must not run"}))
+          (with-redefs [tools/complete (fn [& args]
+                                                   (let [r (apply complete args)] (swap! results conj r) r))
+                        http/post (fn [_ options]
+                                    (swap! families conj execution/*request*)
+                                    (let [n (count (swap! wire conj (:form-params options)))]
+                                      {:status 200 :body
+                                       (if (and durable? (= n 1)) (tool-call "agent nested work")
+                                         (if (= n (if durable? 2 1))
+                                           (update-in (tool-call "agent run uncertain-run-write") [:choices 0 :message :tool_calls]
+                                             conj {:id "later" :type "function" :function {:name "yetibot_command"
+                                                                                          :arguments "{\"command\":\"after-uncertain-run\"}"}})
+                                           (answer "must not infer after unknown")))}))]
+            (dispatch "ai nested uncertain work")
+            (when durable? (try ((first @*queued*)) (catch Exception _ nil))))
+          @effects => 1
+          @later => 0
+          (count @wire) => (if durable? 2 1)
+          (get-in (last @results) [:result/data :execution :reason]) => :unknown-result
+          (mapv :outcome (get-in (last @results) [:result/data :execution :calls])) => [:unknown :skipped]
+          (:unknown? @(:budget (last @families))) => true
+          (when durable?
+            (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])))
+                  row (ledger/read-row url "agent_run" id)]
+              (:execution-phase row) => "unknown"
+              (mapv :state (json/parse-string (:operation-receipts row) true)) => ["definitive" "unknown"]
+              (runs/claim! url "agent_run" id (:state-revision row) {}) => {:status :unknown}
+              (dotimes [_ 2] (support/in-event support/request "echo recover uncertain run" (fn [_] nil)))
+              (count @*queued*) => 1
+              (count @wire) => 2
+              @effects => 1)))))))
+
+(fact "nested agent run known command error stays definitive and success remains available"
+  (with-runtime
+    (fn [_]
+      (let [wire (atom 0) effects (atom 0) results (atom []) complete ai-command/complete-prompt]
+        (hooks/cmd-hook-resolved #"known-run-denial" #".*" (fn [_] (swap! effects inc) {:result/value "must not run"}))
+        (with-redefs [admin/admin-only-command? #(= "known-run-denial" %)
+                      admin/user-is-admin? (constantly false)
+                      ai-command/complete-prompt (fn [p] (let [r (complete p)] (swap! results conj r) r))
+                      http/post (fn [_ _] {:status 200 :body (if (= 1 (swap! wire inc))
+                                                                            (tool-call "agent run known-run-denial") (answer "known error"))})]
+          (dispatch "ai --max-tool-calls 3 known error"))
+        @effects => 0
+        @wire => 2
+        (get-in (last @results) [:result/data :execution :reason]) => :partial-result
+        (mapv :outcome (get-in (last @results) [:result/data :execution :calls])) => [:error]))))
+
+(fact "first native gi optimizer validates failed and incomplete nonempty physical Responses before any image or artifact"
+  (doseq [[status reason expected] [["failed" nil :incomplete-output]
+                                   ["incomplete" "max_output_tokens" :output-limit]
+                                   ["completed" nil nil]]]
+    (with-runtime
+      (fn [_]
+        (let [wire (atom []) publications (atom []) observed (atom []) generate xai/generate-text]
+          (require 'yetibot.core.commands.grokimage)
+          (hooks/cmd-hook-resolved #"gi" #".*" (deref (ns-resolve 'yetibot.core.commands.grokimage 'grokimage-cmd)))
+          (with-redefs [mcp/config (constantly {:servers [] :toolsets [(update toolset :providers conj
+                                                                       {:name "xai" :models ["grok-4.7" "grok-imagine-image-2.0"]})]})
+                        xai/config {:key "safe-first-optimizer-key"}
+                        xai/generate-text (fn [prompt]
+                                            (try (let [r (generate prompt)] (swap! observed conj r) r)
+                                                 (catch Exception e (swap! observed conj (ex-data e)) (throw e))))
+                        images/store-image! (fn [& args] (swap! publications conj args) "https://bot.invalid/image.jpg")
+                        http/post (fn [endpoint opts]
+                                    (swap! wire conj [endpoint opts (when (:body opts) (json/parse-string (:body opts) true))])
+                                    {:status 200 :body
+                                     (cond
+                                       (.endsWith endpoint "/chat/completions") (if (= 1 (count @wire)) (tool-call "gi safe scene") (answer "finished"))
+                                       (.endsWith endpoint "/responses")
+                                       {:status status :incomplete_details {:reason reason}
+                                        :usage {:input_tokens 7 :output_tokens 91}
+                                        :output [{:type "reasoning" :text "original reasoning"}
+                                                 {:type "message" :content [{:type "output_text" :text "nonempty optimizer text"}]}]}
+                                       :else {:data [{:b64_json "AA=="}]})})]
+            (dispatch "ai --max-output-tokens 91 image"))
+          (let [native (filter #(.startsWith (first %) "https://api.x.ai/") @wire)]
+            (println "FIRST-OPTIMIZER-CAUSAL" status
+                     {:native-endpoints (mapv first native) :artifact-publications (count @publications)})
+            (mapv first native) => (if expected ["https://api.x.ai/v1/responses"]
+                                                     ["https://api.x.ai/v1/responses" "https://api.x.ai/v1/images/generations"])
+            (count @wire) => (if expected 3 4)
+            (set (keys (get-in (first native) [2]))) => #{:model :input :max_output_tokens :tools}
+            (get-in (first native) [1 :headers "Authorization"]) => "Bearer safe-first-optimizer-key"
+            (get-in (first native) [2 :max_output_tokens]) => 91
+            (get-in (first native) [2 :tools]) => [{:type "web_search"} {:type "x_search"}]
+            (select-keys (second (first native)) [:conn-timeout :socket-timeout :redirect-strategy])
+            => {:conn-timeout 5000 :socket-timeout 120000 :redirect-strategy :none}
+            ((get-in (first native) [1 :retry-handler]) nil nil nil) => false
+            (:ai/output-error (first @observed)) => expected
+            (when-not expected (first @observed)) => (when-not expected {:text "nonempty optimizer text" :reasoning "original reasoning" :cost 0.00056})
+            (count @publications) => (if expected 0 1)
+            (when expected (select-keys (:ai/response (first @observed)) [:status :output-cap :input_count :output_count]))
+            => (when expected {:status (keyword status) :output-cap 91 :input_count 7 :output_count 91})))))))
+
+(fact "native first-hop input output reasoning and legacy cost shapes survive the actual source boundary with one usage projection"
+  (doseq [[output expected] [[{:type "message" :content "plain text"} {:text "plain text"}]
+                             [{:type "message" :message {:content [{:text "nested "} {:text "text"}]}} {:text "nested text"}]
+                             [{:type "message" :text "top-level text"} {:text "top-level text"}]
+                             [{:type "reasoning" :reasoning {:text "reasoning only"}} {:reasoning "reasoning only"}]]
+          prompt ["source prompt" [{:role "user" :content "supplied native messages"}]]]
+    (with-runtime
+      (fn [url]
+        (database/idempotent-create-table! (:schema/table usage-store/schema) (:schema/specs usage-store/schema))
+        (try
+         (let [wire (atom []) normalized (atom nil) projections (atom 0) metrics usage/xai-metrics]
+          (hooks/cmd-hook-resolved #"native-shape" #".*"
+            (fn [_] (reset! normalized (xai/generate-text prompt)) {:result/value "received"}))
+          (with-redefs [database/connected? (atom true)
+                        mcp/config (constantly {:servers [] :toolsets [(update toolset :providers conj
+                                                                       {:name "xai" :models ["grok-4.7"]})]})
+                        xai/config {:key "safe-shape-key"}
+                        usage/xai-metrics (fn [model response] (swap! projections inc) (metrics model response))
+                        http/post (fn [endpoint options]
+                                    (swap! wire conj [endpoint (or (:form-params options) (json/parse-string (:body options) true))])
+                                    {:status 200 :body (if (.endsWith endpoint "/responses")
+                                                        {:usage {:prompt_tokens 7 :input_tokens 99 :completion_tokens 3 :output_tokens 91}
+                                                         :output [output]}
+                                                        (if (= 1 (count @wire)) (tool-call "native-shape") (answer "done")))})]
+            (dispatch "ai --max-output-tokens 91 native shape"))
+          @normalized => (assoc expected :cost 0.000032)
+          @projections => 1
+          (let [events (jdbc/query url [(str "SELECT provider,model_usage FROM " (db/qualified-table-name "ai_usage")
+                                             " WHERE provider='xai'")])
+                row (first (json/parse-string (str (:model_usage (first events))) true))]
+            (count events) => 1
+            (select-keys row [:model :requests :input_tokens :output_tokens :usd :cost_kind])
+            => {:model "grok-4.7" :requests 1 :input_tokens 99 :output_tokens 91 :usd 0.000744 :cost_kind "estimate"})
+          (count @wire) => 3
+          (get-in @wire [1 1 :max_output_tokens]) => 91
+          (get-in @wire [1 1 :input]) => (if (string? prompt) [{:role "user" :content prompt}] prompt)
+          (get-in @wire [1 1 :tools]) => [{:type "web_search"} {:type "x_search"}])
+         (finally (jdbc/db-do-commands url (str "DROP TABLE " (db/qualified-table-name "ai_usage")))))))))

@@ -202,7 +202,8 @@
 
 (defn counters [row]
   {:limit (:execution-limit row) :used (:execution-used row)
-   :reserved (:execution-reserved row) :closed? false})
+   :reserved (:execution-reserved row) :closed? false
+   :unknown? (= "unknown" (:execution-phase row))})
 
 (defn transfer-live!
   "Reserve all live parent's remainder only after definite commit. Any uncertain
