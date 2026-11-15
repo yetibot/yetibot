@@ -34,15 +34,15 @@
            (try (OffsetDateTime/parse v) true (catch Exception _ false))
            (try (LocalDate/parse v) true (catch Exception _ false)))))
 
-(defn- number-value [dataset field v]
+(defn- number-value [dataset field v path]
   (cond
     (nil? v) nil
     (finite-number? v) v
     (and (= "wise" (:source dataset)) (:semantic field)
          (string? v) (<= (count v) 128)
          (re-matches #"-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?" v))
-    (let [n (bigdec v)] (if (finite-number? n) n (reject! "y" :type)))
-    :else (reject! "y" :type)))
+    (let [n (bigdec v)] (if (finite-number? n) n (reject! path :type)))
+    :else (reject! path :type)))
 
 (defn- field! [fields name path]
   (when-not (string? name) (reject! path :type))
@@ -64,8 +64,10 @@
                        #"[A-Za-z%°/][A-Za-z0-9%°/ ._-]{0,31}") value)
        (or (nil? (:unit field)) (= (:unit field) value))))
 
-(defn- dimension! [row field path]
-  (let [v (cell row field)]
+(defn- dimension! [dataset row field path]
+  (let [v (if (= :quantitative (:type field))
+            (number-value dataset field (cell row field) path)
+            (cell row field))]
     (when-not (or (nil? v)
                   (case (:type field)
                     :temporal (temporal? v)
@@ -155,10 +157,10 @@
                      (or (not= :temporal (:type x)) (not= :complete (:status coverage)) (:has-more coverage)))
             (reject! "y" :incomplete-scope))
         values (mapv (fn [row]
-                       (let [xv (dimension! row x "x")
-                             yv (number-value dataset y (cell row y))
-                             sv (when series (dimension! row series "series"))
-                             hv (when host-series (dimension! row host-series "series"))
+                       (let [xv (dimension! dataset row x "x")
+                             yv (number-value dataset y (cell row y) "y")
+                             sv (when series (dimension! dataset row series "series"))
+                             hv (when host-series (dimension! dataset row host-series "series"))
                              uv (when unit (cell row unit))]
                          (when (or (and series (nil? sv)) (and host-series (nil? hv)))
                            (reject! "series" :incomplete-scope))

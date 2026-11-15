@@ -31,7 +31,11 @@
                    :error message}}))
 
 (defn- safely [args f]
-  (try (f) (catch Exception _ (failure args false))))
+  (try (f)
+       (catch Exception e
+         (if (and execution/*request* (= :policy-denied (:ai/error-code (ex-data e))))
+           (throw e)
+           (failure args false)))))
 
 (def catalog-usage
   "Usage: cf models [--categories | --category <category>]")

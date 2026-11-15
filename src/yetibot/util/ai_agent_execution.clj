@@ -262,6 +262,19 @@
 (defn- tool-key [tool]
   (execution/tool-key tool))
 
+(defn- require-session-live! [session]
+  ;; Hold the row only for this pre-effect check, never while a handler runs.
+  ;; Own admissions/checkpoints advance the session revision under this lock.
+  (locking (:budget session)
+    (jdbc/with-db-transaction [tx (:database session)]
+      (let [{:keys [table id fence]} (:owner session)
+            row (ledger/lock-row! tx table id)]
+        (when-not (and (= ledger/inherited-kind (:execution-kind row))
+                       (= fence (:worker-fence row))
+                       (= (:state-revision @(:row session)) (:state-revision row))
+                       (#{"queued" "ready" "operation-in-flight"} (:execution-phase row)))
+          (denied!))))))
+
 (defn- request-for [session resolved]
   (let [state @(:state session) grant (:original resolved)
         event (or (get-in resolved [:current :runtime-event]) (event-for grant))
@@ -277,6 +290,7 @@
                  :usage-context-id (:usage-context-id state)
                  :budget (:budget session) :event event :core-context (atom nil)
                  :durable-session session :scheduled? (:scheduled? state)
+                 :require-live! #(require-session-live! session)
                  :generation-limit (:generation-cap state) :no-tools? (:no-tools? grant)
                  :text-only (atom (boolean (:no-tools? grant)))
                  :planner-provider (:provider resolved) :planner-model (:model resolved)
@@ -1041,6 +1055,29 @@
                            :producer-operation? true}
     #(callback config text)))
 
+(defn- source-models [callback provider]
+  (if (and (nil? execution/*request*) (origin/value-origin))
+    (origin/invoke! (origin/value-origin) :with-request
+      #(do (when-not execution/*request* (denied!))
+           (source-models callback provider)))
+    (do
+      (when execution/*request*
+        (if origin/*operation* (execution/require-live!) (execution/require-open!))
+        (let [request execution/*request*
+              ;; Catalog authorization must not prepare the planner: Zen
+              ;; preparation itself uses this metadata boundary. Resolve only
+              ;; current registered identity/policy before any credential IO.
+              current (if (:no-host-execution? request)
+                        {:toolset-policy (:toolset (toolsets/select (mcp/config) (:toolset-name request)))}
+                        (current-authority (authority request)))]
+          (when (and (not (:no-host-execution? request))
+                     (not= (identity-fields (get-in request [:event :user])) (:user current)))
+            (denied!))
+          (doseq [t [(:toolset-policy request) (:toolset-policy current)]]
+            (policy/authorize-provider! t (when-not (:no-host-execution? request)
+                                            (policy/actor execution/*event*)) provider))))
+      (callback provider))))
+
 (defonce ^:private runtime (atom nil))
 
 
@@ -1202,6 +1239,7 @@
   (hooke/add-hook #'cron/create #'with-cron-write)
   (hooke/add-hook #'cron/update-where #'with-cron-write)
   (hooke/add-hook #'cron-tools/call! #'with-cron-write)
+  (hooke/add-hook #'ai/models #'source-models)
   (hooke/add-hook #'ai/chat #'source-chat)
   (hooke/add-hook #'ai/complete #'source-complete)
   (hooke/add-hook #'xai/generate-text #'source-xai-text)

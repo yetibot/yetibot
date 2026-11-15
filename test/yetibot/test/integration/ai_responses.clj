@@ -6,6 +6,8 @@
             [yetibot.api.ai :as ai]
             [yetibot.api.mcp :as mcp]
             [yetibot.commands.grok]
+            [yetibot.commands.ai :as command]
+            [yetibot.models.ai-tool-policy :as policy]
             [yetibot.core.config :as config]
             [yetibot.core.util.xai :as xai]
             [yetibot.models.ai-tools :as tools]
@@ -454,3 +456,77 @@
                 (contains? body :tool_choice) => false
                 (mapv :call_id (take-last 2 (:input body)))
                 => ["one" "two"]))))))
+
+(fact "configured credentials in an empty live store protect untrusted keys and scalar spellings"
+  (let [turns (atom 0) stores (atom []) chat ai/chat
+        opaque {:type "reasoning" :id "PROVIDER_SECRET"
+                :encrypted_content "PROVIDER_SECRET" :summary []}
+        usage {:input_tokens 739194 :output_tokens 1 :total_tokens 739195}
+        annotated (update-in (text-output "Safe answer") [:content 0 :annotations 0]
+                             assoc (keyword "PROVIDER_SECRET") "extension"
+                             :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
+                             :numeric 739194 :safe "kept" :start_index 0 :end_index 11)
+        source {:type "web_search_call" :id "source-item" :status "completed"
+                :action {:type "search" :sources [{:type "url" :url "https://safe.example"
+                                                   (keyword "PROVIDER_SECRET") "extension"
+                                                   :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
+                                                   :numeric 739194 :safe "kept"}]}}]
+    (with-runtime
+      (fn [body]
+        (assoc (response (if (= 1 (swap! turns inc))
+                           [opaque annotated source (function-call (account-function-name body) "safe-call" "{}")]
+                           [opaque annotated source])) :usage usage))
+      {:structuredContent {(keyword "PROVIDER_SECRET") "reflection"
+                           :id "PROVIDER_SECRET" :key "PROVIDER_SECRET"
+                           :numeric 739194 :safe "kept"}
+       :content [] :isError false}
+      (fn [provider requests calls]
+        (let [config (update (mcp/config) :secrets conj "739194")]
+          (with-redefs [mcp/config (constantly config)
+                        ai/chat (fn [& args]
+                                  (swap! stores conj @(get-in host-execution/*request* [:dataset-store :state]))
+                                  (apply chat args))]
+            (let [result (tools/complete provider "grok-4.7" messages
+                                         {:actor (policy/actor host-execution/*event*)})
+                  next-body (last-turn requests)
+                  reply (last (:input next-body))
+                  annotation (get-in result [:result/data :output 1 :content 0 :annotations 0])
+                  public-source (get-in result [:result/data :output 2 :action :sources 0])
+                  replay-payload (remove #(= "reasoning" (:type %)) (:input next-body))]
+              (count @stores) => 2
+              (every? #(and (false? (:closed? %)) (= {} (:datasets %))) @stores) => true
+              @calls => [{:name "whoami" :arguments {}}]
+              @turns => 2
+              (:call_id reply) => "safe-call"
+              (get-in (json/parse-string (:output reply) true) [:structuredContent :safe]) => "kept"
+              (string/includes? (:output reply) "PROVIDER_SECRET") => false
+              (string/includes? (:output reply) "739194") => false
+              (doseq [payload [annotation public-source]]
+                (string/includes? (json/generate-string payload) "PROVIDER_SECRET") => false
+                (string/includes? (json/generate-string payload) "739194") => false
+                (:safe payload) => "kept")
+              (:start_index annotation) => 0
+              (:end_index annotation) => 11
+              (first (filter #(= "reasoning" (:type %)) (:input next-body))) => opaque
+              (get-in result [:result/data :output 0]) => opaque
+              (get-in result [:result/data :usage]) => usage
+              (:result/value result) => "Safe answer"
+              (string/includes? (json/generate-string replay-payload) "PROVIDER_SECRET") => false)))))))
+
+(fact "rewritten untrusted key collisions stop before a next planner and expose only safe failure data"
+  (let [turns (atom 0)]
+    (with-runtime
+      (fn [body]
+        (swap! turns inc)
+        (response [(function-call (account-function-name body) "collision-call" "{}")]))
+      {:structuredContent {:PROVIDER_SECRET "one" :CLOUDFLARE_SECRET "two"} :content []}
+      (fn [provider _ calls]
+        (let [result (command/safely #(tools/complete provider "grok-4.7" messages
+                                                    {:actor (policy/actor host-execution/*event*)}))
+              report (get-in result [:result/data :tool-trace])]
+          @turns => 1
+          (count @calls) => 1
+          (get-in result [:result/data :isError]) => true
+          (get-in report [:calls 0 :outcome]) => :unknown
+          (string/includes? (pr-str result) "PROVIDER_SECRET") => false
+          (string/includes? (pr-str result) "CLOUDFLARE_SECRET") => false)))))

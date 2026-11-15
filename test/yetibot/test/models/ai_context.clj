@@ -9,6 +9,8 @@
             [discljord.messaging :as discord]
             [midje.sweet :refer [fact facts =>]]
             [yetibot.core.chat :as chat]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.models.users :as users]
             [yetibot.models.ai-context :as context]))
 
 (def slack-args
@@ -211,3 +213,47 @@
         (subvec tail 0 2) => [{:role "user" :content "U1: root"} {:role "assistant" :content "answer"}]
         (:source (json/parse-string (:content (nth tail 3)) true)) => "yetibot-pipeline-dataset"
         (last tail) => {:role "user" :content "hello"}))))
+
+(fact "prepared live thread requests reauthorize before any protected history read"
+  (doseq [kind [:slack :discord] revoked [:adapter :user]]
+    (let [reads (atom 0) sends (atom 0)
+          request (assoc support/request :chat-source
+                    (if (= kind :slack)
+                      {:adapter :slack :uuid "workspace" :room "C1"
+                       :raw-event {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"}}
+                      {:adapter :discord :uuid "workspace" :room "100"
+                       :raw-event {:author {:id "U1"} :channel-id "100" :id "400"}}))]
+      (with-redefs [ai/config (constantly {:providers [history-provider]})
+                    mcp/config (constantly {:servers [] :toolsets [history-policy]})
+                    slack/replies (fn [& _] (swap! reads inc) {:ok true :messages []})
+                    discord/get-channel! (fn [& _] (swap! reads inc) (delivered {:id "100" :type 12}))
+                    discord/get-channel-messages! (fn [& _] (swap! reads inc) (delivered []))
+                    http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+        (support/in-registered-event request "ai --no-tools hello"
+          (fn [event]
+            (when (= kind :discord) (reset! (:conn chat/*adapter*) {:rest :connection}))
+            (binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+              (let [prepared (command/prepare-prompt (assoc event :match "--no-tools hello"))]
+                (case revoked
+                  :adapter (swap! adapters/adapters dissoc "workspace")
+                  :user (swap! users/users dissoc {:adapter kind :id "U1"}))
+                (string? (error-message #(command/complete-prompt prepared))) => true))))
+        @reads => 0
+        @sends => 0))))
+
+(fact "plaintext compatibility cannot acquire history from supplied chat source data"
+  (let [reads (atom 0) sends (atom 0)
+        request (assoc-in support/request [:chat-source :raw-event]
+                          {:user "U1" :channel "C1" :thread_ts "1.0" :ts "4.0"})]
+    (with-redefs [ai/config (constantly {:providers [history-provider]})
+                  mcp/config (constantly {:servers []})
+                  slack/replies (fn [& _] (swap! reads inc) {:ok true :messages []})
+                  http/post (fn [& _] (swap! sends inc) {:status 200 :body {}})]
+      (support/with-registered-caller request
+        #(binding [chat/*adapter* (assoc chat/*adapter* :config {:token "history-fixture"})]
+           (string? (error-message
+                      (fn [] (command/complete-prompt
+                               (command/prepare-prompt (assoc request :match "--no-tools hello"))))))
+           => true))
+      @reads => 0
+      @sends => 0)))

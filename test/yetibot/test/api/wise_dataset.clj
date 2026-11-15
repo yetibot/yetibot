@@ -6,7 +6,16 @@
             [yetibot.models.ai-tool-policy :as policy]
             [yetibot.models.ai-wise-tools :as tools]
             [yetibot.test.commands.wise :as fixture]
-            [yetibot.test.support.ai-execution :as chat]))
+            [yetibot.test.support.ai-execution :as chat]
+            [cheshire.core :as json]
+            [clj-http.client :as http]
+            [yetibot.api.ai :as ai]
+            [yetibot.api.mcp :as mcp]
+            [yetibot.models.ai-context :as context]
+            [yetibot.models.ai-datasets :as datasets]
+            [yetibot.models.ai-kroki-tools :as kroki]
+            [yetibot.core.util.public-result :as public]
+            [yetibot.test.integration.ai-command-charts :as charts]))
 
 (defn query [args]
   (chat/in-event chat/request "ai synthetic finance chart"
@@ -183,3 +192,46 @@
             (mapv #(get % "balance") (:rows @observed))
             => ["USD balance 1" "USD balance 2"]
             (:historical-balance-available? @observed) => true))))))
+
+(fact "actual Wise statement command charts exact amount against fees through the ordinary adapter once"
+  (fixture/with-wise {}
+    (fn [calls]
+      (with-statement identity
+        (fn []
+          (let [renders (atom []) turns (atom 0) retained (atom []) lookup datasets/lookup!
+                t (assoc charts/toolset :providers [{:name "finance" :models ["chart"]}])]
+            (with-redefs [ai/config (constantly {:providers [{:name "finance" :model "chart"
+                                                            :url "https://finance.invalid/v1"}]})
+                          mcp/config (constantly {:servers [] :toolsets [t]})
+                          context/messages (fn [_ prompt] [{:role "user" :content prompt}])
+                          datasets/lookup! (fn [& args] (let [d (apply lookup args)] (swap! retained conj d) d))
+                          http/post (fn [_ options]
+                                      (let [messages (get-in options [:form-params :messages])]
+                                        {:status 200 :body
+                                         (if (= 1 (swap! turns inc))
+                                           (charts/call "collect" "command" {"command" "wise transactions --days 14 --limit 20"})
+                                           (let [d (some #(when (= "wise" (get % "source")) %)
+                                                         (keep #(try (get-in (json/parse-string (:content %))
+                                                                            ["structuredContent" "datasets" 0])
+                                                                     (catch Exception _ nil)) messages))]
+                                             (charts/call "chart" "chart"
+                                                          {"dataset_id" (get d "dataset-id") "kind" "point"
+                                                           "x" "amount" "y" "fees"})))}))
+                          kroki/client-call (fn [operation request]
+                                              (case operation
+                                                "validate-render!" request
+                                                "render!" (do (swap! renders conj request)
+                                                              (public/reviewed {:result/value (:url charts/artifact)
+                                                                                :result/data charts/artifact
+                                                                                :result/public-data charts/artifact}))))]
+              (charts/with-current-caller #(chat/run-command chat/request "ai chart amount against fees"))
+              @turns => 2
+              (count @renders) => 1
+              (string/includes? (:source (first @renders) "") "0.10000001") => true
+              (let [source (json/parse-string (:source (first @renders) "{}") true)]
+                (get-in source [:data :values 0 :x]) => 0.10000001
+                (get-in source [:data :values 0 :y]) => 0.01
+                (count (get-in source [:data :values])) => 27)
+              (get-in (first @retained) [:rows 0 "amount"]) => "0.10000001"
+              (get-in (first @retained) [:rows 0 "fees"]) => "0.01"
+              (fixture/statement-urls @calls) => [fixture/statement-url])))))))

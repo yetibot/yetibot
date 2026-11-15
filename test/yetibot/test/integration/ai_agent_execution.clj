@@ -14,6 +14,8 @@
             [yetibot.core.config :as host-config]
             [yetibot.commands.openai :as openai]
             [yetibot.commands.weather :as weather]
+            [yetibot.commands.cf]
+            [yetibot.commands.zen]
             [yetibot.core.commands.agent :as core-agent]
             [yetibot.core.commands.alias :as alias]
             [yetibot.core.commands.collections]
@@ -558,29 +560,53 @@
             (count @*queued*) => 1
             (count (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "agent_run"))])) => 1))))))
 
-(fact "concurrent actual cron callbacks cannot overlap or replay an interrupted enclosing tick"
-  (with-runtime
-    (fn [url]
-      (let [{:keys [command]} (scheduler-functions)
-            tasks (atom {}) effects (atom 0) entered (promise) release (promise)]
-        (hooks/cmd-hook-resolved #"cron" #"(\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)" command)
-        (hooks/cmd-hook-resolved #"blocking-tick" #".*"
-          (fn [_] (swap! effects inc) (deliver entered true) @release {:result/value "done"}))
-        (with-redefs [scheduler/add-task (fn [_ id task] (swap! tasks assoc id task))
-                      scheduler/delete-task (fn [_ id] (swap! tasks dissoc id))
-                      http/post (fn [_ _] {:status 200 :body (tool-call "cron 0 0 8 * * * * blocking-tick")})]
-          (dispatch "ai --max-tool-calls 5 create schedule")
-          (let [row (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "cron"))]))
-                callback (get-in @tasks [(str "task-" (:id row)) :handler])
-                first-tick (future (callback nil))]
-            (deref entered 5000 false) => true
-            (callback nil)
-            (deliver release true)
-            (deref first-tick 5000 :timeout) =not=> :timeout
-            (callback nil)
-            @effects => 1
-            (:execution-used (ledger/read-row url "cron" (:id row))) => 1
-            (:execution-phase (ledger/read-row url "cron" (:id row))) => "unknown"))))))
+(fact "actual cron pipelines validate their durable owner before each leaf, including the last unit"
+  (doseq [invalidation [:overlap :edit :none]]
+    (with-runtime
+      (fn [url]
+        (let [{:keys [command]} (scheduler-functions)
+              tasks (atom {}) effects (atom 0) writes (atom 0) sent (atom [])
+              entered (promise) release (promise)]
+          (hooks/cmd-hook-resolved #"cron" #"(\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(.+)" command)
+          (hooks/cmd-hook-resolved #"blocking-tick" #".*"
+            (fn [_] (swap! effects inc) (deliver entered true) @release {:result/value "done"}))
+          (hooks/cmd-hook-resolved #"later-write" #".*"
+            (fn [_] (swap! writes inc) {:result/value "written"}))
+          (binding [*deliveries* sent]
+            (with-redefs [scheduler/add-task (fn [_ id task] (swap! tasks assoc id task))
+                          scheduler/delete-task (fn [_ id] (swap! tasks dissoc id))
+                          http/post (fn [_ _] {:status 200 :body
+                                              (tool-call "cron 0 0 8 * * * * \"blocking-tick | later-write\"")})]
+              (dispatch "ai --max-tool-calls 3 create schedule")
+              (let [id (:id (first (jdbc/query url [(str "SELECT id FROM " (db/qualified-table-name "cron"))])))
+                    saved (ledger/read-row url "cron" id)
+                    callback (get-in @tasks [(str "task-" id) :handler])]
+                (:cmd saved) => "blocking-tick | later-write"
+                (:execution-limit saved) => 1
+                @writes => 0
+                (let [first-tick (future (callback nil))]
+                  (try
+                    (deref entered 5000 false) => true
+                    (case invalidation
+                      :overlap (callback nil)
+                      :edit (cron/update-where {:id id} {:cmd "echo edited"})
+                      :none nil)
+                    (let [current (ledger/read-row url "cron" id)]
+                      (:execution-used current) => 1
+                      (:execution-phase current) => (if (= invalidation :none) "operation-in-flight" "unknown")
+                      (when (not= invalidation :none)
+                        (> (:worker-fence current) (:worker-fence saved)) => true))
+                    (finally (deliver release true)))
+                  (deref first-tick 5000 :timeout) =not=> :timeout)
+                (callback nil)
+                @effects => 1
+                @writes => (if (= invalidation :none) 1 0)
+                (count @sent) => (if (= invalidation :none) 1 0)
+                (:execution-used (ledger/read-row url "cron" id)) => 1
+                (:execution-phase (ledger/read-row url "cron" id)) => "unknown"
+                (contains? #{"intent" "unknown"}
+                           (:state (first (json/parse-string
+                                            (:operation-receipts (ledger/read-row url "cron" id)) true)))) => true))))))))
 
 (fact "actual Gemini image and Veo starts use finite physical admissions; polling and downloads are not fabricated generations"
   (with-runtime
@@ -1761,3 +1787,96 @@
                       @saved => nil
                       (:execution-phase final) => "ready"
                       (:execution-state final) => (:execution-state (:row @committed)))))))))))))
+
+(fact "inherited catalog commands intersect original and current target-provider access before credential IO"
+  (with-runtime
+    (fn [_]
+      (doseq [target ["cloudflare" "zen"] access [:original-denied :current-denied :allowed]
+              lost-binding? [false true]]
+        (let [file (java.io.File/createTempFile "catalog-provider-" ".key")
+              reads (atom 0) catalogs (atom 0) turns (atom 0) family (atom nil)
+              context (atom nil)
+              read-bytes cloudflare/read-bytes
+              target-provider {:name target :model "catalog-entry" :key-file (.getAbsolutePath file)
+                               :url (if (= target "zen") "https://opencode.ai/inference/openai/v1"
+                                        (str "https://api.cloudflare.com/client/v4/accounts/"
+                                             (apply str (repeat 32 "a")) "/ai/v1"))}
+              allowed (update toolset :providers conj {:name target :models ["catalog-entry"]})
+              selected (atom (if (= access :original-denied) toolset allowed))]
+          (hooks/cmd-hook-resolved #"catalog-with-lost-binding" #".*"
+            (fn [_]
+              (reset! context origin/*context*)
+              (binding [execution/*request* nil]
+                {:result/value (ai/models target-provider)})))
+          (try
+            (spit file "catalog-fixture-secret")
+            (with-redefs [ai/config (constantly {:providers [provider target-provider]})
+                          mcp/config (fn [] {:servers [] :toolsets [@selected]})
+                          cloudflare/read-bytes (fn [& args]
+                                                  (when (and (= 2 (count args))
+                                                             (instance? java.io.FileInputStream (first args)))
+                                                    (swap! reads inc))
+                                                  (apply read-bytes args))
+                          http/get (fn [_ _]
+                                     (swap! catalogs inc)
+                                     (if (= target "zen")
+                                       {:status 200 :body {:data [{:id "catalog-entry"}]}}
+                                       {:status 200 :body
+                                        (java.io.ByteArrayInputStream.
+                                          (.getBytes (json/generate-string
+                                                       {:success true :errors []
+                                                        :result [{:name "@cf/vendor/catalog-entry"}]
+                                                        :result_info {:page 1 :per_page 100 :count 1
+                                                                      :total_pages 1 :total_count 1}}) "UTF-8"))}))
+                          http/post (fn [_ _]
+                                      (reset! family execution/*request*)
+                                      {:status 200 :body
+                                       (if (= 1 (swap! turns inc))
+                                         (do (reset! selected (if (= access :current-denied) toolset allowed))
+                                             (tool-call (if lost-binding? "catalog-with-lost-binding"
+                                                         (str (if (= target "zen") "zen" "cf") " models"))))
+                                         (answer "catalog complete"))})]
+              (dispatch "ai --max-tool-calls 3 discover models")
+              @reads => (if (= access :allowed) 1 0)
+              @catalogs => (if (= access :allowed) 1 0)
+              @turns => (if (= access :allowed) 2 1)
+              (:used @(:budget @family)) => (if (= access :allowed) 3 2)
+              (when lost-binding?
+                (origin/capability? @context) => true
+                (binding [execution/*request* nil origin/*context* @context]
+                  (ai/models target-provider) => (throws Exception))
+                @reads => (if (= access :allowed) 1 0)
+                @catalogs => (if (= access :allowed) 1 0)))
+            (finally (.delete file))))))))
+
+(fact "actual worker provider snapshots reject unsafe keyword continuations without mutating the prior checkpoint"
+  (doseq [extension [{(keyword "WORKER_CREDENTIAL") "reflected"}
+                    {:extension (keyword "scope" "WORKER_CREDENTIAL")}
+                    {:extension (keyword (apply str (repeat 129 "x")))}]]
+    (with-runtime
+      (fn [url]
+        (let [wire (atom 0) sent (atom []) configured (assoc provider :key "WORKER_CREDENTIAL")]
+          (binding [*deliveries* sent]
+            (with-redefs [ai/config (constantly {:providers [configured]})
+                          http/post (fn [_ _]
+                                      {:status 200 :body
+                                       (if (= 1 (swap! wire inc)) (answer "agent report")
+                                           (merge (answer "worker answer") extension))})]
+              (dispatch "ai report | split , | xargs %s")
+              (count @*queued*) => 1
+              (let [row (first (jdbc/query url [(str "SELECT * FROM " (db/qualified-table-name "agent_run"))]
+                                          {:identifiers #(string/replace % "_" "-")}))
+                    prior (:execution-state row)]
+                (try ((first @*queued*)) (catch Exception _ :rejected)) => :rejected
+                @wire => 2
+                @sent => []
+                (let [after (ledger/read-row url "agent_run" (:id row))]
+                  (:execution-state after) => prior
+                  (:execution-used after) => 1
+                  (:execution-phase after) => "operation-in-flight"
+                  (runs/claim! url "agent_run" (:id row) (:state-revision after)
+                               {:secrets ["WORKER_CREDENTIAL"]}) => {:status :unknown}
+                  (:execution-phase (ledger/read-row url "agent_run" (:id row))) => "unknown")
+                ((first @*queued*)) => {:status :not-owner}
+                @wire => 2
+                @sent => []))))))))

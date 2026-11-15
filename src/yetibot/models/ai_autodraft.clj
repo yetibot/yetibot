@@ -43,7 +43,9 @@
   [{:keys [provider model messages read-messages actor max-tool-calls max-output-tokens
            on-progress]}
    args key router config t repo]
-  (let [secret (clef/credential! router)
+  (let [_ (when-let [reauthorize (:reauthorize-expression! execution/*request*)]
+            (reauthorize))
+        secret (clef/credential! router)
         private-config (update config :secrets #(concat % [secret (:key provider)]))
         messages (if read-messages (read-messages) messages)
         messages (mapv #(update % :content (fn [text] (if (string? text) (mcp/redact text private-config) text))) messages)

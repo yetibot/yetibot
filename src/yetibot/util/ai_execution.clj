@@ -176,10 +176,12 @@
   []
   (when *request*
     (let [{:keys [closed? unknown?]} @(:budget *request*)]
-      (when (or closed? unknown?) (exhausted!)))))
+      (when (or closed? unknown?) (exhausted!)))
+    (when-let [live! (:require-live! *request*)] (live!))))
 
 (defn require-open! []
   (when *request*
+    (require-live!)
     (let [state @(:budget *request*)]
       (when (or (:closed? state) (:unknown? state) (not (pos? (remaining))))
         (exhausted!)))))

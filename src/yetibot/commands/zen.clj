@@ -68,7 +68,10 @@
           {:result/value models :result/data data
            :result/collection-path [:models]}
           (:models data))))
-    (catch Exception _ (failure args false))))
+    (catch Exception e
+      (if (and execution/*request* (= :policy-denied (:ai/error-code (ex-data e))))
+        (throw e)
+        (failure args false)))))
 
 (defn- ask-prompt [{:keys [chat-source continuation-route] :as args} options]
   (try

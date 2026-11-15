@@ -416,3 +416,36 @@
         (runs/finish! session operation {:state :unknown})
         (jdbc/with-db-transaction [tx url] (cron/claim-tick! tx (:id row))) => {:status :unknown}
         (:execution-used (ledger/read-row url "cron" (:id row))) => 1))))
+
+(fact "provider keyword and scalar spellings reject before durable checkpoint mutation"
+  (with-store
+    (fn [url]
+      (doseq [body [{(keyword "CHECKPOINT_CREDENTIAL") "reflected"}
+                   {:extension (keyword "scope" "CHECKPOINT_CREDENTIAL")}
+                   {:extension (keyword (apply str (repeat 129 "x")))}
+                   {:extension 739194}
+                   {:extension 739194M}
+                   {:extension true}
+                   {:extension (java.util.UUID/fromString "12345678-1234-1234-1234-123456789abc")}]]
+        (let [row (create! url (str (java.util.UUID/randomUUID)) 2)
+              session (assoc (claim! url row) :codec-config
+                             {:secrets ["CHECKPOINT_CREDENTIAL" "739194" "true"
+                                        "12345678-1234-1234-1234-123456789abc"]})
+              operation (runs/admit! session :inference nil)
+              prior (:execution-state (read! url row))
+              snapshot (assoc @(:state session) :phase :loop
+                              :loop {:messages [{:role "assistant" :content "safe"}]
+                                     :body body :trace {} :seen #{} :actions #{}
+                                     :used 0 :response 1 :stage :initial :correction? false})]
+          (runs/checkpoint! session snapshot operation) => (throws Exception)
+          (:execution-state (read! url row)) => prior
+          (:execution-used (read! url row)) => 1
+          ;; A rejected continuation after a send is never refundable/replayable.
+          (claim! url (read! url row)) => {:status :unknown}
+          (:execution-phase (read! url row)) => "unknown"))
+      (let [safe (assoc state :loop {:messages [] :body
+                                    {(keyword (apply str (repeat 128 "x")))
+                                     (keyword "scope" "safe")
+                                     :number 0.10000001M :enabled true
+                                     :uuid (java.util.UUID/randomUUID)}})]
+        (runs/decode (runs/encode safe {}) {}) => safe))))

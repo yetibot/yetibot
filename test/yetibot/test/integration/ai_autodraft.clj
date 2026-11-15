@@ -13,6 +13,10 @@
             [yetibot.test.integration.ai-command-charts :as caller]
             [yetibot.util.ai-execution :as execution]
             [yetibot.core.util.agent-execution :as origin]
+            [yetibot.core.adapters.adapter :as adapters]
+            [yetibot.core.models.users :as users]
+            [yetibot.core.chat :as core-chat]
+            [clj-slack.conversations :as slack]
             [yetibot.models.ai-tools :as tools]))
 
 (defn run-command [request text]
@@ -275,3 +279,56 @@
   (count (:sent (route-wire :clarify 20 true))) => 1
   (count (:sent (route-wire :answer 1 true))) => 1
   (count (:sent (route-wire :answer 20 false))) => 0)
+
+(fact "frozen automatic changes reauthorize after classification before credentials and Slack history"
+  (doseq [revoked [:adapter :user]]
+    (let [credentials (atom 0) history (atom 0) classifier (atom 0) subsequent (atom 0)
+          key-file (java.io.File/createTempFile "autodraft-router-" ".key")
+          read-file slurp
+          classify clef/classify!
+          provider {:name "local" :url "https://automatic.invalid/v1" :model "chat"}
+          t {:name "github-pr" :kind "github-pr" :users ["U1"] :adapters ["slack"]
+             :repositories ["owner/repo"] :base-branches ["main"] :allowed-paths ["src/"]
+             :servers [{:name "reader" :tools ["get_file_contents" "get_commit"]}] :write-server "writer"
+             :providers [{:name "local" :models ["chat"]}
+                         {:name "cloudflare" :models ["@cf/cloudflare/clef"]}]}
+          config {:default-toolset "github-pr" :toolsets [t]
+                  :servers [{:name "reader" :url "https://automatic.invalid/read"
+                             :github-api-token "read-fixture-secret" :tools ["get_file_contents" "get_commit"]}
+                            {:name "writer" :url "https://automatic.invalid/write"}]}
+          request (assoc-in chat/request [:chat-source :raw-event]
+                            {:user "U1" :channel "C1" :ts (str (System/nanoTime) ".0") :thread_ts "1.0"})]
+      (try
+        (spit key-file "classification-key")
+        (with-redefs [api/config (constantly {:providers [provider]
+                                             :intent-router {:enabled true :github-toolset "github-pr"
+                                                             :account-id (apply str (repeat 32 "a"))
+                                                             :key-file (.getAbsolutePath key-file)}})
+                      mcp/config (constantly config)
+                      clojure.core/slurp (fn [& args]
+                                           (when (= (.getAbsolutePath key-file) (str (first args)))
+                                             (swap! credentials inc))
+                                           (apply read-file args))
+                      slack/replies (fn [& _] (swap! history inc) {:ok true :messages []})
+                      mcp/connect! (fn [& _] (swap! subsequent inc) (throw (Exception. "Unexpected discovery")))
+                      clef/classify! (fn [& args]
+                                       (let [decision (apply classify args)]
+                                         (fact decision => :code-change)
+                                         (case revoked
+                                           :adapter (swap! adapters/adapters dissoc "workspace")
+                                           :user (swap! users/users dissoc {:adapter :slack :id "U1"}))
+                                         decision))
+                      client/post (fn [url _]
+                                    (if (string/includes? url "/ai/run/@cf/cloudflare/clef")
+                                      (do (swap! classifier inc)
+                                          (classification :code_change))
+                                      (do (swap! subsequent inc) {:status 500 :body {}})))
+                      client/get (fn [& _] (swap! subsequent inc) {:status 500 :body {}})]
+          (chat/with-registered-caller request
+            #(binding [core-chat/*adapter* (assoc core-chat/*adapter* :config {:token "history-fixture"})]
+               (chat/run-command request "ai Fix src/a.clj in owner/repo")))
+          @classifier => 1
+          @credentials => 1
+          @history => 0
+          @subsequent => 0)
+        (finally (.delete key-file))))))

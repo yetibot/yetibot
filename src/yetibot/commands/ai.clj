@@ -631,6 +631,7 @@
                     :provider provider :model model
                     :caption? (empty? (:next-cmds args))
                     :read-messages #(context/messages args (:prompt options))
+                    :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))
                     :actor (policy/actor args))
        snapshot (assoc :pipeline-input snapshot
                        :additional-secrets (keep :key (:providers config)))))))
@@ -655,6 +656,7 @@
             :read-messages #(let [messages (context/messages args (:match args))]
                               (execution/ensure-followup! route provider)
                               messages)
+            :read-chat-history? (contains? #{:slack :discord} (get-in args [:chat-source :adapter]))
             :actor actor :prompt (:match args) :caption? true})))
 
 (defn- complete-prompt*
@@ -691,6 +693,11 @@
                   (policy/authorize! (:toolset-policy execution/*request*)
                                      (policy/actor execution/*event*)
                                      (:provider prepared) (:model prepared)))
+        _ (when (and (:read-messages prepared)
+                     (or execution/*event* (:read-chat-history? prepared)))
+            (if-let [reauthorize (:reauthorize-expression! execution/*request*)]
+              (reauthorize)
+              (ai/fail "Chat history authority is unavailable.")))
         budgets (limits/effective prepared)
         result (complete-prompt* (cond-> (merge prepared budgets)
                                   (:read-messages prepared)

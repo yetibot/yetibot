@@ -3,7 +3,6 @@
   (:require [cheshire.core :as json]
             [clojure.string :as string]
             [clojure.set :as set]
-            [clojure.walk :as walk]
             [yetibot.api.ai :as ai]
             [yetibot.api.ai-diagnostics :as diagnostics]
             [yetibot.api.ai-stream :as stream]
@@ -91,9 +90,35 @@
        "Staging a change is not a GitHub write. Never claim to have pushed code or opened a PR; "
        "only the host's explicit user-approval command can perform those operations."))
 
+(defn- project-value [value redact project]
+  (cond
+    (string? value) (redact value)
+    (map? value)
+    (let [spellings (volatile! #{})]
+      (reduce-kv
+        (fn [out k v]
+          (when-not (or (keyword? k) (string? k))
+            (throw (ex-info "Non-JSON payload key." {:ai/error true})))
+          (let [spelling (if (keyword? k) (subs (str k) 1) k)
+                safe (redact spelling)]
+            (when (contains? @spellings safe)
+              (throw (ex-info "Untrusted payload has ambiguous keys."
+                              {:ai/error true :ai/ambiguous-payload true})))
+            (vswap! spellings conj safe)
+            (assoc out (if (= spelling safe) k safe) (project v)))) {} value))
+    (sequential? value) (mapv project value)
+    (set? value) (into #{} (map project) value)
+    :else (let [spelling (if (keyword? value) (subs (str value) 1)
+                          (json/generate-string value))]
+            (if (= spelling (redact spelling)) value "[redacted]"))))
+
 (defn- clean-data [data config]
-  (let [cleaned (walk/postwalk #(if (string? %) (mcp/redact % config) %) data)]
-    (if-let [store (:dataset-store config)] (datasets/redact store cleaned) cleaned)))
+  (let [configured (mcp/metadata-redactor config)
+        store (:dataset-store config)
+        redact (if store #(configured (datasets/redact store %)) configured)]
+    (letfn [(project [value] (project-value value redact project))]
+      (let [cleaned (project data)]
+        (if store (datasets/redact store cleaned) cleaned)))))
 
 (defn- with-payload-secrets [config provider additional-secrets credential-file]
   (assoc config :secrets
@@ -110,8 +135,8 @@
   ([content config] (current-content content config {}))
   ([content config {:keys [configured? tool-result?]}]
    (if-not (and (:dataset-store config) (string? content)) content
-     (let [project #(if configured? (clean-data % config)
-                       (datasets/redact (:dataset-store config) %))]
+     (let [project #(clean-data % (if configured? config
+                                    {:dataset-store (:dataset-store config)}))]
        (try
          (let [data (json/parse-string content true)
                ;; The host result envelope is protocol, not untrusted payload.
@@ -132,7 +157,9 @@
                (vector? (get-in data [:structuredContent :datasets]))
                (assoc-in [:structuredContent :datasets]
                          (mapv descriptor (get-in data [:structuredContent :datasets]))))))
-         (catch Exception _ (project content)))))))
+         (catch Exception e
+           (if (:ai/ambiguous-payload (ex-data e)) (throw e)
+             (project content))))))))
 
 (defn- current-answers [answers config]
   ;; Attribution and accounting are host metadata; only answer text is payload.
@@ -899,12 +926,13 @@
           (when-let [ceiling (:tool-ceiling execution/*request*)]
             (compare-and-set! ceiling nil #{}))
           (if on-progress
-           (clean-data (ai/complete provider model (host-messages messages)
-                                    {::diagnostics/stage :initial
-                                     :max-output-tokens
-                                     (:max-output-tokens config)
-                                     :on-progress on-progress
-                                     :progress-config config}) config)
+           (let [result (ai/complete provider model (host-messages messages)
+                                     {::diagnostics/stage :initial
+                                      :max-output-tokens (:max-output-tokens config)
+                                      :on-progress on-progress :progress-config config})]
+             (-> result
+                 (update :result/value clean-data config)
+                 (update :result/data current-response config)))
            (ai/complete provider model (host-messages messages)
                         {:max-output-tokens
                          (:max-output-tokens config)}))))))))
@@ -1198,27 +1226,17 @@
   ([actor] (mapv :name (server-info actor))))
 
 (defn- public-data [value config]
-  ;; Only JSON data is admissible. Never serialize functions or host objects,
-  ;; even if a malformed server puts them inside a schema or annotation.
-  (let [remaining (atom 4096)]
+  ;; Catalog metadata keeps its existing structural limits; payload spelling
+  ;; projection is shared with tool replies and typed response extensions.
+  (let [remaining (atom 4096)
+        redact (mcp/metadata-redactor config)]
     (letfn [(clean [x depth]
               (when (or (> depth 32) (neg? (swap! remaining dec)))
                 (throw (ex-info "Metadata exceeds structural limits." {})))
-              (cond
-                (string? x) (mcp/metadata-redact x config)
-                (or (nil? x) (boolean? x) (number? x)) x
-                (map? x)
-                (into {} (map (fn [[k v]]
-                                (when-not (or (string? k) (keyword? k))
-                                  (throw (ex-info "Non-JSON key." {})))
-                                (let [spelling (if (keyword? k)
-                                                 (subs (str k) 1) k)
-                                      text (mcp/metadata-redact spelling
-                                                                config)]
-                                  [(if (= text spelling) k text)
-                                   (clean v (inc depth))])) x))
-                (vector? x) (mapv #(clean % (inc depth)) x)
-                :else (throw (ex-info "Non-JSON metadata." {}))))]
+              (when-not (or (string? x) (nil? x) (boolean? x) (number? x)
+                            (map? x) (vector? x))
+                (throw (ex-info "Non-JSON metadata." {})))
+              (project-value x redact #(clean % (inc depth))))]
       (clean value 0))))
 
 (defn- catalog-entry [tool server config]

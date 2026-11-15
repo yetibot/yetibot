@@ -1030,3 +1030,39 @@
       (get-in (datasets/lookup! store owner (:dataset-id d)) [:rows 0 "auth/token"]) => secret
       (datasets/close! store owner)
       (#'tools/current-message chat config) => (midje.sweet/throws Exception))))
+
+(fact "progress-only text completion projects payloads without deepwalking typed response controls"
+  (let [secret "CONFIGURED-OPAQUE"
+        body {:id secret :usage {:input_tokens 739194}
+              :output [{:type "reasoning" :id secret :encrypted_content secret :summary []}
+                       {:type "message" :id secret :role "assistant"
+                        :content [{:type "output_text" :text secret
+                                   :annotations [{:type "url_citation" :start_index 0 :end_index 1
+                                                  (keyword secret) "extension" :id secret :number 739194}]}]}]}]
+    (with-redefs [mcp/config (constantly {:servers [] :secrets [secret "739194"]})
+                  ai/complete (fn [& _] {:result/value secret :result/data body})]
+      (let [result (tools/complete provider "chat" messages {:on-progress identity})]
+        (:result/value result) => "[redacted]"
+        (select-keys (:result/data result) [:id :usage]) => (select-keys body [:id :usage])
+        (get-in result [:result/data :output 0]) => (first (:output body))
+        (get-in result [:result/data :output 1 :id]) => secret
+        (get-in result [:result/data :output 1 :content 0 :text]) => "[redacted]"
+        (get-in result [:result/data :output 1 :content 0 :annotations 0])
+        => {:type "url_citation" :start_index 0 :end_index 1
+            "[redacted]" "extension" :id "[redacted]" :number "[redacted]"}))))
+
+(fact "live learned key rewrites reject collisions on replay without changing retained rows"
+  (let [owner {:actor {:id "projection-owner"} :chat-source {:adapter :slack :room "projection"}}
+        store (datasets/create-store owner)
+        descriptor (datasets/retain! store owner
+                     {:rows [{:auth/token "LEARNED-KEY"}]
+                      :fields [{:name "token" :path ["auth/token"] :type :nominal}]
+                      :source "projection" :captured-at "2026-11-11T10:00:00Z"
+                      :coverage {:status :unknown}})
+        message {:role "tool" :tool_call_id "correlation"
+                 :content (json/generate-string
+                            {:structuredContent {"LEARNED-KEY" "one" "[redacted]" "two"}})}]
+    (#'tools/current-message message {:dataset-store store :dataset-owner owner})
+    => (midje.sweet/throws Exception)
+    (get-in (datasets/lookup! store owner (:dataset-id descriptor)) [:rows 0 "auth/token"]) => "LEARNED-KEY"
+    (datasets/close! store owner)))

@@ -170,3 +170,20 @@
         r (charts/render-chart! #(do (swap! calls conj %) actual) compiled)]
     @calls => [(:request compiled)]
     r => {:result actual :caption (:caption compiled) :coverage (:coverage weather)}))
+
+(fact "source-qualified decimal conversion is symmetric and diagnoses the selected axis"
+  (let [dataset (-> history
+                    (assoc :series-field nil :rows [(first (:rows history))])
+                    (update :fields conj {:name "fees" :path ["fees"] :type :quantitative
+                                          :unit-field "currency" :semantic :transaction-amount})
+                    (assoc-in [:rows 0 "fees"] "0.10000001"))
+        intent {"kind" "point" "x" "amount" "y" "fees"}]
+    (:ok? (charts/compile-chart dataset intent)) => true
+    (get-in (spec (charts/compile-chart dataset intent)) [:data :values 0 :x]) => -1.25
+    (get-in (spec (charts/compile-chart dataset intent)) [:data :values 0 :y]) => 0.10000001
+    (doseq [[d axis] [[(assoc dataset :source "generic") "x"]
+                      [(assoc-in dataset [:rows 0 "amount"] "not numeric") "x"]
+                      [(assoc-in dataset [:rows 0 "fees"] "not numeric") "y"]
+                      [(update dataset :fields #(mapv (fn [f] (dissoc f :semantic)) %)) "x"]]]
+      (select-keys (:problem (charts/compile-chart d intent)) [:field :code])
+      => {:field axis :code :type})))

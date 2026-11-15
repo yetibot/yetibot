@@ -16,19 +16,24 @@
 (defn- encode-value [value config]
   (let [remaining (volatile! 2097152)
         redact (mcp/metadata-redactor config)]
-    (letfn [(walk [v depth]
+    (letfn [(spelling! [text]
+              (when (or (neg? (vswap! remaining - (count text)))
+                        (not= text (redact text))) (invalid!))
+              text)
+            (walk [v depth]
               (when (or (> depth 48) (neg? (vswap! remaining dec))) (invalid!))
               (cond
-                (nil? v) nil
-                (boolean? v) v
+                (nil? v) (do (spelling! "null") nil)
+                (boolean? v) (do (spelling! (str v)) v)
                 (instance? java.math.BigDecimal v)
-                (if (Double/isFinite (double v)) ["decimal" (str v)] (invalid!))
-                (number? v) (if (and (not (ratio? v)) (Double/isFinite (double v))) v (invalid!))
-                (string? v)
-                (do (when (or (neg? (vswap! remaining - (count v)))
-                              (not= v (redact v))) (invalid!)) v)
-                (keyword? v) ["keyword" (subs (str v) 1)]
-                (instance? java.util.UUID v) ["uuid" (str v)]
+                (if (Double/isFinite (double v)) ["decimal" (spelling! (str v))] (invalid!))
+                (number? v) (if (and (not (ratio? v)) (Double/isFinite (double v)))
+                              (do (spelling! (json/generate-string v)) v) (invalid!))
+                (string? v) (spelling! v)
+                (keyword? v) (let [text (subs (str v) 1)]
+                               (when (> (count text) 128) (invalid!))
+                               ["keyword" (spelling! text)])
+                (instance? java.util.UUID v) ["uuid" (spelling! (str v))]
                 (map? v)
                 ["map" (mapv (fn [[k cell]]
                                (when (or (not (or (keyword? k) (string? k)))

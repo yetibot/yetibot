@@ -95,8 +95,20 @@
 (fact "ai-tools throwing progress cannot change dispatch or cleanup"
   (let [normal (run-fixture nil :turns identity)
         throwing (run-fixture nil :turns
-                              #(throw (Exception. (str "PRIVATE" %))))]
-    (:result throwing) => (:result normal)
+                              #(throw (Exception. (str "PRIVATE" %))))
+        without-call-durations
+        (fn [result]
+          (reduce (fn [value visibility]
+                    (update-in value [visibility :execution :calls]
+                               #(mapv (fn [call] (dissoc call :elapsed_ms)) %)))
+                  result [:result/data :result/public-data]))]
+    (doseq [run [normal throwing]
+            :let [private (mapv :elapsed_ms (get-in run [:result :result/data :execution :calls]))
+                  public (mapv :elapsed_ms (get-in run [:result :result/public-data :execution :calls]))]]
+      (fact (count private) => 2
+            (every? #(and (integer? %) (<= 0 % 300000)) (concat private public)) => true
+            public => private))
+    (without-call-durations (:result throwing)) => (without-call-durations (:result normal))
     (:calls throwing) => 2
     (last (:observations throwing)) => :closed))
 

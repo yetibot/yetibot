@@ -67,8 +67,8 @@
                   tools/complete (fn [p model messages options]
                                    (reset! captured [p model messages options])
                                    {:result/value "Answer" :result/data {}})]
-      (:value (execution/run-command execution/request
-                                     "grok --toolset cloudflare_read Hi"))
+      (:value (execution/run-registered-command execution/request
+                                                "grok --toolset cloudflare_read Hi"))
       => "Answer\n\nSent via configured-grok"
       @captured => [provider "configured-grok"
                     [{:role "user" :content "Hi"}]
