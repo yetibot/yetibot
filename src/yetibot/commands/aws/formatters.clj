@@ -3,13 +3,27 @@
     [clojure.spec.alpha :as s]
     [cognitect.aws.client.api :as aws]
     [yetibot.commands.aws.specs :as aws.spec]
-    [yetibot.api.aws]))
+    [yetibot.api.aws]
+    [taoensso.timbre :as log]
+    [clojure.contrib.humanize :refer [filesize] :as h]
+    [clj-time.coerce :as tc]
+    [clj-time.format :as tf]
+    [clj-time.format :as f]))
 
 (def iam-response-spec (partial aws/response-spec-key yetibot.api.aws/iam))
+(def s3-response-spec (partial aws/response-spec-key yetibot.api.aws/s3))
+(def aws-date-formatter (tf/formatter "yyyy-MM-dd HH:mm:ss"))
 
-; AWS API response formatting utility function
-(defmulti format-response
-          "Returns a dispatch-value matching the operation that has been successfully invoked
+(defn- aws-date-format
+  "Utility function to format dates like AWS CLI output"
+  [edn-date]
+  (->> edn-date
+       (tc/from-date)
+       (f/unparse aws-date-formatter)))
+
+; IAM AWS API response formatting utility function
+(defmulti format-iam-response
+          "Returns a dispatch-value matching the IAM operation that has been successfully invoked
           or has failed"
           (fn [response]
             (let [aws-type (:aws/type (meta response))]
@@ -52,51 +66,51 @@
                      (= aws-type :aws.type/AccessKeyDeleted)) ::IAMAccessKeyDeleted
                 :else ::error))))
 
-(defmethod format-response ::error
+(defmethod format-iam-response ::error
   [response]
   {:result/error (get-in response [:ErrorResponse :Error :Message])})
 
-(defmethod format-response ::IAMGroupCreated
+(defmethod format-iam-response ::IAMGroupCreated
   [{{:keys [Path GroupName GroupId Arn CreateDate]} :Group}]
   {:result/data  {:path Path, :group-name GroupName, :group-id GroupId, :arn Arn, :create-date CreateDate}
    :result/value (format "Group %s%s [Id=%s, Arn=%s] has been created successfully on %s"
                          Path GroupName GroupId Arn CreateDate)})
 
-(defmethod format-response ::IAMUserCreated
+(defmethod format-iam-response ::IAMUserCreated
   [{{:keys [Path UserName UserId Arn CreateDate]} :User}]
   {:result/data  {:path Path, :user-name UserName, :user-id UserId, :arn Arn, :create-date CreateDate}
    :result/value (format "User %s%s [Id=%s, Arn=%s] has been created successfully on %s"
                          Path UserName UserId Arn CreateDate)})
 
-(defmethod format-response ::IAMUserAddedToGroup
+(defmethod format-iam-response ::IAMUserAddedToGroup
   [response]
   (let [request-id (get-in response [:AddUserToGroupResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "User successfully added to group [RequestId=%s]"
                            request-id)}))
 
-(defmethod format-response ::IAMUserRemovedFromGroup
+(defmethod format-iam-response ::IAMUserRemovedFromGroup
   [response]
   (let [request-id (get-in response [:RemoveUserFromGroupResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "User successfully removed from group [RequestId=%s]"
                            request-id)}))
 
-(defmethod format-response ::IAMUserDeleted
+(defmethod format-iam-response ::IAMUserDeleted
   [response]
   (let [request-id (get-in response [:DeleteUserResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "User successfully deleted [RequestId=%s]"
                            request-id)}))
 
-(defmethod format-response ::IAMGroupDeleted
+(defmethod format-iam-response ::IAMGroupDeleted
   [response]
   (let [request-id (get-in response [:DeleteGroupResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "Group successfully deleted [RequestId=%s]"
                            request-id)}))
 
-(defmethod format-response ::IAMGetGroupResponseReceived
+(defmethod format-iam-response ::IAMGetGroupResponseReceived
   [{:keys [Group Users]}]
   (let [{:keys [Path GroupName GroupId Arn CreateDate]} Group]
     {:result/data  {:path Path, :group-name GroupName, :group-id GroupId, :arn Arn, :create-date CreateDate, :users Users}
@@ -106,79 +120,176 @@
                          (format "Group : %s%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n\n"
                                  Path GroupName GroupId Arn CreateDate))}))
 
-(defmethod format-response ::IAMListGroupsResponseReceived
+(defmethod format-iam-response ::IAMListGroupsResponseReceived
   [{:keys [Groups]}]
   {:result/data  {:groups Groups}
    :result/value (map #(format "Group : %s%s\nGroupId : %s\nArn : %s\nCreateDate : %s\n"
                                (:Path %) (:GroupName %) (:GroupId %) (:Arn %) (:CreateDate %))
                       Groups)})
 
-(defmethod format-response ::IAMGetUserResponseReceived
+(defmethod format-iam-response ::IAMGetUserResponseReceived
   [{:keys [User]}]
   (let [{:keys [Path UserName UserId Arn CreateDate]} User]
     {:result/data  {:path Path, :user-name UserName, :user-id UserId, :arn Arn, :create-date CreateDate}
      :result/value (format "User : %s%s [UserId=%s, Arn=%s] - Created on %s"
                            Path UserName UserId Arn CreateDate)}))
 
-(defmethod format-response ::IAMListUsersResponseReceived
+(defmethod format-iam-response ::IAMListUsersResponseReceived
   [{:keys [Users]}]
   {:result/data  {:users Users}
    :result/value (map #(format "User : %s%s [UserId=%s, Arn=%s] - Created on %s"
                                (:Path %) (:UserName %) (:UserId %) (:Arn %) (:CreateDate %))
                       Users)})
 
-(defmethod format-response ::IAMListPoliciesResponseReceived
+(defmethod format-iam-response ::IAMListPoliciesResponseReceived
   [{:keys [Policies]}]
   {:result/data  {:policies Policies}
    :result/value (map #(format "Policy name : %s%s [PolicyId=%s, Arn=%s] - Created on %s"
                                (:Path %) (:PolicyName %) (:PolicyId %) (:Arn %) (:CreateDate %))
                       Policies)})
 
-(defmethod format-response ::IAMUserPolicyAttached
+(defmethod format-iam-response ::IAMUserPolicyAttached
   [response]
   (let [request-id (get-in response [:AttachUserPolicyResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "User policy successfully attached [RequestId=%s]"
                            request-id)}))
 
-(defmethod format-response ::IAMListAttachedUserPoliciesResponseReceived
+(defmethod format-iam-response ::IAMListAttachedUserPoliciesResponseReceived
   [{:keys [AttachedPolicies]}]
   {:result/data  {:attached-policies AttachedPolicies}
    :result/value (map #(format "Policy name : %s [Arn=%s]"
                                (:PolicyName %) (:PolicyArn %))
                       AttachedPolicies)})
 
-(defmethod format-response ::IAMLoginProfileCreated
+(defmethod format-iam-response ::IAMLoginProfileCreated
   [{:keys [LoginProfile]}]
-  (let [user-name (:UserName LoginProfile)
+  (let [user-name   (:UserName LoginProfile)
         create-date (:CreateDate LoginProfile)]
     {:result/data  {:user-name user-name, :create-date create-date}
      :result/value (format "Login profile for %s, requiring password reset, successfully created on %s"
                            user-name create-date)}))
 
-(defmethod format-response ::IAMLoginProfileUpdated
+(defmethod format-iam-response ::IAMLoginProfileUpdated
   [response]
   (let [request-id (get-in response [:UpdateLoginProfileResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "Login profile successfully updated [RequestId=%s]"
                            request-id)}))
 
-(defmethod format-response ::IAMAccessKeyCreated
+(defmethod format-iam-response ::IAMAccessKeyCreated
   [{{:keys [UserName AccessKeyId Status SecretAccessKey CreateDate]} :AccessKey}]
   {:result/data  {:user-name UserName, :access-key-id AccessKeyId, :status Status, :secret-access-key SecretAccessKey, :create-date CreateDate}
    :result/value (format "An access key for user %s has been successfully created on %s\nAWS Access Key ID : %s\nAWS Secret Access Key : %s\nStatus : %s\n"
                          UserName CreateDate AccessKeyId SecretAccessKey Status)})
 
-(defmethod format-response ::IAMListAccessKeysResponseReceived
+(defmethod format-iam-response ::IAMListAccessKeysResponseReceived
   [{:keys [AccessKeyMetadata]}]
   {:result/data  {:access-key-metadata AccessKeyMetadata}
    :result/value (map #(format "Access key ID : %s\nStatus : %s\nCreated on : %s\n"
                                (:AccessKeyId %) (:Status %) (:CreateDate %))
                       AccessKeyMetadata)})
 
-(defmethod format-response ::IAMAccessKeyDeleted
+(defmethod format-iam-response ::IAMAccessKeyDeleted
   [response]
   (let [request-id (get-in response [:DeleteAccessKeyResponse :ResponseMetadata :RequestId])]
     {:result/data  {:request-id request-id}
      :result/value (format "Access Key successfully deleted [RequestId=%s]"
                            request-id)}))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defmulti format-s3-response
+          "Returns a dispatch-value matching the S3 operation that has been successfully invoked
+          or has failed"
+          (fn [response]
+            (let [aws-type (:aws/type (meta response))]
+              (cond
+                (and (s/valid? (s3-response-spec :CreateBucket) response)
+                     (= aws-type :aws.type/CreateBucket)
+                     (not (contains? response :Error))) ::S3BucketCreated
+                (and (s/valid? (s3-response-spec :ListBuckets) response)
+                     (= aws-type :aws.type/ListBuckets)
+                     (not (contains? response :Error))) ::S3BucketListed
+                (and (s/valid? (s3-response-spec :ListObjectsV2) response)
+                     (= aws-type :aws.type/ListObjects)
+                     (not (contains? response :Error))) ::S3ObjectsListed
+                (and (s/valid? (s3-response-spec :CopyObject) response)
+                     (= aws-type :aws.type/CopyObject)
+                     (not (contains? response :Error))) ::S3ObjectCopied
+                (and (s/valid? (s3-response-spec :DeleteObject) response)
+                     (= aws-type :aws.type/DeleteObject)
+                     (not (contains? response :Error))) ::S3ObjectDeleted
+
+                ; Some weird stuff from AWS for their way of handling bucket deletion
+                ; http://docs.amazonwebservices.com/AmazonS3/latest/API/RESTBucketDELETE.html
+                (and (empty? response)
+                     (= aws-type :aws.type/DeleteBucket)
+                     (not (contains? response :Error))) ::S3BucketDeleted
+                :else ::error))))
+
+(defmethod format-s3-response ::error
+  [response]
+  {:result/error (get-in response [:Error :Message])})
+
+(defmethod format-s3-response ::S3BucketCreated
+  [{:keys [Location]}]
+  {:result/data  {:location Location}
+   :result/value (format "S3 bucket successfully created at %s" Location)})
+
+(defmethod format-s3-response ::S3BucketListed
+  [{:keys [Buckets Owner]}]
+  {:result/data  {:buckets Buckets :owner Owner}
+   :result/value (map
+                   #(format "%-20s %-50s"
+                            (aws-date-format (:CreationDate %))
+                            (:Name %))
+                   Buckets)})
+
+(defmethod format-s3-response ::S3ObjectsListed
+  [{:keys [Prefix StartAfter EncodingType Delimiter NextContinuationToken CommonPrefixes ContinuationToken Contents MaxKeys IsTruncated Name KeyCount]}]
+  {:result/data  {:prefix                  Prefix
+                  :start-after             StartAfter
+                  :encoding-type           EncodingType
+                  :delimiter               Delimiter
+                  :next-continuation-token NextContinuationToken
+                  :common-prefixes         CommonPrefixes
+                  :continuation-token      ContinuationToken
+                  :contents                Contents
+                  :max-keys                MaxKeys
+                  :is-truncated            IsTruncated
+                  :name                    Name
+                  :key-count               KeyCount}
+   :result/value (map
+                   #(format "%-25s %-8s %-50s"
+                            (aws-date-format (:LastModified %))
+                            (h/filesize (:Size %) :binary false)
+                            (:Key %))
+                   Contents)})
+
+(defmethod format-s3-response ::S3ObjectCopied
+  [{:keys                       [RequestCharged SSECustomerKeyMD5 ServerSideEncryption SSECustomerAlgorithm SSEKMSKeyId CopySourceVersionId Expiration VersionId]
+    {:keys [ETag LastModified]} :CopyObjectResult}]
+  {:result/data  {:request-charged        RequestCharged
+                  :sse-customer-key-md5   SSECustomerKeyMD5
+                  :etag                   ETag
+                  :last-modified          LastModified
+                  :server-side-encryption ServerSideEncryption
+                  :sse-customer-algorithm SSECustomerAlgorithm
+                  :sse-kms-key-id         SSEKMSKeyId
+                  :copy-source-version-id CopySourceVersionId
+                  :expiration             Expiration
+                  :version-id             VersionId}
+   :result/value (format "Successful copy of : %s" ETag)})
+
+(defmethod format-s3-response ::S3ObjectDeleted
+  [{:keys [DeleteMarker VersionId RequestCharged]}]
+  {:result/data  {:delete-marker?  DeleteMarker
+                  :request-charged RequestCharged
+                  :version-id      VersionId}
+   :result/value (format "Successful object deletion")})
+
+(defmethod format-s3-response ::S3BucketDeleted
+  [_]
+  {:result/data  nil
+   :result/value (format "Successful bucket deletion")})
